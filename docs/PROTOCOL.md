@@ -152,7 +152,7 @@ All integers are **little-endian**; floats are IEEE 754 binary32, little-endian.
 | 8 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time()` when the HID report was received, microseconds since ESP32 boot |
 | 16 | u32 | `device_ticks` | Controller's own timer, **100 ns per tick**, wraps at 2^32 (about 429 s). Use for IMU `dt`; extend to 64 bits on the phone |
 | 20 | 3 x f32 | `gyro` x, y, z | **rad/s** |
-| 32 | 3 x f32 | `accel` x, y, z | **m/s^2** (a stationary controller reads about 9.8 total) |
+| 32 | 3 x f32 | `accel` x, y, z | **m/s^2**, uncalibrated scale (a stationary controller read 10.0-10.1 total in the samples) |
 | 44 | i16 | `temperature_raw` | Raw sensor word, scale not established |
 | 46 | 2 x i16 | `stick` x, y | -32767..32767 = -1.0..1.0, 0 = centre |
 | 50 | 2 x i16 | `trackpad` x, y | -32767..32767 = -1.0..1.0; both 0 when `trackpad touch` is clear |
@@ -162,8 +162,9 @@ All integers are **little-endian**; floats are IEEE 754 binary32, little-endian.
 ### Scales
 
 - Gyro: raw signed 24-bit word times `1e-5` rad/s (Monado's factor).
-- Accel: raw signed 24-bit word divided by `49000` gives m/s^2 (1 g is about
-  490000 raw, so this equals `9.8 * raw / 480000` to within 2 %).
+- Accel: raw signed 24-bit word divided by `49000` (Monado's factor). Monado notes
+  1 g is about 490000 raw, so this is about m/s^2 with an uncertainty of a few percent
+  (the stationary samples read 10.0-10.1, not 9.81). Not a calibrated figure.
 - Stick: 12-bit value, `(raw - 0x7FF) / 0x7FF`, clamped to 1.0, then times 32767.
 - Trackpad: `(raw - 0x32) / 0x32`, then times 32767; raw `0xFF` (untouched) gives 0.
 - Both scale factors are from Monado and verified only to the extent described in
