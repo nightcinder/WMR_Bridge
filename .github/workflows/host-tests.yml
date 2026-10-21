@@ -17,3 +17,5 @@ jobs:
         run: ./test_protocol samples/controller_frames.txt
       - name: Run decoder tests
         run: ./test_decode samples/controller_frames.txt
+      - name: Run capture/analysis script tests
+        run: python3 tests/test_analyze_capture.py

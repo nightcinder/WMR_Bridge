@@ -48,6 +48,7 @@ poses or button states is future work.
 | `src/` | The firmware: controller handling, BLE transport, protocol, queue, console, init |
 | `wmr_bridge.gatt` | GATT database |
 | `tests/`, `samples/` | Host unit tests for the protocol, queue and decoder; sample frames |
+| `tools/` | PC-side capture (`capture_ble.py`, needs hardware and `bleak`) and rotation analysis (`analyze_capture.py`); see [docs/DECODING.md](docs/DECODING.md) |
 | `integration/` | The one BTstack file that must be replaced to build this (`main-CMakeLists.txt`, plus a diff) |
 | `docs/` | Build, protocol, Android, counters, security, reconnect/queue, testing, refactor notes |
 

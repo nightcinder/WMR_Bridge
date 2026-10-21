@@ -118,24 +118,47 @@ duplicated, interleaved and malformed fragments.
 
 # Decoded stream, FF12 (PROPOSED, version 1, not implemented in firmware)
 
-**Status: proposal for review.** Nothing in `src/` sends this yet. The reference
-pack/unpack is `src/wmr_decoded.{h,c}`, pinned by the "decoded frame (FF12)
-golden packet" test in `tests/test_protocol.c`, so the Android app can build and
-test against exact bytes. The raw FF11 stream above is **unchanged**.
+**Status: proposal, decisions folded in, awaiting review.** Nothing in `src/` sends
+this yet. The reference pack/unpack is `src/wmr_decoded.{h,c}`, pinned by the
+"decoded frame (FF12) golden packet" test in `tests/test_protocol.c`, so the Android
+app can build and test against exact bytes. The raw FF11 stream above is
+**unchanged**. The 56-byte record from the first proposal is kept as it was; the
+decisions below did not require changing it.
 
 ## Why a second characteristic
 
 FF11 stays the byte-for-byte raw pipe (its golden-packet test pins it). Decoded
-samples go on a new characteristic so a receiver can choose raw, decoded or both,
-and so neither format constrains the other. Fusion (orientation) runs on the phone;
-this stream carries IMU *samples*, not a quaternion.
+samples go on a new characteristic so a receiver can choose raw or decoded. Fusion
+(orientation) and calibration run on the phone; this stream carries IMU *samples*,
+not a quaternion. The app normally uses FF12; FF11 is for a debug mode.
 
 | Item | UUID | Properties |
 | --- | --- | --- |
 | Characteristic | `0000FF12-0000-1000-8000-00805F9B34FB` | notify only (in service `FF10`) |
 | CCC (0x2902) | - | read/write |
 
-There is no read value. Enabling notifications on FF12 and on FF11 are independent.
+There is no read value.
+
+## Subscription: FF11 and FF12 are mutually exclusive
+
+Decoded records go only to a phone subscribed to FF12; raw fragments go only to a
+phone subscribed to FF11. The two streams are never sent together, which keeps the
+BLE budget at one stream's worth.
+
+- **Subscribing to both is refused.** While one of the two CCC descriptors is
+  enabled, a write that would enable the other fails with ATT application error
+  `0x80` ("other stream active"). The first subscription is unaffected. To switch,
+  write `0x0000` to the active CCC first, then enable the other.
+- The CCC state is per connection and resets on disconnect, so there is no stale
+  state to clean up after a reconnect.
+- Why refuse instead of letting one silently win: a client that thinks it is getting
+  both streams would otherwise see one go quiet with no error. Refusing makes the
+  mistake visible at the moment it is made. (Review item: the alternative is to
+  accept both and give FF12 precedence.)
+- **Sequence numbers are shared.** Each hand has one counter, incremented for every
+  input report received from that controller regardless of subscription state or
+  which stream is active. Switching streams therefore looks like a gap (the frames
+  received while unsubscribed count as `offline`), not a reset.
 
 ## Notification format
 
@@ -146,13 +169,13 @@ All integers are **little-endian**; floats are IEEE 754 binary32, little-endian.
 | --- | --- | --- | --- |
 | 0 | u8 | `version` | `1`. A receiver must ignore records with an unknown version |
 | 1 | u8 | `hand` | 0 = LEFT, 1 = RIGHT |
-| 2 | u8 | `flags` | bit0 `CALIBRATED`: sensor values have calibration applied. Other bits 0 |
+| 2 | u8 | `flags` | bit0 `CALIBRATED`. **Always 0 in version 1** (see below). Other bits 0 |
 | 3 | u8 | `buttons` | bit0 thumbstick click, bit1 home, bit2 menu, bit3 squeeze click, bit4 trackpad click, bit5 BT pairing, bit6 trackpad touch, bit7 0 |
-| 4 | u32 | `sequence` | The **same per-hand sequence number** as the raw FF11 frame this sample was decoded from (rules under "Sequence numbers" apply, gaps = loss before transmission) |
-| 8 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time()` when the HID report was received, microseconds since ESP32 boot |
-| 16 | u32 | `device_ticks` | Controller's own timer, **100 ns per tick**, wraps at 2^32 (about 429 s). Use for IMU `dt`; extend to 64 bits on the phone |
-| 20 | 3 x f32 | `gyro` x, y, z | **rad/s** |
-| 32 | 3 x f32 | `accel` x, y, z | **m/s^2**, uncalibrated scale (a stationary controller read 10.0-10.1 total in the samples) |
+| 4 | u32 | `sequence` | The **same per-hand sequence number** as the raw FF11 frame this sample was decoded from. Gaps = loss before transmission |
+| 8 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time()` when the HID report was received, microseconds since ESP32 boot. **For latency and jitter diagnostics only; not a sensor clock** |
+| 16 | u32 | `device_ticks` | **Primary clock for sensor timing.** Controller's own timer, 100 ns per tick, wraps at 2^32 (see "Timing") |
+| 20 | 3 x f32 | `gyro` x, y, z | **rad/s**, uncalibrated, raw sensor axes |
+| 32 | 3 x f32 | `accel` x, y, z | **m/s^2**, uncalibrated scale, raw sensor axes |
 | 44 | i16 | `temperature_raw` | Raw sensor word, scale not established |
 | 46 | 2 x i16 | `stick` x, y | -32767..32767 = -1.0..1.0, 0 = centre |
 | 50 | 2 x i16 | `trackpad` x, y | -32767..32767 = -1.0..1.0; both 0 when `trackpad touch` is clear |
@@ -167,42 +190,230 @@ All integers are **little-endian**; floats are IEEE 754 binary32, little-endian.
   (the stationary samples read 10.0-10.1, not 9.81). Not a calibrated figure.
 - Stick: 12-bit value, `(raw - 0x7FF) / 0x7FF`, clamped to 1.0, then times 32767.
 - Trackpad: `(raw - 0x32) / 0x32`, then times 32767; raw `0xFF` (untouched) gives 0.
-- Both scale factors are from Monado and verified only to the extent described in
-  [DECODING.md](DECODING.md) (stationary magnitude, noise level).
+- These factors are from Monado and verified only to the extent described in
+  [DECODING.md](DECODING.md) (stationary magnitude, noise level). A rotation capture
+  is planned to check the gyro scale (a full turn should integrate to 2 pi).
 
-### Axes and calibration
+### Calibration is done on the phone
 
-- `CALIBRATED` clear: gyro/accel are the controller's **raw sensor axes**, scaled
-  to physical units only. This is all that can be produced today.
-- `CALIBRATED` set (future): the per-device mix matrix and bias from the controller's
-  firmware config block are applied, and the values are in the **OpenXR IMU frame**
-  (X right, Y up, Z backward), as Monado does. Axis directions and signs are
-  **unverified** until a rotation capture is done ([DECODING.md](DECODING.md)).
-- A receiver must read `flags` and not assume either.
+FF12 carries **uncalibrated** values: `flags` bit 0 is 0. Each sample is in the
+controller's raw sensor axes, only scaled to physical units. The phone applies the
+per-device mix matrix, bias and pose from the controller's firmware config block,
+which the bridge exposes unmodified on FF13 (below). Bit 0 is kept so a later
+version can set it without changing the layout; a receiver must read `flags` and
+not assume. Axis directions and signs of the raw axes are **unverified** until the
+rotation capture in [DECODING.md](DECODING.md) is done.
+
+## Timing
+
+- **`device_ticks` is the sensor clock.** The app uses the difference between
+  successive samples of the same hand as `dt` for its fusion filter.
+- **Unit: 100 ns per tick (10 MHz).** Taken from Monado, where
+  `WMR_MOTION_CONTROLLER_NS_PER_TICK` is 100 and `wmr_controller_base_handle_imu_sample`
+  computes `sample_time_ns = timestamp_ticks * 100`
+  (monado commit `f50c796c32c811f5fd371f77fd8a749d2ad7df08`). **Confirmed from
+  Monado's code only; not yet measured on hardware.** The capture procedure in
+  [DECODING.md](DECODING.md) checks it two ways: elapsed ticks against elapsed
+  wall-clock time, and the gyro integral over a known rotation.
+- **Wrap.** The counter is an unsigned 32-bit value and wraps at 2^32 ticks, which
+  is 429.4967296 s (about 7 min 9.5 s) at 100 ns. Compute
+  `dt_ticks = (uint32_t)(ticks - prev_ticks)` (unsigned modulo arithmetic, correct
+  across a wrap) and accumulate into a 64-bit total. This is valid while successive
+  samples of the same hand are less than 2^32 ticks (429.5 s) apart, which holds
+  unless the link is lost for longer than that, and is equivalent to Monado's
+  "if the low half went down, add 2^32".
+- **Hands have independent clocks.** LEFT and RIGHT `device_ticks` have unrelated
+  origins; never subtract one from the other. Use `rx_time_us` for coarse
+  cross-hand alignment only.
+- **Discontinuities.** It is not established whether a controller restarts its timer
+  when it reconnects. A receiver should therefore compare
+  `dt_ticks * 100 ns` with `delta(rx_time_us) * 1000 ns` for the same two samples;
+  if they differ by more than about 100 ms, treat it as a discontinuity and reset
+  the filter for that hand. A sequence gap alone is not a discontinuity: ticks keep
+  counting through lost samples, so `dt_ticks` is still the true elapsed time.
+- **`rx_time_us`** (ESP32 receive time) includes Bluetooth scheduling jitter and
+  is only for measuring latency and jitter, for example against a phone-side
+  clock. It answers the one-way part of issue #1; a round-trip (echo) measurement is
+  not provided by this spec.
 
 ## Delivery rules
 
-- The ESP32 sends one FF12 notification per received HID report while FF12
-  notifications are enabled. It is a **separate queue path** from FF11; a full
-  queue drops the newest sample and counts it, as for FF11.
-- Requires an ATT MTU of at least **59** (56 + 3). Below that nothing is sent on
-  FF12. Request a large MTU before enabling FF12 (the same step as for FF11).
+- While FF12 notifications are enabled, the ESP32 sends one FF12 notification per
+  received input report. It is a **separate queue path** from FF11 (the FF11 queue
+  stays idle); a full queue drops the newest sample and counts it, as for FF11.
+- Requires an ATT MTU of at least **59** (56 + 3). Below that nothing is sent on FF12.
+  Request a large MTU before enabling FF12 (the same step as for FF11).
 - Samples of the two hands may interleave freely. Ordering is per hand by `sequence`.
 
-## Throughput, and questions for review
+## Bench-test items (not blockers)
 
-- About 150-180 reports/s per hand measured on the raw stream, so about 360
-  notifications/s for both hands at 56 bytes. Whether the BLE connection interval
-  sustains that **alongside FF11** is untested; the expectation is that a phone
-  subscribes to FF12 *or* FF11 for normal use, not both.
-- Q1: Is `rx_time_us` (ESP32 receive time) the right timestamp, or should the
-  controller's `device_ticks` be the primary clock (receive time carries Bluetooth
-  jitter; ticks do not)? Both are included. This overlaps issue #1 (latency
-  measurement), which is **not** addressed here.
-- Q2: Should buttons/stick/trackpad/trigger be sent in every sample (current,
-  simplest) or only on change?
-- Q3: Calibrated vs uncalibrated: the proposal sends whatever the ESP32 has and sets
-  `CALIBRATED`. Alternative: always send raw-scaled values and the config block
-  once on a separate read, and calibrate on the phone.
-- Q4: `temperature_raw` and `battery` are raw because their scales are unknown.
+- Both hands at about 360 notifications/s (56 bytes each) on one connection: does the
+  negotiated connection interval sustain it with no drops and bounded queue depth?
+  Measured only for the raw stream so far (about 154-174 reports/s per hand).
+- `device_ticks` unit and wrap behaviour on hardware (see Timing).
+- Whether `device_ticks` restarts on controller reconnect.
+- Refused-CCC behaviour on the target Android versions (the app must handle a failed
+  descriptor write).
 - GATT database (`wmr_bridge.gatt`) is not changed until this is approved.
+
+# Controller config block, FF13 (PROPOSED, DESIGN ONLY, not implemented)
+
+**Status: design, no firmware written.** The commands below are what Monado does
+(commit `f50c796c32c811f5fd371f77fd8a749d2ad7df08`, `wmr_controller_base.c`,
+`wmr_controller_protocol.h`). They have **never been tried through this bridge**;
+every item marked "unverified" must be checked on hardware before relying on it.
+
+Goal: the ESP32 reads each controller's firmware config block once, caches it per
+hand, and serves it to the phone **byte-for-byte as received**. The ESP32 does not
+de-obfuscate, parse, or interpret it. The phone de-obfuscates (Monado's fixed
+1024-byte XOR key, applied to the data after the first two bytes), parses the JSON
+(`CalibrationInformation.InertialSensors[]`: mix matrix, bias offsets, pose) and
+applies it. See [DECODING.md](DECODING.md) for the content.
+
+Why raw and not pre-processed: it keeps the key table (1024 bytes) and a JSON parser
+off the ESP32, and it lets the phone check integrity with a CRC over exactly what the
+controller sent.
+
+## Reading the block from the controller (ESP32 to controller)
+
+Commands are 64-byte HID reports with report ID `0x06`:
+
+| Byte | Meaning |
+| --- | --- |
+| 0 | `0x06` (report ID / prefix) |
+| 1 | command id |
+| 2 | block id |
+| 3-6 | `addr`, u32 LE |
+| 7-63 | zero |
+
+Block read is command `0x02`. Responses are 78 bytes: `[0]` response report ID
+(`0x02` for block reads, `0x06` for the init commands), `[2]` echoed command id,
+`[4]` echoed block id, `[5..8]` `blk_remain` u32 LE (bytes of the block not yet
+delivered), `[9]` `len` (data bytes in this response, at most 68), `[10..77]` data.
+
+Reading one block:
+
+1. Send `06 02 <blk> FF FF FF FF`. The response carries the first `len` bytes and
+   `blk_remain`; the block size is `blk_remain + len`.
+2. While bytes remain, send `06 02 <blk> <remain u32 LE>` where `remain` is the
+   number of bytes still to read, and append each response's `len` bytes.
+   Monado waits 10 ms between requests and allows 250 ms for each response.
+
+Blocks used by Monado: `0x00` (firmware revision u32 at offset 0x14, config block
+size u16 at 0x34), `0x03` (16-byte serial number at offset 0x84), and `0x02` (the
+config block: the first 2 bytes are skipped, the rest is obfuscated JSON).
+
+Monado also sends `06 00` (re-init) and `06 04 C1 02` (quiesce) before reading, and
+afterwards enables streaming with `06 03 01 00 02` and `06 03 02 E1 02`. The bridge
+already receives input reports with none of these. **Unverified:** whether block
+reads work without the init commands, and whether the init commands interrupt or
+stop the input stream. Plan: try the block reads alone; only if they fail, send the
+full Monado sequence including the two enable commands, and watch the input stream.
+
+**Unverified:** whether the controller takes these on the HID control or interrupt
+channel and as an output or feature report (Monado uses hidapi `hid_write`, an
+output report). This must be read from the controller's HID report descriptor,
+which the ESP32 already receives; decoding it is a prerequisite.
+
+The sequence is a non-blocking state machine on BTstack timers (one outstanding
+request, 250 ms timeout, a small bounded number of retries, 10 ms spacing), never
+blocking the HID callback.
+
+## Separating config responses from input reports
+
+Today the HID report handler (`handle_report` in `wmr_controller.c`) passes **every**
+report to `wmr_transport_submit_report`, which increments the per-hand sequence,
+counts it as received, and (when subscribed) copies it into a frame of at most 64
+bytes. A config response is 78 bytes including its report ID, plus the 1-byte HID
+transaction header, 79 bytes in all, so today it would consume a sequence number and
+be dropped as oversize.
+
+Rule for the new design, applied **in the HID handler before anything is counted or
+queued**: look at the report ID, which is byte 1 of what BTstack delivers (byte 0 is
+the `0xA1` DATA/input header).
+
+| Report ID | Handling |
+| --- | --- |
+| `0x01` | Input report: existing path, unchanged (sequence, raw FF11 or decoded FF12) |
+| `0x02`, `0x06` | Config command response: goes only to the config reader; **not** sequence-numbered, not counted in `rx`, not queued, not forwarded on FF11/FF12 |
+| anything else | Counted in a separate "other reports" counter, not forwarded |
+
+Classification is by report ID, not by length, so a malformed short response cannot
+leak into the sample stream. While a config read is in progress the controller keeps
+streaming `0x01` input reports interleaved with the responses; the reader ignores
+non-matching IDs exactly as Monado's loop does, and input handling is unaffected.
+`WMR_CFG_MAX_FRAME` (64) stays as it is, since config responses never reach that
+queue. The sequence counter is not advanced by config traffic, so FF11/FF12 sequence
+numbers stay contiguous.
+
+## Cache
+
+- RAM cache per hand, filled after the HID descriptor is available. The block size is
+  not fixed by anything in Monado (it comes from the controller); its size on these
+  controllers is **unknown** until measured, so the buffer must be sized from the
+  `blk_remain` of the first response, with a hard upper bound (proposed 16 KB), and
+  a larger block is a FAILED state.
+- On a later reconnect, re-read only blocks `0x00` and `0x03` (small) and compare the
+  firmware revision and serial against the cache; re-read block `0x02` only if either
+  changed. Persisting the cache in NVS across reboots is an optional follow-up.
+- The cache survives phone disconnects. It is cleared only if the revision or serial
+  differ on reconnect.
+
+## FF13 characteristic (ESP32 to phone)
+
+A GATT attribute value is limited to 512 bytes by the ATT specification (600 on
+Android's stack), and the config block is expected to be larger, so a plain read-only
+characteristic cannot hold it. FF13 is therefore a read characteristic with a
+**window cursor**, plus a notification when the state changes. This departs from
+"read-only" for that reason.
+
+| Item | UUID | Properties |
+| --- | --- | --- |
+| Characteristic | `0000FF13-0000-1000-8000-00805F9B34FB` | read, write (with response), notify |
+| CCC (0x2902) | - | read/write |
+
+Write value (5 bytes): `hand` u8, `offset` u32 LE. Sets the read cursor for this
+connection (default: hand 0, offset 0). Invalid `hand` fails with ATT error `0x80`.
+The blob itself is never written.
+
+Read / notify value: a 16-byte header, then data.
+
+| Offset | Size | Field | Meaning |
+| --- | --- | --- | --- |
+| 0 | u8 | `version` | `1` |
+| 1 | u8 | `hand` | 0 LEFT, 1 RIGHT (the hand the cursor points at) |
+| 2 | u8 | `state` | 0 NOT_READ (controller not connected or not tried), 1 READING, 2 READY, 3 FAILED |
+| 3 | u8 | reserved | 0 |
+| 4 | u32 | `total_len` | Blob length in bytes; 0 unless READY |
+| 8 | u32 | `offset` | Start of this window in the blob |
+| 12 | u32 | `crc32` | CRC-32 (IEEE 802.3, reflected, polynomial `0xEDB88320`, init and final XOR `0xFFFFFFFF`) of the **whole** blob; 0 unless READY |
+| 16 | `n` | data | `blob[offset .. offset+n)`, `n = min(total_len - offset, 496)`; empty unless READY |
+
+A **notify** carries only the 16-byte header (no data), sent when a hand's `state`
+changes, so the app knows when to start reading. The phone reads the blob by writing
+`(hand, 0)`, reading (the stack issues read-blob requests for values longer than the
+MTU), then writing `(hand, 496)`, `(hand, 992)` and so on until `total_len` bytes are
+collected, then checks the CRC-32. If the cursor offset is beyond `total_len`, the
+window is empty.
+
+The blob is the controller's block `0x02` **including the leading 2 bytes and still
+XOR-obfuscated**, exactly as read. The phone drops the first two bytes and XORs the
+rest with Monado's `wmr_config_key` (1024 bytes; byte `i` of the data is XORed with
+`key[i % 1024]`) before parsing the JSON. The key table is Monado's
+(`src/xrt/drivers/wmr/wmr_config_key.h`, Copyright 2021 Jan Schmidt, BSL-1.0); if it is
+copied into the app, its notice must travel with it.
+
+FF13 is independent of the FF11/FF12 exclusivity and is expected to be used alongside
+FF12, with negligible traffic.
+
+## Security note
+
+The config block is device-specific data (it may contain identifiers). Like the rest
+of the BLE service, FF13 has **no authentication or encryption** (see
+[SECURITY.md](SECURITY.md)): anyone in range can read it.
+
+## Not decided here
+
+- NVS persistence, and an eviction rule for it.
+- Behaviour if a controller never answers (this design: FAILED after the bounded
+  retries; a console key could retry).

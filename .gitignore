@@ -2,3 +2,6 @@ build*/
 *.exe
 sdkconfig
 sdkconfig.old
+
+# Hardware capture output (tools/capture_ble.py)
+captures/
