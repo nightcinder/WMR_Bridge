@@ -1,0 +1,307 @@
+/*
+ * Copyright (C) 2017 BlueKitchen GmbH
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holders nor the names of
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ * 4. Any redistribution, use, or modification is done solely for
+ *    personal benefit and not for any commercial purpose or for
+ *    monetary gain.
+ *
+ * THIS SOFTWARE IS PROVIDED BY BLUEKITCHEN GMBH AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL BLUEKITCHEN
+ * GMBH OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+ * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * Please inquire about commercial licensing options at 
+ * contact@bluekitchen-gmbh.com
+ *
+ */
+
+#define BTSTACK_FILE__ "wmr_transport.c"
+
+#include <stdio.h>
+#include <string.h>
+#include "btstack_config.h"
+#include "btstack.h"
+#include "wmr_bridge.h"        /* generated from wmr_bridge.gatt: profile_data, ATT_*_HANDLE */
+#include "wmr_controller.h"
+#include "wmr_protocol.h"
+#include "wmr_queue.h"
+#include "wmr_transport.h"
+
+/* Experimental FF10/FF11 service; see wmr_bridge.gatt. The single FF11
+ * characteristic is both the status read value and the notification stream. */
+#define STREAM_VALUE_HANDLE ATT_CHARACTERISTIC_0000FF11_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
+#define STREAM_CCC_HANDLE   ATT_CHARACTERISTIC_0000FF11_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
+
+#define STATUS_SIZE 16
+
+static hci_con_handle_t phone_handle = HCI_CON_HANDLE_INVALID;
+static bool phone_notifications;
+/* A CAN_SEND_NOW request is outstanding. */
+static bool send_pending;
+/* Seconds since boot; reported in the status read, not a frame sequence. */
+static uint32_t status_tick;
+
+static wmr_queue_t queue;
+static uint16_t send_offset;       /* bytes of the head frame already sent */
+static wmr_stats_t stats;
+
+static btstack_timer_source_t pump_timer;
+static btstack_timer_source_t status_timer;
+
+/* ---- Queue and pump ----------------------------------------------------- */
+
+/* Drop everything queued. Called whenever the live stream restarts (phone
+ * connects, or notifications are switched on or off), so the phone never
+ * receives a stale backlog. Purged frames are counted per hand. */
+static void queue_reset(void){
+    wmr_queue_clear(&queue, stats.purged);
+    send_offset = 0;
+}
+
+static void pump_kick(void){
+    if (!phone_notifications || phone_handle == HCI_CON_HANDLE_INVALID ||
+        !queue.count || send_pending) return;
+    send_pending = true;
+    att_server_request_can_send_now_event(phone_handle);
+}
+
+void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t length){
+    if (hand >= WMR_NUM_CONTROLLERS) return;
+    uint32_t sequence = ++stats.sequence[hand];
+    stats.rx[hand]++;
+    if (!phone_notifications || phone_handle == HCI_CON_HANDLE_INVALID){
+        stats.offline[hand]++;
+        return;
+    }
+    wmr_frame_t frame;
+    if (!length || length > WMR_CFG_MAX_FRAME){
+        stats.drop[hand]++;
+        return;
+    }
+    frame.sequence = sequence;
+    frame.length = length;
+    frame.hand = (uint8_t) hand;
+    memcpy(frame.data, report, length);
+    if (!wmr_queue_push(&queue, &frame)){
+        stats.drop[hand]++;
+        return;
+    }
+    pump_kick();
+}
+
+/* Send one fragment of the head frame. Runs on ATT_EVENT_CAN_SEND_NOW. */
+static void pump_send_one(void){
+    send_pending = false;
+    if (!phone_notifications || phone_handle == HCI_CON_HANDLE_INVALID) return;
+    const wmr_frame_t *frame = wmr_queue_peek(&queue);
+    if (!frame) return;
+    uint16_t capacity = wmr_proto_notification_capacity(att_server_get_mtu(phone_handle));
+    if (!capacity) return;
+    uint8_t packet[WMR_CFG_MAX_NOTIFICATION];
+    uint16_t chunk = 0;
+    uint16_t size = wmr_proto_encode_fragment(frame, send_offset, capacity, packet, &chunk);
+    if (!size) return;
+    uint8_t result = att_server_notify(phone_handle, STREAM_VALUE_HANDLE, packet, size);
+    if (result != ERROR_CODE_SUCCESS){
+        stats.errors++;
+        return;     /* The retry timer tries again; a send error never discards a frame. */
+    }
+    stats.notifications++;
+    send_offset += chunk;
+    if (send_offset == frame->length){
+        stats.tx[frame->hand]++;
+        send_offset = 0;
+        wmr_queue_pop(&queue);
+    }
+    pump_kick();
+}
+
+static void pump_retry_tick(btstack_timer_source_t *timer){
+    pump_kick();
+    btstack_run_loop_set_timer(timer, WMR_CFG_PUMP_RETRY_MS);
+    btstack_run_loop_add_timer(timer);
+}
+
+static void status_tick_handler(btstack_timer_source_t *timer){
+    status_tick++;
+    pump_kick();
+    btstack_run_loop_set_timer(timer, WMR_CFG_STATUS_TICK_MS);
+    btstack_run_loop_add_timer(timer);
+}
+
+/* ---- Introspection ------------------------------------------------------ */
+
+const wmr_stats_t *wmr_transport_stats(void){
+    return &stats;
+}
+
+void wmr_transport_get_info(wmr_transport_info_t *info){
+    info->phone_connected  = phone_handle != HCI_CON_HANDLE_INVALID;
+    info->subscribed       = phone_notifications;
+    info->mtu              = info->phone_connected ? att_server_get_mtu(phone_handle) : 0;
+    info->queue_count      = queue.count;
+    info->queue_capacity   = WMR_CFG_QUEUE_CAPACITY;
+    info->queue_high_water = queue.high_water;
+}
+
+/* ---- ATT callbacks ------------------------------------------------------ */
+
+/* 16-byte status value returned when the phone reads FF11:
+ *   [0]      version (1)
+ *   [1]      bit0 LEFT connected, bit1 RIGHT connected
+ *   [2]      bit0 LEFT descriptor available, bit1 RIGHT descriptor available
+ *   [3]      reserved (0)
+ *   [4..7]   uint32 LE seconds since boot
+ *   [8..11]  uint32 LE LEFT reports this connection
+ *   [12..15] uint32 LE RIGHT reports this connection */
+static void build_status(uint8_t *status){
+    wmr_controller_status_t left, right;
+    wmr_controller_get_status(WMR_HAND_LEFT, &left);
+    wmr_controller_get_status(WMR_HAND_RIGHT, &right);
+    status[0] = 1;
+    status[1] = (left.connected ? 1 : 0) | (right.connected ? 2 : 0);
+    status[2] = (left.descriptor_available ? 1 : 0) | (right.descriptor_available ? 2 : 0);
+    status[3] = 0;
+    little_endian_store_32(status, 4, status_tick);
+    little_endian_store_32(status, 8, left.reports);
+    little_endian_store_32(status, 12, right.reports);
+}
+
+static uint16_t att_read(hci_con_handle_t handle, uint16_t attribute,
+                         uint16_t offset, uint8_t *buffer, uint16_t buffer_size){
+    (void)handle;
+    if (attribute == STREAM_VALUE_HANDLE){
+        uint8_t status[STATUS_SIZE];
+        build_status(status);
+        return att_read_callback_handle_blob(status, sizeof(status), offset, buffer, buffer_size);
+    }
+    if (attribute == STREAM_CCC_HANDLE){
+        uint8_t ccc[2] = {phone_notifications ? 1 : 0, 0};
+        return att_read_callback_handle_blob(ccc, sizeof(ccc), offset, buffer, buffer_size);
+    }
+    return 0;
+}
+
+static int att_write(hci_con_handle_t handle, uint16_t attribute,
+                     uint16_t transaction_mode, uint16_t offset,
+                     uint8_t *buffer, uint16_t buffer_size){
+    if (attribute != STREAM_CCC_HANDLE) return 0;
+    if (transaction_mode != ATT_TRANSACTION_MODE_NONE) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
+    if (offset != 0) return ATT_ERROR_INVALID_OFFSET;
+    if (buffer_size != 2) return ATT_ERROR_INVALID_ATTRIBUTE_VALUE_LENGTH;
+    uint16_t value = little_endian_read_16(buffer, 0);
+    if (value > 1) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
+    if (phone_handle != HCI_CON_HANDLE_INVALID && handle != phone_handle)
+        return ATT_ERROR_WRITE_NOT_PERMITTED;
+    phone_handle = handle;
+    if ((value == 1) != phone_notifications){
+        /* Subscription transitions start a fresh live stream, not a backlog. */
+        queue_reset();
+    }
+    phone_notifications = value == 1;
+    printf("BLE phone notifications %s\n", phone_notifications ? "enabled" : "disabled");
+    return 0;
+}
+
+/* ATT server callback. Only ATT_EVENT_CAN_SEND_NOW is handled here. The
+ * event payload layout is deliberately not parsed: there is a single phone
+ * link, and the pump re-reads its own state. HCI events are handled solely
+ * through wmr_transport_on_hci_event so that LE connect / disconnect are
+ * processed exactly once. */
+static void att_packet_handler(uint8_t packet_type, uint16_t channel,
+                               uint8_t *packet, uint16_t size){
+    (void)channel;
+    if (packet_type == HCI_EVENT_PACKET && size >= 2 &&
+        hci_event_packet_get_type(packet) == ATT_EVENT_CAN_SEND_NOW){
+        pump_send_one();
+    }
+}
+
+/* ---- HCI events --------------------------------------------------------- */
+
+void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
+    switch (hci_event_packet_get_type(packet)){
+        case BTSTACK_EVENT_STATE:
+            if (btstack_event_state_get_state(packet) == HCI_STATE_WORKING){
+                gap_advertisements_enable(1);
+                printf("BLE advertising: WMR Bridge (RAW STREAM FF11)\n");
+            }
+            break;
+        case HCI_EVENT_LE_META:
+            /* Legacy and enhanced LE Connection Complete share these initial
+             * fields: [3] status, [4..5] connection handle. */
+            if (size >= 7 && (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE ||
+                              packet[2] == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1)){
+                if (packet[3] == ERROR_CODE_SUCCESS){
+                    phone_handle = little_endian_read_16(packet, 4);
+                    queue_reset();
+                    phone_notifications = false;
+                    send_pending = false;
+                    printf("BLE phone connected, handle=0x%04x\n", phone_handle);
+                } else {
+                    printf("BLE connection failed: 0x%02x\n", packet[3]);
+                    gap_advertisements_enable(1);
+                }
+            }
+            break;
+        case HCI_EVENT_DISCONNECTION_COMPLETE:
+            if (size >= 6 && little_endian_read_16(packet, 3) == phone_handle){
+                printf("BLE phone disconnected, reason=0x%02x\n", packet[5]);
+                phone_handle = HCI_CON_HANDLE_INVALID;
+                phone_notifications = false;
+                send_pending = false;
+                gap_advertisements_enable(1);
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+/* ---- Init --------------------------------------------------------------- */
+
+void wmr_transport_init(void){
+    wmr_queue_init(&queue);
+    att_server_init(profile_data, att_read, att_write);
+    /* General discoverable; do not claim BR/EDR is unsupported. */
+    static const uint8_t advertising[] = {
+        2, BLUETOOTH_DATA_TYPE_FLAGS, 0x02,
+        11, BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME,
+        'W','M','R',' ','B','r','i','d','g','e',
+        3, BLUETOOTH_DATA_TYPE_INCOMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS,
+        0x10, 0xff
+    };
+    bd_addr_t zero_address = {0};
+    gap_advertisements_set_params(WMR_CFG_ADV_INTERVAL_MIN, WMR_CFG_ADV_INTERVAL_MAX,
+                                  0, 0, zero_address, WMR_CFG_ADV_CHANNEL_MAP, 0);
+    gap_advertisements_set_data(sizeof(advertising), (uint8_t *) advertising);
+
+    pump_timer.process = pump_retry_tick;
+    btstack_run_loop_set_timer(&pump_timer, WMR_CFG_PUMP_RETRY_MS);
+    btstack_run_loop_add_timer(&pump_timer);
+    status_timer.process = status_tick_handler;
+    btstack_run_loop_set_timer(&status_timer, WMR_CFG_STATUS_TICK_MS);
+    btstack_run_loop_add_timer(&status_timer);
+
+    att_server_register_packet_handler(att_packet_handler);
+}

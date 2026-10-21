@@ -1,0 +1,18 @@
+# Build and run the host unit tests (protocol encoder/reassembler + queue).
+# Needs any C99 compiler on PATH: gcc, clang, or `zig cc`. No ESP-IDF needed.
+$ErrorActionPreference = "Stop"
+$root = Split-Path -Parent $PSScriptRoot
+$exe  = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_protocol.exe"
+
+$cc = $null
+foreach ($name in "gcc", "clang", "cc") {
+    if (Get-Command $name -ErrorAction SilentlyContinue) { $cc = @($name); break }
+}
+if (-not $cc -and (Get-Command zig -ErrorAction SilentlyContinue)) { $cc = @("zig", "cc") }
+if (-not $cc) { throw "No C compiler found (install gcc/clang/zig, or see README)." }
+
+$sources = "$root\tests\test_protocol.c", "$root\src\wmr_protocol.c", "$root\src\wmr_queue.c"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" $sources -o $exe
+if ($LASTEXITCODE -ne 0) { throw "compile failed" }
+& $exe "$root\samples\controller_frames.txt"
+exit $LASTEXITCODE

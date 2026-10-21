@@ -1,0 +1,116 @@
+# Set default example to build, update to build your own application
+# e.g. if there is btstack/port/esp32/main/my_app.c, you can set DEFAULT_EXAMPLE to "my_app"
+set (DEFAULT_EXAMPLE gatt_counter)
+
+if( NOT DEFINED ENV{EXAMPLE} )
+    set(EXAMPLE ${DEFAULT_EXAMPLE})
+else()
+    set(EXAMPLE $ENV{EXAMPLE})
+endif()
+
+if( EXAMPLE STREQUAL "wmr_bridge" )
+    # Multi-file application in <btstack>/wmr_bridge (see wmr_bridge/README.md).
+    set(WMR_BRIDGE_DIR "${BTSTACK_ROOT}/wmr_bridge")
+    set(BUILD_MESSAGE  "Building application \"${EXAMPLE}\"")
+    set(EXAMPLE_SOURCE
+        "${WMR_BRIDGE_DIR}/src/wmr_bridge_main.c"
+        "${WMR_BRIDGE_DIR}/src/wmr_console.c"
+        "${WMR_BRIDGE_DIR}/src/wmr_controller.c"
+        "${WMR_BRIDGE_DIR}/src/wmr_protocol.c"
+        "${WMR_BRIDGE_DIR}/src/wmr_queue.c"
+        "${WMR_BRIDGE_DIR}/src/wmr_transport.c")
+    set(GATT_PATH "${WMR_BRIDGE_DIR}/wmr_bridge.gatt")
+else()
+    if( NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/${EXAMPLE}.c" )
+        set(BUILD_MESSAGE  "Building example: \"${EXAMPLE}\"")
+        list(TRANSFORM EXAMPLE PREPEND ${BTSTACK_ROOT}/example/ OUTPUT_VARIABLE EXAMPLE_SOURCE)
+    else()
+        set(BUILD_MESSAGE  "Building custom application \"${EXAMPLE}\"")
+        list(TRANSFORM EXAMPLE PREPEND ${CMAKE_CURRENT_LIST_DIR}/ OUTPUT_VARIABLE EXAMPLE_SOURCE)
+    endif()
+
+    # detect optional .gatt file
+    set( GATT_PATH "${EXAMPLE_SOURCE}.gatt" )
+    string( CONCAT EXAMPLE_SOURCE ${EXAMPLE_SOURCE} ".c" )
+    if( NOT EXISTS "${GATT_PATH}" )
+        unset( GATT_PATH )
+    endif()
+endif()
+
+idf_component_register(
+    SRCS "main.c" "${EXAMPLE_SOURCE}"
+    REQUIRES btstack esp_phy bt esp_driver_gpio esp_driver_i2s)
+
+include(BTstackUtils)
+
+# add GATT DB creation
+message("\n===")
+if ( DEFINED GATT_PATH )
+    message("${BUILD_MESSAGE} with GATT DB")
+    # compile_gatt.py must be run through Python explicitly: on the Windows
+    # setup this was developed on, executing it directly launched Node.js.
+    # Use the interpreter ESP-IDF itself uses.
+    idf_build_get_property(GATT_PYTHON PYTHON)
+    if( NOT GATT_PYTHON )
+        set(GATT_PYTHON "C:/Espressif/tools/python/v6.1/venv/Scripts/python.exe")
+    endif()
+
+    set(GATT_COMPILER
+        "${BTSTACK_ROOT}/tool/compile_gatt.py")
+
+    # compile_gatt.py output is named after the .gatt file, not the example.
+    get_filename_component(GATT_NAME "${GATT_PATH}" NAME_WLE)
+    set(GATT_HEADER
+        "${CMAKE_CURRENT_BINARY_DIR}/${GATT_NAME}.h")
+
+    add_custom_command(
+        OUTPUT "${GATT_HEADER}"
+        COMMAND "${GATT_PYTHON}"
+                "${GATT_COMPILER}"
+                "${GATT_PATH}"
+                "${GATT_HEADER}"
+        DEPENDS "${GATT_PATH}" "${GATT_COMPILER}"
+        WORKING_DIRECTORY "${BTSTACK_ROOT}/tool"
+        COMMENT "Generating ${GATT_NAME}.h using Python"
+        VERBATIM
+    )
+
+    target_sources(${COMPONENT_LIB} PRIVATE "${GATT_HEADER}")
+
+    target_include_directories(${COMPONENT_LIB}
+        PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+    if( EXAMPLE STREQUAL "wmr_bridge" )
+        target_include_directories(${COMPONENT_LIB}
+            PRIVATE "${WMR_BRIDGE_DIR}/src")
+    endif()
+else()
+    message(${BUILD_MESSAGE})
+endif()
+message("===\n")
+
+# add example utils as needed
+set(SCO_EXAMPLES hfp_ag_demo hfp_hf_demo hsp_ag_demo hsp_hs_demo )
+if( ${EXAMPLE} IN_LIST SCO_EXAMPLES )
+    list(APPEND SRCS ${BTSTACK_ROOT}/example/sco_demo_util.c )
+    target_include_directories(${COMPONENT_LIB} PRIVATE ${BTSTACK_ROOT}/example/)
+endif()
+
+set(LE_AUDIO_SINK_EXAMPLES le_audio_unicast_headset le_audio_unicast_gateway le_audio_broadcast_sink le_audio_broadcast_sink_lite le_audio_unicast_gateway_lite le_audio_unicast_headset_lite)
+if( ${EXAMPLE} IN_LIST LE_AUDIO_SINK_EXAMPLES )
+    list(APPEND SRCS ${BTSTACK_ROOT}/example/le_audio_demo_util_sink.c )
+    target_include_directories(${COMPONENT_LIB} PRIVATE ${BTSTACK_ROOT}/example/)
+endif()
+
+set(LE_AUDIO_SOURCE_EXAMPLES le_audio_unicast_gateway le_audio_broadcast_source le_audio_broadcast_source_lite le_audio_unicast_gateway_lite le_audio_unicast_headset_lite)
+if( ${EXAMPLE} IN_LIST LE_AUDIO_SOURCE_EXAMPLES )
+    list(APPEND SRCS ${BTSTACK_ROOT}/example/le_audio_demo_util_source.c )
+    target_include_directories(${COMPONENT_LIB} PRIVATE ${BTSTACK_ROOT}/example/)
+endif()
+
+# define sources for main component
+target_sources(${COMPONENT_LIB} PRIVATE ${SRCS})
+
+# custom target to list all BTstack examples
+add_custom_target(list-examples
+    COMMAND ${CMAKE_COMMAND} -D BTSTACK_ROOT=${BTSTACK_ROOT} -P ${BTSTACK_ROOT}/tool/cmake/BTstackListExamples.cmake
+)
