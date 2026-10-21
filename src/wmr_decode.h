@@ -41,11 +41,19 @@
  * Pure C, no BTstack dependency; meant for the receiving side (phone/host)
  * and for host unit tests, not for the ESP32 firmware, which stays a raw pipe.
  *
- * The field layout and scale factors follow Monado's OG WMR controller driver
- * (src/xrt/drivers/wmr/wmr_controller_og.c, BSL-1.0, by N Madsen, Collabora and
- * Jan Schmidt, checked at monado commit f50c796c32c8). Values are NOT
- * calibrated: the per-device sensor mix matrix, bias and orientation come from
- * the controller's firmware config block, which this bridge does not read.
+ * The field layout and scale factors follow Monado's OG WMR controller driver.
+ * Portions derived from Monado (https://gitlab.freedesktop.org/monado/monado),
+ * src/xrt/drivers/wmr/wmr_controller_og.c and wmr_protocol.h at commit
+ * f50c796c32c811f5fd371f77fd8a749d2ad7df08:
+ *   Copyright 2018, Philipp Zabel.
+ *   Copyright 2020-2021, N Madsen.
+ *   Copyright 2020-2023, Collabora, Ltd.
+ *   Copyright 2020-2023, Jan Schmidt
+ *   SPDX-License-Identifier: BSL-1.0 (Boost Software License 1.0; full text in
+ *   docs/DECODING.md). That notice must be kept in all copies and derivative
+ *   works of this file.
+ *
+ * Values from wmr_decode_frame are NOT calibrated; see docs/DECODING.md.
  */
 
 #ifndef WMR_DECODE_H

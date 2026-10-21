@@ -37,7 +37,17 @@
 
 /*
  * wmr_decode.c - OG WMR motion controller input report decoder.
- * Layout and scaling follow Monado's wmr_controller_og.c; see wmr_decode.h.
+ * Layout and scaling follow Monado's wmr_controller_og.c.
+ * Portions derived from Monado (https://gitlab.freedesktop.org/monado/monado),
+ * src/xrt/drivers/wmr/wmr_controller_og.c and wmr_protocol.h at commit
+ * f50c796c32c811f5fd371f77fd8a749d2ad7df08:
+ *   Copyright 2018, Philipp Zabel.
+ *   Copyright 2020-2021, N Madsen.
+ *   Copyright 2020-2023, Collabora, Ltd.
+ *   Copyright 2020-2023, Jan Schmidt
+ *   SPDX-License-Identifier: BSL-1.0 (Boost Software License 1.0; full text in
+ *   docs/DECODING.md). That notice must be kept in all copies and derivative
+ *   works of this file.
  */
 
 #define BTSTACK_FILE__ "wmr_decode.c"
