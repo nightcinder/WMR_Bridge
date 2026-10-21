@@ -43,6 +43,7 @@
 #include "btstack.h"
 #include "wmr_bridge.h"        /* generated from wmr_bridge.gatt: profile_data, ATT_*_HANDLE */
 #include "wmr_controller.h"
+#include "wmr_link.h"
 #include "wmr_protocol.h"
 #include "wmr_queue.h"
 #include "wmr_transport.h"
@@ -67,6 +68,43 @@ static wmr_stats_t stats;
 
 static btstack_timer_source_t pump_timer;
 static btstack_timer_source_t status_timer;
+
+/* ---- Connection parameters ---------------------------------------------- */
+
+static const wmr_conn_request_t conn_wanted = {
+    WMR_CFG_CONN_INTERVAL_MIN, WMR_CFG_CONN_INTERVAL_MAX,
+    WMR_CFG_CONN_LATENCY, WMR_CFG_CONN_TIMEOUT
+};
+static bool conn_known;
+static wmr_conn_params_t conn_now;
+static bool conn_update_pending;
+static btstack_timer_source_t conn_request_timer;
+
+static void conn_report(const char *what, uint16_t interval, uint16_t latency, uint16_t timeout){
+    char text[48];
+    conn_now.interval = interval;
+    conn_now.latency = latency;
+    conn_now.timeout = timeout;
+    conn_known = true;
+    wmr_conn_format(&conn_now, text, sizeof(text));
+    printf("BLE connection parameters %s: %s (%s)\n", what, text,
+           wmr_conn_params_satisfy(&conn_now, &conn_wanted) ? "meets request" : "does NOT meet request");
+}
+
+/* One-shot after the phone connects: ask for a short interval. The phone (the
+ * central) decides; the result arrives as a connection-update-complete event,
+ * or not at all if the request is refused or ignored (conn_update_pending then
+ * stays set and shows in the statistics line). */
+static void conn_request_fire(btstack_timer_source_t *timer){
+    (void)timer;
+    if (phone_handle == HCI_CON_HANDLE_INVALID) return;
+    int rc = gap_request_connection_parameter_update(phone_handle,
+        conn_wanted.interval_min, conn_wanted.interval_max, conn_wanted.latency, conn_wanted.timeout);
+    conn_update_pending = rc == 0;
+    printf("BLE connection parameter update requested (interval %u-%u x 1.25 ms, latency %u, timeout %u x 10 ms): %s (rc=%d)\n",
+           conn_wanted.interval_min, conn_wanted.interval_max, conn_wanted.latency, conn_wanted.timeout,
+           rc == 0 ? "sent" : "NOT sent", rc);
+}
 
 /* ---- Queue and pump ----------------------------------------------------- */
 
@@ -162,6 +200,9 @@ void wmr_transport_get_info(wmr_transport_info_t *info){
     info->queue_count      = queue.count;
     info->queue_capacity   = WMR_CFG_QUEUE_CAPACITY;
     info->queue_high_water = queue.high_water;
+    info->conn_known       = conn_known;
+    info->conn             = conn_now;
+    info->conn_update_pending = conn_update_pending;
 }
 
 /* ---- ATT callbacks ------------------------------------------------------ */
@@ -250,6 +291,21 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
         case HCI_EVENT_LE_META:
             /* Legacy and enhanced LE Connection Complete share these initial
              * fields: [3] status, [4..5] connection handle. */
+            if (size >= 7 && packet[2] == HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE){
+                if (hci_subevent_le_connection_update_complete_get_connection_handle(packet) == phone_handle){
+                    if (hci_subevent_le_connection_update_complete_get_status(packet) == ERROR_CODE_SUCCESS){
+                        conn_update_pending = false;
+                        conn_report("updated",
+                            hci_subevent_le_connection_update_complete_get_conn_interval(packet),
+                            hci_subevent_le_connection_update_complete_get_conn_latency(packet),
+                            hci_subevent_le_connection_update_complete_get_supervision_timeout(packet));
+                    } else {
+                        printf("BLE connection update failed: 0x%02x\n",
+                               hci_subevent_le_connection_update_complete_get_status(packet));
+                    }
+                }
+                break;
+            }
             if (size >= 7 && (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE ||
                               packet[2] == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1)){
                 if (packet[3] == ERROR_CODE_SUCCESS){
@@ -258,6 +314,21 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     phone_notifications = false;
                     send_pending = false;
                     printf("BLE phone connected, handle=0x%04x\n", phone_handle);
+                    conn_update_pending = false;
+                    if (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
+                        conn_report("at connect",
+                            hci_subevent_le_connection_complete_get_conn_interval(packet),
+                            hci_subevent_le_connection_complete_get_conn_latency(packet),
+                            hci_subevent_le_connection_complete_get_supervision_timeout(packet));
+                    } else {
+                        conn_report("at connect",
+                            hci_subevent_le_enhanced_connection_complete_v1_get_conn_interval(packet),
+                            hci_subevent_le_enhanced_connection_complete_v1_get_conn_latency(packet),
+                            hci_subevent_le_enhanced_connection_complete_v1_get_supervision_timeout(packet));
+                    }
+                    btstack_run_loop_remove_timer(&conn_request_timer);
+                    btstack_run_loop_set_timer(&conn_request_timer, WMR_CFG_CONN_REQUEST_DELAY_MS);
+                    btstack_run_loop_add_timer(&conn_request_timer);
                 } else {
                     printf("BLE connection failed: 0x%02x\n", packet[3]);
                     gap_advertisements_enable(1);
@@ -270,6 +341,9 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                 phone_handle = HCI_CON_HANDLE_INVALID;
                 phone_notifications = false;
                 send_pending = false;
+                conn_known = false;
+                conn_update_pending = false;
+                btstack_run_loop_remove_timer(&conn_request_timer);
                 gap_advertisements_enable(1);
             }
             break;
@@ -299,6 +373,7 @@ void wmr_transport_init(void){
     pump_timer.process = pump_retry_tick;
     btstack_run_loop_set_timer(&pump_timer, WMR_CFG_PUMP_RETRY_MS);
     btstack_run_loop_add_timer(&pump_timer);
+    conn_request_timer.process = conn_request_fire;
     status_timer.process = status_tick_handler;
     btstack_run_loop_set_timer(&status_timer, WMR_CFG_STATUS_TICK_MS);
     btstack_run_loop_add_timer(&status_timer);

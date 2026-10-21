@@ -46,6 +46,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "wmr_stats.h"
+#include "wmr_link.h"
 
 typedef struct {
     bool     phone_connected;
@@ -54,6 +55,9 @@ typedef struct {
     unsigned queue_count;
     unsigned queue_capacity;
     unsigned queue_high_water;
+    bool     conn_known;       /* connection parameters have been reported */
+    wmr_conn_params_t conn;    /* interval/latency/timeout currently in use */
+    bool     conn_update_pending;   /* requested, no update event received yet */
 } wmr_transport_info_t;
 
 /* Init ATT server, advertising data, timers; register the ATT handler. */

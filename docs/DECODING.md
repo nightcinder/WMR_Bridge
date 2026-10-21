@@ -240,3 +240,47 @@ THE SOFTWARE.
 ```
 
 The rest of this repository carries the BlueKitchen BTstack license (see the README).
+
+## Link quality (read this before trusting a rotation capture)
+
+The rotation checks assume most frames arrive. The controllers produce about 150-190
+reports/s each; the first LEFT and RIGHT captures delivered only about 10 frames/s per
+hand, with 1,000 to 1,500 sequence gaps per phase. Gyro integration, the tick-unit check
+and the axis mapping are **not valid** on such a capture, so the tools now say so:
+
+- `tools/capture_ble.py` prints the ATT MTU the PC's BLE stack reports right after
+  connecting, writes it into the capture header (`# mtu: N`), and after every phase and
+  at the end prints per hand: frames received, sequence-gap events, total missing frames,
+  percentage lost, effective Hz (what arrived) and produced Hz (arrived + missing).
+- `tools/analyze_capture.py` prints the MTU, the loss per phase, and, when more than
+  **5 %** of the produced frames in any phase were lost, a `LINK TOO LOSSY, rotation
+  results not valid` banner; it then withholds the sensor-to-world mapping.
+- The bridge's own 5-second line shows what it believes: `mtu`, `conn=[interval
+  latency timeout]`, queue depth, and per hand `rx` (from the controller), `tx` (handed
+  to BLE) and `drop` (queue full). If `rx` is about 190/s but `tx` is about 10/s with
+  `drop` rising, the BLE link is the bottleneck; if `tx` is about 190/s but the capture is
+  short of frames, the loss is after the ESP32 (the PC's BLE stack or radio). See
+  [COUNTERS.md](COUNTERS.md).
+- After the phone connects the bridge asks for a **7.5-15 ms connection interval, latency
+  0, 4 s timeout** and logs what the phone actually granted
+  (`BLE connection parameters at connect: ...` and, if the phone changes them,
+  `... updated: ...`). Windows centrals often keep a longer interval (tens of ms), which
+  limits how many notifications fit per second whatever the bridge asks; the log shows
+  whether the request was honoured. **This has not been tried on hardware.**
+
+**Repeat capture** (the user flashes the firmware from this branch first; nothing here
+flashes anything):
+
+```powershell
+# 1. Build and flash as in docs/BUILD_WINDOWS.md, then open the monitor and note, after the
+#    PC connects: the 'BLE connection parameters ...' lines and the STREAM line.
+# 2. In another terminal, with the bridge not connected to a phone:
+pip install bleak
+python tools/capture_ble.py --hand LEFT
+python tools/analyze_capture.py captures/<file>.txt --hand LEFT
+# 3. Repeat for --hand RIGHT. Keep the monitor output from step 1 next to each capture.
+```
+
+Report with each capture: the printed MTU, the `conn=[...]` text, the per-phase loss lines
+from `capture_ble.py`, and the STREAM/`rx`/`tx`/`drop` lines from the monitor during the
+`still` phase.

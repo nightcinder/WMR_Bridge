@@ -21,6 +21,7 @@ import json
 import math
 import sys
 
+LOSSY_THRESHOLD = 0.05        # above this fraction of lost frames the rotation results are not valid
 TICK_SECONDS = 100e-9          # Monado: WMR_MOTION_CONTROLLER_NS_PER_TICK = 100
 GYRO_SCALE = 1e-5              # rad/s per raw count
 ACCEL_SCALE = 1.0 / 49000.0    # m/s^2 per raw count
@@ -129,8 +130,28 @@ def seq_gaps(frames):
     return missing
 
 
+def read_meta(path):
+    """Header comment lines of the form '# key: value' (mtu, hand, started...)."""
+    meta = {}
+    with open(path, "r") as fp:
+        for line in fp:
+            if not line.startswith("#"):
+                break
+            if ":" in line:
+                key, value = line[1:].split(":", 1)
+                meta[key.strip()] = value.strip()
+    return meta
+
+
+def loss_fraction(frames):
+    """Fraction of the frames the controller produced that never arrived."""
+    missing = seq_gaps(frames)
+    total = len(frames) + missing
+    return missing / total if total else 0.0
+
+
 def analyse_still(frames):
-    r = {"frames": len(frames)}
+    r = {"frames": len(frames), "loss_fraction": loss_fraction(frames)}
     if len(frames) < 10:
         r["error"] = "fewer than 10 frames"
         return r
@@ -173,7 +194,7 @@ def analyse_still(frames):
 
 
 def analyse_rotation(name, frames, bias):
-    r = {"phase": name, "frames": len(frames)}
+    r = {"phase": name, "frames": len(frames), "loss_fraction": loss_fraction(frames)}
     if len(frames) < 10:
         r["error"] = "fewer than 10 frames"
         return r
@@ -213,9 +234,33 @@ def analyse_rotation(name, frames, bias):
     return r
 
 
+def lossy_phases(report):
+    """[(phase, loss_fraction)] for every phase above the threshold."""
+    out = []
+    if report["still"] and report["still"].get("loss_fraction", 0) > LOSSY_THRESHOLD:
+        out.append(("still", report["still"]["loss_fraction"]))
+    for name, rot in report["rotations"].items():
+        if rot.get("loss_fraction", 0) > LOSSY_THRESHOLD:
+            out.append((name, rot["loss_fraction"]))
+    return out
+
+
+def lossy_banner(report):
+    bad = lossy_phases(report)
+    if not bad:
+        return None
+    return ("LINK TOO LOSSY, rotation results not valid: " +
+            ", ".join("%s lost %.0f%% of frames" % (n, 100 * f) for n, f in bad) +
+            " (limit %d%%). Fix the link and repeat the capture; do not use the numbers below."
+            % int(LOSSY_THRESHOLD * 100))
+
+
 def verdict(report):
     """Plain-language summary lines. Never claims more than the data shows."""
     lines = []
+    banner = lossy_banner(report)
+    if banner:
+        lines.append(banner)
     s = report.get("still", {})
     if "error" in s:
         lines.append("still: %s" % s["error"])
@@ -245,6 +290,9 @@ def verdict(report):
         if (rot["leakage"] or 0) > 0.25:
             lines.append("  note: large cross-axis motion; the rotation axis was not clean")
         mapping[rot["world_axis"]] = (rot["dominant_axis"], rot["sigma"])
+    if banner:
+        lines.append("sensor-to-world mapping and the accel/gyro cross-check are NOT shown: link too lossy")
+        return lines
     if "Y" in mapping and s and "gravity_axis" in s:
         # Upright pose: a stationary accelerometer reads +1 g along world +Y
         # (it measures the reaction to gravity). Compare with the twist result.
@@ -275,7 +323,8 @@ def analyse(path, hand):
     phases, problems = parse_capture(path)
     mine = {name: [f for f in frames if f["hand"] == hand] for name, frames in phases.items()}
     other = sum(1 for frames in phases.values() for f in frames if f["hand"] != hand)
-    report = {"file": path, "hand": hand, "problems": problems,
+    meta = read_meta(path)
+    report = {"file": path, "hand": hand, "problems": problems, "mtu": meta.get("mtu", "not recorded"),
               "frames_other_hand": other, "rotations": {}}
     still = analyse_still(mine["still"]) if "still" in mine else {}
     report["still"] = still
@@ -283,6 +332,7 @@ def analyse(path, hand):
     for name in EXPECTED:
         if name in mine:
             report["rotations"][name] = analyse_rotation(name, mine[name], bias)
+    report["link_lossy"] = bool(lossy_phases(report))
     report["summary"] = verdict(report)
     return report
 
@@ -290,12 +340,16 @@ def analyse(path, hand):
 def print_report(rep):
     print("Capture: %s   hand: %s%s" % (rep["file"], "LEFT" if rep["hand"] == 0 else "RIGHT",
           ("   (ignored %d frames from the other hand)" % rep["frames_other_hand"]) if rep["frames_other_hand"] else ""))
+    print("BLE ATT MTU during capture: %s" % rep["mtu"])
+    banner = lossy_banner(rep)
+    if banner:
+        print("\n" + "!" * 78 + "\n" + banner + "\n" + "!" * 78)
     for p in rep["problems"][:10]:
         print("  warning:", p)
     s = rep["still"]
     if s and "error" not in s:
-        print("\nstill: %d frames over %.1f s (%.1f Hz), %d sequence gaps, median %.0f ticks/frame"
-              % (s["frames"], s["wall_seconds"], s["rate_hz"] or 0, s["seq_gaps"], s["median_dticks"]))
+        print("\nstill: %d frames over %.1f s (%.1f Hz), %d sequence gaps (%.1f%% of produced frames lost), median %.0f ticks/frame"
+              % (s["frames"], s["wall_seconds"], s["rate_hz"] or 0, s["seq_gaps"], 100 * s["loss_fraction"], s["median_dticks"]))
         print("  gyro bias  [rad/s]: %s" % " ".join("%+.4f" % x for x in s["gyro_bias_rad_s"]))
         print("  gyro noise [rad/s]: %s" % " ".join("%.4f" % x for x in s["gyro_noise_rad_s"]))
         print("  accel mean        : %s |a|=%.2f" % (" ".join("%+.2f" % x for x in s["accel_mean"]), s["accel_magnitude"]))
@@ -309,8 +363,8 @@ def print_report(rep):
         if "error" in r:
             print("\n%s: %s" % (name, r["error"]))
             continue
-        print("\n%s: %d frames over %.1f s, %d sequence gaps, %d gaps >100 ms"
-              % (name, r["frames"], r["duration_s"], r["seq_gaps"], r["gaps_over_100ms"]))
+        print("\n%s: %d frames over %.1f s, %d sequence gaps (%.1f%% of produced frames lost), %d gaps >100 ms"
+              % (name, r["frames"], r["duration_s"], r["seq_gaps"], 100 * r["loss_fraction"], r["gaps_over_100ms"]))
         print("  net angle [deg] X/Y/Z: %s  (expected %s)" % (" ".join("%+.0f" % x for x in r["net_angle_deg"]), r["expected"]))
     print("\nSummary")
     for line in rep["summary"]:

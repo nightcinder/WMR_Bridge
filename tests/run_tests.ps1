@@ -23,4 +23,9 @@ $decodeSources = "$root	ests	est_decode.c", "$root\src\wmr_decode.c"
 if ($LASTEXITCODE -ne 0) { throw "compile failed (decode)" }
 & $exeDecode "$root\samples\controller_frames.txt"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeLink = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_link.exe"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_link.c" "$root\src\wmr_link.c" -o $exeLink
+if ($LASTEXITCODE -ne 0) { throw "compile failed (link)" }
+& $exeLink
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 exit $protocolStatus
