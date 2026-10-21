@@ -47,7 +47,8 @@ poses or button states is future work.
 | --- | --- |
 | `src/` | The firmware: controller handling, BLE transport, protocol, queue, console, init |
 | `wmr_bridge.gatt` | GATT database |
-| `tests/`, `samples/` | Host unit tests for the protocol and queue; sample frames |
+| `tests/`, `samples/` | Host unit tests for the protocol, queue and decoder; sample frames |
+| `tools/` | PC-side capture (`capture_ble.py`, needs hardware and `bleak`) and rotation analysis (`analyze_capture.py`); see [docs/DECODING.md](docs/DECODING.md) |
 | `integration/` | The one BTstack file that must be replaced to build this (`main-CMakeLists.txt`, plus a diff) |
 | `docs/` | Build, protocol, Android, counters, security, reconnect/queue, testing, refactor notes |
 
@@ -163,7 +164,7 @@ counters and their limits: [docs/COUNTERS.md](docs/COUNTERS.md).
 ## Planned, not done
 
 - Android receiver that validates sequence numbers and reassembles frames.
-- Input and sensor decoding (referencing Monado), then calibration and orientation if needed.
+- Calibration (firmware config block) and orientation/pose fusion. A decoded-frame characteristic (FF12) is *proposed*, not implemented: see [docs/PROTOCOL.md](docs/PROTOCOL.md). Input and sensor decoding exists as a host-side module: [docs/DECODING.md](docs/DECODING.md).
 
 ## Configuration
 
