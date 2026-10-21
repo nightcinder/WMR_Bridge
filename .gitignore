@@ -5,3 +5,7 @@ sdkconfig.old
 
 # Hardware capture output (tools/capture_ble.py)
 captures/
+
+# Python bytecode
+__pycache__/
+*.pyc
