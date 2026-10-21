@@ -1,0 +1,19 @@
+name: host-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build protocol and queue tests
+        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_protocol.c src/wmr_protocol.c src/wmr_queue.c -o test_protocol
+      - name: Build decoder tests
+        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_decode.c src/wmr_decode.c -lm -o test_decode
+      - name: Run protocol and queue tests
+        run: ./test_protocol samples/controller_frames.txt
+      - name: Run decoder tests
+        run: ./test_decode samples/controller_frames.txt
