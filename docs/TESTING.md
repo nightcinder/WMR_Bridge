@@ -89,3 +89,38 @@ Run with the refactored firmware flashed. Record dates and observed numbers here
 Needs a C99 compiler on PATH (`gcc`, `clang`, or `zig`). Written and run here
 with `zig cc` from a throwaway Python venv, because no host compiler was
 installed.
+
+## FF12 decoded stream: bench-test checklist (hardware)
+
+Firmware: branch `ff12-decoded-stream`. **Nothing below has been run on hardware.** What
+has been run is host-only: the pure CCC-exclusion rule, the minimum-MTU rule and the
+raw-frame-to-record path (`tests/test_stream_mode.c`, in CI) and a full ESP-IDF build
+(the command and result are in the pull request). The BTstack callbacks, the GATT
+database, the notification pump and anything over the air are untested.
+
+Use any BLE client that can write descriptors and subscribe (nRF Connect, or a script).
+Record the date, the build, the phone/client and the observed numbers in the Result column.
+
+| # | Check | How | Expect | Result |
+| --- | --- | --- | --- | --- |
+| 1 | FF12 is discoverable | Connect, discover service `FF10` | Characteristics `FF11` (read, notify) and `FF12` (notify only); `FF12` has a CCC | not yet run |
+| 2 | Subscribe to FF12 | Request MTU 247 or more, write `0x0001` to the FF12 CCC | Write succeeds; log shows `BLE decoded notifications enabled`; periodic `STREAM` line shows `stream=decoded` together with `mtu=` and `conn=[interval lat= to=]` | not yet run |
+| 3 | Record size and version | Capture 100 notifications | Every value is exactly 56 bytes; byte 0 is `0x01` (version); byte 2 (`flags`) is `0x00`; byte 1 matches the hand | not yet run |
+| 4 | Fields plausible | Hold a controller still | `accel` magnitude about 10 m/s^2, `gyro` near 0 (about 0.02 rad/s), `device_ticks` increasing; compare with a rotation capture from `tools/capture_ble.py` | not yet run |
+| 5 | Sequence continuity, one hand | One controller streaming for 60 s | `sequence` increases by 1 per record with no gaps (a gap means loss before transmission); note any | not yet run |
+| 6 | Sequence continuity, both hands | Both controllers streaming for 10 minutes | Per-hand `sequence` contiguous; per-hand rate about 150-180/s; `drop` stays flat; `q` stays low; `rx` = `tx` + `drop` + `offline` + `purged` + `mtu_skip` + `dec_err` + `q` (accounting identity in COUNTERS.md); `errors=0` | not yet run |
+| 7 | Throughput | Same run as 6 | Record whether about 360 notifications/s sustains with no drops at the negotiated connection interval (bench item from PROTOCOL.md) | not yet run |
+| 8 | Refusal | While FF12 is subscribed, write `0x0001` to the FF11 CCC | The write fails with ATT error `0x80`; FF12 keeps streaming; log shows `BLE raw notifications refused` | not yet run |
+| 9 | Refusal, other direction | Subscribe to FF11 first, then try the FF12 CCC | ATT error `0x80`; FF11 keeps streaming | not yet run |
+| 10 | Switching | Write `0x0000` to the active CCC, then enable the other | Both writes succeed; the other stream starts; the first stops; no records of the old format after the switch | not yet run |
+| 11 | CCC read-back | Read both CCCs in each state | Only the active one reads `0x0001` | not yet run |
+| 12 | Disabling the inactive stream | While FF12 is active, write `0x0000` to the FF11 CCC | Succeeds; FF12 unaffected | not yet run |
+| 13 | Small MTU | Enable FF12 while the ATT MTU is below 59 (default 23, before MTU exchange, or a client that will not negotiate) | No FF12 notifications; `mtu_skip` rises on both hands; `drop` and `q` do not | not yet run |
+| 14 | Recovery after small MTU | Raise the MTU to 59 or more while subscribed | Records start flowing; the first `sequence` is higher than the last one before (the skipped reports); `mtu_skip` stops rising | not yet run |
+| 15 | Reconnect | Disconnect and reconnect the phone | Subscription is not remembered (`stream=none` until the CCC is written again); no stale records | not yet run |
+| 16 | FF11 unchanged | Subscribe to FF11 instead | Fragmented frames as before; the golden-packet format in PROTOCOL.md; `stream=raw`; same rates as the earlier bench run | not yet run |
+| 17 | `rx_time_us` | Compare record timestamps | Monotonic per hand across a controller reconnect; spacing matches `device_ticks` x 100 ns within jitter | not yet run |
+| 18 | Tick unit and wrap | Use `tools/analyze_capture.py` on an FF11 capture (or compute from FF12) | ticks/wall about 1.0 confirms 100 ns per tick; unconfirmed until run | not yet run |
+
+Do not flash from this repository's CI or from an assistant session; flashing and the
+runs above are done by hand.

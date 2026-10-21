@@ -87,17 +87,18 @@ static void print_stats(bool periodic){
     const wmr_stats_t *st = wmr_transport_stats();
     char conn[48] = "n/a";
     if (info.conn_known) wmr_conn_format(&info.conn, conn, sizeof(conn));
-    printf("STREAM phone=%u sub=%u mtu=%u conn=[%s]%s q=%u/%u high=%u notify=%lu errors=%lu\n",
-           info.phone_connected, info.subscribed, info.mtu,
+    printf("STREAM phone=%u sub=%u stream=%s mtu=%u conn=[%s]%s q=%u/%u high=%u notify=%lu errors=%lu\n",
+           info.phone_connected, info.subscribed, wmr_stream_mode_name(info.stream), info.mtu,
            conn, info.conn_update_pending ? " (update requested, not granted yet)" : "",
            info.queue_count, info.queue_capacity, info.queue_high_water,
            (unsigned long) st->notifications, (unsigned long) st->errors);
     const double seconds = WMR_CFG_STATS_INTERVAL_MS / 1000.0;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
-        printf("  %s rx=%lu tx=%lu drop=%lu offline=%lu purged=%lu rate_rx=%.1f/s rate_tx=%.1f/s\n",
+        printf("  %s rx=%lu tx=%lu drop=%lu offline=%lu purged=%lu mtu_skip=%lu dec_err=%lu rate_rx=%.1f/s rate_tx=%.1f/s\n",
                wmr_controller_name(i), (unsigned long) st->rx[i],
                (unsigned long) st->tx[i], (unsigned long) st->drop[i],
                (unsigned long) st->offline[i], (unsigned long) st->purged[i],
+               (unsigned long) st->mtu_skipped[i], (unsigned long) st->decode_errors[i],
                (st->rx[i] - last_rx[i]) / seconds,
                (st->tx[i] - last_tx[i]) / seconds);
         last_rx[i] = st->rx[i];

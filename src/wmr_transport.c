@@ -41,22 +41,30 @@
 #include <string.h>
 #include "btstack_config.h"
 #include "btstack.h"
+#include "esp_timer.h"
 #include "wmr_bridge.h"        /* generated from wmr_bridge.gatt: profile_data, ATT_*_HANDLE */
 #include "wmr_controller.h"
 #include "wmr_link.h"
+#include "wmr_decoded.h"
 #include "wmr_protocol.h"
 #include "wmr_queue.h"
+#include "wmr_stream_mode.h"
 #include "wmr_transport.h"
 
-/* Experimental FF10/FF11 service; see wmr_bridge.gatt. The single FF11
- * characteristic is both the status read value and the notification stream. */
+/* Experimental FF10 service; see wmr_bridge.gatt. The FF11 characteristic is
+ * both the status read value and the raw notification stream. FF12 is the
+ * notify-only decoded stream. The two are mutually exclusive per phone
+ * (wmr_stream_mode.h). */
 #define STREAM_VALUE_HANDLE ATT_CHARACTERISTIC_0000FF11_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
 #define STREAM_CCC_HANDLE   ATT_CHARACTERISTIC_0000FF11_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
+#define DECODED_VALUE_HANDLE ATT_CHARACTERISTIC_0000FF12_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
+#define DECODED_CCC_HANDLE   ATT_CHARACTERISTIC_0000FF12_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
 
 #define STATUS_SIZE 16
 
 static hci_con_handle_t phone_handle = HCI_CON_HANDLE_INVALID;
-static bool phone_notifications;
+/* Active stream for the current phone connection; NONE until a CCC is enabled. */
+static wmr_stream_t stream_mode = WMR_STREAM_NONE;
 /* A CAN_SEND_NOW request is outstanding. */
 static bool send_pending;
 /* Seconds since boot; reported in the status read, not a frame sequence. */
@@ -117,7 +125,7 @@ static void queue_reset(void){
 }
 
 static void pump_kick(void){
-    if (!phone_notifications || phone_handle == HCI_CON_HANDLE_INVALID ||
+    if (stream_mode == WMR_STREAM_NONE || phone_handle == HCI_CON_HANDLE_INVALID ||
         !queue.count || send_pending) return;
     send_pending = true;
     att_server_request_can_send_now_event(phone_handle);
@@ -127,8 +135,15 @@ void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t 
     if (hand >= WMR_NUM_CONTROLLERS) return;
     uint32_t sequence = ++stats.sequence[hand];
     stats.rx[hand]++;
-    if (!phone_notifications || phone_handle == HCI_CON_HANDLE_INVALID){
+    if (stream_mode == WMR_STREAM_NONE || phone_handle == HCI_CON_HANDLE_INVALID){
         stats.offline[hand]++;
+        return;
+    }
+    /* FF12 needs room for a whole record; below that nothing is sent. Count the
+     * sample here instead of queueing something that can never be delivered. */
+    if (stream_mode == WMR_STREAM_DECODED &&
+        !wmr_decoded_mtu_ok(att_server_get_mtu(phone_handle))){
+        stats.mtu_skipped[hand]++;
         return;
     }
     wmr_frame_t frame;
@@ -137,6 +152,9 @@ void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t 
         return;
     }
     frame.sequence = sequence;
+    /* Receive time is captured here, at arrival. Decoding is deferred to the
+     * pump, so the HID callback only copies bytes. */
+    frame.rx_time_us = (uint64_t) esp_timer_get_time();
     frame.length = length;
     frame.hand = (uint8_t) hand;
     memcpy(frame.data, report, length);
@@ -147,12 +165,46 @@ void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t 
     pump_kick();
 }
 
-/* Send one fragment of the head frame. Runs on ATT_EVENT_CAN_SEND_NOW. */
+/* FF12: decode the head frame now (not in the HID callback) and send one
+ * 56-byte record. A frame that cannot be sent or decoded is removed and counted,
+ * so it never blocks the queue; a failed notify keeps it for the retry timer. */
+static void pump_send_decoded(const wmr_frame_t *frame){
+    if (!wmr_decoded_mtu_ok(att_server_get_mtu(phone_handle))){
+        /* Queued before the MTU was known to be too small. */
+        stats.mtu_skipped[frame->hand]++;
+        wmr_queue_pop(&queue);
+        pump_kick();
+        return;
+    }
+    uint8_t record[WMR_DECODED_SIZE];
+    if (!wmr_decoded_from_frame(frame, record)){
+        stats.decode_errors[frame->hand]++;
+        wmr_queue_pop(&queue);
+        pump_kick();
+        return;
+    }
+    uint8_t result = att_server_notify(phone_handle, DECODED_VALUE_HANDLE, record, sizeof(record));
+    if (result != ERROR_CODE_SUCCESS){
+        stats.errors++;
+        return;     /* The retry timer tries again; a send error never discards a frame. */
+    }
+    stats.notifications++;
+    stats.tx[frame->hand]++;
+    wmr_queue_pop(&queue);
+    pump_kick();
+}
+
+/* Send one fragment (FF11) or one record (FF12) of the head frame. Runs on
+ * ATT_EVENT_CAN_SEND_NOW. */
 static void pump_send_one(void){
     send_pending = false;
-    if (!phone_notifications || phone_handle == HCI_CON_HANDLE_INVALID) return;
+    if (stream_mode == WMR_STREAM_NONE || phone_handle == HCI_CON_HANDLE_INVALID) return;
     const wmr_frame_t *frame = wmr_queue_peek(&queue);
     if (!frame) return;
+    if (stream_mode == WMR_STREAM_DECODED){
+        pump_send_decoded(frame);
+        return;
+    }
     uint16_t capacity = wmr_proto_notification_capacity(att_server_get_mtu(phone_handle));
     if (!capacity) return;
     uint8_t packet[WMR_CFG_MAX_NOTIFICATION];
@@ -195,7 +247,8 @@ const wmr_stats_t *wmr_transport_stats(void){
 
 void wmr_transport_get_info(wmr_transport_info_t *info){
     info->phone_connected  = phone_handle != HCI_CON_HANDLE_INVALID;
-    info->subscribed       = phone_notifications;
+    info->subscribed       = stream_mode != WMR_STREAM_NONE;
+    info->stream           = stream_mode;
     info->mtu              = info->phone_connected ? att_server_get_mtu(phone_handle) : 0;
     info->queue_count      = queue.count;
     info->queue_capacity   = WMR_CFG_QUEUE_CAPACITY;
@@ -236,8 +289,9 @@ static uint16_t att_read(hci_con_handle_t handle, uint16_t attribute,
         build_status(status);
         return att_read_callback_handle_blob(status, sizeof(status), offset, buffer, buffer_size);
     }
-    if (attribute == STREAM_CCC_HANDLE){
-        uint8_t ccc[2] = {phone_notifications ? 1 : 0, 0};
+    if (attribute == STREAM_CCC_HANDLE || attribute == DECODED_CCC_HANDLE){
+        wmr_stream_t which = attribute == STREAM_CCC_HANDLE ? WMR_STREAM_RAW : WMR_STREAM_DECODED;
+        uint8_t ccc[2] = {wmr_stream_mode_ccc_enabled(stream_mode, which) ? 1 : 0, 0};
         return att_read_callback_handle_blob(ccc, sizeof(ccc), offset, buffer, buffer_size);
     }
     return 0;
@@ -246,7 +300,10 @@ static uint16_t att_read(hci_con_handle_t handle, uint16_t attribute,
 static int att_write(hci_con_handle_t handle, uint16_t attribute,
                      uint16_t transaction_mode, uint16_t offset,
                      uint8_t *buffer, uint16_t buffer_size){
-    if (attribute != STREAM_CCC_HANDLE) return 0;
+    wmr_stream_t which;
+    if (attribute == STREAM_CCC_HANDLE)       which = WMR_STREAM_RAW;
+    else if (attribute == DECODED_CCC_HANDLE) which = WMR_STREAM_DECODED;
+    else return 0;
     if (transaction_mode != ATT_TRANSACTION_MODE_NONE) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
     if (offset != 0) return ATT_ERROR_INVALID_OFFSET;
     if (buffer_size != 2) return ATT_ERROR_INVALID_ATTRIBUTE_VALUE_LENGTH;
@@ -254,13 +311,21 @@ static int att_write(hci_con_handle_t handle, uint16_t attribute,
     if (value > 1) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
     if (phone_handle != HCI_CON_HANDLE_INVALID && handle != phone_handle)
         return ATT_ERROR_WRITE_NOT_PERMITTED;
+    /* FF11 and FF12 are mutually exclusive: enabling one while the other is
+     * active fails; switching means disabling the active one first. */
+    wmr_stream_ccc_result_t result = wmr_stream_mode_ccc_write(stream_mode, which, value == 1);
+    if (!result.accepted){
+        printf("BLE %s notifications refused: %s stream is active (ATT error 0x%02x)\n",
+               wmr_stream_mode_name(which), wmr_stream_mode_name(stream_mode), result.att_error);
+        return result.att_error;
+    }
     phone_handle = handle;
-    if ((value == 1) != phone_notifications){
+    if (result.mode != stream_mode){
         /* Subscription transitions start a fresh live stream, not a backlog. */
         queue_reset();
+        stream_mode = result.mode;
     }
-    phone_notifications = value == 1;
-    printf("BLE phone notifications %s\n", phone_notifications ? "enabled" : "disabled");
+    printf("BLE %s notifications %s\n", wmr_stream_mode_name(which), value == 1 ? "enabled" : "disabled");
     return 0;
 }
 
@@ -285,7 +350,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
         case BTSTACK_EVENT_STATE:
             if (btstack_event_state_get_state(packet) == HCI_STATE_WORKING){
                 gap_advertisements_enable(1);
-                printf("BLE advertising: WMR Bridge (RAW STREAM FF11)\n");
+                printf("BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream)\n");
             }
             break;
         case HCI_EVENT_LE_META:
@@ -311,7 +376,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                 if (packet[3] == ERROR_CODE_SUCCESS){
                     phone_handle = little_endian_read_16(packet, 4);
                     queue_reset();
-                    phone_notifications = false;
+                    stream_mode = WMR_STREAM_NONE;
                     send_pending = false;
                     printf("BLE phone connected, handle=0x%04x\n", phone_handle);
                     conn_update_pending = false;
@@ -339,7 +404,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
             if (size >= 6 && little_endian_read_16(packet, 3) == phone_handle){
                 printf("BLE phone disconnected, reason=0x%02x\n", packet[5]);
                 phone_handle = HCI_CON_HANDLE_INVALID;
-                phone_notifications = false;
+                stream_mode = WMR_STREAM_NONE;
                 send_pending = false;
                 conn_known = false;
                 conn_update_pending = false;

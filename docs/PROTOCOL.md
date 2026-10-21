@@ -116,10 +116,11 @@ duplicated, interleaved and malformed fragments.
   a gap does **not** yet prove lossless end-to-end delivery: see
   [COUNTERS.md](COUNTERS.md) and [TESTING.md](TESTING.md).
 
-# Decoded stream, FF12 (PROPOSED, version 1, not implemented in firmware)
+# Decoded stream, FF12 (version 1; implemented in firmware, NOT yet run on hardware)
 
-**Status: proposal, decisions folded in, awaiting review.** Nothing in `src/` sends
-this yet. The reference pack/unpack is `src/wmr_decoded.{h,c}`, pinned by the
+**Status: approved; firmware implemented on branch `ff12-decoded-stream`; host-tested
+and built, but never run on hardware** (checklist in [TESTING.md](TESTING.md)). The
+reference pack/unpack is `src/wmr_decoded.{h,c}`, pinned by the
 "decoded frame (FF12) golden packet" test in `tests/test_protocol.c`, so the Android
 app can build and test against exact bytes. The raw FF11 stream above is
 **unchanged**. The 56-byte record from the first proposal is kept as it was; the
@@ -239,10 +240,25 @@ rotation capture in [DECODING.md](DECODING.md) is done.
 ## Delivery rules
 
 - While FF12 notifications are enabled, the ESP32 sends one FF12 notification per
-  received input report. It is a **separate queue path** from FF11 (the FF11 queue
-  stays idle); a full queue drops the newest sample and counts it, as for FF11.
-- Requires an ATT MTU of at least **59** (56 + 3). Below that nothing is sent on FF12.
-  Request a large MTU before enabling FF12 (the same step as for FF11).
+  received input report. It uses the **same bounded frame queue** as FF11 (only one of
+  the two streams is ever active, so there is no contention); a full queue drops the
+  newest sample and counts it in `drop`, as for FF11.
+- **Where decoding happens.** The HID callback only copies the report and stamps
+  `rx_time_us` (`esp_timer_get_time()`) at arrival. Decoding into the 56-byte record
+  happens when the notification pump takes a frame from the queue, and only while FF12
+  is the active stream.
+- **Minimum MTU: 59** (56 + 3 bytes of ATT opcode and handle). Below that nothing is
+  sent on FF12. Each report received while FF12 is active and the MTU is below 59 is
+  discarded and counted in the per-hand `mtu_skip` statistic (it is not queued); its
+  sequence number is still consumed, so the phone sees the gap once the MTU is raised.
+  A frame that was already queued when the MTU turned out to be too small is dropped
+  and counted the same way. This is a deliberate difference from FF11, where a tiny MTU
+  leaves frames queued until the queue fills and `drop` rises. Request a large MTU
+  before enabling FF12 (the same step as for FF11).
+- A queued frame that is not a valid 46-byte input report (wrong length, transaction
+  header, or report ID) is discarded and counted in the per-hand `dec_err` statistic.
+  Config responses are not expected here: they are separated by report ID before this
+  point in the FF13 design, which is not implemented.
 - Samples of the two hands may interleave freely. Ordering is per hand by `sequence`.
 
 ## Bench-test items (not blockers)
@@ -254,7 +270,8 @@ rotation capture in [DECODING.md](DECODING.md) is done.
 - Whether `device_ticks` restarts on controller reconnect.
 - Refused-CCC behaviour on the target Android versions (the app must handle a failed
   descriptor write).
-- GATT database (`wmr_bridge.gatt`) is not changed until this is approved.
+- GATT: FF12 is `NOTIFY | DYNAMIC` in `wmr_bridge.gatt`, directly after FF11 in
+  service `FF10`; FF11 is unchanged.
 
 # Controller config block, FF13 (PROPOSED, DESIGN ONLY, not implemented)
 

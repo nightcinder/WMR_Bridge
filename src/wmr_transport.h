@@ -36,8 +36,9 @@
  */
 
 /*
- * wmr_transport.h - BLE peripheral side: advertising, the FF10/FF11 GATT
- * service, the frame queue and the notification pump.
+ * wmr_transport.h - BLE peripheral side: advertising, the FF10 GATT service
+ * (FF11 raw stream, FF12 decoded stream), the frame queue and the notification
+ * pump.
  */
 
 #ifndef WMR_TRANSPORT_H
@@ -47,10 +48,12 @@
 #include <stdbool.h>
 #include "wmr_stats.h"
 #include "wmr_link.h"
+#include "wmr_stream_mode.h"
 
 typedef struct {
     bool     phone_connected;
-    bool     subscribed;       /* phone enabled notifications (CCC = 1) */
+    bool     subscribed;       /* phone enabled FF11 or FF12 notifications */
+    wmr_stream_t stream;       /* which one (NONE, RAW or DECODED) */
     uint16_t mtu;              /* negotiated ATT MTU; 0 if no phone */
     unsigned queue_count;
     unsigned queue_capacity;

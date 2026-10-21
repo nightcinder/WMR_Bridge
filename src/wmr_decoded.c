@@ -157,3 +157,17 @@ bool wmr_decoded_unpack(const uint8_t *p, uint16_t size, wmr_decoded_t *out){
     out->battery = p[55];
     return true;
 }
+
+bool wmr_decoded_mtu_ok(uint16_t att_mtu){
+    return att_mtu >= WMR_DECODED_MIN_MTU;
+}
+
+bool wmr_decoded_from_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]){
+    wmr_controller_state_t state;
+    wmr_decoded_t record;
+    if (!frame || frame->hand >= 2) return false;
+    if (!wmr_decode_frame(frame->data, frame->length, &state)) return false;
+    wmr_decoded_from_state(&record, &state, frame->hand, frame->sequence, frame->rx_time_us);
+    wmr_decoded_pack(&record, out);
+    return true;
+}

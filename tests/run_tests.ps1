@@ -18,7 +18,7 @@ if ($LASTEXITCODE -ne 0) { throw "compile failed" }
 $protocolStatus = $LASTEXITCODE
 
 $exeDecode = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_decode.exe"
-$decodeSources = "$root	ests	est_decode.c", "$root\src\wmr_decode.c"
+$decodeSources = "$root\tests\test_decode.c", "$root\src\wmr_decode.c"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" $decodeSources -lm -o $exeDecode
 if ($LASTEXITCODE -ne 0) { throw "compile failed (decode)" }
 & $exeDecode "$root\samples\controller_frames.txt"
@@ -27,5 +27,11 @@ $exeLink = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_link.exe"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_link.c" "$root\src\wmr_link.c" -o $exeLink
 if ($LASTEXITCODE -ne 0) { throw "compile failed (link)" }
 & $exeLink
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeStream = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_stream_mode.exe"
+$streamSources = "$root\tests\test_stream_mode.c", "$root\src\wmr_stream_mode.c", "$root\src\wmr_decoded.c", "$root\src\wmr_decode.c"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" $streamSources -o $exeStream
+if ($LASTEXITCODE -ne 0) { throw "compile failed (stream mode)" }
+& $exeStream "$root\samples\controller_frames.txt"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 exit $protocolStatus

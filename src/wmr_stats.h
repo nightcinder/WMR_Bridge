@@ -55,6 +55,8 @@ typedef struct {
     uint32_t offline[WMR_NUM_CONTROLLERS];  /* no subscribed phone */
     uint32_t purged[WMR_NUM_CONTROLLERS];   /* queued, then discarded on reset */
     uint32_t sequence[WMR_NUM_CONTROLLERS]; /* last sequence number assigned */
+    uint32_t mtu_skipped[WMR_NUM_CONTROLLERS];   /* FF12 only: ATT MTU < 59, sample not sent */
+    uint32_t decode_errors[WMR_NUM_CONTROLLERS]; /* FF12 only: frame not a valid input report */
     uint32_t notifications;                 /* BLE notifications accepted */
     uint32_t errors;                        /* att_server_notify failures */
 } wmr_stats_t;

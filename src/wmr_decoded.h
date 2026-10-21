@@ -49,6 +49,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "wmr_decode.h"
+#include "wmr_protocol.h"
 
 #define WMR_DECODED_VERSION   1
 #define WMR_DECODED_SIZE      56      /* bytes per notification value */
@@ -92,5 +93,16 @@ void wmr_decoded_pack(const wmr_decoded_t *d, uint8_t out[WMR_DECODED_SIZE]);
 /* Parse a notification value. Returns false unless size == WMR_DECODED_SIZE,
  * version == WMR_DECODED_VERSION and hand < 2. */
 bool wmr_decoded_unpack(const uint8_t *packet, uint16_t size, wmr_decoded_t *out);
+
+/* Smallest ATT MTU that can carry one record (record size + 3 bytes of ATT
+ * opcode and handle). Below it nothing is sent on FF12. */
+#define WMR_DECODED_MIN_MTU   (WMR_DECODED_SIZE + 3)
+
+bool wmr_decoded_mtu_ok(uint16_t att_mtu);
+
+/* Decode a queued raw frame into a packed FF12 record. Uses frame->hand,
+ * frame->sequence and frame->rx_time_us. Returns false (out untouched) if the
+ * frame is not a valid 46-byte input report. The CALIBRATED flag stays 0. */
+bool wmr_decoded_from_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]);
 
 #endif /* WMR_DECODED_H */

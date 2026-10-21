@@ -142,6 +142,7 @@ wmr_proto_result_t wmr_reassembler_push(wmr_reassembler_t *r,
     if (out){
         out->hand     = (uint8_t) hand;
         out->sequence = s->sequence;
+        out->rx_time_us = 0;
         out->length   = s->total;
         memcpy(out->data, s->data, s->total);
     }
