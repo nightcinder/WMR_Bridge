@@ -163,7 +163,7 @@ counters and their limits: [docs/COUNTERS.md](docs/COUNTERS.md).
 ## Planned, not done
 
 - Android receiver that validates sequence numbers and reassembles frames.
-- Calibration (firmware config block) and orientation/pose fusion. Input and sensor decoding exists as a host-side module: [docs/DECODING.md](docs/DECODING.md).
+- Calibration (firmware config block) and orientation/pose fusion. A decoded-frame characteristic (FF12) is *proposed*, not implemented: see [docs/PROTOCOL.md](docs/PROTOCOL.md). Input and sensor decoding exists as a host-side module: [docs/DECODING.md](docs/DECODING.md).
 
 ## Configuration
 

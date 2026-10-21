@@ -11,6 +11,7 @@
 #include <string.h>
 #include "wmr_protocol.h"
 #include "wmr_queue.h"
+#include "wmr_decoded.h"
 
 static int checks, failures;
 
@@ -382,6 +383,86 @@ static void test_sample_file(const char *path){
     printf("  %u sample frames\n", samples);
 }
 
+/* ---- Decoded stream (FF12) -------------------------------------------- */
+
+static const uint8_t decoded_golden[WMR_DECODED_SIZE] = {
+    0x01, 0x01, 0x00, 0x06,                                     /* version, hand, flags, buttons */
+    0x04, 0x03, 0x02, 0x01,                                     /* sequence 0x01020304 */
+    0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,             /* rx_time_us */
+    0xDD, 0xCC, 0xBB, 0xAA,                                     /* device_ticks */
+    0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x3F,   /* gyro 1.0 -2.0 0.5 */
+    0x00, 0x00, 0x80, 0x40, 0x00, 0x00, 0x00, 0xC1, 0x00, 0x00, 0x00, 0x00,   /* accel 4.0 -8.0 0.0 */
+    0xFE, 0xFF,                                                 /* temperature -2 */
+    0xFF, 0x7F, 0x01, 0x80,                                     /* stick 32767 -32767 */
+    0x00, 0x00, 0x00, 0x40,                                     /* trackpad 0 16384 */
+    0xFF, 0x7B                                                  /* trigger, battery */
+};
+
+static void test_decoded_golden(void){
+    printf("decoded frame (FF12) golden packet\n");
+    wmr_decoded_t d;
+    memset(&d, 0, sizeof(d));
+    d.hand = 1; d.buttons = 0x06; d.sequence = 0x01020304;
+    d.rx_time_us = UINT64_C(0x1122334455667788); d.device_ticks = 0xAABBCCDDu;
+    d.gyro[0] = 1.0f; d.gyro[1] = -2.0f; d.gyro[2] = 0.5f;
+    d.accel[0] = 4.0f; d.accel[1] = -8.0f; d.accel[2] = 0.0f;
+    d.temperature_raw = -2;
+    d.stick[0] = 32767; d.stick[1] = -32767;
+    d.trackpad[0] = 0; d.trackpad[1] = 16384;
+    d.trigger = 0xFF; d.battery = 0x7B;
+    uint8_t out[WMR_DECODED_SIZE];
+    wmr_decoded_pack(&d, out);
+    CHECK(memcmp(out, decoded_golden, WMR_DECODED_SIZE) == 0);
+
+    wmr_decoded_t u;
+    CHECK(wmr_decoded_unpack(decoded_golden, WMR_DECODED_SIZE, &u));
+    CHECK(u.hand == 1 && u.buttons == 0x06 && u.sequence == 0x01020304);
+    CHECK(u.rx_time_us == UINT64_C(0x1122334455667788) && u.device_ticks == 0xAABBCCDDu);
+    CHECK(u.gyro[0] == 1.0f && u.gyro[1] == -2.0f && u.gyro[2] == 0.5f);
+    CHECK(u.accel[0] == 4.0f && u.accel[1] == -8.0f && u.accel[2] == 0.0f);
+    CHECK(u.temperature_raw == -2 && u.stick[0] == 32767 && u.stick[1] == -32767);
+    CHECK(u.trackpad[0] == 0 && u.trackpad[1] == 16384 && u.trigger == 0xFF && u.battery == 0x7B);
+}
+
+static void test_decoded_rejects(void){
+    printf("decoded frame (FF12) rejects bad values\n");
+    uint8_t p[WMR_DECODED_SIZE];
+    wmr_decoded_t u;
+    memcpy(p, decoded_golden, sizeof(p));
+    CHECK(!wmr_decoded_unpack(p, WMR_DECODED_SIZE - 1, &u));
+    CHECK(!wmr_decoded_unpack(p, WMR_DECODED_SIZE + 1, &u));
+    p[0] = 2; CHECK(!wmr_decoded_unpack(p, WMR_DECODED_SIZE, &u));   /* unknown version */
+    memcpy(p, decoded_golden, sizeof(p));
+    p[1] = 2; CHECK(!wmr_decoded_unpack(p, WMR_DECODED_SIZE, &u));   /* bad hand */
+    CHECK(!wmr_decoded_unpack(NULL, WMR_DECODED_SIZE, &u));
+}
+
+/* Raw frame -> decoder -> FF12 record -> bytes -> record. */
+static void test_decoded_from_frame(void){
+    printf("decoded frame (FF12) from a raw frame\n");
+    uint8_t f[WMR_DECODE_FRAME_LENGTH];
+    memset(f, 0, sizeof(f));
+    f[0] = 0xA1; f[1] = 0x01;
+    f[2] = 0x0C;                         /* menu + squeeze */
+    f[2 + 1] = 0xFF; f[2 + 2] = 0xF7; f[2 + 3] = 0x7F;   /* stick centred */
+    f[2 + 4] = 0x80;                     /* trigger */
+    f[2 + 5] = 0xFF; f[2 + 6] = 0xFF;    /* trackpad untouched */
+    f[2 + 7] = 0x55;                     /* battery */
+    f[2 + 28] = 0x10; f[2 + 29] = 0x27;  /* ticks 10000 */
+    wmr_controller_state_t s;
+    CHECK(wmr_decode_frame(f, sizeof(f), &s));
+    wmr_decoded_t d, u;
+    wmr_decoded_from_state(&d, &s, 0, 42, 123456);
+    CHECK(d.flags == 0);                 /* uncalibrated */
+    uint8_t out[WMR_DECODED_SIZE];
+    wmr_decoded_pack(&d, out);
+    CHECK(wmr_decoded_unpack(out, sizeof(out), &u));
+    CHECK(u.hand == 0 && u.sequence == 42 && u.rx_time_us == 123456);
+    CHECK(u.buttons == (WMR_BTN_MENU | WMR_BTN_SQUEEZE));
+    CHECK(u.stick[0] == 0 && u.stick[1] == 0 && u.trackpad[0] == 0 && u.trackpad[1] == 0);
+    CHECK(u.trigger == 0x80 && u.battery == 0x55 && u.device_ticks == 10000);
+}
+
 int main(int argc, char **argv){
     test_capacity();
     test_golden_packet();
@@ -398,6 +479,9 @@ int main(int argc, char **argv){
     test_malformed();
     test_malformed_poisons_partial();
     test_queue();
+    test_decoded_golden();
+    test_decoded_rejects();
+    test_decoded_from_frame();
     if (argc > 1) test_sample_file(argv[1]);
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

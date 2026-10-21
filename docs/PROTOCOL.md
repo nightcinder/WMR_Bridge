@@ -115,3 +115,93 @@ duplicated, interleaved and malformed fragments.
 - A gap proves loss *before* the BLE stack accepted the frame. The absence of
   a gap does **not** yet prove lossless end-to-end delivery: see
   [COUNTERS.md](COUNTERS.md) and [TESTING.md](TESTING.md).
+
+# Decoded stream, FF12 (PROPOSED, version 1, not implemented in firmware)
+
+**Status: proposal for review.** Nothing in `src/` sends this yet. The reference
+pack/unpack is `src/wmr_decoded.{h,c}`, pinned by the "decoded frame (FF12)
+golden packet" test in `tests/test_protocol.c`, so the Android app can build and
+test against exact bytes. The raw FF11 stream above is **unchanged**.
+
+## Why a second characteristic
+
+FF11 stays the byte-for-byte raw pipe (its golden-packet test pins it). Decoded
+samples go on a new characteristic so a receiver can choose raw, decoded or both,
+and so neither format constrains the other. Fusion (orientation) runs on the phone;
+this stream carries IMU *samples*, not a quaternion.
+
+| Item | UUID | Properties |
+| --- | --- | --- |
+| Characteristic | `0000FF12-0000-1000-8000-00805F9B34FB` | notify only (in service `FF10`) |
+| CCC (0x2902) | - | read/write |
+
+There is no read value. Enabling notifications on FF12 and on FF11 are independent.
+
+## Notification format
+
+One notification = one complete sample = exactly **56 bytes** (no fragmentation).
+All integers are **little-endian**; floats are IEEE 754 binary32, little-endian.
+
+| Offset | Size | Field | Meaning |
+| --- | --- | --- | --- |
+| 0 | u8 | `version` | `1`. A receiver must ignore records with an unknown version |
+| 1 | u8 | `hand` | 0 = LEFT, 1 = RIGHT |
+| 2 | u8 | `flags` | bit0 `CALIBRATED`: sensor values have calibration applied. Other bits 0 |
+| 3 | u8 | `buttons` | bit0 thumbstick click, bit1 home, bit2 menu, bit3 squeeze click, bit4 trackpad click, bit5 BT pairing, bit6 trackpad touch, bit7 0 |
+| 4 | u32 | `sequence` | The **same per-hand sequence number** as the raw FF11 frame this sample was decoded from (rules under "Sequence numbers" apply, gaps = loss before transmission) |
+| 8 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time()` when the HID report was received, microseconds since ESP32 boot |
+| 16 | u32 | `device_ticks` | Controller's own timer, **100 ns per tick**, wraps at 2^32 (about 429 s). Use for IMU `dt`; extend to 64 bits on the phone |
+| 20 | 3 x f32 | `gyro` x, y, z | **rad/s** |
+| 32 | 3 x f32 | `accel` x, y, z | **m/s^2** (a stationary controller reads about 9.8 total) |
+| 44 | i16 | `temperature_raw` | Raw sensor word, scale not established |
+| 46 | 2 x i16 | `stick` x, y | -32767..32767 = -1.0..1.0, 0 = centre |
+| 50 | 2 x i16 | `trackpad` x, y | -32767..32767 = -1.0..1.0; both 0 when `trackpad touch` is clear |
+| 54 | u8 | `trigger` | 0..255 |
+| 55 | u8 | `battery` | Raw controller byte, scale not established |
+
+### Scales
+
+- Gyro: raw signed 24-bit word times `1e-5` rad/s (Monado's factor).
+- Accel: raw signed 24-bit word divided by `49000` gives m/s^2 (1 g is about
+  490000 raw, so this equals `9.8 * raw / 480000` to within 2 %).
+- Stick: 12-bit value, `(raw - 0x7FF) / 0x7FF`, clamped to 1.0, then times 32767.
+- Trackpad: `(raw - 0x32) / 0x32`, then times 32767; raw `0xFF` (untouched) gives 0.
+- Both scale factors are from Monado and verified only to the extent described in
+  [DECODING.md](DECODING.md) (stationary magnitude, noise level).
+
+### Axes and calibration
+
+- `CALIBRATED` clear: gyro/accel are the controller's **raw sensor axes**, scaled
+  to physical units only. This is all that can be produced today.
+- `CALIBRATED` set (future): the per-device mix matrix and bias from the controller's
+  firmware config block are applied, and the values are in the **OpenXR IMU frame**
+  (X right, Y up, Z backward), as Monado does. Axis directions and signs are
+  **unverified** until a rotation capture is done ([DECODING.md](DECODING.md)).
+- A receiver must read `flags` and not assume either.
+
+## Delivery rules
+
+- The ESP32 sends one FF12 notification per received HID report while FF12
+  notifications are enabled. It is a **separate queue path** from FF11; a full
+  queue drops the newest sample and counts it, as for FF11.
+- Requires an ATT MTU of at least **59** (56 + 3). Below that nothing is sent on
+  FF12. Request a large MTU before enabling FF12 (the same step as for FF11).
+- Samples of the two hands may interleave freely. Ordering is per hand by `sequence`.
+
+## Throughput, and questions for review
+
+- About 150-180 reports/s per hand measured on the raw stream, so about 360
+  notifications/s for both hands at 56 bytes. Whether the BLE connection interval
+  sustains that **alongside FF11** is untested; the expectation is that a phone
+  subscribes to FF12 *or* FF11 for normal use, not both.
+- Q1: Is `rx_time_us` (ESP32 receive time) the right timestamp, or should the
+  controller's `device_ticks` be the primary clock (receive time carries Bluetooth
+  jitter; ticks do not)? Both are included. This overlaps issue #1 (latency
+  measurement), which is **not** addressed here.
+- Q2: Should buttons/stick/trackpad/trigger be sent in every sample (current,
+  simplest) or only on change?
+- Q3: Calibrated vs uncalibrated: the proposal sends whatever the ESP32 has and sets
+  `CALIBRATED`. Alternative: always send raw-scaled values and the config block
+  once on a separate read, and calibrate on the phone.
+- Q4: `temperature_raw` and `battery` are raw because their scales are unknown.
+- GATT database (`wmr_bridge.gatt`) is not changed until this is approved.

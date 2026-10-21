@@ -11,7 +11,7 @@ foreach ($name in "gcc", "clang", "cc") {
 if (-not $cc -and (Get-Command zig -ErrorAction SilentlyContinue)) { $cc = @("zig", "cc") }
 if (-not $cc) { throw "No C compiler found (install gcc/clang/zig, or see README)." }
 
-$sources = "$root\tests\test_protocol.c", "$root\src\wmr_protocol.c", "$root\src\wmr_queue.c"
+$sources = "$root\tests\test_protocol.c", "$root\src\wmr_protocol.c", "$root\src\wmr_queue.c", "$root\src\wmr_decoded.c", "$root\src\wmr_decode.c"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" $sources -o $exe
 if ($LASTEXITCODE -ne 0) { throw "compile failed" }
 & $exe "$root\samples\controller_frames.txt"

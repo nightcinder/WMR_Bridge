@@ -31,18 +31,64 @@ controller): acceleration magnitude is about 10.0 (1 g), gyro is at noise level
 (about 0.016 rad/s) and ticks increase within each session. That confirms the
 offsets and scales; it does not validate signs or axes.
 
-## Not done / caveats
+## Calibration: status
 
-- **Uncalibrated.** Monado additionally applies a per-device accel/gyro mix
-  matrix, bias and orientation read from the controller's firmware config
-  block (over HID, not done by this bridge). Axes here are the raw sensor axes.
-- Battery scale, temperature scale and bytes 32-43 are unknown.
-- Thumbstick/trackpad/trigger values were not exercised: the samples have no
-  input held. Only the synthetic tests cover them. Capture frames while
-  moving the stick and pressing buttons, labelled by hand.
-- The first frame of `sessionA` (a startup transient) looks different from
-  the rest; not investigated.
-- No pose/orientation fusion yet (Monado uses `m_imu_3dof`).
+**Not done.** It needs two things that cannot be produced without the controllers:
+
+1. **The firmware config block.** Monado reads it over HID: output report `0x06`
+   (64 bytes: `06 02 <block id> <addr u32 LE>`), after a `06 00` and a `06 04 C1 02`
+   command, and collects the 78-byte `0x06` input-report responses (`blk_remain`,
+   `len`, up to 68 data bytes each) until the block is complete. Then it XORs the
+   data after the first two bytes with a fixed key table (`wmr_config_key.h`) and
+   parses the JSON: `CalibrationInformation.InertialSensors[]` (per sensor: mix
+   matrix, bias offsets, pose) and `ControllerLeds[]`. Monado then multiplies by the
+   mix matrix, adds the bias, and rotates into the OpenXR IMU frame
+   (X right, Y up, Z backward).
+2. **A rotation capture.** Axis and sign checks need someone to rotate the
+   controller about each axis in turn while frames are recorded.
+
+Doing this on the ESP32 also changes the firmware's HID path: the 78-byte `0x06`
+responses would arrive through the same report callback that now forwards every
+report as a 46-byte raw frame (`WMR_CFG_MAX_FRAME` is 64), so the command channel
+must be kept out of the raw stream. That change is firmware work and was not made,
+because it cannot be tested without hardware.
+
+### Confirmed (from the stationary samples only)
+
+- Accel scale: magnitude 10.0 for a stationary controller (1 g), consistent with
+  `raw / 49000`.
+- Gyro scale is at least the right order of magnitude (noise about 0.016 rad/s).
+- Ticks increase monotonically within each session.
+
+### Unknown
+
+- Gyro and accel **axis directions and signs** (no rotation capture yet).
+- Per-device mix matrix, bias and orientation (config block not read).
+- Gyro scale in a real rotation (`1e-5` is Monado's value; unconfirmed here).
+- Battery and temperature scales, and bytes 32-43 of the payload.
+
+### First-frame transient in `sessionA-0`
+
+Compared with the other seven frames, `sessionA-0` has: gyro about (0.44, 0.79, -0.03)
+rad/s instead of about 0.016; acceleration (0.2, 7.7, 7.2) m/s^2, magnitude 10.5,
+instead of (-8.4, 4.6, 3.0), magnitude 10.07; temperature raw 1409 instead of about
+3030; battery 156 instead of 131-133; a tick count of 56,034,506 (about 5.6 s at
+100 ns per tick) with the next frame at 186,461,378.
+
+The data show the controller was moving and in a different orientation at that
+moment, and that the temperature word was still far from its settled value. Frame
+spacing in the sample file is sparse, so this cannot say whether the temperature or
+battery word settles over seconds or is a startup artefact. The data cannot
+distinguish a real startup transient from the controller being picked up; a capture
+of the first few seconds after connect, with the controller held still, would. Not
+resolved.
+
+### Other caveats
+
+- Thumbstick, trackpad, trigger and buttons were not exercised by the samples (nothing
+  held); only the synthetic tests cover them. Capture frames while moving the stick
+  and pressing buttons, labelled by hand.
+- No pose/orientation fusion (Monado uses `m_imu_3dof`); fusion is planned on the phone.
 
 ## Attribution
 
