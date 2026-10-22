@@ -1,6 +1,6 @@
-# Controller discovery by name (issue #2)
+# Controller discovery by name (issue #2, closed)
 
-**Status: implemented and host-tested; not built with ESP-IDF, never run on hardware.**
+**Status: implemented, merged and run on hardware. The D1-D11 checklist was reported passed by the project owner (user-reported 2026-10-22; no output pasted).**
 Checklist in [TESTING.md](TESTING.md) ("Discovery by name"). Reference logic:
 `src/wmr_discovery.{h,c}` (pure C, `tests/test_discovery.c`); BTstack side in
 `src/wmr_controller.c`.
@@ -17,8 +17,7 @@ scanning.
 | `Motion controller - Right` | RIGHT |
 
 Trailing spaces and NUL padding are ignored; anything else must match. These are the names
-given in issue #2. **They have not been read from the controllers through this code**; check
-D2 in TESTING.md confirms them.
+given in issue #2. Check D2 in TESTING.md covers them (reported passed, no output pasted).
 
 ## Where an address comes from
 
@@ -93,7 +92,7 @@ with `L` and `R` first. It does **not** delete link keys; that is still the per-
 ## Security
 
 A Bluetooth name is not authentication: any device can call itself `Motion controller - Left`.
-Before this change the bridge trusted two compiled-in addresses, which can also be spoofed.
+Before this change the bridge trusted two compiled-in addresses (since removed; the addresses now live in NVS), which can also be spoofed.
 What changes:
 
 - A device that answers inquiry with a controller name while a hand has no address becomes

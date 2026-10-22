@@ -87,7 +87,7 @@ rising means the phone link cannot keep up.
 - Counters are cumulative; judge health from **changes**: `drop` should stop
   increasing, `q` should not grow persistently, and `rate_tx` should track `rate_rx`.
 
-## Link diagnostics lines (`src/wmr_linkdiag.c`; not yet run on hardware)
+## Link diagnostics lines (`src/wmr_linkdiag.c`; run on hardware, user-reported 2026-10-22)
 
 Added to the periodic line and the `s` command to help find where controller reports are lost.
 Background and caveats: [DECODING.md](DECODING.md), "Investigation notes: upstream report loss".
@@ -119,7 +119,7 @@ STREAM phone=1 sub=1 stream=decoded mtu=517 conn=[15.00ms lat=1 to=5000ms] q=0/2
 second (and 1.2 Command Complete events per second) with both controllers connected, sent one at a
 time at least 100 ms apart.
 
-## Machine-readable line (`LINKLOG`) and one-off log lines (not yet run on hardware)
+## Machine-readable line (`LINKLOG`) and one-off log lines (run on hardware, user-reported 2026-10-22)
 
 Logging only; none of these adds HCI traffic. The HCI budget above is unchanged.
 
