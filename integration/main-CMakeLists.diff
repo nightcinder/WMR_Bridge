@@ -16,6 +16,8 @@ index e575a44..24b37e8 100644
 +    set(EXAMPLE_SOURCE
 +        "${WMR_BRIDGE_DIR}/src/wmr_batch.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_bridge_main.c"
++        "${WMR_BRIDGE_DIR}/src/wmr_cfg.c"
++        "${WMR_BRIDGE_DIR}/src/wmr_cfgmgr.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_console.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_controller.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_decode.c"

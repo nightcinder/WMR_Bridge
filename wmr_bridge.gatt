@@ -15,3 +15,7 @@ CHARACTERISTIC, 0000FF14-0000-1000-8000-00805F9B34FB, NOTIFY | DYNAMIC,
 // FF15: echo. The phone writes a 4-byte ping, the ESP32 notifies a 20-byte answer ahead of
 // any queued stream data. Independent of the FF11/FF12/FF14 exclusion.
 CHARACTERISTIC, 0000FF15-0000-1000-8000-00805F9B34FB, WRITE_WITHOUT_RESPONSE | NOTIFY | DYNAMIC,
+// FF13: controller config block (docs/PROTOCOL.md). Write a 5-byte cursor (hand, offset), read a
+// 16-byte header plus up to 496 data bytes; notify carries the header when a hand's state changes.
+// Independent of the FF11/FF12/FF14 exclusion.
+CHARACTERISTIC, 0000FF13-0000-1000-8000-00805F9B34FB, READ | WRITE | NOTIFY | DYNAMIC,

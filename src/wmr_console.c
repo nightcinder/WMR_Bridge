@@ -42,6 +42,7 @@
 #include "btstack_config.h"
 #include "btstack.h"
 #include "esp_timer.h"
+#include "wmr_cfgmgr.h"
 #include "wmr_console.h"
 #include "wmr_controller.h"
 #include "wmr_diag.h"
@@ -114,6 +115,7 @@ static void print_stats(bool periodic){
            (unsigned long) echo->accepted, (unsigned long) echo->sent, echo->pending ? 1u : 0u,
            (unsigned long) echo->busy, (unsigned long) echo->bad,
            (unsigned long) echo->unsubscribed, (unsigned long) echo->cancelled);
+    wmr_cfgmgr_print();
     printf("  vhci_drop=%lu log_errors=%lu\n",
            (unsigned long) wmr_linkdiag_vhci_drops(), (unsigned long) wmr_linkdiag_log_errors());
 #if WMR_CFG_FF12_DECIMATE > 1

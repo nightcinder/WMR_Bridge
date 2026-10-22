@@ -518,13 +518,14 @@ periodic line ([COUNTERS.md](COUNTERS.md)). Identity: `accepted = sent + cancell
 
 See [TESTING.md](TESTING.md), "FF15 echo". None has been run.
 
-# Controller config block, FF13 (APPROVED layout, host-tested formats only, not wired, not yet run)
+# Controller config block, FF13 (APPROVED layout, wired in firmware, NOT BUILT OR RUN on ESP32 yet)
 
 **Status: layout approved by the project owner (Nick, 2026-10-22); firmware wiring still to do.** The wire formats, the block-read state
-machine and the FF13 window are implemented as a pure-C module (`src/wmr_cfg.c`,
-`tests/test_cfg.c`) and host-tested. It is **not** wired into the HID handler or the GATT
-database, `FF13` is **not** in `wmr_bridge.gatt`, and nothing has run on an ESP32, a
-controller or a phone. The UUID and layout below were approved on 2026-10-22; they are still
+machine and the FF13 window are a pure-C module (`src/wmr_cfg.c`, `tests/test_cfg.c`,
+host-tested). The BTstack side is wired in: `src/wmr_cfgmgr.c` (cache, timers, sending),
+report-ID routing in `wmr_controller.c`, the characteristic in `wmr_transport.c` and
+`wmr_bridge.gatt`. **That wiring has not been compiled against BTstack or the ESP-IDF build
+and nothing has run on an ESP32, a controller or a phone.** The UUID and layout below were approved on 2026-10-22; they are still
 unverified on hardware.
 
 **Design basis.** The commands below are what Monado does
@@ -709,6 +710,27 @@ the data window follows (496 bytes, then 104 at offset 496). A hand that is not 
   then FAILED. A consumed response resets the retry count.
 - Reports are classified by report ID in the HID handler (`0x01` input, `0x02`/`0x06` config,
   else other), never by length.
+
+## As implemented (wiring; not built, not run)
+
+- The read starts 1 s after a hand's HID descriptor becomes available, once per boot per
+  hand: when the cache is READY it is **not** re-read and the revision/serial comparison from
+  the design above is **not implemented** (block `0x02` only; blocks `0x00` and `0x03` are
+  never read). A FAILED or NOT_READ hand is retried on its next connection.
+- Commands go out with `hid_host_send_report(cid, 0x06, bytes 1..63)`, i.e. as an HID output
+  report on the interrupt channel, without Monado's init commands. Whether the controller
+  accepts that is exactly what C1 checks.
+- Report routing in the HID handler: `0x01` input (unchanged), `0x02`/`0x06` config (only the
+  reader; no sequence number, not in `rx`), anything else counted per hand as `other_reports`
+  (printed at disconnect) and **not forwarded** (a change from before, when every report was
+  forwarded).
+- FF13 notify (16-byte header, offset 0) is sent only to a phone that enabled the CCC, once
+  per state change, behind a waiting FF15 answer and ahead of stream data. It does not count in
+  `notifications`. Enabling the CCC sends nothing: read the value to learn the current state.
+- The cursor and CCC reset when the phone connects or disconnects. The console statistics
+  print `FF13 LEFT/RIGHT state= total= crc32= send_errors=` (state 0 NOT_READ, 1 READING,
+  2 READY, 3 FAILED).
+- RAM: two 16 KB block buffers.
 
 ## Still unverified (needs a controller)
 

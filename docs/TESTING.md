@@ -368,10 +368,11 @@ before discovery has found them is check D6.
 | D11 | Override | Build with `-DWMR_CFG_LEFT_ADDRESS=\"..\"` | LEFT `compile-time override`; discovery looks only for RIGHT; `F` keeps LEFT | user-reported (2026-10-22): passed; one-line report for the whole checklist, no output pasted, so no figures are recorded |
 
 
-## FF13 config block (PROPOSED; not wired; none run)
+## FF13 config block (APPROVED layout; wired but not built; none run)
 
 Host tests (`tests/test_cfg.c`, CI) cover formats and the reader only. The checks below need
-the GATT wiring, which does not exist yet, and a controller. **Not yet run.**
+the ESP32 build with the new wiring and a controller. **Not yet run.** Watch the console for
+`FF13 LEFT: ...` lines and the statistics `FF13` lines.
 
 | # | Check | Expected | Result |
 | --- | --- | --- | --- |
