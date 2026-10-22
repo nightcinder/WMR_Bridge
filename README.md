@@ -2,8 +2,11 @@
 
 ESP32 firmware, built on [BTstack](https://github.com/bluekitchen/btstack), that
 connects to **two Windows Mixed Reality motion controllers** over Classic
-Bluetooth and forwards their raw input reports to an **Android phone** over a
-custom BLE GATT service.
+Bluetooth and forwards their input to an **Android phone** over a custom BLE GATT
+service, either as raw frames (FF11) or as decoded IMU and input records (FF12). The
+phone side is the companion app [wmr-companion](https://github.com/nightcinder/wmr-companion);
+the overall state, hardware results and roadmap are in its
+[docs/STATUS.md](https://github.com/nightcinder/wmr-companion/blob/main/docs/STATUS.md).
 
 ```
  WMR LEFT  --\  Classic Bluetooth HID                       BLE GATT notifications
@@ -11,13 +14,21 @@ custom BLE GATT service.
  WMR RIGHT --/  46-byte frames        bounded queue          service FF10 / characteristic FF11
 ```
 
-It is a **raw pipe**. It does not decode, filter, batch or time-stamp anything;
-each controller frame goes to the phone byte-for-byte. Turning those frames into
-poses or button states is future work.
+The raw stream (FF11) is a **raw pipe**: each controller frame goes to the phone
+byte-for-byte, with per-hand sequence numbers. The decoded stream (FF12) carries
+56-byte records with the sensor clock (`device_ticks`), gyro, accel, buttons, stick,
+trackpad, trigger and battery. It sends raw IMU values, not a quaternion, and neither
+stream filters or calibrates; orientation fusion runs on the phone. The two streams
+are mutually exclusive per connection. Batched decoded records (FF14) are being
+specified.
 
-> **Project status: experimental, partly verified.** It works in a bench test,
-> but most of the checks that would justify trusting it have not been run yet.
-> Read [What is and isn't tested](#what-is-and-isnt-tested) before relying on it.
+> **Project status: experimental, partly verified.** Both streams work in bench
+> tests with two controllers and a phone, and the app shows correct 3D orientation
+> from FF12 (checked visually, user-reported). Controller-to-ESP32 report loss
+> (about 10 % idle, 20 to 40 % while streaming, worse on RIGHT) is the main open
+> problem and is being investigated; see [docs/DECODING.md](docs/DECODING.md). Many
+> checks in [docs/TESTING.md](docs/TESTING.md) have not been run. Read
+> [What is and isn't tested](#what-is-and-isnt-tested) before relying on it.
 
 ## What it does
 
@@ -30,9 +41,11 @@ poses or button states is future work.
   run that was measured.
 - **Queue.** Frames from both hands go into one bounded FIFO (256 frames). If it
   fills, the newest frame is dropped and counted.
-- **BLE.** The ESP32 advertises as `WMR Bridge`. When the phone subscribes to
-  notifications, frames are sent as BLE notifications, fragmented to fit the
-  negotiated ATT MTU (one notification per frame when the MTU is large).
+- **BLE.** The ESP32 advertises as `WMR Bridge`. When the phone subscribes to FF11,
+  frames are sent as BLE notifications, fragmented to fit the negotiated ATT MTU
+  (one notification per frame when the MTU is large). When it subscribes to FF12
+  instead (MTU 59 or more), each report is decoded and sent as one 56-byte record.
+  Only one of the two can be enabled at a time.
 - **Sequence numbers.** Every frame gets a per-hand sequence number *when it
   arrives*, whether or not it is delivered, so the phone can detect loss by
   looking for gaps.
@@ -106,8 +119,10 @@ link key for that controller only; manual, refused while connected).
 
 ## BLE interface (summary)
 
-Service `0000FF10-0000-1000-8000-00805F9B34FB`, characteristic
-`0000FF11-0000-1000-8000-00805F9B34FB` (read + notify). Each notification is a
+Service `0000FF10-0000-1000-8000-00805F9B34FB`; raw characteristic
+`0000FF11-0000-1000-8000-00805F9B34FB` (read + notify); decoded characteristic
+`0000FF12-0000-1000-8000-00805F9B34FB` (notify only, 56-byte records, see
+[docs/PROTOCOL.md](docs/PROTOCOL.md)). Each notification is a
 12-byte little-endian header (`'R'`, hand, u32 sequence, u16 total length,
 u16 offset, u16 chunk length) followed by a chunk of the frame. A read of FF11
 returns a 16-byte status record. Exact layout, fragmentation and reassembly rules:
@@ -128,8 +143,8 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 
 - **Lossless end-to-end delivery.** The bridge's counters only prove frames were
   handed to the BLE stack. Nothing on the phone has checked sequence numbers, so
-  loss between the ESP32 and the app is unmeasured. Phone-side sequence checking
-  has not been written.
+  loss between the ESP32 and the app is checked only in a few bench captures (the
+  companion app counts sequence gaps and reported none); no long run.
 - **Duration.** Nothing longer than about 15 seconds of streaming; no soak test; no
   look at memory, error counters, or queue behavior over hours.
 - **Reconnects.** Controller power-cycle while streaming, controller disconnect while the
@@ -163,9 +178,11 @@ counters and their limits: [docs/COUNTERS.md](docs/COUNTERS.md).
 
 ## Planned, not done
 
-- Android receiver that validates sequence numbers and reassembles frames.
-- Calibration (firmware config block) and orientation/pose fusion. A decoded-frame characteristic (FF12) is *proposed*, not implemented: see [docs/PROTOCOL.md](docs/PROTOCOL.md). Input and sensor decoding exists as a host-side module: [docs/DECODING.md](docs/DECODING.md).
-
+- FF12 version 2 batching on a separate characteristic (FF14): several records per notification. Motivated by bench runs in which halving the notification count recovered most of RIGHT's lost reports; see [docs/PROTOCOL.md](docs/PROTOCOL.md) and [docs/DECODING.md](docs/DECODING.md).
+- Explaining and reducing controller-to-ESP32 report loss, in particular LEFT's extra loss while a phone streams (coexistence options to test: [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md)).
+- Calibration (FF13 config blob, designed only) and the remaining unknowns in [docs/DECODING.md](docs/DECODING.md) (accel scale, temperature, battery, input ranges).
+- An echo characteristic or device timestamp for true latency ([issue #1](../../issues/1)); controller discovery by name instead of compiled-in addresses ([issue #2](../../issues/2)).
+- BLE security (no pairing or encryption today), see [docs/SECURITY.md](docs/SECURITY.md).
 ## Configuration
 
 Every tunable is a named constant in [src/wmr_config.h](src/wmr_config.h) (controller
