@@ -94,6 +94,11 @@ void wmr_controller_init(wmr_report_sink_t sink){
     hid_host_register_packet_handler(hid_packet_handler);
 }
 
+int wmr_controller_hand_for_address(const uint8_t address[6]){
+    controller_t *c = controller_for_address(address);
+    return c ? (int) (c - controllers) : -1;
+}
+
 const char *wmr_controller_name(unsigned hand){
     return hand < WMR_NUM_CONTROLLERS ? controllers[hand].name : "?";
 }

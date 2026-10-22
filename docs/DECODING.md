@@ -234,6 +234,12 @@ Where it happens is **not established**; see [Investigation notes](#investigatio
 - The controller's HID report descriptor (needed to choose the right report type for the
   config commands) and the block sizes on these controllers.
 - Where the thumbstick centre is: resting values are not 0 (see below).
+- **The cause of the upstream report loss.** The BLE-load hypothesis (reports drop while the
+  ESP32 is also notifying on BLE) is **not established**; the reported rates are mixed (see
+  "Investigation notes"). The link diagnostics added for this have **not run on hardware**:
+  whether this ESP32 controller answers Read RSSI / Read Failed Contact Counter / Read Link
+  Quality for Classic links, whether the VHCI drop message wording matches what the counter
+  looks for, and what the tick-based estimate reads on the real stream are all unknown.
 
 ### First-frame transient in `sessionA-0`
 
@@ -390,6 +396,10 @@ this repository and the BTstack ESP32 port it is built with (`e38553977`).
 | PR #6 bench, ESP32 statistics | about 150 | about 150 |
 | Phone capture, `still` phase, arrival rate | 108 Hz | 192.7 Hz |
 | FF12 first interval after subscribing (`tx` count; interval length not stated) | 377 | 310 |
+| No phone subscribed (FF12 build, `stream=none`), `rate_rx` | 175-181/s | 164-184/s |
+| FF11 streaming to the Pixel at MTU 517, `rate_rx` | about 147/s | 165-172/s |
+| FF11 at MTU 23, queue full and dropping, `rate_rx` | about 135/s | about 135/s |
+| First FF12 interval after subscribing, `rate_rx` | 180/s | 163/s |
 
 The controllers produce about 200 reports/s (median tick period about 4.99 ms). Every run
 is below 200, the shortfall changes from run to run, and **LEFT is not always the worse
@@ -397,6 +407,13 @@ hand** (it was the higher of the two in the first bench). So the asymmetry is no
 property of one controller as far as these numbers show; it may depend on position, radio
 conditions or timing. The phone saw no sequence gaps, so the reports are lost before the
 bridge numbers them.
+
+The `rate_rx` rows (reported from `STREAM` lines, single runs) are mixed and **no conclusion
+is drawn**. With no phone subscribed both hands are already 8-18 % below 200, so BLE load
+cannot be the whole explanation. With FF11 streaming LEFT is lower (about 147 against about
+178) while RIGHT's ranges overlap (165-172 against 164-184), and at MTU 23 with a full queue
+both are lower still; whether BLE load adds to the shortfall is **not established**, and the
+runs were not repeated.
 
 ### Where a report can be lost, and what would show it
 
@@ -445,13 +462,53 @@ bridge numbers them.
   2. Phone connected, not subscribed (`stream=none`), then FF11, then FF12.
   3. Each controller on its own, then both.
   4. The two controllers swapped in position / right next to the ESP32 antenna.
-  If the rate with no phone is already below 200, BLE sharing (2) is not the main cause.
-- **Diagnostics that would need a firmware change (not made; for approval):**
-  (a) a per-hand count of missing reports from the tick deltas, computed at the ESP32 (it
-  reads 4 bytes of the report), shown in the `STREAM` line, so upstream loss is measured
-  without a phone; (b) log `HCI_EVENT_MODE_CHANGE`; (c) read RSSI, failed-contact counter and
-  link quality for each Classic link every few seconds; (d) make the VHCI ring-buffer drop
-  visible (a counter in the port, or enabling the HCI dump, which is very verbose).
+  The no-phone rates reported so far are already below 200, so BLE sharing cannot be the
+  whole explanation; whether it adds to it is not established.
+- **Diagnostics implemented on the PR #8 branch (approved on director issue #3). None has run
+  on hardware.** See [COUNTERS.md](COUNTERS.md) for the output lines.
+  - **(a) Missing reports, from the tick deltas, per hand** (`src/wmr_devloss.c`, pure C and
+    host-tested). Fed with the 32-bit device tick counter of every received input report (4
+    bytes read in `wmr_transport_submit_report`, before queueing). Same definition as the
+    analyzer: each delta between consecutive reports implies `round(delta / period) - 1`
+    missing reports, where `period` is the median of the deltas not longer than 1.5x the
+    10th-percentile delta. Because it runs online: the period comes from a **sliding window
+    of the last 256 deltas** (so it cannot drift with run length) and is refreshed every 32
+    reports; nothing is counted until 16 deltas exist, which are then counted retroactively;
+    a delta over 5 s is a *discontinuity* (counted separately, not as missing); a repeated
+    tick value is ignored; the tracker is reset when the Classic link is created or lost.
+    Same limit as the analyzer: perfectly uniform loss looks like a slower controller. Cost:
+    about 1.1 KB per hand, and one sort of at most 256 values per hand every 32 reports.
+  - **(b) Link mode changes.** `HCI_EVENT_MODE_CHANGE` is logged once per change (not per
+    report), e.g. `LEFT link mode: active -> sniff (interval 40 slots = 25.00 ms) at t=12.345 s`
+    (time since boot). Links are assumed active when created. The hand is found from the
+    Bluetooth address in the ACL connection-complete event. The current mode also appears in
+    the per-hand link line.
+  - **(c) RSSI, failed-contact counter and link quality per Classic link**, polled every 5 s.
+    **Extra HCI traffic: 3 commands per connected link per cycle, i.e. 6 commands per 5 s for
+    two links = 1.2 commands per second, plus 1.2 Command Complete events per second.** They
+    are sent one at a time, at least 100 ms apart (so at most 10 per second, and only for
+    about 0.6 s of every 5 s), and an unanswered command is abandoned after 500 ms. Shown as
+    `rssi=... fcc=... lq=...`, or `n/a(0xNN)` with the HCI status if the controller refuses.
+    Interpretation caveats, unverified here: for BR/EDR, Read RSSI is, as I understand the
+    specification, a difference from the "golden receive power range" (0 = within range,
+    negative = too weak) rather than dBm; the failed-contact counter is, as I understand it,
+    a count of *consecutive* failed contacts, so a poll every 5 s may read 0 almost always;
+    link quality is vendor-specific (0-255, higher is better) and may be unsupported.
+  - **(d) Silent VHCI receive drops, counted without editing any BTstack file.** A log sink
+    registered with `hci_dump_init` (from `src/wmr_linkdiag.c`; this repository's
+    `integration/main-CMakeLists.txt` only lists its sources) receives BTstack's error-level
+    messages. A message whose format matches the one in `hci_transport_esp32_vhci.c`
+    (`transport_recv_pkt_cb ... dropping packet`) increments `vhci_drop`; all error-level
+    messages increment `log_errors` (which therefore includes the drops). Packet logging is
+    turned off and only the error level reaches the sink, so the cost is one function call per
+    error message and one flag test per HCI packet. Limits: it depends on BTstack's wording (a
+    different wording would be counted in `log_errors` but not in `vhci_drop`); the callback runs
+    on the Bluetooth controller task, so the counters are atomic; and the sink is not installed
+    if `CONFIG_BTSTACK_HCI_DUMP_STDOUT` is set, in which case both stay 0.
+  - **How to read them:** `dev_missing` per hand with no phone against with a phone shows
+    whether BLE traffic changes the upstream loss; `mode` lines show whether a controller enters
+    sniff mode when the loss appears; `rssi`/`fcc`/`lq` per hand may show a radio difference
+    between LEFT and RIGHT; `vhci_drop` above zero means the ESP32 itself is dropping packets.
 
 ### Not explained
 

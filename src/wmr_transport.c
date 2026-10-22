@@ -44,6 +44,7 @@
 #include "esp_timer.h"
 #include "wmr_bridge.h"        /* generated from wmr_bridge.gatt: profile_data, ATT_*_HANDLE */
 #include "wmr_controller.h"
+#include "wmr_linkdiag.h"
 #include "wmr_link.h"
 #include "wmr_decoded.h"
 #include "wmr_protocol.h"
@@ -133,6 +134,7 @@ static void pump_kick(void){
 
 void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t length){
     if (hand >= WMR_NUM_CONTROLLERS) return;
+    wmr_linkdiag_note_report(hand, report, length);       /* reads 4 bytes, see wmr_linkdiag.h */
     uint32_t sequence = ++stats.sequence[hand];
     stats.rx[hand]++;
     if (stream_mode == WMR_STREAM_NONE || phone_handle == HCI_CON_HANDLE_INVALID){

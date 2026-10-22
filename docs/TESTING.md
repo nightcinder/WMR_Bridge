@@ -126,3 +126,23 @@ Record the date, the build, the phone/client and the observed numbers in the Res
 
 Do not flash from this repository's CI or from an assistant session; flashing and the
 runs above are done by hand.
+
+## Link diagnostics: bench-test checklist (hardware, **not yet run**)
+
+Firmware: the PR #8 branch. Added to find where controller reports are lost (director issue
+#3). Everything below is **not yet run**; what the assistant ran is host-only (`tests/test_diag.c`
+in CI: the missing-report estimator, log classification, mode tracking and reply parsing) and a
+full ESP-IDF build.
+
+| # | Check | How | Expect | Result |
+| --- | --- | --- | --- | --- |
+| D1 | Boots and prints the new lines | Flash, both controllers connected | `vhci_drop=` / `log_errors=` line and a `<HAND> link:` line per hand in each `STREAM` block; no other new output | not yet run |
+| D2 | Link health answered | Watch the `link:` lines for 30 s | `rssi`, `fcc`, `lq` show numbers, or `n/a(0xNN)` with a status (record which, per hand) | not yet run |
+| D3 | HCI cost | Count commands for 60 s (e.g. with `WMR_CFG_HCI_TRACE` set, or a sniffer) | About 72 Read RSSI / Failed Contact / Link Quality commands per minute (1.2/s), none closer than 100 ms | not yet run |
+| D4 | Tick-based estimate vs the analyzer | Same controller, phone capture and the ESP32 `dev_missing` over the same period | `dev_missing` and the analyzer's `device reports missing` roughly agree (the analyzer's window is the whole phase, the ESP32's is the last 256 deltas) | not yet run |
+| D5 | Estimate on a clean stream | A controller very close to the ESP32, nothing else on | `dev_missing` stays near 0 and `period` is about 4.99 ms | not yet run |
+| D6 | Reconnect | Power-cycle a controller | `link:` shows `n/a (no ACL link)` while down; `dev_missing` and `discont` restart from 0 on reconnect, with no spike | not yet run |
+| D7 | Mode changes | Leave a controller idle, then move it | A `LEFT link mode: active -> sniff ...` line appears only if the link really changes mode, once per change; none otherwise | not yet run |
+| D8 | VHCI drop counter | Normal streaming for 10 minutes | `vhci_drop` stays 0, or rises, which would be a finding; also try the old tick-based shortfall against it | not yet run |
+| D9 | Does the diagnostics build change the rates? | Compare `rate_rx` per hand with the earlier reports (no phone: LEFT 175-181, RIGHT 164-184) | Similar; record any difference | not yet run |
+| D10 | Experiments in DECODING.md | No phone / not subscribed / FF11 / FF12; each controller alone; positions swapped | Record `rate_rx`, `dev_missing`, `mode`, `rssi` per case | not yet run |

@@ -151,6 +151,22 @@
 #define WMR_CFG_STATS_INTERVAL_MS  5000
 #endif
 
+/* ---- Link diagnostics (wmr_linkdiag.c) ----------------------------------- */
+
+/* Every interval each connected Classic link is polled with 3 HCI commands (Read RSSI,
+ * Read Failed Contact Counter, Read Link Quality): 1.2 commands/s and 1.2 Command Complete
+ * events/s for two links at 5 s. Commands go out one at a time, at least PACE_MS apart,
+ * and an unanswered one is abandoned after REPLY_TIMEOUT_MS. */
+#ifndef WMR_CFG_LINKDIAG_INTERVAL_MS
+#define WMR_CFG_LINKDIAG_INTERVAL_MS      5000
+#endif
+#ifndef WMR_CFG_LINKDIAG_PACE_MS
+#define WMR_CFG_LINKDIAG_PACE_MS          100
+#endif
+#ifndef WMR_CFG_LINKDIAG_REPLY_TIMEOUT_MS
+#define WMR_CFG_LINKDIAG_REPLY_TIMEOUT_MS 500
+#endif
+
 /* ---- Diagnostics (all off by default) ---------------------------------- */
 
 /* Print selected HCI events and hex-dump them. Very verbose. */
