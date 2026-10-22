@@ -188,6 +188,15 @@
 #error "WMR_CFG_FF12_DECIMATE must be 1 (off) or more"
 #endif
 
+/* ---- FF13 config block read -------------------------------------------------- */
+
+/* 1: read each controller's config block (block 0x02) after its HID descriptor arrives
+ * (docs/PROTOCOL.md, FF13). 0: never send any config command, as before FF13; use it to check
+ * whether the read is what stops a controller's input stream. */
+#ifndef WMR_CFG_FF13_READ
+#define WMR_CFG_FF13_READ                 1
+#endif
+
 /* ---- FF14 batching -------------------------------------------------------- */
 
 /* Longest a queued record waits before a partial FF14 batch is sent while the connection

@@ -75,6 +75,17 @@ void wmr_cfg_pack_read_request(uint8_t block, uint32_t addr, uint8_t out[WMR_CFG
     put_u32(&out[3], addr);
 }
 
+void wmr_cfg_pack_enable_streaming(unsigned step, uint8_t out[WMR_CFG_CMD_SIZE]){
+    memset(out, 0, WMR_CFG_CMD_SIZE);
+    out[0] = 0x06;
+    out[1] = 0x03;
+    if (step == 0){
+        out[2] = 0x01; out[3] = 0x00; out[4] = 0x02;
+    } else {
+        out[2] = 0x02; out[3] = 0xE1; out[4] = 0x02;
+    }
+}
+
 bool wmr_cfg_parse_response(const uint8_t *buf, uint16_t size, wmr_cfg_response_t *out){
     if (buf == NULL || out == NULL || size != WMR_CFG_RESP_SIZE) return false;
     if (buf[0] != 0x02 && buf[0] != 0x06) return false;

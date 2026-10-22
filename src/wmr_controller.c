@@ -222,6 +222,7 @@ void wmr_controller_get_status(unsigned hand, wmr_controller_status_t *out){
     out->connected            = controllers[hand].connected;
     out->descriptor_available = controllers[hand].descriptor_available;
     out->reports              = (uint32_t) controllers[hand].reports;
+    out->other_reports        = (uint32_t) controllers[hand].other_reports;
     out->address_source       = controllers[hand].source;
     memcpy(out->address, controllers[hand].address, 6);
 }
@@ -239,6 +240,7 @@ static bool connect_hand(unsigned hand){
     if (connect_pending){ printf("Another connection/discovery is pending\n"); return false; }
     if (c->cid){ printf("%s already open or opening, cid=%u\n", c->name, c->cid); return false; }
     c->reports = 0;
+    c->other_reports = 0;
     c->descriptor_available = false;
     connect_pending = true;
     printf("Connecting %s %s\n", c->name, bd_addr_to_str(c->address));
@@ -470,6 +472,7 @@ static void accept_incoming(controller_t *c, uint16_t cid){
     c->connected = false;
     c->descriptor_available = false;
     c->reports = 0;
+    c->other_reports = 0;
     connect_pending = true;
     printf("%s accepting incoming HID connection, cid=%u\n", c->name, cid);
     hid_host_accept_connection(cid, HID_PROTOCOL_MODE_REPORT);

@@ -732,6 +732,23 @@ the data window follows (496 bytes, then 104 at offset 496). A hand that is not 
   2 READY, 3 FAILED).
 - RAM: two 16 KB block buffers.
 
+## Input stream stops after the read (user-reported, 2026-10-22)
+
+After WMR_Bridge #17, on every boot each controller delivered only a few hundred input reports
+(LEFT 149-188, RIGHT 190) and then none, with the HID link up (rssi/lq healthy) and the block
+READY. The stop lines up with the first config command (about 1 s after the descriptor, at about
+200 reports/s). This is the unverified item the design named ("whether the init commands
+interrupt or stop the input stream"). The cause is **not proven**: it is either the commands
+stopping the controller's streaming, or the new routing dropping reports (neither input nor
+config reports are no longer forwarded). The statistics line now shows `other=` per hand: it
+stays 0 if routing is not the cause.
+
+Fix being tried: after each read (done or failed) send Monado's two enable commands,
+`06 03 01 00 02` then `06 03 02 E1 02` (rest zero, 10 ms apart). Those bytes come from the
+design notes, not from a source checked here. **Not yet run.** Build with
+`-DWMR_CFG_FF13_READ=0` (or set it in `wmr_config.h`) to send no config command at all; input
+must then stream as it did before FF13.
+
 ## Still unverified (needs a controller)
 
 Whether the controller accepts block reads without Monado's init commands; control or

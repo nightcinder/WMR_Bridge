@@ -48,7 +48,7 @@
 #define CFG_BLOCK_ID        0x02    /* the obfuscated JSON config block */
 #define CFG_START_DELAY_MS  1000    /* let the input stream settle before the first request */
 
-typedef enum { PHASE_NONE = 0, PHASE_START, PHASE_SPACING, PHASE_TIMEOUT } phase_t;
+typedef enum { PHASE_NONE = 0, PHASE_START, PHASE_SPACING, PHASE_TIMEOUT, PHASE_ENABLE } phase_t;
 
 typedef struct {
     wmr_cfg_blob_state_t state;
@@ -60,6 +60,7 @@ typedef struct {
     btstack_timer_source_t timer;
     unsigned             hand;
     uint32_t             send_errors;
+    unsigned             enable_step;    /* next streaming-enable command to send */
 } hand_t;
 
 static hand_t hands[WMR_NUM_CONTROLLERS];
@@ -102,8 +103,28 @@ static void send_request(hand_t *h){
     arm(h, PHASE_TIMEOUT, WMR_CFG_TIMEOUT_MS);
 }
 
+/* Block reads make the controller stop sending input reports (seen on hardware after PR #17:
+ * a few hundred reports, then none). Monado puts it back into streaming afterwards with two
+ * enable commands; send them after every read, successful or not. */
+static void enable_streaming(hand_t *h){
+    if (h->enable_step >= WMR_CFG_ENABLE_STEPS) return;
+    uint8_t command[WMR_CFG_CMD_SIZE];
+    wmr_cfg_pack_enable_streaming(h->enable_step, command);
+    h->enable_step++;
+    uint16_t cid = wmr_controller_cid(h->hand);
+    uint8_t status = cid ? hid_host_send_report(cid, command[0], &command[1], WMR_CFG_CMD_SIZE - 1)
+                         : ERROR_CODE_COMMAND_DISALLOWED;
+    if (status != ERROR_CODE_SUCCESS){
+        h->send_errors++;
+        printf("FF13 %s: streaming-enable command not sent (0x%02x)\n", hand_name(h->hand), status);
+    }
+    if (h->enable_step < WMR_CFG_ENABLE_STEPS) arm(h, PHASE_ENABLE, WMR_CFG_SPACING_MS);
+}
+
 static void finish(hand_t *h){
     disarm(h);
+    h->enable_step = 0;
+    arm(h, PHASE_ENABLE, WMR_CFG_SPACING_MS);
     if (h->reader.state == WMR_CFG_DONE){
         h->total = h->reader.total;
         h->crc = wmr_cfg_crc32(h->blob, h->total);
@@ -122,6 +143,10 @@ static void timer_fire(btstack_timer_source_t *timer){
     hand_t *h = (hand_t *) btstack_run_loop_get_timer_context(timer);
     phase_t phase = h->phase;
     h->phase = PHASE_NONE;
+    if (phase == PHASE_ENABLE){
+        enable_streaming(h);
+        return;
+    }
     if (h->state != WMR_CFG_READING) return;
     switch (phase){
         case PHASE_START:
@@ -155,6 +180,7 @@ void wmr_cfgmgr_init(wmr_cfgmgr_listener_t l){
 
 void wmr_cfgmgr_on_descriptor(unsigned hand){
     if (hand >= WMR_NUM_CONTROLLERS) return;
+    if (!WMR_CFG_FF13_READ) return;
     hand_t *h = &hands[hand];
     if (h->state == WMR_CFG_READY || h->state == WMR_CFG_READING) return;
     /* NOT_READ, or FAILED on an earlier connection: try again. */
