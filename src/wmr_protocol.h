@@ -52,6 +52,7 @@
 /* One controller frame as captured (A1, report ID, payload...). */
 typedef struct {
     uint32_t sequence;                    /* per-hand, starts at 1 */
+    uint64_t rx_time_us;                  /* esp_timer time at receipt; 0 if unknown */
     uint16_t length;
     uint8_t  hand;
     uint8_t  data[WMR_CFG_MAX_FRAME];
