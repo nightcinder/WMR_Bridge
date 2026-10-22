@@ -146,8 +146,17 @@ static void permille_field(char *buf, size_t len, int permille){
     else snprintf(buf, len, "%d.%d", permille / 10, permille % 10);
 }
 
+void wmr_diag_batch_mean_format(uint32_t records, uint32_t batches, char *buf, size_t len){
+    if (!batches){
+        if (len) buf[0] = '\0';
+        return;
+    }
+    const uint64_t hundredths = ((uint64_t) records * 100u + batches / 2u) / batches;
+    snprintf(buf, len, "%lu.%02lu", (unsigned long) (hundredths / 100u), (unsigned long) (hundredths % 100u));
+}
+
 void wmr_linklog_format(const wmr_linklog_t *r, char *buf, size_t len){
-    char rate[16] = "", delta[24] = "", last5s[16], cum[16], rssi[8] = "", lq[8] = "", fcc[8] = "", conn[16] = "";
+    char rate[16] = "", delta[24] = "", last5s[16], cum[16], rssi[8] = "", lq[8] = "", fcc[8] = "", conn[16] = "", mean[16];
     if (r->rate_rx_tenths >= 0) snprintf(rate, sizeof(rate), "%ld.%ld", (long) (r->rate_rx_tenths / 10), (long) (r->rate_rx_tenths % 10));
     if (r->missing_delta >= 0) snprintf(delta, sizeof(delta), "%lu", (unsigned long) r->missing_delta);
     permille_field(last5s, sizeof(last5s), r->last5s_permille);
@@ -161,9 +170,12 @@ void wmr_linklog_format(const wmr_linklog_t *r, char *buf, size_t len){
         unsigned long hundredths = (unsigned long) ((r->conn_interval_us + 5u) / 10u);   /* 10 us -> 0.01 ms */
         snprintf(conn, sizeof(conn), "%lu.%02lu", hundredths / 100ul, hundredths % 100ul);
     }
-    snprintf(buf, len, "LINKLOG,%lu,%s,%s,%s,%lu,%s,%s,%s,%s,%s,%s,%u,%s,%lu",
+    wmr_diag_batch_mean_format(r->records_in_batches, r->batches_tx, mean, sizeof(mean));
+    snprintf(buf, len, "LINKLOG,%lu,%s,%s,%s,%lu,%s,%s,%s,%s,%s,%s,%u,%s,%lu,%lu,%lu,%s,%lu,%lu",
              (unsigned long) r->t_ms, r->hand, rate, delta, (unsigned long) r->missing_cum,
-             last5s, cum, rssi, lq, fcc, r->stream, (unsigned) r->mtu, conn, (unsigned long) r->decimated);
+             last5s, cum, rssi, lq, fcc, r->stream, (unsigned) r->mtu, conn, (unsigned long) r->decimated,
+             (unsigned long) r->batches_tx, (unsigned long) r->records_in_batches, mean,
+             (unsigned long) r->batch_max, (unsigned long) r->batch_full_flushes);
 }
 
 bool wmr_episode_note_drop(wmr_episode_t *e){

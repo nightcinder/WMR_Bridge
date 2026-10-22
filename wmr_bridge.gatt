@@ -9,3 +9,6 @@ PRIMARY_SERVICE, 0000FF10-0000-1000-8000-00805F9B34FB
 CHARACTERISTIC, 0000FF11-0000-1000-8000-00805F9B34FB, READ | NOTIFY | DYNAMIC,
 // FF12: decoded 56-byte records, notify only. Mutually exclusive with FF11 notifications.
 CHARACTERISTIC, 0000FF12-0000-1000-8000-00805F9B34FB, NOTIFY | DYNAMIC,
+// FF14: batched decoded records (2-byte header + 1..9 FF12 records), notify only. Mutually
+// exclusive with FF11 and FF12 notifications.
+CHARACTERISTIC, 0000FF14-0000-1000-8000-00805F9B34FB, NOTIFY | DYNAMIC,

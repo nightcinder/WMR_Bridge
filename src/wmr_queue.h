@@ -64,6 +64,9 @@ bool wmr_queue_push(wmr_queue_t *q, const wmr_frame_t *frame);
 /* Oldest frame, or NULL if empty. Valid until the next pop/clear. */
 const wmr_frame_t *wmr_queue_peek(const wmr_queue_t *q);
 
+/* The frame `index` places behind the oldest (0 = oldest), or NULL if index >= count. */
+const wmr_frame_t *wmr_queue_peek_at(const wmr_queue_t *q, unsigned index);
+
 /* Remove the oldest frame. No-op if empty. */
 void wmr_queue_pop(wmr_queue_t *q);
 

@@ -86,7 +86,8 @@ Run with the refactored firmware flashed. Record dates and observed numbers here
 .\tests\run_tests.ps1
 ```
 
-Needs a C99 compiler on PATH (`gcc`, `clang`, or `zig`). Written and run here
+Needs a C99 compiler on PATH (`gcc`, `clang`, or `zig`); it also builds and runs the FF14 tests
+(`tests/test_batch.c`). Written and run here
 with `zig cc` from a throwaway Python venv, because no host compiler was
 installed.
 
@@ -249,3 +250,62 @@ Logging only; no new HCI traffic. Lines are described in [COUNTERS.md](COUNTERS.
 | L3 | First-drop line | At MTU 23 subscribe to FF11 until the queue fills | Exactly one `<HAND> queue full: first drop of this episode, stream=raw mtu=23 q=256/256 errors=N` line per episode, not one per dropped report; a second line only after the queue has drained and filled again | not yet run |
 | L4 | LE buffer size | Read the boot log | One `HCI LE buffers: ACL packet length N bytes, M packets` line during start-up (or none, which would mean the event was not seen by the handler) | not yet run |
 | L5 | Data length | Connect the phone | A `BLE data length changed: tx ... rx ...` line, or `BLE data length: no change event seen since connect` about 0.5 s after connect | not yet run |
+
+## FF14 batched stream (branch `ff14-batching`; hardware, **not yet run**)
+
+What was run (host only, by the assistant): `tests/test_batch.c` (golden bytes for a batch of 1, 2 and
+the maximum of 9; the MTU rule at 0, 23, 59, 60, 61, 116, 117, 247, 285, 517; the flush rule
+including a partial flush on the hold time and a simulated 200 reports/s arrival that never held a
+record longer than the hold time; all six orderings of the FF11/FF12/FF14 exclusion; queue-full and
+wraparound behaviour; a failed send keeping its records), plus the extended `LINKLOG` strings in
+`tests/test_diag.c`. These ran locally with `zig cc` (0 failures); the CI result is on the pull request. The ESP-IDF build
+(`EXAMPLE=wmr_bridge`) is clean with 0 warnings. **Not tested anywhere:** `pump_send_batch`,
+the hold timer and `att_server_notify` in `wmr_transport.c` (they need BTstack and a radio), and
+everything below. Nothing about FF14 is verified on hardware.
+
+**One BTstack-side file changes with this branch:** `integration/main-CMakeLists.txt` lists
+`wmr_batch.c` as a new source. Copy it over `port\esp32\main\CMakeLists.txt` again (as in
+[BUILD_WINDOWS.md](BUILD_WINDOWS.md)) before building, or the link fails with undefined
+`wmr_batch_*` references.
+
+### Checks
+
+| # | Check | How | Expect | Result |
+| --- | --- | --- | --- | --- |
+| B1 | FF14 exists | Connect, discover service FF10 | A notify-only `0000FF14-...` characteristic with a CCC, after FF12; FF11 and FF12 still present and unchanged | not yet run |
+| B2 | Exclusion, all six orders | With FF11 / FF12 / FF14 in turn enabled, try to enable each of the other two (six pairs) | Every second enable fails with ATT error `0x80` and the first stream keeps running; after writing `0x0000` to the active CCC the other enables | not yet run |
+| B3 | Batches at MTU 517 | Subscribe to FF14, both controllers streaming, 60 s | Values start `02 NN`; `NN` between 1 and 9; value length `2 + 56 x NN`; STREAM `FF14` line shows `batches_tx` rising, `mean` between 1 and 9, `max` up to 9; **`notify` rises by `batches_tx`, much slower than FF12's ~320/s** (the expectation is of the order of 70 to 100 per second at a 15 ms interval; not measured) | not yet run |
+| B4 | Nothing lost to batching | Same run; on the phone, per hand, `sequence` gaps | Gaps equal the FF12 gaps for the same run (missing reports from the controllers show as gaps, batching adds none); no repeated or reordered `sequence` within a hand | not yet run |
+| B5 | Identity | STREAM and `LEFT`/`RIGHT` lines at the end of B3 | `rx = tx + drop + offline + purged + mtu_skip + dec_err + decimated + q` per hand, with `tx` in records; `tx` (both hands) grew by `records_in_batches`; `notify` grew by `batches_tx` | not yet run |
+| B6 | MTU 247 | Cap the phone's MTU at 247 | `max` is at most 4; values at most 226 bytes | not yet run |
+| B7 | MTU below 61 | MTU 23, then (if the phone allows) 59 or 60 | Nothing arrives on FF14; `mtu_skip` rises for both hands; `batches_tx` stays 0. At 59/60 FF12 still works and FF14 does not | not yet run |
+| B8 | Partial flush | Only one controller connected (about 160 to 200 reports/s) | Batches smaller than full: `mean` about the reports that arrive in one connection interval (roughly 3 at 15 ms, not measured); `batch_full_flushes` stays near 0; the phone still sees every record | not yet run |
+| B9 | Latency of a record | Use `rx_time_us` against the phone's arrival time for a few seconds of FF12, then FF14 (needs the app to log both) | FF14 arrival-minus-`rx_time_us` is larger by at most about one connection interval; **not measured so far** | not yet run |
+| B10 | FF12 and FF11 unchanged | Re-run X1 (FF12 at `N=1`) and the FF11 checks | Identical to before; `FF14` line stays at zero | not yet run |
+| B11 | Switching | FF12, then `0x0000`, then FF14, then `0x0000`, then FF11 | Each switch starts a fresh stream (the queue is cleared, `purged` counts what was dropped), no stale batch | not yet run |
+| B12 | `LINKLOG` | Capture a B3 run | Header and lines have the same number of fields; the last five are `batches_tx,records_in_batches,batch_mean,batch_max,batch_full_flushes`; the first fourteen are unchanged | not yet run |
+
+### The comparison the director asked for (user to run; the assistant has not)
+
+Question: does sending the same samples in far fewer notifications reduce the missing-report
+share the way decimation did? Use the default build (decimation off, `N=1`), the **same fixed,
+stated table position** for every run (controllers face down and still, as in the decimation
+runs), MTU 517, interval as granted (note it). Four 2-minute runs, in this order:
+
+1. **No phone** (baseline; the idle level).
+2. **A: FF12**, `N=1`.
+3. **B: FF14**.
+4. **A again: FF12**, `N=1` (A/B/A: if the second A differs from the first, the position or the
+   session drifted and the comparison is weaker).
+
+Per run, record per hand `rate_rx`, `last5s` and `cum`, `rssi`/`lq`, the granted interval and
+`mtu`, and for FF14 `mean`, `max`, `batches_tx` (the `LINKLOG` lines carry all of it; paste the
+capture).
+
+How to read it, so the conclusion is not chosen after the fact: in the decimation runs RIGHT fell
+from 28 to 36 % at N=1 to 12 to 15 % at N=2 and 4, and LEFT stayed at about 18 to 20 % at every N
+(director-reported, one position, one session). If FF14 brings RIGHT down toward that range,
+notification count is part of RIGHT's loss and FF14 helps it without dropping samples. If RIGHT
+stays near its FF12 level, batching does not help at this position. **LEFT is not expected to
+change and a change would be a new finding; do not claim FF14 fixes LEFT.** One session at one
+position cannot say more than that.

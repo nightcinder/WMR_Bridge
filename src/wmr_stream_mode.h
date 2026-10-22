@@ -36,11 +36,11 @@
  */
 
 /*
- * wmr_stream_mode.h - which BLE stream (raw FF11 or decoded FF12) a phone has
- * subscribed to, and the rule that the two are mutually exclusive.
+ * wmr_stream_mode.h - which BLE stream (raw FF11, decoded FF12 or batched FF14) a phone
+ * has subscribed to, and the rule that at most one is active.
  *
  * Pure C, no BTstack dependency, host-tested. Specified in docs/PROTOCOL.md
- * ("Subscription: FF11 and FF12 are mutually exclusive").
+ * ("Subscription: FF11, FF12 and FF14 are mutually exclusive").
  */
 
 #ifndef WMR_STREAM_MODE_H
@@ -56,7 +56,8 @@
 typedef enum {
     WMR_STREAM_NONE = 0,
     WMR_STREAM_RAW,         /* FF11: raw fragmented frames */
-    WMR_STREAM_DECODED      /* FF12: 56-byte decoded records */
+    WMR_STREAM_DECODED,     /* FF12: 56-byte decoded records */
+    WMR_STREAM_BATCHED      /* FF14: 2-byte header + 1..9 FF12 records */
 } wmr_stream_t;
 
 typedef struct {
@@ -65,10 +66,10 @@ typedef struct {
     uint8_t      att_error; /* 0 when accepted */
 } wmr_stream_ccc_result_t;
 
-/* A phone wrote the CCC of stream `which` (RAW or DECODED) with notifications
+/* A phone wrote the CCC of stream `which` (RAW, DECODED or BATCHED) with notifications
  * `enable`d or disabled, while `current` was active.
  *  - enabling the active stream again is accepted (no change);
- *  - enabling a stream while the OTHER is active is refused with
+ *  - enabling a stream while ANOTHER is active is refused with
  *    WMR_ATT_ERROR_OTHER_STREAM_ACTIVE and changes nothing;
  *  - disabling the active stream leaves NONE;
  *  - disabling a stream that is not active is accepted and changes nothing. */

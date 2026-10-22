@@ -43,6 +43,7 @@
 #include "btstack.h"
 #include "esp_timer.h"
 #include "wmr_bridge.h"        /* generated from wmr_bridge.gatt: profile_data, ATT_*_HANDLE */
+#include "wmr_batch.h"
 #include "wmr_controller.h"
 #include "wmr_diag.h"
 #include "wmr_linkdiag.h"
@@ -55,12 +56,14 @@
 
 /* Experimental FF10 service; see wmr_bridge.gatt. The FF11 characteristic is
  * both the status read value and the raw notification stream. FF12 is the
- * notify-only decoded stream. The two are mutually exclusive per phone
- * (wmr_stream_mode.h). */
+ * notify-only decoded stream and FF14 the notify-only batched decoded stream.
+ * At most one of the three is active per phone (wmr_stream_mode.h). */
 #define STREAM_VALUE_HANDLE ATT_CHARACTERISTIC_0000FF11_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
 #define STREAM_CCC_HANDLE   ATT_CHARACTERISTIC_0000FF11_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
 #define DECODED_VALUE_HANDLE ATT_CHARACTERISTIC_0000FF12_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
 #define DECODED_CCC_HANDLE   ATT_CHARACTERISTIC_0000FF12_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
+#define BATCHED_VALUE_HANDLE ATT_CHARACTERISTIC_0000FF14_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
+#define BATCHED_CCC_HANDLE   ATT_CHARACTERISTIC_0000FF14_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
 
 #define STATUS_SIZE 16
 
@@ -81,6 +84,8 @@ static uint16_t send_offset;       /* bytes of the head frame already sent */
 static wmr_stats_t stats;
 
 static btstack_timer_source_t pump_timer;
+/* FF14: fires when the oldest queued record has waited long enough to send a partial batch. */
+static btstack_timer_source_t batch_timer;
 static btstack_timer_source_t status_timer;
 
 /* ---- Connection parameters ---------------------------------------------- */
@@ -131,12 +136,46 @@ static void queue_reset(void){
     send_offset = 0;
 }
 
+static void pump_kick(void);
+
+static void batch_timer_fire(btstack_timer_source_t *timer){
+    (void)timer;
+    pump_kick();
+}
+
+/* FF14: is a batch due? True when a full notification is queued or the oldest record has
+ * waited the hold time (one connection interval). Otherwise arms batch_timer for the
+ * remaining wait, so a lone record is never held longer than that. */
+static bool batch_due(void){
+    const wmr_frame_t *oldest = wmr_queue_peek(&queue);
+    if (!oldest) return false;
+    const uint64_t now = (uint64_t) esp_timer_get_time();
+    const uint64_t age64 = now > oldest->rx_time_us ? now - oldest->rx_time_us : 0;
+    const uint32_t age = age64 > UINT32_MAX ? UINT32_MAX : (uint32_t) age64;
+    const uint32_t hold = wmr_batch_hold_us(conn_known ? wmr_conn_interval_us(conn_now.interval) : 0);
+    const unsigned max_count = wmr_batch_max_count(att_server_get_mtu(phone_handle));
+    if (wmr_batch_flush_reason(queue.count, max_count, age, hold) != WMR_BATCH_FLUSH_NO) return true;
+    btstack_run_loop_remove_timer(&batch_timer);
+    btstack_run_loop_set_timer(&batch_timer, wmr_batch_timer_ms(age, hold));
+    btstack_run_loop_add_timer(&batch_timer);
+    return false;
+}
+
 static void pump_kick(void){
     wmr_episode_note_queue(&drop_episode, queue.count);
     if (stream_mode == WMR_STREAM_NONE || phone_handle == HCI_CON_HANDLE_INVALID ||
         !queue.count || send_pending) return;
+    if (stream_mode == WMR_STREAM_BATCHED && !batch_due()) return;
     send_pending = true;
     att_server_request_can_send_now_event(phone_handle);
+}
+
+/* The smallest ATT MTU the active stream can use; below it nothing is sent. */
+static bool stream_mtu_ok(void){
+    const uint16_t mtu = att_server_get_mtu(phone_handle);
+    if (stream_mode == WMR_STREAM_DECODED) return wmr_decoded_mtu_ok(mtu);
+    if (stream_mode == WMR_STREAM_BATCHED) return wmr_batch_mtu_ok(mtu);
+    return true;
 }
 
 void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t length){
@@ -148,10 +187,10 @@ void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t 
         stats.offline[hand]++;
         return;
     }
-    /* FF12 needs room for a whole record; below that nothing is sent. Count the
-     * sample here instead of queueing something that can never be delivered. */
-    if (stream_mode == WMR_STREAM_DECODED &&
-        !wmr_decoded_mtu_ok(att_server_get_mtu(phone_handle))){
+    /* FF12 needs room for a whole record (FF14 for a header and one record); below that
+     * nothing is sent. Count the sample here instead of queueing something that can never
+     * be delivered. */
+    if (!stream_mtu_ok()){
         stats.mtu_skipped[hand]++;
         return;
     }
@@ -217,8 +256,50 @@ static void pump_send_decoded(const wmr_frame_t *frame){
     pump_kick();
 }
 
-/* Send one fragment (FF11) or one record (FF12) of the head frame. Runs on
- * ATT_EVENT_CAN_SEND_NOW. */
+/* FF14: decode up to a notification's worth of queued frames and send them as one batch.
+ * Nothing leaves the queue until the notification is accepted, so a send error loses
+ * nothing and the retry sends the same records again. A frame that is not a valid input
+ * report is removed and counted (dec_err) and does not occupy a slot in the batch. */
+static void pump_send_batch(void){
+    const unsigned max_count = wmr_batch_max_count(att_server_get_mtu(phone_handle));
+    if (!max_count){
+        /* Queued before the MTU was known to be too small. */
+        for (const wmr_frame_t *f; (f = wmr_queue_peek(&queue)) != NULL; wmr_queue_pop(&queue))
+            stats.mtu_skipped[f->hand]++;
+        return;
+    }
+    wmr_batch_t batch;
+    wmr_batch_init(&batch, max_count);
+    bool valid[WMR_BATCH_MAX_COUNT];
+    const unsigned take = queue.count < max_count ? queue.count : max_count;
+    for (unsigned i = 0; i < take; i++){
+        uint8_t record[WMR_DECODED_SIZE];
+        const wmr_frame_t *frame = wmr_queue_peek_at(&queue, i);
+        valid[i] = wmr_decoded_from_frame(frame, record) && wmr_batch_add(&batch, record);
+    }
+    if (batch.count){
+        uint8_t result = att_server_notify(phone_handle, BATCHED_VALUE_HANDLE, batch.data, wmr_batch_size(&batch));
+        if (result != ERROR_CODE_SUCCESS){
+            stats.errors++;
+            return;     /* The retry timer tries again; a send error never discards a frame. */
+        }
+        stats.notifications++;
+        stats.batches_tx++;
+        stats.records_in_batches += batch.count;
+        if (batch.count > stats.batch_max) stats.batch_max = batch.count;
+        if (take == max_count) stats.batch_full_flushes++;
+    }
+    for (unsigned i = 0; i < take; i++){
+        const wmr_frame_t *frame = wmr_queue_peek(&queue);
+        if (valid[i]) stats.tx[frame->hand]++;
+        else          stats.decode_errors[frame->hand]++;
+        wmr_queue_pop(&queue);
+    }
+    pump_kick();
+}
+
+/* Send one fragment (FF11), one record (FF12) or one batch (FF14) from the head of the
+ * queue. Runs on ATT_EVENT_CAN_SEND_NOW. */
 static void pump_send_one(void){
     send_pending = false;
     if (stream_mode == WMR_STREAM_NONE || phone_handle == HCI_CON_HANDLE_INVALID) return;
@@ -226,6 +307,10 @@ static void pump_send_one(void){
     if (!frame) return;
     if (stream_mode == WMR_STREAM_DECODED){
         pump_send_decoded(frame);
+        return;
+    }
+    if (stream_mode == WMR_STREAM_BATCHED){
+        pump_send_batch();
         return;
     }
     uint16_t capacity = wmr_proto_notification_capacity(att_server_get_mtu(phone_handle));
@@ -304,6 +389,14 @@ static void build_status(uint8_t *status){
     little_endian_store_32(status, 12, right.reports);
 }
 
+/* Which stream a CCC handle belongs to. */
+static bool ccc_stream(uint16_t attribute, wmr_stream_t *which){
+    if (attribute == STREAM_CCC_HANDLE)  { *which = WMR_STREAM_RAW;     return true; }
+    if (attribute == DECODED_CCC_HANDLE) { *which = WMR_STREAM_DECODED; return true; }
+    if (attribute == BATCHED_CCC_HANDLE) { *which = WMR_STREAM_BATCHED; return true; }
+    return false;
+}
+
 static uint16_t att_read(hci_con_handle_t handle, uint16_t attribute,
                          uint16_t offset, uint8_t *buffer, uint16_t buffer_size){
     (void)handle;
@@ -312,8 +405,8 @@ static uint16_t att_read(hci_con_handle_t handle, uint16_t attribute,
         build_status(status);
         return att_read_callback_handle_blob(status, sizeof(status), offset, buffer, buffer_size);
     }
-    if (attribute == STREAM_CCC_HANDLE || attribute == DECODED_CCC_HANDLE){
-        wmr_stream_t which = attribute == STREAM_CCC_HANDLE ? WMR_STREAM_RAW : WMR_STREAM_DECODED;
+    wmr_stream_t which;
+    if (ccc_stream(attribute, &which)){
         uint8_t ccc[2] = {wmr_stream_mode_ccc_enabled(stream_mode, which) ? 1 : 0, 0};
         return att_read_callback_handle_blob(ccc, sizeof(ccc), offset, buffer, buffer_size);
     }
@@ -324,9 +417,7 @@ static int att_write(hci_con_handle_t handle, uint16_t attribute,
                      uint16_t transaction_mode, uint16_t offset,
                      uint8_t *buffer, uint16_t buffer_size){
     wmr_stream_t which;
-    if (attribute == STREAM_CCC_HANDLE)       which = WMR_STREAM_RAW;
-    else if (attribute == DECODED_CCC_HANDLE) which = WMR_STREAM_DECODED;
-    else return 0;
+    if (!ccc_stream(attribute, &which)) return 0;
     if (transaction_mode != ATT_TRANSACTION_MODE_NONE) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
     if (offset != 0) return ATT_ERROR_INVALID_OFFSET;
     if (buffer_size != 2) return ATT_ERROR_INVALID_ATTRIBUTE_VALUE_LENGTH;
@@ -334,7 +425,7 @@ static int att_write(hci_con_handle_t handle, uint16_t attribute,
     if (value > 1) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
     if (phone_handle != HCI_CON_HANDLE_INVALID && handle != phone_handle)
         return ATT_ERROR_WRITE_NOT_PERMITTED;
-    /* FF11 and FF12 are mutually exclusive: enabling one while the other is
+    /* FF11, FF12 and FF14 are mutually exclusive: enabling one while another is
      * active fails; switching means disabling the active one first. */
     wmr_stream_ccc_result_t result = wmr_stream_mode_ccc_write(stream_mode, which, value == 1);
     if (!result.accepted){
@@ -373,7 +464,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
         case BTSTACK_EVENT_STATE:
             if (btstack_event_state_get_state(packet) == HCI_STATE_WORKING){
                 gap_advertisements_enable(1);
-                printf("BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream)\n");
+                printf("BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream)\n");
             }
             break;
         case HCI_EVENT_LE_META:
@@ -475,6 +566,7 @@ void wmr_transport_init(void){
     pump_timer.process = pump_retry_tick;
     btstack_run_loop_set_timer(&pump_timer, WMR_CFG_PUMP_RETRY_MS);
     btstack_run_loop_add_timer(&pump_timer);
+    batch_timer.process = batch_timer_fire;
     conn_request_timer.process = conn_request_fire;
     status_timer.process = status_tick_handler;
     btstack_run_loop_set_timer(&status_timer, WMR_CFG_STATUS_TICK_MS);

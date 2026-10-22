@@ -90,7 +90,7 @@ machine, running it directly started Node.js. The supplied CMake file already do
 
 ## Using it
 
-1. Flash, open the monitor. You should see `BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream)`.
+1. Flash, open the monitor. You should see `BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream)`.
 2. Power on the controllers (already paired): they connect on their own, and the log
    shows `Incoming HID ... accepting` and `descriptor status=0x00` for each.
    First pairing or recovery: put a controller in pairing mode and press `l` (LEFT) or `r` (RIGHT).

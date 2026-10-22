@@ -140,16 +140,20 @@ not a quaternion. The app normally uses FF12; FF11 is for a debug mode.
 
 There is no read value.
 
-## Subscription: FF11 and FF12 are mutually exclusive
+## Subscription: FF11, FF12 and FF14 are mutually exclusive
 
 Decoded records go only to a phone subscribed to FF12; raw fragments go only to a
-phone subscribed to FF11. The two streams are never sent together, which keeps the
-BLE budget at one stream's worth.
+phone subscribed to FF11; batches of decoded records ([FF14](#batched-decoded-stream-ff14-version-2-implemented-in-firmware-not-yet-run-on-hardware))
+go only to a phone subscribed to FF14. At most one of the three is ever active, which
+keeps the BLE budget at one stream's worth.
 
-- **Subscribing to both is refused.** While one of the two CCC descriptors is
-  enabled, a write that would enable the other fails with ATT application error
+- **Subscribing to a second stream is refused.** While one of the three CCC descriptors
+  is enabled, a write that would enable another fails with ATT application error
   `0x80` ("other stream active"). The first subscription is unaffected. To switch,
-  write `0x0000` to the active CCC first, then enable the other.
+  write `0x0000` to the active CCC first, then enable the other. This holds in every
+  order (FF11 then FF12, FF11 then FF14, FF12 then FF11, FF12 then FF14, FF14 then
+  FF11, FF14 then FF12); it is one rule in `wmr_stream_mode_ccc_write` and is
+  host-tested for all six.
 - The CCC state is per connection and resets on disconnect, so there is no stale
   state to clean up after a reconnect.
 - Why refuse instead of letting one silently win: a client that thinks it is getting
@@ -272,6 +276,139 @@ rotation capture in [DECODING.md](DECODING.md) is done.
   descriptor write).
 - GATT: FF12 is `NOTIFY | DYNAMIC` in `wmr_bridge.gatt`, directly after FF11 in
   service `FF10`; FF11 is unchanged.
+
+# Batched decoded stream, FF14 (version 2; implemented in firmware, NOT yet run on hardware)
+
+**Status: firmware implemented on branch `ff14-batching`, host-tested and built, never run
+on hardware** (checklist in [TESTING.md](TESTING.md)). Reference code:
+`src/wmr_batch.{h,c}`. FF11 and FF12 are **unchanged**; FF14 is an additional
+notify-only characteristic that carries the same 56-byte FF12 version 1 records, several
+per notification.
+
+## Why
+
+Both hands stream about 160 reports/s each (reported), so FF12 sends about 320
+notifications/s. A decimation experiment (`WMR_CFG_FF12_DECIMATE`) was run by the user at
+one fixed table position with the controllers face down and still, MTU 517, connection
+interval 15 ms (user-reported, single runs, one session; the `last5s` missing-report
+share per hand):
+
+| Run | LEFT | RIGHT |
+| --- | --- | --- |
+| no phone (N=4 build) | 9-11 % | 9-11 % |
+| N=1, first run | 22-25 % | 36 % |
+| N=1, repeat | 19 % | 28-36 % |
+| N=2 | 18-20 % | 14-15 % |
+| N=4 | 18-20 % | 12-13 % |
+
+Reading, as given by the director and not independently re-checked here: sending fewer
+notifications cost RIGHT up to about 20 points less loss, and the effect repeated;
+LEFT rose from about 10 % to about 19 % as soon as the phone streamed and stayed there at
+N=1, 2 and 4, so LEFT's extra loss is **not** explained by notification volume, and
+**FF14 is not claimed to fix LEFT**. Decimation drops samples; FF14 sends all of them in
+fewer notifications. Whether that gives the same relief is exactly what the FF14 bench
+runs in TESTING.md are for. Everything above is one position and one session.
+
+| Item | UUID | Properties |
+| --- | --- | --- |
+| Characteristic | `0000FF14-0000-1000-8000-00805F9B34FB` | notify only (in service `FF10`) |
+| CCC (0x2902) | - | read/write |
+
+There is no read value. GATT: `NOTIFY | DYNAMIC` in `wmr_bridge.gatt`, directly after FF12.
+
+## Notification format
+
+One notification value = a 2-byte header followed by `count` complete FF12 version 1
+records, **unchanged** (each keeps its own `version` = 1, `hand`, `sequence`,
+`rx_time_us`, `device_ticks`, ...):
+
+| Offset | Size | Field | Meaning |
+| --- | --- | --- | --- |
+| 0 | u8 | `version` | `2` |
+| 1 | u8 | `count` | Records that follow, 1 to `(MTU - 3 - 2) / 56`, at most 9 |
+| 2 | 56 x `count` | records | FF12 version 1 records, oldest first. Records of both hands may share a batch (each record carries its own `hand`); order is by arrival, and per hand by `sequence` |
+
+Total size = `2 + 56 x count`, never more than `MTU - 3`. The most records per
+notification: 4 at MTU 247, 5 at MTU 285, 9 at MTU 517 (the largest ATT MTU). Pinned by the
+golden-bytes tests for a batch of 1, 2 and the maximum in `tests/test_batch.c`.
+
+A receiver reads `version`, rejects anything other than 2, takes `count`, and requires the
+value length to be exactly `2 + 56 x count` (`wmr_batch_parse` is the reference). Records
+are then parsed as in the FF12 section.
+
+## Minimum MTU: 61
+
+`3 + 2 + 56` = 61 (one record). Below 61 **nothing is sent** on FF14. As for FF12, each
+report received while FF14 is active and the MTU is below 61 is discarded and counted in
+the per-hand `mtu_skip` (not queued, sequence number still consumed). Note that FF12 needs
+only 59, so an MTU of 59 or 60 works for FF12 and not for FF14. Request a large MTU before
+enabling FF14.
+
+## When a batch is sent
+
+Reports go into the same bounded frame queue as FF11 and FF12 (a full queue drops the newest
+and counts it in `drop`, exactly as for FF12; batching drops nothing itself). A batch is
+sent from the queue when the ATT stack can send (`ATT_EVENT_CAN_SEND_NOW`), and only when
+one of these holds:
+
+- **a full notification is queued**: `(MTU - 3 - 2) / 56` records (9 at MTU 517) or more,
+  counted in `batch_full_flushes`; or
+- **the oldest queued record has waited one connection interval** (the interval the phone
+  granted; 15 ms until it is known, `WMR_CFG_BATCH_HOLD_DEFAULT_US`): the queue is then
+  flushed as a partial batch.
+
+So a record is held for batching no longer than one connection interval, checked by a
+timer that is armed for exactly the remaining time (plus up to one report period, about 5 ms,
+if a check is delayed). The decision is the pure function `wmr_batch_flush_reason`, and its
+bound is simulated in `tests/test_batch.c`. This bound is on the batching **hold**: if the BLE
+stack cannot send (the previous notification has not been accepted yet, or the link is
+busy) records wait in the queue longer, exactly as FF12 records do. Decimation is not
+applied on FF14 (a diagnostic setting for FF12 only). Whether the ESP32 BLE stack really
+sends one batch per connection event is not guaranteed and has not been measured.
+
+On a send error the batch stays queued and is sent again (a send error never discards
+records). A queued frame that is not a valid 46-byte input report is removed and counted in
+`dec_err`, and takes no slot in the batch.
+
+## Counters and the accounting identity
+
+Per-hand counters are those of FF12. On FF14, `tx` counts **records** (each valid record in
+an accepted batch counts once for its hand), not notifications. The global counters:
+
+| Counter | Meaning |
+| --- | --- |
+| `batches_tx` | Batches accepted by the BLE stack (FF14 only) |
+| `records_in_batches` | Records inside those batches |
+| mean batch size | `records_in_batches / batches_tx` |
+| `batch_max` | Most records in one batch so far |
+| `batch_full_flushes` | Batches sent because a full one was queued; the rest were sent on the hold time |
+| `notify` / `notifications` | BLE notifications accepted; under FF14 this is the number of batches |
+
+Identity (see [COUNTERS.md](COUNTERS.md)): `rx = tx + drop + offline + purged + mtu_skip
++ dec_err + decimated + queued` holds per hand as for FF12, with `tx` in records.
+Under FF14 `batches_tx` equals the growth of `notify`, and `records_in_batches` equals the
+growth of `tx` summed over both hands (both counted since boot, so they match exactly only
+if no other stream ran in that boot).
+
+## Loss pattern and latency
+
+One lost notification now loses up to `count` records (9 at MTU 517) instead of one; they are
+still detectable by per-hand `sequence` gaps. A record can wait up to one connection
+interval for its batch; a v1 record also waits for its connection event. `device_ticks`
+stays the sensor clock and `rx_time_us` is per record, so fusion timing does not depend on
+the batch. Latency is not measured.
+
+## An FF12 or FF11 receiver
+
+An app that never subscribes to FF14 never sees a version 2 value. A version 1 parser that
+were pointed at FF14 would ignore it silently (`version` is byte 0), which is the reason FF14
+is a separate characteristic rather than a mode of FF12.
+
+## Bench-test items
+
+See [TESTING.md](TESTING.md): FF14 on a phone at MTU 517 and 247, the three ordered
+exclusion cases, MTU below 61, and the A/B/A comparison of FF12 and FF14 at one fixed
+position. None has been run.
 
 # Controller config block, FF13 (PROPOSED, DESIGN ONLY, not implemented)
 
@@ -437,80 +574,6 @@ of the BLE service, FF13 has **no authentication or encryption** (see
 
 # Proposals (NOT decided, NOT implemented, NOT part of the spec above)
 
-Nothing in this section is in the firmware or changes the FF11 or FF12 version 1 formats
-above. It is a sketch for the maintainer and the app author to decide on.
-
-**Status: on hold, depends on the decimation experiments.** Batching is not to be built before
-the decimation checklist X1 to X4 in [TESTING.md](TESTING.md) has been run at one fixed,
-stated controller position. If sending half or a quarter of the notifications does not reduce
-the missing-report figure, batching is not the fix and should not be built. If it does, the
-recommendation below is a separate characteristic (FF14) rather than an opt-in flag, so a
-receiver that did not ask for version 2 can never be sent one. Do not implement before the
-user decides.
-
-## FF12 version 2: several records per notification
-
-**Why.** Both hands stream about 160 reports/s each (reported), so FF12 version 1 sends about
-320 notifications/s. A first bench result (user-reported, single runs, see
-[DECODING.md](DECODING.md)) shows the missing-report figure on the Classic links roughly doubling
-while FF12 streams. If a decimation test (`WMR_CFG_FF12_DECIMATE`) shows BLE airtime is a
-cause, fewer, larger notifications are one way to cut it without dropping samples.
-
-**Format.** One notification = a 2-byte header followed by `count` complete version 1
-records, unchanged (each keeps its own `version` = 1, `hand`, `sequence`, `rx_time_us`,
-`device_ticks`, ...):
-
-| Offset | Size | Field | Meaning |
-| --- | --- | --- | --- |
-| 0 | u8 | `version` | `2` |
-| 1 | u8 | `count` | Records that follow, 1 to `(MTU - 3 - 2) / 56` (9 at MTU 517, 4 at MTU 247) |
-| 2 | 56 x `count` | records | Version 1 records, oldest first. Both hands may be mixed; order is by arrival, and per hand by `sequence` |
-
-Total size = `2 + 56 x count`, never more than `MTU - 3`. The minimum useful MTU for version 2
-is 61 (one record), against 59 for version 1.
-
-**When to flush.** Send everything queued, up to the capacity, when the ATT stack says it can
-send (`ATT_EVENT_CAN_SEND_NOW`, which the pump already uses), instead of one record per
-event. No timer is needed: while the previous notification is waiting for its connection
-event, newer records accumulate and go out together; with an idle link a lone record goes
-out at once. The ESP32 host cannot see connection-event boundaries, so "once per
-connection event" is approximated by this rule, not guaranteed. At 15 ms granted
-(about 67 events/s) and 320 records/s that is about 4.8 records per event, so about 67
-notifications/s with an MTU that fits 5 records (MTU 285 or more), about 80/s at MTU 247
-(4 records): well under 100 against about 320 today. The saving in bytes on air is smaller
-than the saving in packets (headers shrink, payload does not, and a notification longer
-than the link-layer data length is split into several link-layer packets); how much it
-helps airtime has **not been measured**.
-
-**Latency.** A record can wait for the notification that carries it, which is bounded by the
-time the previous notification waits for its connection event, i.e. at most one connection
-interval (15 ms as granted in the PR #6 bench). A version 1 record also waits for its
-connection event, so the extra delay is at most that same bound and, on average, less than a
-full interval. Not measured. `device_ticks` stays the sensor clock, so fusion timing does not
-depend on arrival time; `rx_time_us` is still per record.
-
-**Loss pattern.** One lost or dropped notification now loses up to `count` records (9 at MTU
-517) at once instead of one. They are still detectable by per-hand `sequence` gaps. When the
-queue is full the newest records are still dropped one at a time, as today.
-
-**Signalling and how an unaware receiver fails.** `version` is byte 0, where version 1 already
-puts it, and the spec already says a receiver must ignore records with an unknown version. A
-version 1-only parser therefore ignores a version 2 notification entirely, **silently and with
-no data**, rather than misreading it (this is deliberate: it is why the header comes first and
-the first record does not sit at offset 0). So version 2 must never be sent to a receiver
-that has not asked for it. Two ways to make that safe, for the maintainer to choose:
-
-1. **A separate characteristic** (for example `FF14`, notify only) that carries version 2.
-   FF12 is untouched, an unaware app never subscribes to FF14, and the mutual-exclusion
-   rule (one of FF11, FF12, FF14 at a time, ATT error `0x80` on the others) is extended.
-   Simplest and safest; costs one more characteristic.
-2. **An opt-in on FF12 itself** (a control attribute or a flag the app writes before enabling
-   notifications). Keeps one characteristic but needs a new attribute anyway, and a wrongly
-   written flag silently breaks the stream, so it is not simpler.
-
-Recommended in this sketch: option 1. An unaware app on option 1 gets nothing it did not ask
-for; the failure mode is that it never receives version 2 data.
-
-**Not decided here:** the characteristic or opt-in choice, whether a short flush timer is
-worth adding on top of the can-send-now rule, a maximum `count` below the MTU limit (to bound
-the loss burst), and whether to do this at all; that depends on the decimation test.
+None at present. The FF12 version 2 batching sketch that was here is now the implemented
+[FF14](#batched-decoded-stream-ff14-version-2-implemented-in-firmware-not-yet-run-on-hardware)
+section above. FF13 (controller config block) is a design only.

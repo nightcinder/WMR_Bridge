@@ -13,6 +13,7 @@ if( EXAMPLE STREQUAL "wmr_bridge" )
     set(WMR_BRIDGE_DIR "${BTSTACK_ROOT}/wmr_bridge")
     set(BUILD_MESSAGE  "Building application \"${EXAMPLE}\"")
     set(EXAMPLE_SOURCE
+        "${WMR_BRIDGE_DIR}/src/wmr_batch.c"
         "${WMR_BRIDGE_DIR}/src/wmr_bridge_main.c"
         "${WMR_BRIDGE_DIR}/src/wmr_console.c"
         "${WMR_BRIDGE_DIR}/src/wmr_controller.c"

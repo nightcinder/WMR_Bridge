@@ -8,6 +8,7 @@ reconnect. They wrap after 2^32 events. They live in `wmr_stats_t`
 
 ```
 STREAM phone=1 sub=1 stream=decoded mtu=247 conn=[11.25ms lat=0 to=4000ms] q=0/256 high=3 notify=1234 errors=0
+  FF14 batches_tx=0 records_in_batches=0 mean=n/a max=0 batch_full_flushes=0
   LEFT  rx=600 tx=600 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=60.0/s rate_tx=60.0/s
   RIGHT rx=600 tx=600 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=60.0/s rate_tx=60.0/s
 ```
@@ -20,22 +21,27 @@ printed rates and moved their baselines, which contradicted this paragraph; it n
 | Field | Meaning | Limitation |
 | --- | --- | --- |
 | `phone` | 1 if a BLE phone is connected | |
-| `sub` | 1 if the phone enabled FF11 or FF12 notifications | |
-| `stream` | `none`, `raw` (FF11) or `decoded` (FF12): the active stream. Only one can be active | |
+| `sub` | 1 if the phone enabled FF11, FF12 or FF14 notifications | |
+| `stream` | `none`, `raw` (FF11), `decoded` (FF12) or `batched` (FF14): the active stream. Only one can be active | |
 | `mtu` | Negotiated ATT MTU of the phone link (0 = no phone, 23 = default) | The *negotiated* value, not what the phone requested |
 | `conn=[...]` | Connection interval, slave latency and supervision timeout currently in use (`n/a` with no phone). Set at connect and updated when the phone grants a connection-parameter update | The phone decides. `(update requested, not granted yet)` is appended while the bridge's request (7.5-15 ms, latency 0, 4 s timeout) has had no answer; a phone that refuses or ignores it leaves that text on, and the interval stays at the phone's choice |
 | `q=n/N` | Frames queued now / queue capacity | Counts frames, both hands together; a partly sent frame counts as queued |
 | `high` | Peak queue depth since boot | Never decreases |
-| `notify` | BLE notifications accepted by `att_server_notify` | FF11: fragments, not frames. FF12: one per record |
+| `notify` | BLE notifications accepted by `att_server_notify` | FF11: fragments, not frames. FF12: one per record. FF14: one per **batch** (so it equals `batches_tx` while FF14 streams) |
 | `errors` | `att_server_notify` calls that returned an error | Each failed attempt counts; the frame is kept and retried, not lost |
 | `rx` | Reports received from that controller | Counts every report, including those never forwarded |
-| `tx` | FF11: frames whose last fragment was accepted by `att_server_notify`. FF12: records accepted by `att_server_notify` | **Handed to the BLE stack, not confirmed received by the phone** |
+| `tx` | FF11: frames whose last fragment was accepted by `att_server_notify`. FF12: records accepted by `att_server_notify`. FF14: valid records inside batches accepted by `att_server_notify` (records, not notifications) | **Handed to the BLE stack, not confirmed received by the phone** |
 | `drop` | Reports discarded because the queue was full, or the length was 0 or over `WMR_CFG_MAX_FRAME` (64) | Drop-newest: queued frames are kept |
 | `offline` | Reports received while no phone was connected and subscribed | Intentional, not an error |
 | `purged` | Frames that were queued, then discarded by a queue reset | See [RECONNECT_AND_QUEUE.md](RECONNECT_AND_QUEUE.md) |
-| `mtu_skip` | FF12 only: reports discarded because the ATT MTU was below 59 | Zero on FF11. Intentional, not a queue problem |
-| `dec_err` | FF12 only: queued frames that were not a valid 46-byte input report, discarded | Should stay 0 |
+| `mtu_skip` | FF12 and FF14: reports discarded because the ATT MTU was below the stream's minimum (59 for FF12, 61 for FF14) | Zero on FF11. Intentional, not a queue problem |
+| `dec_err` | FF12 and FF14: queued frames that were not a valid 46-byte input report, discarded | Should stay 0 |
 | `decimated` | FF12 only: reports skipped on purpose by the diagnostic build option `WMR_CFG_FF12_DECIMATE` | Always 0 in the default build (`N=1`). Intentional, not a loss |
+| `batches_tx` | FF14 only, both hands together: batches accepted by `att_server_notify` | Handed to the BLE stack, not confirmed received. Cumulative since boot |
+| `records_in_batches` | FF14 only: valid records inside those batches | Equals the growth of `tx` summed over both hands while only FF14 streamed |
+| `mean` | `records_in_batches / batches_tx`, two decimals (`n/a` before the first batch) | Depends on the link, the MTU and the hold time (one connection interval); at 15 ms and about 320 reports/s the expectation is a little under 5, not measured |
+| `max` | Most records in one batch since boot | At most `(MTU - 3 - 2) / 56`, never more than 9 |
+| `batch_full_flushes` | FF14 only: batches sent because a full notification's worth was queued | The remaining `batches_tx - batch_full_flushes` were sent because the oldest record had waited one connection interval |
 | `rate_rx`, `rate_tx` | (change in `rx` / `tx` since the previous periodic line) / 5 s | Uses the nominal 5 s interval, not a measured one; `s` does not print or disturb them |
 
 The per-hand `sequence` counter (the number placed on the wire) always equals `rx`.
@@ -49,7 +55,16 @@ sum over hands of  rx  =  sum of (tx + drop + offline + purged + mtu_skip + dec_
 ```
 
 (`q` is the current queue depth.) This holds per hand if you could see the
-per-hand queue depth. A mismatch in a steady state means a counting bug.
+per-hand queue depth.
+
+**On FF14 the identity is unchanged, but `tx` counts records, not notifications.** One
+notification (one batch) carries up to 9 records, so `tx` grows much faster than `notify`:
+`notify` grows by `batches_tx`, and `tx` (both hands) grows by `records_in_batches`. Use
+`records_in_batches / batches_tx` for the mean batch size. `dec_err` frames take no slot in a
+batch, and a batch that fails to send leaves its records queued (they are counted when a
+retry succeeds, so `errors` can rise without any loss). The check `notify == batches_tx`
+holds only while FF14 is the only stream used since boot. `rate_tx` stays a records-per-second
+figure. A mismatch in a steady state means a counting bug.
 `tx` growing slower than `rx` with `q` rising towards 256 and then `drop`
 rising means the phone link cannot keep up.
 
@@ -103,8 +118,8 @@ time at least 100 ms apart.
 Logging only; none of these adds HCI traffic. The HCI budget above is unchanged.
 
 ```
-LINKLOG_FIELDS,t_ms,hand,rate_rx,dev_missing_delta,dev_missing_cum,last5s_pct,cum_pct,rssi,lq,fcc,stream,mtu,conn_interval_ms,decimated
-LINKLOG,12345,LEFT,157.8,1124,9000,21.2,17.7,-28,227,0,decoded,517,15.00,0
+LINKLOG_FIELDS,t_ms,hand,rate_rx,dev_missing_delta,dev_missing_cum,last5s_pct,cum_pct,rssi,lq,fcc,stream,mtu,conn_interval_ms,decimated,batches_tx,records_in_batches,batch_mean,batch_max,batch_full_flushes
+LINKLOG,12345,LEFT,157.8,1124,9000,21.2,17.7,-28,227,0,batched,517,15.00,0,980,4710,4.81,9,12
 ```
 
 (Illustrative format only, not measurements.) The header is printed once, before the first
@@ -120,9 +135,12 @@ with the same numbers. Filter on the prefix `LINKLOG,`.
 | `dev_missing_cum` | `dev_missing` since the link was created |
 | `last5s_pct`, `cum_pct` | Missing share over the interval and since the link was created, in percent, without the `%` sign |
 | `rssi`, `lq`, `fcc` | The last polled link-health values; empty if the controller is not connected or refused the command |
-| `stream`, `mtu` | `none`, `raw` or `decoded`; the negotiated ATT MTU (0 = no phone) |
+| `stream`, `mtu` | `none`, `raw`, `decoded` or `batched`; the negotiated ATT MTU (0 = no phone) |
 | `conn_interval_ms` | The BLE connection interval in use, empty if not yet known |
 | `decimated` | Cumulative reports skipped by `WMR_CFG_FF12_DECIMATE` (0 when off) |
+| `batches_tx`, `records_in_batches` | FF14 batches accepted by the BLE stack and the records inside them, cumulative since boot (0 unless FF14 was used). **Appended at the end of the line**: the first fourteen fields, up to `decimated`, are unchanged, so an older script that reads by position still works. Both hands' lines carry the same value (these are not per hand) |
+| `batch_mean` | `records_in_batches / batches_tx` with two decimals; empty before the first batch |
+| `batch_max`, `batch_full_flushes` | Most records in one batch so far; batches sent because a full one was queued |
 
 Unknown values are empty fields, never `n/a`, so a CSV reader sees a missing value.
 

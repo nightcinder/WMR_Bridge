@@ -96,6 +96,12 @@ static void print_stats(bool periodic){
            conn, info.conn_update_pending ? " (update requested, not granted yet)" : "",
            info.queue_count, info.queue_capacity, info.queue_high_water,
            (unsigned long) st->notifications, (unsigned long) st->errors);
+    char batch_mean[16];
+    wmr_diag_batch_mean_format(st->records_in_batches, st->batches_tx, batch_mean, sizeof(batch_mean));
+    printf("  FF14 batches_tx=%lu records_in_batches=%lu mean=%s max=%lu batch_full_flushes=%lu\n",
+           (unsigned long) st->batches_tx, (unsigned long) st->records_in_batches,
+           batch_mean[0] ? batch_mean : "n/a", (unsigned long) st->batch_max,
+           (unsigned long) st->batch_full_flushes);
     printf("  vhci_drop=%lu log_errors=%lu\n",
            (unsigned long) wmr_linkdiag_vhci_drops(), (unsigned long) wmr_linkdiag_log_errors());
 #if WMR_CFG_FF12_DECIMATE > 1
@@ -133,6 +139,10 @@ static void print_stats(bool periodic){
             rec.mtu              = info.mtu;
             rec.conn_interval_us = info.conn_known ? wmr_conn_interval_us(info.conn.interval) : 0;
             rec.decimated        = st->decimated[i];
+            rec.batches_tx          = st->batches_tx;
+            rec.records_in_batches  = st->records_in_batches;
+            rec.batch_max           = st->batch_max;
+            rec.batch_full_flushes  = st->batch_full_flushes;
             wmr_linklog_format(&rec, log_line, sizeof(log_line));
             snprintf(rate_rx_copy, sizeof(rate_rx_copy), " rate_rx=%.1f/s", rate_rx);
             last_rx[i] = st->rx[i];

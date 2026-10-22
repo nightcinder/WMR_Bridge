@@ -58,7 +58,11 @@ typedef struct {
     uint32_t mtu_skipped[WMR_NUM_CONTROLLERS];   /* FF12 only: ATT MTU < 59, sample not sent */
     uint32_t decode_errors[WMR_NUM_CONTROLLERS]; /* FF12 only: frame not a valid input report */
     uint32_t decimated[WMR_NUM_CONTROLLERS];     /* FF12 only: skipped by WMR_CFG_FF12_DECIMATE (0 when off) */
-    uint32_t notifications;                 /* BLE notifications accepted */
+    uint32_t notifications;                 /* BLE notifications accepted (FF14: one per batch) */
+    uint32_t batches_tx;                    /* FF14 only: batches accepted by the BLE stack */
+    uint32_t records_in_batches;            /* FF14 only: valid records inside those batches */
+    uint32_t batch_max;                     /* FF14 only: most records in one batch so far */
+    uint32_t batch_full_flushes;            /* FF14 only: batches sent because a full one was queued */
     uint32_t errors;                        /* att_server_notify failures */
 } wmr_stats_t;
 
