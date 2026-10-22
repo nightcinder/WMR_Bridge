@@ -96,3 +96,15 @@ Why: the first run (user-reported, 2026-10-22) had RSSI move from -69 to -48 dBm
 5. Paste back: the exported files, the RSSI at start and end, and the firmware image used (C7, FF13 off).
 
 Afterwards, to put the normal image back: restore `WMR_CFG_FF13_READ` to 1 (re-run step 0).
+
+## 8. Housekeeping on Ixhel (not a hardware check; the permission layer refused the assistant, so run it yourself)
+
+Leftover folders from earlier sessions: `wmr-companion-ff12` is empty, `wmr-apk*` hold only downloaded APKs, and `%TEMP%\wmr-key-test` is a clean clone of a merged branch. (`%TEMP%\wmr-ff13` was already gone.) In PowerShell on Ixhel:
+
+```powershell
+Remove-Item C:\Users\Nick\source\repos\wmr-companion-ff12, C:\Users\Nick\source\repos\wmr-apk, C:\Users\Nick\source\repos\wmr-apk-capture, C:\Users\Nick\source\repos\wmr-apk-ff12, $env:TEMP\wmr-key-test -Recurse -Force
+```
+
+If a folder refuses to go (long paths or locks): `$e = "$env:TEMP\empty"; mkdir $e; robocopy $e <folder> /MIR; Remove-Item <folder> -Force`.
+
+Merged branches on GitHub (delete from the branches page or `git push origin --delete <name>`): WMR_Bridge `claude/project-thread-5z6njd` and `claude/project-thread-6pi7k2`; wmr-companion `claude/project-thread-5z6njd`, `-dt8m36`, `-vrlh8e` and `-6pi7k2` (the last of each repo only after its handoff PR is merged).
