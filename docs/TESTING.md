@@ -367,3 +367,16 @@ before discovery has found them is check D6.
 | D10 | Loss during discovery | One controller streaming to the phone (FF12), the other missing, run `d` | Note `last5s` of the streaming hand during the inquiry rounds vs. before; stays connected | user-reported (2026-10-22): passed; one-line report for the whole checklist, no output pasted, so no figures are recorded. The row asks for `last5s` before and during the inquiry rounds; no figures reported |
 | D11 | Override | Build with `-DWMR_CFG_LEFT_ADDRESS=\"..\"` | LEFT `compile-time override`; discovery looks only for RIGHT; `F` keeps LEFT | user-reported (2026-10-22): passed; one-line report for the whole checklist, no output pasted, so no figures are recorded |
 
+
+## FF13 config block (PROPOSED; not wired; none run)
+
+Host tests (`tests/test_cfg.c`, CI) cover formats and the reader only. The checks below need
+the GATT wiring, which does not exist yet, and a controller. **Not yet run.**
+
+| # | Check | Expected | Result |
+| --- | --- | --- | --- |
+| C1 | Controller accepts `06 02 00 FF FF FF FF` (block 0) with no init commands | Response report ID `02`, `len` > 0 | not yet run |
+| C2 | Follow-up `addr` = bytes still to read | Responses continue; `blk_remain` falls by `len` | not yet run |
+| C3 | Block `0x02` size and CRC-32 | Size below 16384; CRC stable across two reads | not yet run |
+| C4 | Input stream during the read | FF11/FF12 sequence numbers stay contiguous | not yet run |
+| C5 | Phone reads FF13 in 496-byte windows | Reassembled blob CRC matches header | not yet run |

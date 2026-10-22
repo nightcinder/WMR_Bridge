@@ -518,9 +518,16 @@ periodic line ([COUNTERS.md](COUNTERS.md)). Identity: `accepted = sent + cancell
 
 See [TESTING.md](TESTING.md), "FF15 echo". None has been run.
 
-# Controller config block, FF13 (PROPOSED, DESIGN ONLY, not implemented)
+# Controller config block, FF13 (APPROVED layout, host-tested formats only, not wired, not yet run)
 
-**Status: design, no firmware written.** The commands below are what Monado does
+**Status: layout approved by the project owner (Nick, 2026-10-22); firmware wiring still to do.** The wire formats, the block-read state
+machine and the FF13 window are implemented as a pure-C module (`src/wmr_cfg.c`,
+`tests/test_cfg.c`) and host-tested. It is **not** wired into the HID handler or the GATT
+database, `FF13` is **not** in `wmr_bridge.gatt`, and nothing has run on an ESP32, a
+controller or a phone. The UUID and layout below were approved on 2026-10-22; they are still
+unverified on hardware.
+
+**Design basis.** The commands below are what Monado does
 (commit `f50c796c32c811f5fd371f77fd8a749d2ad7df08`, `wmr_controller_base.c`,
 `wmr_controller_protocol.h`). They have **never been tried through this bridge**;
 every item marked "unverified" must be checked on hardware before relying on it.
@@ -668,6 +675,50 @@ copied into the app, its notice must travel with it.
 FF13 is independent of the FF11/FF12 exclusivity and is expected to be used alongside
 FF12, with negligible traffic.
 
+## Golden bytes (host-tested; not yet run on hardware)
+
+All integers little-endian. CRC-32 check value: CRC-32 of the ASCII bytes `123456789` is
+`0xCBF43926`; of four zero bytes `0x2144DF1C`.
+
+First block-read request for block `0x02` (64 bytes, rest zero), then a follow-up for block
+`0x03` with `addr` `0x01020304`:
+
+```
+06 02 02 FF FF FF FF 00 ...            06 02 03 04 03 02 01 00 ...
+```
+
+Config response (78 bytes, from the report ID; BTstack delivers it behind the `A1` header
+byte): block `0x02`, `blk_remain` `0x1234`, `len` 3, data `AA BB CC`, rest zero:
+
+```
+02 00 02 00 02 34 12 00 00 03 AA BB CC 00 ...
+```
+
+FF13 header-only value (notify, or any non-READY read), RIGHT, state `READY` shown for a
+600-byte blob (`total_len` 0x258) at offset 0: `01 01 02 00 58 02 00 00 00 00 00 00 <crc32>`;
+the data window follows (496 bytes, then 104 at offset 496). A hand that is not READY reads
+`total_len` 0, `crc32` 0 and no data. Cursor write for RIGHT, offset 496: `01 F0 01 00 00`.
+
+## Reader rules fixed by the host tests
+
+- The block size is `blk_remain + len` of the first response. Zero, or more than the buffer
+  (hard cap 16384), is FAILED.
+- Each later response must satisfy `blk_remain == bytes_expected - bytes_received - len`;
+  any disagreement, or a zero-length response while bytes remain, is FAILED.
+- Responses for another block or command are ignored. Three retries after a 250 ms timeout,
+  then FAILED. A consumed response resets the retry count.
+- Reports are classified by report ID in the HID handler (`0x01` input, `0x02`/`0x06` config,
+  else other), never by length.
+
+## Still unverified (needs a controller)
+
+Whether the controller accepts block reads without Monado's init commands; control or
+interrupt channel and output or feature report; that the follow-up `addr` is "bytes still to
+read" as written above (taken from this design's reading of Monado, not checked against
+Monado's source in this session); block `0x02` size on these controllers; that the 78-byte
+response arrives as one HID report. Bench items: [TESTING.md](TESTING.md), "FF13 config
+block".
+
 ## Security note
 
 The config block is device-specific data (it may contain identifiers). Like the rest
@@ -684,4 +735,4 @@ of the BLE service, FF13 has **no authentication or encryption** (see
 
 None at present. The FF12 version 2 batching sketch that was here is now the implemented
 [FF14](#batched-decoded-stream-ff14-version-2-implemented-in-firmware-not-yet-run-on-hardware)
-section above. FF13 (controller config block) is a design only.
+section above. FF13 (controller config block) is a proposal: formats host-tested, firmware not wired, not yet run.
