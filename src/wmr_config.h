@@ -107,6 +107,31 @@
 /* Advertise on all three channels (bit mask 7). */
 #define WMR_CFG_ADV_CHANNEL_MAP    7
 
+/* Connection parameters the bridge asks the phone for after it connects (an
+ * L2CAP connection parameter update request; the phone may refuse or pick other
+ * values, and what it actually grants is logged and shown in the statistics
+ * line). Interval in 1.25 ms units (6 = 7.5 ms, 12 = 15 ms), supervision timeout
+ * in 10 ms units (400 = 4 s). A short interval matters because the two
+ * controllers produce about 350 reports/s together and each is one notification
+ * on the raw stream. */
+#ifndef WMR_CFG_CONN_INTERVAL_MIN
+#define WMR_CFG_CONN_INTERVAL_MIN  6
+#endif
+#ifndef WMR_CFG_CONN_INTERVAL_MAX
+#define WMR_CFG_CONN_INTERVAL_MAX  12
+#endif
+#ifndef WMR_CFG_CONN_LATENCY
+#define WMR_CFG_CONN_LATENCY       0
+#endif
+#ifndef WMR_CFG_CONN_TIMEOUT
+#define WMR_CFG_CONN_TIMEOUT       400
+#endif
+/* Delay between the phone connecting and the request, so it does not compete
+ * with the phone's service discovery and MTU exchange. */
+#ifndef WMR_CFG_CONN_REQUEST_DELAY_MS
+#define WMR_CFG_CONN_REQUEST_DELAY_MS 500
+#endif
+
 /* ---- Timers ------------------------------------------------------------ */
 
 /* Retry period for the notification pump: re-requests a send when frames are

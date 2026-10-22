@@ -7,7 +7,7 @@ reconnect. They wrap after 2^32 events. They live in `wmr_stats_t`
 ## Periodic line (every 5 s) and the `s` command
 
 ```
-STREAM phone=1 sub=1 mtu=247 q=0/256 high=3 notify=1234 errors=0
+STREAM phone=1 sub=1 mtu=247 conn=[11.25ms lat=0 to=4000ms] q=0/256 high=3 notify=1234 errors=0
   LEFT  rx=600 tx=600 drop=0 offline=0 purged=0 rate_rx=60.0/s rate_tx=60.0/s
   RIGHT rx=600 tx=600 drop=0 offline=0 purged=0 rate_rx=60.0/s rate_tx=60.0/s
 ```
@@ -21,6 +21,7 @@ connection state (`cid`, `connected`, `descriptor`, `reports`).
 | `phone` | 1 if a BLE phone is connected | |
 | `sub` | 1 if the phone enabled notifications (CCC = 1) | |
 | `mtu` | Negotiated ATT MTU of the phone link (0 = no phone, 23 = default) | The *negotiated* value, not what the phone requested |
+| `conn=[...]` | Connection interval, slave latency and supervision timeout currently in use (`n/a` with no phone). Set at connect and updated when the phone grants a connection-parameter update | The phone decides. `(update requested, not granted yet)` is appended while the bridge's request (7.5-15 ms, latency 0, 4 s timeout) has had no answer; a phone that refuses or ignores it leaves that text on, and the interval stays at the phone's choice |
 | `q=n/N` | Frames queued now / queue capacity | Counts frames, both hands together; a partly sent frame counts as queued |
 | `high` | Peak queue depth since boot | Never decreases |
 | `notify` | BLE notifications accepted by `att_server_notify` | Fragments, not frames |

@@ -43,6 +43,7 @@
 #include "btstack.h"
 #include "wmr_console.h"
 #include "wmr_controller.h"
+#include "wmr_link.h"
 #include "wmr_transport.h"
 
 static btstack_timer_source_t stats_timer;
@@ -84,8 +85,11 @@ static void print_stats(bool periodic){
     wmr_transport_info_t info;
     wmr_transport_get_info(&info);
     const wmr_stats_t *st = wmr_transport_stats();
-    printf("STREAM phone=%u sub=%u mtu=%u q=%u/%u high=%u notify=%lu errors=%lu\n",
+    char conn[48] = "n/a";
+    if (info.conn_known) wmr_conn_format(&info.conn, conn, sizeof(conn));
+    printf("STREAM phone=%u sub=%u mtu=%u conn=[%s]%s q=%u/%u high=%u notify=%lu errors=%lu\n",
            info.phone_connected, info.subscribed, info.mtu,
+           conn, info.conn_update_pending ? " (update requested, not granted yet)" : "",
            info.queue_count, info.queue_capacity, info.queue_high_water,
            (unsigned long) st->notifications, (unsigned long) st->errors);
     const double seconds = WMR_CFG_STATS_INTERVAL_MS / 1000.0;

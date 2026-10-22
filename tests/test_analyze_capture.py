@@ -242,7 +242,82 @@ def test_file_roundtrip():
     check(len(frame) == 46, "frame size")
 
 
+def test_link_stats():
+    print("link statistics (capture_ble.LinkStats)")
+    s = cb.LinkStats()
+    # RIGHT: 100 frames at 100 Hz with every 10th one missing; LEFT: no gaps.
+    seq = 1000
+    t = 0.0
+    for i in range(100):
+        seq += 2 if i and i % 10 == 0 else 1       # one missing number before every 10th arrival
+        s.add(1, seq, t)
+        s.add(0, 5000 + i, t)
+        t += 0.01
+    r = s.summary(1)
+    check(r["frames"] == 100 and r["gap_events"] == 9 and r["missing"] == 9, "right gaps: %s" % r)
+    check(abs(r["loss_fraction"] - 9 / 109) < 1e-9, "loss fraction")
+    check(abs(r["effective_hz"] - 100.0) < 0.5, "effective Hz %.2f" % r["effective_hz"])
+    check(abs(r["produced_hz"] - 108.0 / 0.99) < 0.01, "produced Hz %.2f" % r["produced_hz"])   # 109 numbers over 0.99 s
+    l = s.summary(0)
+    check(l["missing"] == 0 and l["gap_events"] == 0 and l["loss_fraction"] == 0, "left clean")
+    # wrap-around of the 32-bit sequence is not a gap; a repeat is not 'missing'
+    w = cb.LinkStats()
+    w.add(0, 0xFFFFFFFF, 0.0); w.add(0, 0, 0.01); w.add(0, 0, 0.02); w.add(0, 1, 0.03)
+    ws = w.summary(0)
+    check(ws["missing"] == 0 and ws["out_of_order"] == 1, "wrap and duplicate: %s" % ws)
+    check(len(s.lines()) == 2 and "LEFT" in s.lines()[0], "formatted lines")
+    check(cb.LinkStats().worst_loss() == 0.0, "empty is clean")
+
+
+def test_lossy_link_warning():
+    print("lossy link warning (analyze_capture)")
+    # The reported failure: about 190 frames/s produced, about 10 delivered (95% lost).
+    w = Writer()
+    w.lines.append("# mtu: 247")
+    w.phase("still", 6.0, [0, 9.81, 0], lambda t: [0, 0, 0], drop_every=2)
+    w.phase("twist_cw", 5.0, [0, 9.81, 0], turn(0, +1), drop_every=2)
+    w.phase("flip_away", 5.0, [0, 9.81, 0], turn(2, -1), drop_every=2)
+    w.phase("lean_right", 5.0, [0, 9.81, 0], turn(1, -1), drop_every=2)
+    path = w.save()
+    try:
+        rep = ac.analyse(path, 1)
+        check(rep["link_lossy"], "flagged lossy")
+        check(rep["mtu"] == "247", "mtu parsed from header: %s" % rep["mtu"])
+        check(rep["summary"][0].startswith("LINK TOO LOSSY, rotation results not valid"), "banner first")
+        check(not any(line.startswith("sensor-to-world (raw axes)") for line in rep["summary"]), "no mapping when lossy")
+        check(any("NOT shown" in line for line in rep["summary"]), "says why")
+        check(ac.lossy_banner(rep) is not None, "banner text")
+    finally:
+        os.remove(path)
+
+    # Just under and just over the 5% limit.
+    for every, lossy in ((25, False), (15, True)):       # 1/25 = 4%, 1/15 = 6.7%
+        w = Writer()
+        w.phase("still", 6.0, [0, 9.81, 0], lambda t: [0, 0, 0], drop_every=every)
+        w.phase("twist_cw", 5.0, [0, 9.81, 0], turn(0, +1), drop_every=every)
+        path = w.save()
+        try:
+            rep = ac.analyse(path, 1)
+            check(rep["link_lossy"] == lossy, "drop 1/%d lossy=%s (got %s)" % (every, lossy, rep["link_lossy"]))
+        finally:
+            os.remove(path)
+
+    # A clean capture has no warning and says the MTU was not recorded when there is no header.
+    w = Writer()
+    w.phase("still", 6.0, [0, 9.81, 0], lambda t: [0, 0, 0])
+    w.phase("twist_cw", 5.0, [0, 9.81, 0], turn(0, +1))
+    path = w.save()
+    try:
+        rep = ac.analyse(path, 1)
+        check(not rep["link_lossy"] and ac.lossy_banner(rep) is None, "clean capture not flagged")
+        check(rep["mtu"] == "not recorded", "mtu missing -> 'not recorded'")
+    finally:
+        os.remove(path)
+
+
 if __name__ == "__main__":
+    test_link_stats()
+    test_lossy_link_warning()
     test_decode()
     test_analysis()
     test_wrong_scale_is_flagged()

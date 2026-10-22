@@ -99,6 +99,68 @@ class Reassembler:
             self.slot[hand] = None
 
 
+class LinkStats:
+    """Per-hand frame and sequence accounting over one window (a phase or the run).
+
+    A sequence gap means frames the controller produced that never reached the
+    capture: lost on the way (see docs/DECODING.md, 'Link quality'). Effective Hz is
+    what arrived; produced Hz is what the controller generated (arrived + missing).
+    """
+
+    def __init__(self):
+        self.hands = {0: self._blank(), 1: self._blank()}
+
+    @staticmethod
+    def _blank():
+        return {"frames": 0, "gap_events": 0, "missing": 0, "out_of_order": 0,
+                "first_t": None, "last_t": None, "last_seq": None}
+
+    def add(self, hand, sequence, t):
+        h = self.hands[hand]
+        if h["last_seq"] is not None:
+            step = (sequence - h["last_seq"]) & 0xFFFFFFFF
+            if step == 0 or step >= 0x80000000:
+                h["out_of_order"] += 1          # duplicate or going backwards: not "missing"
+            elif step > 1:
+                h["gap_events"] += 1
+                h["missing"] += step - 1
+        h["frames"] += 1
+        h["last_seq"] = sequence
+        if h["first_t"] is None:
+            h["first_t"] = t
+        h["last_t"] = t
+
+    def summary(self, hand):
+        h = self.hands[hand]
+        span = (h["last_t"] - h["first_t"]) if h["frames"] > 1 else 0.0
+        total = h["frames"] + h["missing"]
+        return {
+            "frames": h["frames"], "gap_events": h["gap_events"], "missing": h["missing"],
+            "out_of_order": h["out_of_order"], "seconds": span,
+            "loss_fraction": (h["missing"] / total) if total else 0.0,
+            "effective_hz": ((h["frames"] - 1) / span) if span > 0 else 0.0,
+            "produced_hz": ((total - 1) / span) if span > 0 else 0.0,
+        }
+
+    def lines(self, indent="  "):
+        out = []
+        for hand, name in ((0, "LEFT"), (1, "RIGHT")):
+            s = self.summary(hand)
+            if not s["frames"]:
+                continue
+            out.append("%s%-5s frames=%d gaps=%d missing=%d (%.1f%% lost) effective=%.1f Hz produced=%.1f Hz%s"
+                       % (indent, name, s["frames"], s["gap_events"], s["missing"],
+                          100 * s["loss_fraction"], s["effective_hz"], s["produced_hz"],
+                          ("  out-of-order=%d" % s["out_of_order"]) if s["out_of_order"] else ""))
+        return out
+
+    def worst_loss(self):
+        return max(self.summary(0)["loss_fraction"], self.summary(1)["loss_fraction"])
+
+
+LOSSY_THRESHOLD = 0.05
+
+
 class CaptureFile:
     """Writes the capture text format read by tools/analyze_capture.py.
 
@@ -142,43 +204,58 @@ async def run(args):
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     reassembler = Reassembler()
-    counts = {0: 0, 1: 0}
-    active = {"name": None, "writer": None}
+    run_stats = LinkStats()
+    phase_stats = LinkStats()
+    active = {"name": None}
     t0 = time.perf_counter()
 
     with open(args.out, "w", newline="\n") as fp:
         cap = CaptureFile(fp)
-        cap.meta("wmr-capture v1")
-        cap.meta("source: BLE FF11 raw stream via tools/capture_ble.py")
-        cap.meta("hand: %s (as stated by the operator)" % args.hand)
-        cap.meta("started: %s" % datetime.datetime.now().isoformat(timespec="seconds"))
-        active["writer"] = cap
 
         def on_notify(_sender, data):
             now = time.perf_counter() - t0
             result = reassembler.push(bytes(data))
             if result and active["name"]:
                 hand, seq, frame = result
-                counts[hand] += 1
+                run_stats.add(hand, seq, now)
+                phase_stats.add(hand, seq, now)
                 cap.frame(now, hand, seq, frame)
 
         async with BleakClient(target) as client:
-            print("Connected. Subscribing to FF11 (raw stream)...")
+            mtu = getattr(client, "mtu_size", None)
+            print("Connected. ATT MTU as reported by the PC's BLE stack: %s" % (mtu if mtu else "unknown"))
+            if mtu is not None and mtu < 59:
+                print("  note: an MTU below 59 cannot carry a 56-byte decoded record; the raw stream "
+                      "needs one notification per frame only from MTU 61 up.")
+            cap.meta("wmr-capture v1")
+            cap.meta("source: BLE FF11 raw stream via tools/capture_ble.py")
+            cap.meta("hand: %s (as stated by the operator)" % args.hand)
+            cap.meta("mtu: %s" % (mtu if mtu else "unknown"))
+            cap.meta("started: %s" % datetime.datetime.now().isoformat(timespec="seconds"))
             await client.start_notify(FF11_UUID, on_notify)
             for name, text in PHASES:
                 print("\n=== %s ===\n%s" % (name, text))
                 await ainput("Press Enter to BEGIN '%s' ... " % name)
+                phase_stats = LinkStats()
                 active["name"] = name
                 cap.begin(name, time.perf_counter() - t0)
                 await ainput("Recording. Press Enter when FINISHED ... ")
                 cap.end(name, time.perf_counter() - t0)
                 active["name"] = None
                 fp.flush()
+                print("Link during '%s':" % name)
+                for line in phase_stats.lines():
+                    print(line)
+                if phase_stats.worst_loss() > LOSSY_THRESHOLD:
+                    print("  WARNING: more than %d%% of frames lost in this phase; the rotation results "
+                          "from it will not be valid." % int(LOSSY_THRESHOLD * 100))
             await client.stop_notify(FF11_UUID)
 
     print("\nWrote %s" % args.out)
-    print("frames: LEFT=%d RIGHT=%d, malformed fragments=%d, abandoned frames=%d"
-          % (counts[0], counts[1], reassembler.errors, reassembler.incomplete))
+    print("Whole run:")
+    for line in run_stats.lines():
+        print(line)
+    print("malformed fragments=%d, abandoned frames=%d" % (reassembler.errors, reassembler.incomplete))
     print("Next: python tools/analyze_capture.py %s --hand %s" % (args.out, args.hand))
 
 
