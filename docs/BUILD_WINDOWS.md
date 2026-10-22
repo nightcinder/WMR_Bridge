@@ -41,9 +41,11 @@ is modified; the stock `port/esp32/sdkconfig.defaults` is used.
 **Re-copy `main-CMakeLists.txt` after pulling the FF14 change:** the file lists the
 application's sources, and `wmr_batch.c` was added. Without the new copy the link
 fails with undefined `wmr_batch_*` symbols.
-The FF15 echo change adds `wmr_echo.c` in the same way (undefined `wmr_echo_*` without a
-fresh copy).
-Edit the controller addresses in `src\wmr_config.h` first.
+No controller addresses need editing: the bridge finds the controllers by name after the
+first flash and stores their addresses ([DISCOVERY.md](DISCOVERY.md)). Put them in pairing
+mode within the first minute after boot. **Re-copy `main-CMakeLists.txt` after pulling the
+discovery change:** it adds `wmr_discovery.c` (undefined `wmr_discovery_*` symbols
+otherwise).
 
 ## Build
 

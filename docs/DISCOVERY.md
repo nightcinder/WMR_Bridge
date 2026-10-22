@@ -1,0 +1,116 @@
+# Controller discovery by name (issue #2)
+
+**Status: implemented and host-tested; not built with ESP-IDF, never run on hardware.**
+Checklist in [TESTING.md](TESTING.md) ("Discovery by name"). Reference logic:
+`src/wmr_discovery.{h,c}` (pure C, `tests/test_discovery.c`); BTstack side in
+`src/wmr_controller.c`.
+
+The bridge no longer ships with Bluetooth addresses. It finds the two controllers by their
+Classic Bluetooth names and stores the addresses in NVS, so later boots reconnect without
+scanning.
+
+## Names
+
+| Name (case-insensitive, whole name) | Hand |
+| --- | --- |
+| `Motion controller - Left` | LEFT |
+| `Motion controller - Right` | RIGHT |
+
+Trailing spaces and NUL padding are ignored; anything else must match. These are the names
+given in issue #2. **They have not been read from the controllers through this code**; check
+D2 in TESTING.md confirms them.
+
+## Where an address comes from
+
+Per hand, in this order:
+
+1. **Compile-time override** (`-DWMR_CFG_LEFT_ADDRESS=\"AA:BB:CC:DD:EE:FF\"`, same for RIGHT;
+   undefined by default). Never written to NVS, never forgotten by `F`. An unparsable value is
+   reported at boot and ignored.
+2. **Stored**: found by discovery (or by name on an incoming connection) and saved in NVS
+   through BTstack's TLV store (the same store as the link keys), tag `WMRA`, a 16-byte record
+   (`wmr_addr_record_pack`, golden bytes in the test).
+3. **None**: the hand is unknown until discovery finds it.
+
+The `s` command prints each hand's address and its source.
+
+## Discovery
+
+Starts by itself about 3 s after boot when a hand has no address
+(`WMR_CFG_DISCOVERY_AUTOSTART`, `WMR_CFG_DISCOVERY_START_DELAY_MS`), or with console key `d`.
+It looks only for hands that have no address; a known hand is never replaced.
+
+1. **Inquiry** for 10.24 s (`WMR_CFG_DISCOVERY_INQUIRY_LEN` = 8 x 1.28 s). A result whose
+   name is in the inquiry response is matched at once. Devices without a name are remembered
+   (up to 8 per round). The inquiry stops early once every wanted hand is found.
+2. **Remote name requests**, one at a time, for the remembered devices, until every wanted
+   hand is found.
+3. **Store and connect.** New addresses are saved, then each new hand is connected outwards,
+   one at a time. A controller in pairing mode pairs on that connection (Secure Simple
+   Pairing, auto-confirmed as before).
+4. If a hand is still missing, another round runs, up to `WMR_CFG_DISCOVERY_ROUNDS` (6, about
+   a minute of inquiry), then discovery stops and says which hand was not found. Press `d`
+   to try again.
+
+While discovery runs, `l`/`r` are refused. A controller that is already connected keeps
+streaming, but an inquiry shares the ESP32's Classic radio with it, so expect more missing
+reports on that hand during discovery (not measured). Discovery is bounded for that reason.
+
+### Pairing-mode procedure
+
+Assumed, not yet checked on these controllers: a WMR controller answers inquiry only in
+pairing mode (hold the Windows button until the LEDs flash). For a fresh flash: power on the
+ESP32, put **one or both** controllers in pairing mode within the first minute, and watch for
+`Discovery: LEFT is ...` and `descriptor status=0x00`. If pairing mode times out first, put
+the controller in pairing mode again and press `d`.
+
+### More than one matching controller in range
+
+The **first** device found with a hand's name is used for that hand; any other device with
+the same name in the same discovery is logged (`another device with a controller name ...
+ignored`) and not used. Keep only one controller of each hand in pairing mode during
+discovery. If the wrong one was taken: `F`, then discovery again with only the right one in
+pairing mode. Asking for confirmation on the console was considered and not done: the bridge
+runs headless in normal use.
+
+## Incoming connections
+
+- From a **stored or overridden address**: accepted as before (this is how a controller
+  reconnects on its own after waking).
+- From an **unknown address** while both hands have addresses: declined.
+- From an **unknown address** while a hand has no address: the connection is **held, not
+  accepted**, its name is requested, and it is accepted only if the name matches a hand that
+  has no address. The address is then stored. Otherwise it is declined. Only one such check
+  runs at a time; a second unknown device meanwhile is declined.
+
+## Forgetting addresses (`F`)
+
+`F` deletes the stored addresses of both hands (overrides stay) and starts discovery. It is
+refused while a controller is connected or connecting, or while discovery runs: disconnect
+with `L` and `R` first. It does **not** delete link keys; that is still the per-hand bond reset
+(`k`/`K`), which now needs the hand to have an address.
+
+## Security
+
+A Bluetooth name is not authentication: any device can call itself `Motion controller - Left`.
+Before this change the bridge trusted two compiled-in addresses, which can also be spoofed.
+What changes:
+
+- A device that answers inquiry with a controller name while a hand has no address becomes
+  that hand, and is paired with automatically (SSP is auto-confirmed for any device). The
+  exposure is the discovery window, which runs only while a hand has no address and is bounded.
+- Once both hands have addresses, name matching is off: incoming devices with other addresses
+  are declined, and discovery has nothing to look for.
+- A stored address is never replaced by discovery or by an incoming device; only `F` (local
+  serial console) clears it.
+
+See [SECURITY.md](SECURITY.md).
+
+## Not done / open
+
+- Real names, pairing-mode behaviour and timings: not yet checked on hardware.
+- Whether a controller in pairing mode also tries to connect inwards (it would then take the
+  incoming path above, which handles it).
+- The BTstack HID host keeps the incoming L2CAP connection pending while the name is
+  requested; how long a controller waits before giving up is not known. A controller that
+  gives up is handled (the late name answer is ignored).

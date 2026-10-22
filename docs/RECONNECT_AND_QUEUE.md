@@ -10,9 +10,13 @@ This documents what the firmware does today (unchanged by the refactor).
   the HID channel ID (cid) is recorded for that hand **before** the connection
   is accepted, then `hid_host_accept_connection` is called. Removing this path
   stops reconnects from working.
-- Unknown addresses are not accepted. A second, different cid for an already
-  tracked hand is refused.
-- **Outgoing connections** (`l`, `r`) are for first pairing and recovery.
+- Unknown addresses are not accepted blindly: while a hand has no address, the
+  connection is held and accepted only if the device's name matches that hand
+  ([DISCOVERY.md](DISCOVERY.md)); otherwise it is declined. A second, different cid
+  for an already tracked hand is refused.
+- **Discovery** (automatic after boot when a hand has no address, or `d`) finds
+  controllers by name and connects them outwards; see [DISCOVERY.md](DISCOVERY.md).
+- **Outgoing connections** (`l`, `r`) are for recovery; they need a known address.
 - Only one connection attempt (outgoing or accepted) may be in flight
   (`connect_pending`); it ends when the HID descriptor arrives, the open
   fails, or the connection closes before completing.

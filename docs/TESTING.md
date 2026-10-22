@@ -310,30 +310,33 @@ stays near its FF12 level, batching does not help at this position. **LEFT is no
 change and a change would be a new finding; do not claim FF14 fixes LEFT.** One session at one
 position cannot say more than that.
 
-## FF15 echo (issue #1; hardware, **not yet run**)
+## Discovery by name (issue #2; hardware, **not yet run**)
 
-What was run (host only, by the assistant): `tests/test_echo.c` (golden bytes of the request and
-the answer; rejected lengths and versions; one outstanding echo, `busy`, `unsubscribed`,
-`cancelled`, a retry restamping the turnaround, saturation). The firmware sources were also
-syntax-checked with gcc against current BTstack `master` headers and a `wmr_bridge.gatt` compiled
-with BTstack's `compile_gatt.py` (FF15 value handle 0x0012, CCC 0x0013; all earlier handles
-unchanged). **Not built with ESP-IDF, not flashed, not run.** Not tested anywhere: the pump giving
-the echo priority, `att_server_notify` for FF15, and everything below.
+What was run (host only, by the assistant): `tests/test_discovery.c` (name matching incl. case,
+padding and near misses; golden bytes of the stored address record and what it rejects; address
+parsing; a discovery run with names in the inquiry response, with remote name requests, with one
+hand already known, with a second controller of the same hand, with a full pending list; the
+incoming-connection rule). The firmware sources were syntax-checked with gcc against BTstack
+`e38553977a25` (the tested commit) and current `master` headers. **Not built with ESP-IDF, not
+flashed, not run.** Not tested anywhere: inquiry, remote name requests, NVS storage, the held
+incoming connection, connecting and pairing after discovery, and everything below.
 
-**One BTstack-side file changes:** `integration/main-CMakeLists.txt` lists `wmr_echo.c`. Copy it over
-`port\esp32\main\CMakeLists.txt` again before building, or the link fails with undefined
-`wmr_echo_*` references.
+**Before testing:** this change removes the compiled-in addresses, so the first boot has none
+stored and starts discovery. Re-copy `integration/main-CMakeLists.txt` (adds `wmr_discovery.c`).
+Already-paired controllers keep their link keys on the ESP32; whether they reconnect inwards
+before discovery has found them is check D6.
 
 | # | Check | How | Expect | Result |
 | --- | --- | --- | --- | --- |
-| E1 | FF15 exists | Connect, discover service FF10 | `0000FF15-...` with write-without-response and notify, and a CCC, after FF14; FF11, FF12, FF14 unchanged | not yet run |
-| E2 | Echo, no stream | Enable FF15 only, write `01 00 01 00` | One 20-byte answer starting `01 00 01 00`; `queue_depth` 0; `FF15 echo accepted=1 sent=1` | not yet run |
-| E3 | Not subscribed | FF15 CCC off, write a ping | No answer; `unsubscribed` rises | not yet run |
-| E4 | Bad request | Write 3 bytes, and a version 2 request | No answer; `bad` rises by 2 | not yet run |
-| E5 | Independent of the exclusion | With FF12 (then FF14, then FF11) active, enable FF15 | Accepted, never `0x80`; the stream keeps running | not yet run |
-| E6 | RTT at load | FF12 at MTU 517 with both controllers, one ping every 100 ms for 60 s (needs the app or a script to log `t1`, `t4`, the answer) | RTT distribution; `turnaround_us` small (expected well under 1 ms, not measured); RTT does not grow with `queue_depth` | not yet run |
-| E7 | RTT idle vs FF14 | Repeat E6 with no stream, then FF14 | The three distributions side by side; FF14 is not expected to add a batch hold to the echo | not yet run |
-| E8 | Busy | Send two pings back to back | One answer for the first `ping_id`, `busy` rises for the second (only if the second arrives before the first answer is sent; may not reproduce) | not yet run |
-| E9 | Counters and identity | `s` after E2-E8 | `accepted = sent + cancelled + pending`; `notify` did not grow from echo answers | not yet run |
-| E10 | Loss unchanged | Compare `last5s` with and without pings during FF12 | No visible change at 10 pings/s (an echo is 20 bytes on air per 100 ms) | not yet run |
+| D1 | Fresh boot, nothing stored | Flash, boot, controllers off | `LEFT address: unknown (not discovered yet)`, same for RIGHT; about 3 s later `Discovery round 1/6 ...`; after 6 rounds `not found ... press d` and `Discovery finished` | not yet run |
+| D2 | Names | Put LEFT in pairing mode, press `d` | `Discovery: LEFT is <addr> (name in inquiry response)` or `(remote name)`. If neither appears, the real name differs from `Motion controller - Left`: record it with `WMR_CFG_HCI_TRACE` | not yet run |
+| D3 | Pair and connect | Continue D2 | `Addresses saved (LEFT stored, ...)`, `Connecting LEFT`, SSP accept, `descriptor status=0x00`, reports flow | not yet run |
+| D4 | Both hands | `F` (after `L`/`R`), then both controllers in pairing mode | Both found in one or two rounds, connected one after the other | not yet run |
+| D5 | Persistence | Reboot the ESP32, power-cycle the controllers | Addresses printed as `discovered, stored`; no discovery round; controllers reconnect on their own (`Incoming HID ... accepting`) | not yet run |
+| D6 | Unknown incoming, hand missing | `F` while both are disconnected, then power on a paired controller (not pairing mode) | Either `Incoming unknown device: requesting its name` then accepted and stored, or it does not try to connect (record which) | not yet run |
+| D7 | Unknown incoming, both known | A different paired HID device connects in | `not LEFT or RIGHT; declining` | not yet run |
+| D8 | Two of a hand | Two LEFT controllers in pairing mode | One taken, `another device with a controller name ... ignored` for the other | not yet run (needs a second LEFT) |
+| D9 | Refusals | `F` while connected; `l` while discovery runs; `k` with no address | `FORGET refused ...`; `Discovery is running`; `has no address yet` | not yet run |
+| D10 | Loss during discovery | One controller streaming to the phone (FF12), the other missing, run `d` | Note `last5s` of the streaming hand during the inquiry rounds vs. before; stays connected | not yet run |
+| D11 | Override | Build with `-DWMR_CFG_LEFT_ADDRESS=\"..\"` | LEFT `compile-time override`; discovery looks only for RIGHT; `F` keeps LEFT | not yet run |
 
