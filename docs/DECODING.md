@@ -268,8 +268,30 @@ and the axis mapping are **not valid** on such a capture, so the tools now say s
   limits how many notifications fit per second whatever the bridge asks; the log shows
   whether the request was honoured. **This has not been tried on hardware.**
 
-**Repeat capture** (the user flashes the firmware from this branch first; nothing here
-flashes anything):
+**Which captures to trust (reported by the maintainer's bench runs; not reproduced by
+the assistant that wrote this):**
+
+- **Desktop captures over Windows with `bleak` lost over 90 % of the frames** (about 10
+  frames/s per hand received of about 190 produced, 1,000-1,500 sequence gaps per
+  phase). They are not usable for the rotation checks.
+- **Phone captures are the reference.** A Pixel running the companion app, with ATT MTU
+  517 and high connection priority, received about 4,200 FF11 frames per hand with 0
+  sequence gaps, 0 incomplete frames and 0 fragment errors. The bridge's own statistics
+  agree: `mtu=517`, `conn=[15.00ms lat=1 to=5000ms]` (the phone kept 15 ms and chose
+  latency 1 rather than 0), about 150 frames/s per hand, `drop=0 offline=0 purged=0
+  errors=0`, `rx=tx`, queue high-water 15 of 256. So the bridge and its queue keep up,
+  and the earlier loss came from the Windows `bleak` link.
+- The companion app is getting a capture screen that writes the same file format as
+  `capture_ble.py`, so `tools/analyze_capture.py` stays the analyzer. `capture_ble.py`
+  remains available for quick checks, but treat a desktop capture as valid only if its own
+  loss lines are under 5 %.
+- **Nothing is confirmed by the lossy captures.** The gyro scale, the tick unit
+  (100 ns per tick), the axis directions and signs, and the other items under "Unknown"
+  above stay **unconfirmed** until a clean capture, with a loss line under 5 %, has been
+  analysed.
+
+**Repeat capture** (firmware from `main`, which includes the link diagnostics, flashed by
+the user; nothing here flashes anything):
 
 ```powershell
 # 1. Build and flash as in docs/BUILD_WINDOWS.md, then open the monitor and note, after the
