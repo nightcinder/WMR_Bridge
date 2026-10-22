@@ -92,35 +92,37 @@ installed.
 
 ## FF12 decoded stream: bench-test checklist (hardware)
 
-Firmware: branch `ff12-decoded-stream`. **Nothing below has been run on hardware.** What
-has been run is host-only: the pure CCC-exclusion rule, the minimum-MTU rule and the
+Firmware: FF12 as merged to `main` (PR #5). **Results marked "Reported" or "PARTIAL" were
+run by the user (Pixel with nRF Connect, a pasted ESP32 log and one screenshot) and relayed through
+director issue #3; the assistant did not run or see them, and they are not claimed as verified by
+it.** Rows still saying "not yet run" have no report at all. What the assistant ran is host-only: the pure CCC-exclusion rule, the minimum-MTU rule and the
 raw-frame-to-record path (`tests/test_stream_mode.c`, in CI) and a full ESP-IDF build
-(the command and result are in the pull request). The BTstack callbacks, the GATT
-database, the notification pump and anything over the air are untested.
+(the command and result are in the pull request). Beyond the rows below, nothing over the
+air has been reported.
 
 Use any BLE client that can write descriptors and subscribe (nRF Connect, or a script).
 Record the date, the build, the phone/client and the observed numbers in the Result column.
 
 | # | Check | How | Expect | Result |
 | --- | --- | --- | --- | --- |
-| 1 | FF12 is discoverable | Connect, discover service `FF10` | Characteristics `FF11` (read, notify) and `FF12` (notify only); `FF12` has a CCC | not yet run |
-| 2 | Subscribe to FF12 | Request MTU 247 or more, write `0x0001` to the FF12 CCC | Write succeeds; log shows `BLE decoded notifications enabled`; periodic `STREAM` line shows `stream=decoded` together with `mtu=` and `conn=[interval lat= to=]` | not yet run |
-| 3 | Record size and version | Capture 100 notifications | Every value is exactly 56 bytes; byte 0 is `0x01` (version); byte 2 (`flags`) is `0x00`; byte 1 matches the hand | not yet run |
-| 4 | Fields plausible | Hold a controller still | `accel` magnitude about 10 m/s^2, `gyro` near 0 (about 0.02 rad/s), `device_ticks` increasing; compare with a rotation capture from `tools/capture_ble.py` | not yet run |
+| 1 | FF12 is discoverable | Connect, discover service `FF10` | Characteristics `FF11` (read, notify) and `FF12` (notify only); `FF12` has a CCC | Reported OK (user, Pixel with nRF Connect): FF12 found and subscribed. Whether the FF11 properties were inspected was not reported. |
+| 2 | Subscribe to FF12 | Request MTU 247 or more, write `0x0001` to the FF12 CCC | Write succeeds; log shows `BLE decoded notifications enabled`; periodic `STREAM` line shows `stream=decoded` together with `mtu=` and `conn=[interval lat= to=]` | Reported OK: MTU 517; log `BLE decoded notifications enabled`; STREAM line `stream=decoded mtu=517 conn=[15.00ms lat=1 to=5000ms]`. Before subscribing: `stream=none`, `tx=0`, every frame counted `offline`. First interval after subscribing: `notify=687` (LEFT tx 377 + RIGHT tx 310), `drop=0`, `mtu_skip=0`, `dec_err=0`, queue high-water 15. |
+| 3 | Record size and version | Capture 100 notifications | Every value is exactly 56 bytes; byte 0 is `0x01` (version); byte 2 (`flags`) is `0x00`; byte 1 matches the hand | PARTIAL (4 records, not 100): all exactly 56 bytes, version 1, flags 0. The hand byte was not reported as checked against the controller. |
+| 4 | Fields plausible | Hold a controller still | `accel` magnitude about 10 m/s^2, `gyro` near 0 (about 0.02 rad/s), `device_ticks` increasing; compare with a rotation capture from `tools/capture_ble.py` | PARTIAL (controllers sitting still, a few records): hand 0 gyro about 0.02 rad/s, accel magnitude 10.07; hand 1 gyro 0.010-0.011, accel 10.16-10.17; `temperature_raw` 2926 (hand 0) and 2983-2984 (hand 1); battery 133 and 131; trigger, trackpad and buttons 0. Resting stick was not centred: hand 0 (-0.029, 0.014), hand 1 (-0.064, 0.148); see DECODING.md, "Thumbstick resting values are not zero". Not compared with a rotation capture. |
 | 5 | Sequence continuity, one hand | One controller streaming for 60 s | `sequence` increases by 1 per record with no gaps (a gap means loss before transmission); note any | not yet run |
 | 6 | Sequence continuity, both hands | Both controllers streaming for 10 minutes | Per-hand `sequence` contiguous; per-hand rate about 150-180/s; `drop` stays flat; `q` stays low; `rx` = `tx` + `drop` + `offline` + `purged` + `mtu_skip` + `dec_err` + `q` (accounting identity in COUNTERS.md); `errors=0` | not yet run |
 | 7 | Throughput | Same run as 6 | Record whether about 360 notifications/s sustains with no drops at the negotiated connection interval (bench item from PROTOCOL.md) | not yet run |
-| 8 | Refusal | While FF12 is subscribed, write `0x0001` to the FF11 CCC | The write fails with ATT error `0x80`; FF12 keeps streaming; log shows `BLE raw notifications refused` | not yet run |
-| 9 | Refusal, other direction | Subscribe to FF11 first, then try the FF12 CCC | ATT error `0x80`; FF11 keeps streaming | not yet run |
-| 10 | Switching | Write `0x0000` to the active CCC, then enable the other | Both writes succeed; the other stream starts; the first stops; no records of the old format after the switch | not yet run |
+| 8 | Refusal | While FF12 is subscribed, write `0x0001` to the FF11 CCC | The write fails with ATT error `0x80`; FF12 keeps streaming; log shows `BLE raw notifications refused` | PARTIAL: refusal logged as `BLE raw notifications refused: decoded stream is active (ATT error 0x80)`. Not yet shown: FF12 still streaming afterwards (the follow-up STREAM line was not pasted). |
+| 9 | Refusal, other direction | Subscribe to FF11 first, then try the FF12 CCC | ATT error `0x80`; FF11 keeps streaming | Reported OK: `BLE decoded notifications refused: raw stream is active (ATT error 0x80)`. FF11 still streaming afterwards: not reported. |
+| 10 | Switching | Write `0x0000` to the active CCC, then enable the other | Both writes succeed; the other stream starts; the first stops; no records of the old format after the switch | Reported OK: `BLE decoded notifications disabled` then `BLE raw notifications enabled` worked. Absence of records in the old format after the switch: not reported. |
 | 11 | CCC read-back | Read both CCCs in each state | Only the active one reads `0x0001` | not yet run |
 | 12 | Disabling the inactive stream | While FF12 is active, write `0x0000` to the FF11 CCC | Succeeds; FF12 unaffected | not yet run |
 | 13 | Small MTU | Enable FF12 while the ATT MTU is below 59 (default 23, before MTU exchange, or a client that will not negotiate) | No FF12 notifications; `mtu_skip` rises on both hands; `drop` and `q` do not | not yet run |
 | 14 | Recovery after small MTU | Raise the MTU to 59 or more while subscribed | Records start flowing; the first `sequence` is higher than the last one before (the skipped reports); `mtu_skip` stops rising | not yet run |
 | 15 | Reconnect | Disconnect and reconnect the phone | Subscription is not remembered (`stream=none` until the CCC is written again); no stale records | not yet run |
 | 16 | FF11 unchanged | Subscribe to FF11 instead | Fragmented frames as before; the golden-packet format in PROTOCOL.md; `stream=raw`; same rates as the earlier bench run | not yet run |
-| 17 | `rx_time_us` | Compare record timestamps | Monotonic per hand across a controller reconnect; spacing matches `device_ticks` x 100 ns within jitter | not yet run |
-| 18 | Tick unit and wrap | Use `tools/analyze_capture.py` on an FF11 capture (or compute from FF12) | ticks/wall about 1.0 confirms 100 ns per tick; unconfirmed until run | not yet run |
+| 17 | `rx_time_us` | Compare record timestamps | Monotonic per hand across a controller reconnect; spacing matches `device_ticks` x 100 ns within jitter | PARTIAL: `rx_time_us` monotonic, but bursty: three consecutive hand-1 records arrived 2,437 us and 155 us apart while their `device_ticks` are 4.990 ms apart, so arrival time is not the sensor clock (as specified). Across a controller reconnect: not run. |
+| 18 | Tick unit and wrap | Use `tools/analyze_capture.py` on an FF11 capture (or compute from FF12) | ticks/wall about 1.0 confirms 100 ns per tick; unconfirmed until run | PARTIAL (from FF12): three consecutive hand-1 records have sequence +1 and `device_ticks` +49,896 each (4.990 ms), the same median as the capture analysis, consistent with 100 ns per tick. The 2^32 wrap (about 7 minutes of controller time) has not been observed. Phone FF11 captures (reported): ticks/wall 1.0016 (RIGHT), 1.0083 (LEFT). |
 
 Do not flash from this repository's CI or from an assistant session; flashing and the
 runs above are done by hand.
