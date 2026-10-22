@@ -140,3 +140,61 @@ void wmr_diag_percent_format(int permille, char *buf, size_t len){
     if (permille < 0) snprintf(buf, len, "n/a");
     else snprintf(buf, len, "%d.%d%%", permille / 10, permille % 10);
 }
+
+static void permille_field(char *buf, size_t len, int permille){
+    if (permille < 0) buf[0] = '\0';
+    else snprintf(buf, len, "%d.%d", permille / 10, permille % 10);
+}
+
+void wmr_linklog_format(const wmr_linklog_t *r, char *buf, size_t len){
+    char rate[16] = "", delta[24] = "", last5s[16], cum[16], rssi[8] = "", lq[8] = "", fcc[8] = "", conn[16] = "";
+    if (r->rate_rx_tenths >= 0) snprintf(rate, sizeof(rate), "%ld.%ld", (long) (r->rate_rx_tenths / 10), (long) (r->rate_rx_tenths % 10));
+    if (r->missing_delta >= 0) snprintf(delta, sizeof(delta), "%lu", (unsigned long) r->missing_delta);
+    permille_field(last5s, sizeof(last5s), r->last5s_permille);
+    permille_field(cum, sizeof(cum), r->cum_permille);
+    if (r->health){
+        if (r->health->valid[WMR_LINKCMD_RSSI]) snprintf(rssi, sizeof(rssi), "%d", (int) r->health->rssi);
+        if (r->health->valid[WMR_LINKCMD_QUALITY]) snprintf(lq, sizeof(lq), "%u", (unsigned) r->health->quality);
+        if (r->health->valid[WMR_LINKCMD_FAILED_CONTACT]) snprintf(fcc, sizeof(fcc), "%u", (unsigned) r->health->failed_contacts);
+    }
+    if (r->conn_interval_us){
+        unsigned long hundredths = (unsigned long) ((r->conn_interval_us + 5u) / 10u);   /* 10 us -> 0.01 ms */
+        snprintf(conn, sizeof(conn), "%lu.%02lu", hundredths / 100ul, hundredths % 100ul);
+    }
+    snprintf(buf, len, "LINKLOG,%lu,%s,%s,%s,%lu,%s,%s,%s,%s,%s,%s,%u,%s,%lu",
+             (unsigned long) r->t_ms, r->hand, rate, delta, (unsigned long) r->missing_cum,
+             last5s, cum, rssi, lq, fcc, r->stream, (unsigned) r->mtu, conn, (unsigned long) r->decimated);
+}
+
+bool wmr_episode_note_drop(wmr_episode_t *e){
+    if (e->active) return false;
+    e->active = true;
+    return true;
+}
+
+void wmr_episode_note_queue(wmr_episode_t *e, unsigned queue_count){
+    if (!queue_count) e->active = false;
+}
+
+void wmr_diag_format_drop(char *buf, size_t len, const char *hand_name, const char *stream_name,
+                          uint16_t mtu, unsigned queue_count, unsigned queue_capacity, uint32_t errors){
+    snprintf(buf, len, "%s queue full: first drop of this episode, stream=%s mtu=%u q=%u/%u errors=%lu",
+             hand_name, stream_name, (unsigned) mtu, queue_count, queue_capacity, (unsigned long) errors);
+}
+
+bool wmr_diag_parse_le_buffer_size(const uint8_t *ret, uint16_t len, uint16_t *acl_length, uint8_t *acl_count){
+    if (len < 4 || ret[0] != 0) return false;
+    *acl_length = (uint16_t) (ret[1] | (ret[2] << 8));
+    *acl_count = ret[3];
+    return true;
+}
+
+void wmr_diag_format_le_buffers(char *buf, size_t len, uint16_t acl_length, uint8_t acl_count){
+    snprintf(buf, len, "HCI LE buffers: ACL packet length %u bytes, %u packets", (unsigned) acl_length, (unsigned) acl_count);
+}
+
+void wmr_diag_format_data_length(char *buf, size_t len, uint16_t tx_octets, uint16_t tx_time_us,
+                                 uint16_t rx_octets, uint16_t rx_time_us){
+    snprintf(buf, len, "BLE data length changed: tx %u octets / %u us, rx %u octets / %u us",
+             (unsigned) tx_octets, (unsigned) tx_time_us, (unsigned) rx_octets, (unsigned) rx_time_us);
+}

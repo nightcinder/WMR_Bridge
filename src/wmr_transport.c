@@ -44,6 +44,7 @@
 #include "esp_timer.h"
 #include "wmr_bridge.h"        /* generated from wmr_bridge.gatt: profile_data, ATT_*_HANDLE */
 #include "wmr_controller.h"
+#include "wmr_diag.h"
 #include "wmr_linkdiag.h"
 #include "wmr_link.h"
 #include "wmr_decoded.h"
@@ -72,6 +73,10 @@ static bool send_pending;
 static uint32_t status_tick;
 
 static wmr_queue_t queue;
+/* Logs the first queue-full drop of each episode, not every dropped report. */
+static wmr_episode_t drop_episode;
+/* An LE data-length-change event has been seen on the current phone connection. */
+static bool data_length_seen;
 static uint16_t send_offset;       /* bytes of the head frame already sent */
 static wmr_stats_t stats;
 
@@ -107,6 +112,7 @@ static void conn_report(const char *what, uint16_t interval, uint16_t latency, u
 static void conn_request_fire(btstack_timer_source_t *timer){
     (void)timer;
     if (phone_handle == HCI_CON_HANDLE_INVALID) return;
+    if (!data_length_seen) printf("BLE data length: no change event seen since connect\n");
     int rc = gap_request_connection_parameter_update(phone_handle,
         conn_wanted.interval_min, conn_wanted.interval_max, conn_wanted.latency, conn_wanted.timeout);
     conn_update_pending = rc == 0;
@@ -126,6 +132,7 @@ static void queue_reset(void){
 }
 
 static void pump_kick(void){
+    wmr_episode_note_queue(&drop_episode, queue.count);
     if (stream_mode == WMR_STREAM_NONE || phone_handle == HCI_CON_HANDLE_INVALID ||
         !queue.count || send_pending) return;
     send_pending = true;
@@ -168,6 +175,14 @@ void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t 
     memcpy(frame.data, report, length);
     if (!wmr_queue_push(&queue, &frame)){
         stats.drop[hand]++;
+        if (wmr_episode_note_drop(&drop_episode)){
+            char line[128];
+            wmr_diag_format_drop(line, sizeof(line), wmr_controller_name(hand),
+                                 wmr_stream_mode_name(stream_mode),
+                                 att_server_get_mtu(phone_handle), queue.count,
+                                 WMR_CFG_QUEUE_CAPACITY, stats.errors);
+            printf("%s\n", line);
+        }
         return;
     }
     pump_kick();
@@ -364,6 +379,19 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
         case HCI_EVENT_LE_META:
             /* Legacy and enhanced LE Connection Complete share these initial
              * fields: [3] status, [4..5] connection handle. */
+            if (size >= 13 && packet[2] == HCI_SUBEVENT_LE_DATA_LENGTH_CHANGE){
+                if (hci_subevent_le_data_length_change_get_connection_handle(packet) == phone_handle){
+                    char line[100];
+                    data_length_seen = true;
+                    wmr_diag_format_data_length(line, sizeof(line),
+                        hci_subevent_le_data_length_change_get_max_tx_octets(packet),
+                        hci_subevent_le_data_length_change_get_max_tx_time(packet),
+                        hci_subevent_le_data_length_change_get_max_rx_octets(packet),
+                        hci_subevent_le_data_length_change_get_max_rx_time(packet));
+                    printf("%s\n", line);
+                }
+                break;
+            }
             if (size >= 7 && packet[2] == HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE){
                 if (hci_subevent_le_connection_update_complete_get_connection_handle(packet) == phone_handle){
                     if (hci_subevent_le_connection_update_complete_get_status(packet) == ERROR_CODE_SUCCESS){
@@ -383,6 +411,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                               packet[2] == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1)){
                 if (packet[3] == ERROR_CODE_SUCCESS){
                     phone_handle = little_endian_read_16(packet, 4);
+                    data_length_seen = false;
                     queue_reset();
                     stream_mode = WMR_STREAM_NONE;
                     send_pending = false;

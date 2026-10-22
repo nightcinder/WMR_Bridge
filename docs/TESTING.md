@@ -172,11 +172,10 @@ costs reports on the Classic link, but the earlier, larger losses had the contro
 user's hands, so other factors are likely too. **Not established.** The decimation option below
 is the next test.
 
-**A figure that does not match.** The first report also says "about 45 missing per hand per 5 s on
-1000 expected". 45 in 1000 is 4.5 %, not 20 % (20 % of 1000 is about 200). The `rate_rx`
-figures and the later per-interval table (about 208 missing per 1000) agree with 20 %, so "45"
-is probably a different quantity (a difference between two intervals, or a typo). It is
-recorded here as reported and **not used**.
+**Per-interval figure.** The first report's "about 45 missing per hand" was corrected by the
+director to about 45 per **second**, i.e. about 225 per 5 s or about 22 %, which agrees with
+`rate_rx` 158 to 163 against about 200 and with the later per-interval table (about 208 missing
+per 1000).
 
 **Later in the same run the user moved both controllers away from the ESP32** (to simulate real
 distance). The loss and link-quality readings that followed changed with the distance and are
@@ -238,3 +237,15 @@ cause; if it stays at about 20 %, it is not (or not only).** Build and CI: see t
 | X2 | N=2 | Rebuild with `WMR_CFG_FF12_DECIMATE=2`, FF12 at MTU 517, 60 s | `DIAGNOSTIC BUILD` line; `tx` about half of `rx`; `decimated` about half of `rx`; identity holds; phone `sequence` steps of 2 | not yet run |
 | X3 | N=4 | Same with 4 | `tx` about a quarter of `rx`; steps of 4 | not yet run |
 | X4 | The test itself | At N=1, 2, 4 and with no phone, **controllers at one fixed, stated position for every run (state it, and note `rssi`/`lq`; do not move them)**: `rate_rx`, `last5s` and `cum` per hand, 2 minutes each | Record all four; compare with the idle level | not yet run |
+
+## New log lines (PR #9; hardware, **not yet run**)
+
+Logging only; no new HCI traffic. Lines are described in [COUNTERS.md](COUNTERS.md).
+
+| # | Check | How | Expect | Result |
+| --- | --- | --- | --- | --- |
+| L1 | `LINKLOG` lines | Run with both controllers; capture the serial output | One `LINKLOG_FIELDS,...` header, then one `LINKLOG,...` line per hand per 5 s; every line has as many fields as the header; the numbers match the `link:` line printed just before | not yet run |
+| L2 | `LINKLOG` in a script | Paste a capture into a CSV reader, filtering on the prefix `LINKLOG,` | Empty fields (not `n/a`) where a value is unknown, for example `rssi` while a controller is down | not yet run |
+| L3 | First-drop line | At MTU 23 subscribe to FF11 until the queue fills | Exactly one `<HAND> queue full: first drop of this episode, stream=raw mtu=23 q=256/256 errors=N` line per episode, not one per dropped report; a second line only after the queue has drained and filled again | not yet run |
+| L4 | LE buffer size | Read the boot log | One `HCI LE buffers: ACL packet length N bytes, M packets` line during start-up (or none, which would mean the event was not seen by the handler) | not yet run |
+| L5 | Data length | Connect the phone | A `BLE data length changed: tx ... rx ...` line, or `BLE data length: no change event seen since connect` about 0.5 s after connect | not yet run |

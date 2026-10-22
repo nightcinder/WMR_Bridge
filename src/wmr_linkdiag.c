@@ -224,8 +224,21 @@ void wmr_linkdiag_on_hci_event(uint8_t *packet, uint16_t size){
             break;
         }
         case HCI_EVENT_COMMAND_COMPLETE: {
-            if (!awaiting) break;
             uint16_t opcode = hci_event_command_complete_get_command_opcode(packet);
+            if (opcode == hci_le_read_buffer_size.opcode || opcode == hci_le_read_buffer_size_v2.opcode){
+                /* Read once during stack start-up; logged once, nothing is polled. */
+                uint16_t acl_length;
+                uint8_t acl_count;
+                if (packet[1] > 3 &&
+                    wmr_diag_parse_le_buffer_size(hci_event_command_complete_get_return_parameters(packet),
+                                                  (uint16_t) (packet[1] - 3), &acl_length, &acl_count)){
+                    char line[80];
+                    wmr_diag_format_le_buffers(line, sizeof(line), acl_length, acl_count);
+                    printf("%s\n", line);
+                }
+                break;
+            }
+            if (!awaiting) break;
             if (opcode != command_for(awaiting_job.kind)->opcode) break;
             uint16_t handle = 0;
             const uint8_t *ret = hci_event_command_complete_get_return_parameters(packet);

@@ -41,6 +41,7 @@
 #include <stdbool.h>
 #include "btstack_config.h"
 #include "btstack.h"
+#include "esp_timer.h"
 #include "wmr_console.h"
 #include "wmr_controller.h"
 #include "wmr_diag.h"
@@ -110,13 +111,29 @@ static void print_stats(bool periodic){
         char rates[64] = "";
         char last5s[16] = "";
         char rate_rx_copy[24] = "";
+        wmr_linklog_t rec;
+        char log_line[160] = "";
         if (periodic){
             const double rate_rx = (st->rx[i] - last_rx[i]) / seconds;
             snprintf(rates, sizeof(rates), " rate_rx=%.1f/s rate_tx=%.1f/s", rate_rx,
                      (st->tx[i] - last_tx[i]) / seconds);
-            wmr_diag_percent_format(wmr_diag_interval_permille(last_missing[i], ld.missing,
-                                                               last_rx[i], st->rx[i]),
-                                    last5s, sizeof(last5s));
+            const int interval_permille = wmr_diag_interval_permille(last_missing[i], ld.missing,
+                                                                     last_rx[i], st->rx[i]);
+            wmr_diag_percent_format(interval_permille, last5s, sizeof(last5s));
+            rec.t_ms             = (uint32_t) (esp_timer_get_time() / 1000);
+            rec.hand             = wmr_controller_name(i);
+            rec.rate_rx_tenths   = (int32_t) (((uint64_t) (st->rx[i] - last_rx[i]) * 10000u +
+                                               WMR_CFG_STATS_INTERVAL_MS / 2u) / WMR_CFG_STATS_INTERVAL_MS);
+            rec.missing_delta    = ld.missing >= last_missing[i] ? (int64_t) (ld.missing - last_missing[i]) : -1;
+            rec.missing_cum      = ld.missing;
+            rec.last5s_permille  = interval_permille;
+            rec.cum_permille     = (int) ld.loss_permille;
+            rec.health           = ld.connected ? &ld.health : NULL;
+            rec.stream           = wmr_stream_mode_name(info.stream);
+            rec.mtu              = info.mtu;
+            rec.conn_interval_us = info.conn_known ? wmr_conn_interval_us(info.conn.interval) : 0;
+            rec.decimated        = st->decimated[i];
+            wmr_linklog_format(&rec, log_line, sizeof(log_line));
             snprintf(rate_rx_copy, sizeof(rate_rx_copy), " rate_rx=%.1f/s", rate_rx);
             last_rx[i] = st->rx[i];
             last_tx[i] = st->tx[i];
@@ -138,6 +155,15 @@ static void print_stats(bool periodic){
                rate_rx_copy, (unsigned long) ld.missing, periodic ? last5s : "-",
                (unsigned long) (ld.loss_permille / 10), (unsigned long) (ld.loss_permille % 10),
                period_us / 1000ul, (period_us % 1000ul) / 10ul, (unsigned long) ld.discontinuities);
+        if (periodic){
+            /* Machine-readable copy of the same numbers, for pasting into a script. */
+            static bool header_printed;
+            if (!header_printed){
+                printf("%s\n", WMR_LINKLOG_HEADER);
+                header_printed = true;
+            }
+            printf("%s\n", log_line);
+        }
     }
 }
 

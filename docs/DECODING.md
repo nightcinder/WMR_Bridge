@@ -187,21 +187,29 @@ verification by the assistant.
 - **From `flip_away` and `lean_right`** (both hands agree): sensor -Y = world +X and
   sensor +Z = world +Z.
 
-**Probable, NOT verified (sensor-to-world axes):** world X = -sensor Y, world Y = +sensor X,
-world Z = +sensor Z (world: X right, Y up, Z toward the user, as in the analyzer). This is a
-proper rotation (determinant +1) and gravity, flip and lean all agree with it.
+**Checked visually in the companion app's 3D view (user-reported), not measured
+(sensor-to-world axes):** world X = -sensor Y, world Y = +sensor X, world Z = +sensor Z
+(world: X right, Y up, Z toward the user, as in the analyzer). This is a proper rotation
+(determinant +1) and gravity, flip and lean all agree with it.
 
-The one disagreement is `twist_cw`, which came out as a **positive** rotation about sensor X
-on both hands; read literally that gives sensor -X = world +Y, which contradicts gravity
-(+X = world +Y) and would be a mirror image (determinant -1). The likely explanation is that
-the twist was performed the other way from the instruction: the user held the controller
-upright with the buttons toward him and twisted "to the right", which moved the button side
-toward his right, i.e. **counterclockwise** seen from above (the instruction asked for
-clockwise). The user's wording is ambiguous, so this stays **probable, not verified**. It
-becomes confirmed when either (a) a repeat `twist_cw`, clearly clockwise from above, comes
-out as a **negative** rotation about sensor +X, or (b) the app's 3D view driven by this
-mapping follows all three rotations correctly. **Do not write a final sensor-to-world matrix
-and do not remove the "unconfirmed" wording until one of those has happened.**
+The check: the user ran the companion app (wmr-companion PR #5, FF12 mode, default axis table
+= this mapping) on the Pixel against the flashed PR #5 firmware and reported that the decoded
+3D debug view "appears to be working with correct orientations". This was relayed through the
+director on issue #3; the assistant did not see it. **What it establishes:** the three
+rotations and the gravity direction agree with this table through the app's fusion filter, to
+the extent one person looking at a 3D view can tell. **What it does not:** it is not a
+numerical sign check, it was not reported separately for each hand, and a fusion filter can
+hide an error in a small angle or in one sign pair. This is the second of the two acceptance
+criteria set earlier (a clean clockwise `twist_cw` repeat, or a correct 3D view); the first has
+not been done.
+
+The one disagreement in the raw captures is `twist_cw`, which came out as a **positive**
+rotation about sensor X on both hands; read literally that gives sensor -X = world +Y, which
+contradicts gravity (+X = world +Y) and would be a mirror image (determinant -1). It is
+explained by the direction the twist was performed in: the user held the controller upright
+with the buttons toward him and twisted "to the right", which moved the button side toward his
+right, i.e. **counterclockwise** seen from above (the instruction asked for clockwise). The
+table that drives a correct view is the gravity-consistent one, which is the one above.
 
 The twist instruction in the procedure above has been rewritten to say which way the
 trigger side moves, so it cannot be misread again. (The companion app's own instruction text
@@ -224,7 +232,12 @@ Where it happens is **not established**; see [Investigation notes](#investigatio
 
 ### Unknown (do not record as confirmed)
 
-- The **sign of the Y axis mapping** (the `twist_cw` conflict above).
+- A **numerical** sign check of the axis mapping: it has been checked only visually, in the
+  app's 3D view, and not separately for each hand. A clean clockwise `twist_cw` repeat would
+  give one.
+- Whether the accel scale is 9.81 or 10 (readings 9.92 and 9.95).
+- The meaning and scale of `temperature_raw` and the battery byte, the buttons, and the
+  trackpad and trigger ranges.
 - Per-device mix matrix, bias and pose (needs the config block; not captured).
 - Whether the tick timer restarts when a controller reconnects, and the 2^32 wrap (about
   7 minutes of controller time) has not been observed.
@@ -367,8 +380,8 @@ the assistant that wrote this):**
   loss lines are under 5 %.
 - **Nothing is confirmed by the lossy desktop captures.** What the first loss-free phone
   captures (0 sequence gaps) do and do not confirm is under "Calibration: status" above:
-  the tick unit and gyro scale are reported confirmed; the axis mapping is only probable
-  and the Y-axis sign is still open. Everything else under "Unknown" stays **unconfirmed**.
+  the tick unit and gyro scale are reported confirmed; the axis mapping is checked visually
+  only (user-reported). Everything else under "Unknown" stays **unconfirmed**.
 
 **Repeat capture** (firmware from `main`, which includes the link diagnostics, flashed by
 the user; nothing here flashes anything):
