@@ -123,7 +123,7 @@ Service `0000FF10-0000-1000-8000-00805F9B34FB`; raw characteristic
 `0000FF11-0000-1000-8000-00805F9B34FB` (read + notify); decoded characteristic
 `0000FF12-0000-1000-8000-00805F9B34FB` (notify only, 56-byte records, see
 [docs/PROTOCOL.md](docs/PROTOCOL.md)); echo characteristic `0000FF15-...` (write without
-response + notify, round-trip pings answered ahead of the stream; proposed, not yet run on
+response + notify, round-trip pings answered ahead of the stream; layout approved, not yet run on
 hardware). Each FF11 notification is a
 12-byte little-endian header (`'R'`, hand, u32 sequence, u16 total length,
 u16 offset, u16 chunk length) followed by a chunk of the frame. A read of FF11
@@ -183,7 +183,7 @@ counters and their limits: [docs/COUNTERS.md](docs/COUNTERS.md).
 - FF12 version 2 batching on a separate characteristic (FF14): several records per notification. Motivated by bench runs in which halving the notification count recovered most of RIGHT's lost reports; see [docs/PROTOCOL.md](docs/PROTOCOL.md) and [docs/DECODING.md](docs/DECODING.md).
 - Explaining and reducing controller-to-ESP32 report loss, in particular LEFT's extra loss while a phone streams (coexistence options to test: [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md)).
 - Calibration (FF13 config blob, designed only) and the remaining unknowns in [docs/DECODING.md](docs/DECODING.md) (accel scale, temperature, battery, input ranges).
-- Controller discovery by name instead of compiled-in addresses ([issue #2](../../issues/2)). The latency side of [issue #1](../../issues/1) is FF12's `rx_time_us` plus the FF15 echo (proposed; not yet run on hardware).
+- Controller discovery by name instead of compiled-in addresses ([issue #2](../../issues/2)). The latency side of [issue #1](../../issues/1) is FF12's `rx_time_us` plus the FF15 echo (layout approved; not yet run on hardware).
 - BLE security (no pairing or encryption today), see [docs/SECURITY.md](docs/SECURITY.md).
 ## Configuration
 

@@ -239,7 +239,7 @@ rotation capture in [DECODING.md](DECODING.md) is done.
 - **`rx_time_us`** (ESP32 receive time) includes Bluetooth scheduling jitter and
   is only for measuring latency and jitter, for example against a phone-side
   clock. It answers the one-way part of issue #1; the round trip is the
-  [FF15 echo](#echo-ff15-version-1-proposed-implemented-in-firmware-not-yet-run-on-hardware),
+  [FF15 echo](#echo-ff15-version-1-approved-implemented-in-firmware-not-yet-run-on-hardware),
   whose answer carries a timestamp on the same clock.
 
 ## Delivery rules
@@ -411,11 +411,11 @@ See [TESTING.md](TESTING.md): FF14 on a phone at MTU 517 and 247, the three orde
 exclusion cases, MTU below 61, and the A/B/A comparison of FF12 and FF14 at one fixed
 position. None has been run.
 
-# Echo, FF15 (version 1; PROPOSED, implemented in firmware, NOT yet run on hardware)
+# Echo, FF15 (version 1; approved, implemented in firmware, NOT yet run on hardware)
 
-**Status: proposal for review (issue #1), firmware implemented and host-tested, never run on
-hardware** (checklist in [TESTING.md](TESTING.md)). The UUID and both layouts below are new and
-are not final until the project owner approves them. Reference code: `src/wmr_echo.{h,c}`, pinned
+**Status: layout approved by the project owner (2026-10-22, issue #1); firmware implemented and
+host-tested, never run on hardware** (checklist in [TESTING.md](TESTING.md)). Reference code:
+`src/wmr_echo.{h,c}`, pinned
 by the golden-bytes tests in `tests/test_echo.c`. FF11, FF12 and FF14 are **unchanged**, and no
 existing handle moves (FF15 is appended after FF14 in `wmr_bridge.gatt`).
 
