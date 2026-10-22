@@ -459,22 +459,31 @@ conclusion is drawn** until the `STREAM` lines from that period are available.
 **A / B / C at one far position (user-reported; the position was chosen by the user and not
 measured: `rssi` -27 to -29 LEFT and -36 to -37 RIGHT, `lq` about 227 LEFT and 218-219 RIGHT, so
 RIGHT is the weaker link).** Per-interval figures come from the `dev_missing` deltas per 5 s
-(about 1000 expected per hand). The runs were **not fixed length**:
+(about 1000 expected per hand). The runs were **not fixed length**. State A was first reported
+as one full interval (LEFT 158.6/s, about 22 % missing; RIGHT 113.4/s, about 45 %) and then
+replaced by a longer run of 15 full intervals, computed by the director from the pasted `STREAM`
+lines. Missing percentages use the nominal period of 4.98 ms (about 200.8 reports/s):
 
 | State | Intervals | LEFT `rate_rx` | LEFT missing | RIGHT `rate_rx` | RIGHT missing |
 | --- | --- | --- | --- | --- | --- |
 | C: phone disconnected | 1 block (no delta available) | 171.0/s | n/a | 164.4/s | n/a |
-| B: phone connected, nothing subscribed (MTU 23, then 517) | 4 full | 167-177/s | about 15-17 % | 150-154/s | about 24-27 % |
-| A: phone connected, FF12 streaming at MTU 517 | 1 full (plus 1 partial: LEFT 156.8/s, RIGHT 138.8/s, `tx` still catching up) | 158.6/s | about 22 % | 113.4/s | about 45 % |
+| B: phone connected, nothing subscribed (MTU 23, then 517) | 5 full | mean 171.6/s | about 14.6 % | mean 154.5/s | about 23.1 % |
+| A: phone connected, FF12 streaming at MTU 517 | 15 full | mean 157.8/s (range 150.0-167.2, sd 4.1) | about 21.4 % (mean of the `dev_missing` deltas 22.5 %) | mean 120.9/s (range 104.6-142.2, sd 10.2) | about 39.8 % (mean of the `dev_missing` deltas 40.7 %) |
 
-What it suggests, with the sample-size caveat (**not established; one full A interval per hand
-is thin**): A against B at the same position, LEFT loses about 6 more points and RIGHT about
-20 more, so notification traffic may matter beyond the BLE connection itself (B costs little by
-comparison); the weak-link hand (RIGHT) suffers most, in the same direction as the near result
-(about 10 % to about 20 %) with a much larger effect; C against B is not resolved from one
-block. Other limits: the states were run one after another, not interleaved, so a slow change
-over time is not excluded; B includes a change of MTU; the position is not measured. Real use
-is at distance, so the weak-link case is the one that matters.
+Link readings stayed flat during the A run (reported): LEFT `rssi` -28 to -30, `lq` 225-227;
+RIGHT `rssi` -35 to -37, `lq` 218-220; `fcc=0`, `mode=active`, `vhci_drop=0`, `drop` and `purged`
+constant, `tx` equal to `rx`.
+
+What it suggests, with the caveats below (**not established**): A against B at the same
+position, LEFT loses about 7 more points and RIGHT about 17 more, consistently across the run
+rather than in one interval, so notification traffic may matter beyond the BLE connection
+itself (B costs little by comparison); the weak-link hand (RIGHT) suffers most, in the same
+direction as the near result (about 10 % to about 20 %) with a larger effect; C against B is
+not resolved from one block. Other limits: the states were run one after another, not
+interleaved, so a slow change over time is not excluded; B includes a change of MTU; B and C
+are short; **the position is not measured**, so the percentages must not be treated as
+characteristic of the hardware until the experiment is repeated at a measured, fixed distance.
+Real use is at distance, so the weak-link case is the one that matters.
 
 ### Where a report can be lost, and what would show it
 
