@@ -57,10 +57,16 @@ class Writer:
         self.ticks = 0xFFFFFFFF - 3_000_000      # wraps early in the first phase
         self.seq = 10
 
-    def phase(self, name, seconds, accel, gyro_fn, hand=1, drop_every=0):
+    def phase(self, name, seconds, accel, gyro_fn, hand=1, drop_every=0, dev_drop=None):
+        """dev_drop=(period, run): in every `period` reports the last `run` never reach the
+        capture AND never get a sequence number (loss before the ESP32), only the ticks show it."""
         self.lines.append("@begin %s t=%.6f" % (name, self.t))
         n = int(seconds * RATE)
         for i in range(n):
+            if dev_drop and i % dev_drop[0] >= dev_drop[0] - dev_drop[1]:
+                self.t += 1.0 / RATE
+                self.ticks += DTICKS
+                continue
             self.seq += 1
             if drop_every and i % drop_every == drop_every - 1:
                 self.t += 1.0 / RATE
@@ -242,6 +248,71 @@ def test_file_roundtrip():
     check(len(frame) == 46, "frame size")
 
 
+def test_device_loss():
+    print("device reports missing (tick deltas)")
+    # 3 of every 10 reports lost upstream: sequence numbers stay contiguous, ticks show it.
+    w = Writer()
+    w.phase("still", 6.0, [0, 9.81, 0], lambda t: [0, 0, 0], dev_drop=(10, 3))
+    w.phase("twist_cw", 5.0, [0, 9.81, 0], turn(0, +1), dev_drop=(10, 3))
+    path = w.save()
+    try:
+        rep = ac.analyse(path, 1)
+        s = rep["still"]
+        check(s["seq_gaps"] == 0 and s["loss_fraction"] == 0.0, "sequence numbers show no loss")
+        dl = s["device_loss"]
+        check(dl is not None and abs(dl["loss_fraction"] - 0.3) < 0.02, "30%% upstream loss found: %s" % dl)
+        check(abs(dl["period_ms"] - 1000.0 / RATE) < 0.05, "period %.3f ms" % dl["period_ms"])
+        check(dl["runs"].get("3", 0) >= 100 and set(dl["runs"]) == {"3"}, "all missing runs have length 3: %s" % dl["runs"])
+        check(not rep["link_lossy"], "sequence-based banner is not triggered by upstream loss")
+        check(any(l.startswith("device reports missing upstream") for l in rep["summary"]), "summary line")
+        check("lost before the ESP32" in ac.device_loss_text(dl), "text says where")
+    finally:
+        os.remove(path)
+
+    # Isolated single losses (one in three): deltas of 1 and 2 periods, so the period is still found.
+    w = Writer()
+    w.phase("still", 6.0, [0, 9.81, 0], lambda t: [0, 0, 0], dev_drop=(3, 1))
+    path = w.save()
+    try:
+        dl = ac.analyse(path, 1)["still"]["device_loss"]
+        check(abs(dl["loss_fraction"] - 1 / 3) < 0.02, "one in three lost: %s" % dl)
+        check(set(dl["runs"]) == {"1"}, "isolated losses are 1-runs: %s" % dl["runs"])
+        check(abs(dl["period_ms"] - 1000.0 / RATE) < 0.05, "period still found")
+    finally:
+        os.remove(path)
+
+    # Documented limit: if EVERY other report is lost the deltas are all 2 periods, which is
+    # indistinguishable from a controller running at half rate, so nothing is reported missing.
+    w = Writer()
+    w.phase("still", 6.0, [0, 9.81, 0], lambda t: [0, 0, 0], dev_drop=(2, 1))
+    path = w.save()
+    try:
+        dl = ac.analyse(path, 1)["still"]["device_loss"]
+        check(dl["missing"] == 0 and abs(dl["period_ms"] - 2000.0 / RATE) < 0.1, "uniform loss looks like a slower controller")
+    finally:
+        os.remove(path)
+
+    # A clean capture reports zero, and too few frames reports 'not enough'.
+    w = Writer()
+    w.phase("still", 6.0, [0, 9.81, 0], lambda t: [0, 0, 0])
+    path = w.save()
+    try:
+        dl = ac.analyse(path, 1)["still"]["device_loss"]
+        check(dl["missing"] == 0 and dl["runs"] == {}, "clean capture: %s" % dl)
+    finally:
+        os.remove(path)
+    check(ac.device_loss([]) is None and "not enough" in ac.device_loss_text(None), "too few frames")
+
+    # Tick wrap does not create phantom losses (Writer starts 3,000,000 ticks before 2^32).
+    w = Writer()
+    w.phase("still", 6.0, [0, 9.81, 0], lambda t: [0, 0, 0])
+    path = w.save()
+    try:
+        check(ac.analyse(path, 1)["still"]["device_loss"]["missing"] == 0, "wrap is not loss")
+    finally:
+        os.remove(path)
+
+
 def test_link_stats():
     print("link statistics (capture_ble.LinkStats)")
     s = cb.LinkStats()
@@ -316,6 +387,7 @@ def test_lossy_link_warning():
 
 
 if __name__ == "__main__":
+    test_device_loss()
     test_link_stats()
     test_lossy_link_warning()
     test_decode()

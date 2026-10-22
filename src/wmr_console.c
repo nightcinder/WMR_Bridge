@@ -43,6 +43,7 @@
 #include "btstack.h"
 #include "wmr_console.h"
 #include "wmr_controller.h"
+#include "wmr_linkdiag.h"
 #include "wmr_link.h"
 #include "wmr_transport.h"
 
@@ -92,6 +93,8 @@ static void print_stats(bool periodic){
            conn, info.conn_update_pending ? " (update requested, not granted yet)" : "",
            info.queue_count, info.queue_capacity, info.queue_high_water,
            (unsigned long) st->notifications, (unsigned long) st->errors);
+    printf("  vhci_drop=%lu log_errors=%lu\n",
+           (unsigned long) wmr_linkdiag_vhci_drops(), (unsigned long) wmr_linkdiag_log_errors());
     const double seconds = WMR_CFG_STATS_INTERVAL_MS / 1000.0;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         printf("  %s rx=%lu tx=%lu drop=%lu offline=%lu purged=%lu mtu_skip=%lu dec_err=%lu rate_rx=%.1f/s rate_tx=%.1f/s\n",
@@ -103,6 +106,15 @@ static void print_stats(bool periodic){
                (st->tx[i] - last_tx[i]) / seconds);
         last_rx[i] = st->rx[i];
         last_tx[i] = st->tx[i];
+        wmr_linkdiag_hand_t ld;
+        wmr_linkdiag_get_hand(i, &ld);
+        char health[64];
+        wmr_link_health_format(&ld.health, health, sizeof(health));
+        unsigned long period_us = (unsigned long) ld.period_ticks / 10ul;      /* 100 ns ticks */
+        printf("  %s link: %s mode=%s dev_missing=%lu (%lu.%lu%% of expected) period=%lu.%02lums discont=%lu\n",
+               wmr_controller_name(i), ld.connected ? health : "n/a (no ACL link)", wmr_mode_name(ld.mode),
+               (unsigned long) ld.missing, (unsigned long) (ld.loss_permille / 10), (unsigned long) (ld.loss_permille % 10),
+               period_us / 1000ul, (period_us % 1000ul) / 10ul, (unsigned long) ld.discontinuities);
     }
 }
 

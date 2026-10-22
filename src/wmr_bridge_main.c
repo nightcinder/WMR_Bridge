@@ -39,7 +39,7 @@
  * wmr_bridge_main.c - initialization and event routing only.
  *
  * Callback routing (each event reaches each module exactly once):
- *   - HCI events      -> wmr_bridge_hci_handler  -> controller / transport / console
+ *   - HCI events      -> wmr_bridge_hci_handler  -> controller / transport / linkdiag / console
  *   - HID host events -> wmr_controller's own HID handler
  *   - ATT events      -> wmr_transport's own ATT handler (CAN_SEND_NOW only)
  * Do not register one handler for several of these sources.
@@ -53,6 +53,7 @@
 #include "wmr_config.h"
 #include "wmr_console.h"
 #include "wmr_controller.h"
+#include "wmr_linkdiag.h"
 #include "wmr_transport.h"
 
 static btstack_packet_callback_registration_t hci_registration;
@@ -88,6 +89,7 @@ static void wmr_bridge_hci_handler(uint8_t packet_type, uint16_t channel,
 #endif
     wmr_transport_on_hci_event(packet, size);
     wmr_controller_on_hci_event(packet, size);
+    wmr_linkdiag_on_hci_event(packet, size);
     wmr_console_on_hci_event(packet, size);
 }
 
@@ -102,6 +104,7 @@ int btstack_main(int argc, const char *argv[]){
 #endif
     wmr_controller_init(wmr_transport_submit_report);   /* HID host + handler */
     wmr_transport_init();                               /* ATT server + handler */
+    wmr_linkdiag_init();                                /* diagnostics: log sink + polling timers */
 
     gap_set_default_link_policy_settings(
         LM_LINK_POLICY_ENABLE_SNIFF_MODE | LM_LINK_POLICY_ENABLE_ROLE_SWITCH);

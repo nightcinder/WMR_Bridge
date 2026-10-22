@@ -78,6 +78,8 @@ void wmr_controller_disconnect(unsigned hand);
 wmr_bond_reset_result_t wmr_controller_forget_bond(unsigned hand);
 
 const char *wmr_controller_name(unsigned hand);
+/* Which hand has this Bluetooth address, or -1. */
+int wmr_controller_hand_for_address(const uint8_t address[6]);
 void wmr_controller_get_status(unsigned hand, wmr_controller_status_t *out);
 /* Raw HID cid (0 if none); for the console status line. */
 uint16_t wmr_controller_cid(unsigned hand);

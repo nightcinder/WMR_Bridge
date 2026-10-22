@@ -33,8 +33,9 @@ PHASES = [
      "least 5 seconds after pressing Enter."),
     ("twist_cw",
      "Start upright and facing away, as above. Twist it about its handle, like\n"
-     "tightening a screw: clockwise as seen from above. ONE full 360-degree turn,\n"
-     "slowly (about 4 seconds), ending in the same pose."),
+     "tightening a screw: the TRIGGER side (the side facing away from you) swings to\n"
+     "your RIGHT and the button side swings to your LEFT, which is clockwise seen from\n"
+     "above. ONE full 360-degree turn, slowly (about 4 seconds), ending in the same pose."),
     ("flip_away",
      "Start upright and facing away. Tip the top of the ring away from you and over:\n"
      "a forward somersault of the controller. ONE full 360-degree turn, slowly\n"
