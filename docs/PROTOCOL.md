@@ -434,3 +434,75 @@ of the BLE service, FF13 has **no authentication or encryption** (see
 - NVS persistence, and an eviction rule for it.
 - Behaviour if a controller never answers (this design: FAILED after the bounded
   retries; a console key could retry).
+
+# Proposals (NOT decided, NOT implemented, NOT part of the spec above)
+
+Nothing in this section is in the firmware or changes the FF11 or FF12 version 1 formats
+above. It is a sketch for the maintainer and the app author to decide on.
+
+## FF12 version 2: several records per notification
+
+**Why.** Both hands stream about 160 reports/s each (reported), so FF12 version 1 sends about
+320 notifications/s. A first bench result (user-reported, single runs, see
+[DECODING.md](DECODING.md)) shows the missing-report figure on the Classic links roughly doubling
+while FF12 streams. If a decimation test (`WMR_CFG_FF12_DECIMATE`) shows BLE airtime is a
+cause, fewer, larger notifications are one way to cut it without dropping samples.
+
+**Format.** One notification = a 2-byte header followed by `count` complete version 1
+records, unchanged (each keeps its own `version` = 1, `hand`, `sequence`, `rx_time_us`,
+`device_ticks`, ...):
+
+| Offset | Size | Field | Meaning |
+| --- | --- | --- | --- |
+| 0 | u8 | `version` | `2` |
+| 1 | u8 | `count` | Records that follow, 1 to `(MTU - 3 - 2) / 56` (9 at MTU 517, 4 at MTU 247) |
+| 2 | 56 x `count` | records | Version 1 records, oldest first. Both hands may be mixed; order is by arrival, and per hand by `sequence` |
+
+Total size = `2 + 56 x count`, never more than `MTU - 3`. The minimum useful MTU for version 2
+is 61 (one record), against 59 for version 1.
+
+**When to flush.** Send everything queued, up to the capacity, when the ATT stack says it can
+send (`ATT_EVENT_CAN_SEND_NOW`, which the pump already uses), instead of one record per
+event. No timer is needed: while the previous notification is waiting for its connection
+event, newer records accumulate and go out together; with an idle link a lone record goes
+out at once. The ESP32 host cannot see connection-event boundaries, so "once per
+connection event" is approximated by this rule, not guaranteed. At 15 ms granted
+(about 67 events/s) and 320 records/s that is about 4.8 records per event, so about 67
+notifications/s with an MTU that fits 5 records (MTU 285 or more), about 80/s at MTU 247
+(4 records): well under 100 against about 320 today. The saving in bytes on air is smaller
+than the saving in packets (headers shrink, payload does not, and a notification longer
+than the link-layer data length is split into several link-layer packets); how much it
+helps airtime has **not been measured**.
+
+**Latency.** A record can wait for the notification that carries it, which is bounded by the
+time the previous notification waits for its connection event, i.e. at most one connection
+interval (15 ms as granted in the PR #6 bench). A version 1 record also waits for its
+connection event, so the extra delay is at most that same bound and, on average, less than a
+full interval. Not measured. `device_ticks` stays the sensor clock, so fusion timing does not
+depend on arrival time; `rx_time_us` is still per record.
+
+**Loss pattern.** One lost or dropped notification now loses up to `count` records (9 at MTU
+517) at once instead of one. They are still detectable by per-hand `sequence` gaps. When the
+queue is full the newest records are still dropped one at a time, as today.
+
+**Signalling and how an unaware receiver fails.** `version` is byte 0, where version 1 already
+puts it, and the spec already says a receiver must ignore records with an unknown version. A
+version 1-only parser therefore ignores a version 2 notification entirely, **silently and with
+no data**, rather than misreading it (this is deliberate: it is why the header comes first and
+the first record does not sit at offset 0). So version 2 must never be sent to a receiver
+that has not asked for it. Two ways to make that safe, for the maintainer to choose:
+
+1. **A separate characteristic** (for example `FF14`, notify only) that carries version 2.
+   FF12 is untouched, an unaware app never subscribes to FF14, and the mutual-exclusion
+   rule (one of FF11, FF12, FF14 at a time, ATT error `0x80` on the others) is extended.
+   Simplest and safest; costs one more characteristic.
+2. **An opt-in on FF12 itself** (a control attribute or a flag the app writes before enabling
+   notifications). Keeps one characteristic but needs a new attribute anyway, and a wrongly
+   written flag silently breaks the stream, so it is not simpler.
+
+Recommended in this sketch: option 1. An unaware app on option 1 gets nothing it did not ask
+for; the failure mode is that it never receives version 2 data.
+
+**Not decided here:** the characteristic or opt-in choice, whether a short flush timer is
+worth adding on top of the can-send-now rule, a maximum `count` below the MTU limit (to bound
+the loss burst), and whether to do this at all; that depends on the decimation test.

@@ -43,6 +43,7 @@
 #include "btstack.h"
 #include "wmr_console.h"
 #include "wmr_controller.h"
+#include "wmr_diag.h"
 #include "wmr_linkdiag.h"
 #include "wmr_link.h"
 #include "wmr_transport.h"
@@ -50,6 +51,7 @@
 static btstack_timer_source_t stats_timer;
 static uint32_t last_rx[WMR_NUM_CONTROLLERS];
 static uint32_t last_tx[WMR_NUM_CONTROLLERS];
+static uint32_t last_missing[WMR_NUM_CONTROLLERS];
 
 void wmr_console_show_usage(void){
     printf("\nWMR bridge console\n");
@@ -95,25 +97,46 @@ static void print_stats(bool periodic){
            (unsigned long) st->notifications, (unsigned long) st->errors);
     printf("  vhci_drop=%lu log_errors=%lu\n",
            (unsigned long) wmr_linkdiag_vhci_drops(), (unsigned long) wmr_linkdiag_log_errors());
+#if WMR_CFG_FF12_DECIMATE > 1
+    printf("  DIAGNOSTIC BUILD: FF12 sends every %dth report per hand (WMR_CFG_FF12_DECIMATE)\n",
+           WMR_CFG_FF12_DECIMATE);
+#endif
     const double seconds = WMR_CFG_STATS_INTERVAL_MS / 1000.0;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
-        printf("  %s rx=%lu tx=%lu drop=%lu offline=%lu purged=%lu mtu_skip=%lu dec_err=%lu rate_rx=%.1f/s rate_tx=%.1f/s\n",
+        wmr_linkdiag_hand_t ld;
+        wmr_linkdiag_get_hand(i, &ld);
+        /* Rates and the interval figures are deltas, so only the periodic call prints
+         * them and moves the baselines; `s` leaves both alone. */
+        char rates[64] = "";
+        char last5s[16] = "";
+        char rate_rx_copy[24] = "";
+        if (periodic){
+            const double rate_rx = (st->rx[i] - last_rx[i]) / seconds;
+            snprintf(rates, sizeof(rates), " rate_rx=%.1f/s rate_tx=%.1f/s", rate_rx,
+                     (st->tx[i] - last_tx[i]) / seconds);
+            wmr_diag_percent_format(wmr_diag_interval_permille(last_missing[i], ld.missing,
+                                                               last_rx[i], st->rx[i]),
+                                    last5s, sizeof(last5s));
+            snprintf(rate_rx_copy, sizeof(rate_rx_copy), " rate_rx=%.1f/s", rate_rx);
+            last_rx[i] = st->rx[i];
+            last_tx[i] = st->tx[i];
+            last_missing[i] = ld.missing;
+        }
+        printf("  %s rx=%lu tx=%lu drop=%lu offline=%lu purged=%lu mtu_skip=%lu dec_err=%lu decimated=%lu%s\n",
                wmr_controller_name(i), (unsigned long) st->rx[i],
                (unsigned long) st->tx[i], (unsigned long) st->drop[i],
                (unsigned long) st->offline[i], (unsigned long) st->purged[i],
                (unsigned long) st->mtu_skipped[i], (unsigned long) st->decode_errors[i],
-               (st->rx[i] - last_rx[i]) / seconds,
-               (st->tx[i] - last_tx[i]) / seconds);
-        last_rx[i] = st->rx[i];
-        last_tx[i] = st->tx[i];
-        wmr_linkdiag_hand_t ld;
-        wmr_linkdiag_get_hand(i, &ld);
+               (unsigned long) st->decimated[i], rates);
         char health[64];
         wmr_link_health_format(&ld.health, health, sizeof(health));
         unsigned long period_us = (unsigned long) ld.period_ticks / 10ul;      /* 100 ns ticks */
-        printf("  %s link: %s mode=%s dev_missing=%lu (%lu.%lu%% of expected) period=%lu.%02lums discont=%lu\n",
+        /* last5s = missing share of this interval, cum = since the link was created; shown
+         * next to rate_rx so a drift is visible without arithmetic. */
+        printf("  %s link: %s mode=%s%s dev_missing=%lu last5s=%s cum=%lu.%lu%% period=%lu.%02lums discont=%lu\n",
                wmr_controller_name(i), ld.connected ? health : "n/a (no ACL link)", wmr_mode_name(ld.mode),
-               (unsigned long) ld.missing, (unsigned long) (ld.loss_permille / 10), (unsigned long) (ld.loss_permille % 10),
+               rate_rx_copy, (unsigned long) ld.missing, periodic ? last5s : "-",
+               (unsigned long) (ld.loss_permille / 10), (unsigned long) (ld.loss_permille % 10),
                period_us / 1000ul, (period_us % 1000ul) / 10ul, (unsigned long) ld.discontinuities);
     }
 }

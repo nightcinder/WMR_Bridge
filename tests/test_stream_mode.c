@@ -101,6 +101,25 @@ static void test_mtu_rule(void){
     CHECK(wmr_decoded_mtu_ok(517));
 }
 
+static void test_decimate(void){
+    printf("FF12 decimation rule\n");
+    for (uint32_t seq = 0; seq < 20; seq++){
+        CHECK(wmr_decoded_decimate_keep(seq, 0));       /* off */
+        CHECK(wmr_decoded_decimate_keep(seq, 1));       /* off (the default) */
+    }
+    unsigned kept2 = 0, kept4 = 0;
+    for (uint32_t seq = 1; seq <= 1000; seq++){
+        kept2 += wmr_decoded_decimate_keep(seq, 2);
+        kept4 += wmr_decoded_decimate_keep(seq, 4);
+    }
+    CHECK(kept2 == 500);
+    CHECK(kept4 == 250);
+    CHECK(!wmr_decoded_decimate_keep(1, 4) && !wmr_decoded_decimate_keep(3, 4));
+    CHECK(wmr_decoded_decimate_keep(4, 4) && wmr_decoded_decimate_keep(8, 4));
+    CHECK(wmr_decoded_decimate_keep(0xFFFFFFFCu, 4));   /* wrap region of the 32-bit sequence */
+    CHECK(!wmr_decoded_decimate_keep(0xFFFFFFFFu, 4));
+}
+
 static void make_input_frame(wmr_frame_t *f, uint8_t hand, uint32_t seq, uint64_t t_us){
     memset(f, 0, sizeof(*f));
     f->hand = hand;
@@ -179,6 +198,7 @@ static void test_sample_file(const char *path){
 int main(int argc, char **argv){
     test_ccc_rules();
     test_mtu_rule();
+    test_decimate();
     test_from_frame();
     if (argc > 1) test_sample_file(argv[1]);
     printf("\n%d checks, %d failures\n", checks, failures);

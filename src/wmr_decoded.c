@@ -162,6 +162,10 @@ bool wmr_decoded_mtu_ok(uint16_t att_mtu){
     return att_mtu >= WMR_DECODED_MIN_MTU;
 }
 
+bool wmr_decoded_decimate_keep(uint32_t sequence, unsigned n){
+    return n <= 1 || (sequence % n) == 0;
+}
+
 bool wmr_decoded_from_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]){
     wmr_controller_state_t state;
     wmr_decoded_t record;

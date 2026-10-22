@@ -217,6 +217,30 @@ static void test_command_rate(void){
     CHECK(WMR_CFG_LINKDIAG_PACE_MS >= 100);        /* never more than 10 commands/s even while a cycle runs */
 }
 
+static void test_interval_share(void){
+    printf("diag: missing share over one interval\n");
+    char text[16];
+    /* 1000 expected per hand in 5 s: 790 received + 210 missing */
+    CHECK(wmr_diag_interval_permille(0, 210, 0, 790) == 210);
+    CHECK(wmr_diag_interval_permille(1000, 1210, 5000, 5790) == 210);
+    CHECK(wmr_diag_interval_permille(1000, 1287, 5000, 5713) == 287);
+    CHECK(wmr_diag_interval_permille(7, 7, 100, 200) == 0);            /* nothing missing */
+    CHECK(wmr_diag_interval_permille(7, 57, 50, 100) == 500);         /* rounds to nearest */
+    CHECK(wmr_diag_interval_permille(5, 6, 0, 2) == 333);              /* 1 of 3 */
+    CHECK(wmr_diag_interval_permille(5, 7, 0, 1) == 667);              /* 2 of 3 */
+    CHECK(wmr_diag_interval_permille(500, 3, 100, 200) == -1);         /* tracker reset */
+    CHECK(wmr_diag_interval_permille(9, 9, 50, 50) == -1);             /* nothing expected */
+    CHECK(wmr_diag_interval_permille(0, 5, 0xFFFFFFFEu, 1) == 625);    /* received counter wraps: dr = 3 */
+    wmr_diag_percent_format(212, text, sizeof(text));
+    CHECK(strcmp(text, "21.2%") == 0);
+    wmr_diag_percent_format(0, text, sizeof(text));
+    CHECK(strcmp(text, "0.0%") == 0);
+    wmr_diag_percent_format(1000, text, sizeof(text));
+    CHECK(strcmp(text, "100.0%") == 0);
+    wmr_diag_percent_format(-1, text, sizeof(text));
+    CHECK(strcmp(text, "n/a") == 0);
+}
+
 int main(void){
     test_clean_stream();
     test_warmup();
@@ -231,6 +255,7 @@ int main(void){
     test_mode_tracker();
     test_link_replies();
     test_command_rate();
+    test_interval_share();
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }
