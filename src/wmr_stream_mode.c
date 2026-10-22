@@ -35,7 +35,7 @@
  *
  */
 
-/* wmr_stream_mode.c - FF11/FF12 mutual exclusion; see wmr_stream_mode.h. */
+/* wmr_stream_mode.c - FF11/FF12/FF14 mutual exclusion; see wmr_stream_mode.h. */
 
 #define BTSTACK_FILE__ "wmr_stream_mode.c"
 
@@ -44,7 +44,7 @@
 wmr_stream_ccc_result_t wmr_stream_mode_ccc_write(wmr_stream_t current,
                                                   wmr_stream_t which, bool enable){
     wmr_stream_ccc_result_t r = { true, current, 0 };
-    if (which != WMR_STREAM_RAW && which != WMR_STREAM_DECODED){
+    if (which != WMR_STREAM_RAW && which != WMR_STREAM_DECODED && which != WMR_STREAM_BATCHED){
         r.accepted = false;
         r.att_error = WMR_ATT_ERROR_OTHER_STREAM_ACTIVE;
         return r;
@@ -70,6 +70,7 @@ const char *wmr_stream_mode_name(wmr_stream_t mode){
     switch (mode){
         case WMR_STREAM_RAW:     return "raw";
         case WMR_STREAM_DECODED: return "decoded";
+        case WMR_STREAM_BATCHED: return "batched";
         default:                 return "none";
     }
 }

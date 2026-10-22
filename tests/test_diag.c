@@ -254,19 +254,33 @@ static void test_linklog(void){
     r.last5s_permille = 212; r.cum_permille = 177; r.health = &h; r.stream = "decoded"; r.mtu = 517;
     r.conn_interval_us = 15000; r.decimated = 0;
     wmr_linklog_format(&r, text, sizeof(text));
-    CHECK(strcmp(text, "LINKLOG,12345,LEFT,157.8,1124,9000,21.2,17.7,-28,227,0,decoded,517,15.00,0") == 0);
+    CHECK(strcmp(text, "LINKLOG,12345,LEFT,157.8,1124,9000,21.2,17.7,-28,227,0,decoded,517,15.00,0,0,0,,0,0") == 0);
     /* unknown values stay empty */
     r.rate_rx_tenths = -1; r.missing_delta = -1; r.last5s_permille = -1; r.health = NULL;
     r.conn_interval_us = 0; r.mtu = 0; r.stream = "none"; r.decimated = 42; r.hand = "RIGHT";
     wmr_linklog_format(&r, text, sizeof(text));
-    CHECK(strcmp(text, "LINKLOG,12345,RIGHT,,,9000,,17.7,,,,none,0,,42") == 0);
+    CHECK(strcmp(text, "LINKLOG,12345,RIGHT,,,9000,,17.7,,,,none,0,,42,0,0,,0,0") == 0);
     /* a refused command leaves its field empty */
     memset(&h, 0, sizeof(h));
     h.valid[WMR_LINKCMD_RSSI] = true; h.rssi = 0;
     h.status[WMR_LINKCMD_QUALITY] = 0x01;
     r.health = &h; r.rate_rx_tenths = 1750; r.conn_interval_us = 11250; r.hand = "LEFT";
     wmr_linklog_format(&r, text, sizeof(text));
-    CHECK(strcmp(text, "LINKLOG,12345,LEFT,175.0,,9000,,17.7,0,,,none,0,11.25,42") == 0);
+    CHECK(strcmp(text, "LINKLOG,12345,LEFT,175.0,,9000,,17.7,0,,,none,0,11.25,42,0,0,,0,0") == 0);
+    /* FF14 counters are appended at the end */
+    r.stream = "batched"; r.mtu = 517; r.batches_tx = 980; r.records_in_batches = 4710; r.batch_max = 9;
+    r.batch_full_flushes = 12; r.conn_interval_us = 15000; r.decimated = 0;
+    wmr_linklog_format(&r, text, sizeof(text));
+    CHECK(strcmp(text, "LINKLOG,12345,LEFT,175.0,,9000,,17.7,0,,,batched,517,15.00,0,980,4710,4.81,9,12") == 0);
+    char mean[16];
+    wmr_diag_batch_mean_format(0, 0, mean, sizeof(mean));
+    CHECK(mean[0] == '\0');
+    wmr_diag_batch_mean_format(3, 1, mean, sizeof(mean));
+    CHECK(strcmp(mean, "3.00") == 0);
+    wmr_diag_batch_mean_format(2, 3, mean, sizeof(mean));
+    CHECK(strcmp(mean, "0.67") == 0);
+    wmr_diag_batch_mean_format(4000000000u, 7, mean, sizeof(mean));
+    CHECK(strcmp(mean, "571428571.43") == 0);
     CHECK(strncmp(WMR_LINKLOG_HEADER, "LINKLOG_FIELDS,", 15) == 0);
     /* header and a line have the same number of fields */
     unsigned header_fields = 0, line_fields = 0;

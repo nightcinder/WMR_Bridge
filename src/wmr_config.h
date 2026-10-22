@@ -165,6 +165,15 @@
 #error "WMR_CFG_FF12_DECIMATE must be 1 (off) or more"
 #endif
 
+/* ---- FF14 batching -------------------------------------------------------- */
+
+/* Longest a queued record waits before a partial FF14 batch is sent while the connection
+ * interval is not yet known (the phone's granted interval is used once it is). 15 ms is the
+ * interval the phone granted in the bench runs. A full batch is sent at once. */
+#ifndef WMR_CFG_BATCH_HOLD_DEFAULT_US
+#define WMR_CFG_BATCH_HOLD_DEFAULT_US     15000
+#endif
+
 /* ---- Link diagnostics (wmr_linkdiag.c) ----------------------------------- */
 
 /* Every interval each connected Classic link is polled with 3 HCI commands (Read RSSI,

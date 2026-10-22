@@ -34,6 +34,12 @@ $streamSources = "$root\tests\test_stream_mode.c", "$root\src\wmr_stream_mode.c"
 if ($LASTEXITCODE -ne 0) { throw "compile failed (stream mode)" }
 & $exeStream "$root\samples\controller_frames.txt"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeBatch = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_batch.exe"
+$batchSources = "$root\tests\test_batch.c", "$root\src\wmr_batch.c", "$root\src\wmr_stream_mode.c", "$root\src\wmr_queue.c", "$root\src\wmr_decoded.c", "$root\src\wmr_decode.c"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" $batchSources -o $exeBatch
+if ($LASTEXITCODE -ne 0) { throw "compile failed (batch)" }
+& $exeBatch
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $exeDiag = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_diag.exe"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_diag.c" "$root\src\wmr_devloss.c" "$root\src\wmr_diag.c" -o $exeDiag
 if ($LASTEXITCODE -ne 0) { throw "compile failed (diag)" }

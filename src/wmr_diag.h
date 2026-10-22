@@ -134,7 +134,8 @@ void wmr_diag_percent_format(int permille, char *buf, size_t len);
 /* Printed once before the first LINKLOG line. Scripts filter on the prefix "LINKLOG,". */
 #define WMR_LINKLOG_HEADER \
     "LINKLOG_FIELDS,t_ms,hand,rate_rx,dev_missing_delta,dev_missing_cum,last5s_pct,cum_pct," \
-    "rssi,lq,fcc,stream,mtu,conn_interval_ms,decimated"
+    "rssi,lq,fcc,stream,mtu,conn_interval_ms,decimated," \
+    "batches_tx,records_in_batches,batch_mean,batch_max,batch_full_flushes"
 
 typedef struct {
     uint32_t    t_ms;               /* milliseconds since boot */
@@ -149,9 +150,17 @@ typedef struct {
     uint16_t    mtu;                /* 0 = no phone */
     uint32_t    conn_interval_us;   /* 0 = unknown */
     uint32_t    decimated;          /* cumulative, see WMR_CFG_FF12_DECIMATE */
+    /* FF14 batching, cumulative and shared by both hands (identical on the two lines). */
+    uint32_t    batches_tx;
+    uint32_t    records_in_batches;
+    uint32_t    batch_max;
+    uint32_t    batch_full_flushes;
 } wmr_linklog_t;
 
-/* "LINKLOG,12345,LEFT,157.8,1124,17.7,21.2,17.7,-28,227,0,decoded,517,15.00,0". Unknown or
+/* Mean records per batch as "4.82" (two decimals); an empty string when no batch was sent. */
+void wmr_diag_batch_mean_format(uint32_t records, uint32_t batches, char *buf, size_t len);
+
+/* "LINKLOG,12345,LEFT,157.8,1124,17.7,21.2,17.7,-28,227,0,batched,517,15.00,0,980,4710,4.81,9,12". Unknown or
  * unavailable values are left empty (",,"), never "n/a", so a CSV reader sees a missing value. */
 void wmr_linklog_format(const wmr_linklog_t *r, char *buf, size_t len);
 

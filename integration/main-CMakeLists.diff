@@ -1,8 +1,8 @@
 diff --git a/port/esp32/main/CMakeLists.txt b/port/esp32/main/CMakeLists.txt
-index e575a44..6c262ce 100644
+index e575a44..24b37e8 100644
 --- a/port/esp32/main/CMakeLists.txt
 +++ b/port/esp32/main/CMakeLists.txt
-@@ -8,24 +8,45 @@ else()
+@@ -8,24 +8,46 @@ else()
      set(EXAMPLE $ENV{EXAMPLE})
  endif()
  
@@ -14,6 +14,7 @@ index e575a44..6c262ce 100644
 +    set(WMR_BRIDGE_DIR "${BTSTACK_ROOT}/wmr_bridge")
 +    set(BUILD_MESSAGE  "Building application \"${EXAMPLE}\"")
 +    set(EXAMPLE_SOURCE
++        "${WMR_BRIDGE_DIR}/src/wmr_batch.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_bridge_main.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_console.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_controller.c"
@@ -60,7 +61,7 @@ index e575a44..6c262ce 100644
  
  include(BTstackUtils)
  
-@@ -33,7 +54,42 @@ include(BTstackUtils)
+@@ -33,7 +55,42 @@ include(BTstackUtils)
  message("\n===")
  if ( DEFINED GATT_PATH )
      message("${BUILD_MESSAGE} with GATT DB")

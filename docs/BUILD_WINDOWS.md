@@ -37,6 +37,10 @@ Copy-Item wmr_bridge\integration\main-CMakeLists.txt port\esp32\main\CMakeLists.
 file: it selects `EXAMPLE=wmr_bridge`, and runs `compile_gatt.py` explicitly
 through the ESP-IDF Python (see "GATT compilation" below). No other BTstack file
 is modified; the stock `port/esp32/sdkconfig.defaults` is used.
+
+**Re-copy `main-CMakeLists.txt` after pulling the FF14 change:** the file lists the
+application's sources, and `wmr_batch.c` was added. Without the new copy the link
+fails with undefined `wmr_batch_*` symbols.
 Edit the controller addresses in `src\wmr_config.h` first.
 
 ## Build

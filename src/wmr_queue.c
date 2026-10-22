@@ -57,6 +57,10 @@ const wmr_frame_t *wmr_queue_peek(const wmr_queue_t *q){
     return q->count ? &q->frames[q->head] : NULL;
 }
 
+const wmr_frame_t *wmr_queue_peek_at(const wmr_queue_t *q, unsigned index){
+    return index < q->count ? &q->frames[(q->head + index) % WMR_CFG_QUEUE_CAPACITY] : NULL;
+}
+
 void wmr_queue_pop(wmr_queue_t *q){
     if (!q->count) return;
     q->head = (q->head + 1) % WMR_CFG_QUEUE_CAPACITY;
