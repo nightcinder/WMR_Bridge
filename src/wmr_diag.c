@@ -125,3 +125,18 @@ void wmr_link_health_format(const wmr_link_health_t *h, char *buf, size_t len){
     else snprintf(lq, sizeof(lq), "n/a(0x%02x)", (unsigned) h->status[WMR_LINKCMD_QUALITY]);
     snprintf(buf, len, "rssi=%s fcc=%s lq=%s", rssi, fcc, lq);
 }
+
+int wmr_diag_interval_permille(uint32_t prev_missing, uint32_t missing,
+                               uint32_t prev_received, uint32_t received){
+    if (missing < prev_missing) return -1;
+    uint32_t dm = missing - prev_missing;
+    uint32_t dr = received - prev_received;
+    uint64_t expected = (uint64_t) dm + dr;
+    if (!expected) return -1;
+    return (int) (((uint64_t) dm * 1000u + expected / 2u) / expected);
+}
+
+void wmr_diag_percent_format(int permille, char *buf, size_t len){
+    if (permille < 0) snprintf(buf, len, "n/a");
+    else snprintf(buf, len, "%d.%d%%", permille / 10, permille % 10);
+}

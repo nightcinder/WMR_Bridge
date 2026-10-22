@@ -240,7 +240,8 @@ Where it happens is **not established**; see [Investigation notes](#investigatio
   runs): the controllers answered the three link-quality commands (`rssi=0 lq=255 fcc=0`,
   RIGHT slightly lower before the MTU change); no mode change was seen; and the tick-based
   missing-report figure rose from about 10 % to about 20 % per hand while FF12 was actually
-  streaming. That points at BLE notification traffic costing reports but does not establish it;
+  streaming (controllers beside the ESP32; at a larger distance the figures were higher again, see
+  "Bench runs on the diagnostics build"). That points at BLE notification traffic costing reports but does not establish it;
   `WMR_CFG_FF12_DECIMATE` (below) is the next test. Still unknown: what the link-quality
   values mean for a Classic link, and whether the VHCI drop message wording matches what the
   counter looks for (`vhci_drop=0 log_errors=0` cannot tell "no drops" from "sink not
@@ -422,6 +423,59 @@ cannot be the whole explanation. With FF11 streaming LEFT is lower (about 147 ag
 both are lower still; whether BLE load adds to the shortfall is **not established**, and the
 runs were not repeated.
 
+### Bench runs on the diagnostics build (user-reported; the assistant did not run or see them)
+
+Relayed on director issue #3; single runs, the first two partly corrected by the director.
+
+**Near the ESP32 (controllers beside it, `rssi=0`, `lq=255`).** Missing device reports per hand
+were about 10 % with the phone idle or the stream held at `mtu_skip` (MTU 23), and about 20 %
+while FF12 streamed at MTU 517. This is the part of the first run that stands. It is
+suggestive only.
+
+**Distance changed partway through the run.** The user moved both controllers away from the
+ESP32 during the same FF12 streaming run. The table below therefore shows the readings
+changing **with distance increasing, not with time or BLE load**:
+
+| Interval (per hand, 1000 reports expected) | LEFT `rate_rx` | RIGHT `rate_rx` | LEFT `rssi` / `lq` | RIGHT `rssi` / `lq` | LEFT missing | RIGHT missing |
+| --- | --- | --- | --- | --- | --- | --- |
+| first (before the move) | 160 | 158 | 0 / 255 | 0 / 255 | 208 | n/a |
+| middle | 155-157 | 148-151 | -21 / 233 | -30 / 225 | about 237 | about 260 |
+| last | 143 | 145 | -23 / 232 | -30 / 225 | 287 | 297 |
+
+Reported flat through the run: `drop`, `purged`, `vhci_drop=0`, `log_errors=0`, `mode=active`,
+`fcc=0`, `discont=0`, `q=0` (one `q=6/256` blip), `tx` equal to `rx`, `conn=[15.00ms lat=1 to=5000ms]`.
+The cumulative `dev_missing` crept from 16.4 % to 17.7 %, which hides the per-interval rise from
+about 21 % to about 29 %. That rise is **confounded by distance** and is not a result about BLE.
+The `last5s=` figure in the `link:` line (added with the decimation option) shows this per interval.
+
+**Phone disconnected at the far position (user-reported, no per-interval numbers yet).** The
+user said the `dev_missing` percentage "started to fall back down immediately" after the phone
+was disconnected, with the controllers left where they were. The cumulative percentage falls
+whenever the current loss is below the running average, so this shows the loss dropped, not by
+how much. It is consistent with BLE traffic competing with the Classic link; it cannot say
+whether the cost comes from the notifications or from the BLE connection itself. **No
+conclusion is drawn** until the `STREAM` lines from that period are available.
+
+**A / B / C at one far position (user-reported; the position was chosen by the user and not
+measured: `rssi` -27 to -29 LEFT and -36 to -37 RIGHT, `lq` about 227 LEFT and 218-219 RIGHT, so
+RIGHT is the weaker link).** Per-interval figures come from the `dev_missing` deltas per 5 s
+(about 1000 expected per hand). The runs were **not fixed length**:
+
+| State | Intervals | LEFT `rate_rx` | LEFT missing | RIGHT `rate_rx` | RIGHT missing |
+| --- | --- | --- | --- | --- | --- |
+| C: phone disconnected | 1 block (no delta available) | 171.0/s | n/a | 164.4/s | n/a |
+| B: phone connected, nothing subscribed (MTU 23, then 517) | 4 full | 167-177/s | about 15-17 % | 150-154/s | about 24-27 % |
+| A: phone connected, FF12 streaming at MTU 517 | 1 full (plus 1 partial: LEFT 156.8/s, RIGHT 138.8/s, `tx` still catching up) | 158.6/s | about 22 % | 113.4/s | about 45 % |
+
+What it suggests, with the sample-size caveat (**not established; one full A interval per hand
+is thin**): A against B at the same position, LEFT loses about 6 more points and RIGHT about
+20 more, so notification traffic may matter beyond the BLE connection itself (B costs little by
+comparison); the weak-link hand (RIGHT) suffers most, in the same direction as the near result
+(about 10 % to about 20 %) with a much larger effect; C against B is not resolved from one
+block. Other limits: the states were run one after another, not interleaved, so a slow change
+over time is not excluded; B includes a change of MTU; the position is not measured. Real use
+is at distance, so the weak-link case is the one that matters.
+
 ### Where a report can be lost, and what would show it
 
 1. **Radio, controller to ESP32.** Classic ACL retransmits, but a controller can flush a
@@ -471,6 +525,20 @@ runs were not repeated.
   4. The two controllers swapped in position / right next to the ESP32 antenna.
   The no-phone rates reported so far are already below 200, so BLE sharing cannot be the
   whole explanation; whether it adds to it is not established.
+- **Three-state protocol at one fixed position (A / B / C).** Pick one position for both
+  controllers, state it (distance, orientation, height, which side) and **do not move them
+  for the whole experiment**; note `rssi` and `lq` per hand as a proxy, since the position
+  itself is not measured. About 2 minutes (24 intervals) per state, in this order:
+  - **A**: phone connected, FF12 streaming at MTU 517 (request the MTU first).
+  - **B**: phone connected, nothing subscribed (`stream=none`; disable the CCC, keep the connection).
+  - **C**: phone disconnected.
+  Record per 5 s, per hand: `rate_rx`, the interval figure (`last5s=` in the `link:` line) and
+  the cumulative figure (`cum=`), `rssi` and `lq`. **A against B** separates notification
+  traffic from the BLE connection; **B against C** separates the connection itself. Because
+  slow changes over time are not excluded by one pass, repeat the sequence in reverse order
+  (C, B, A) and compare the two passes. (The reversed pass is an addition of this write-up, not
+  a director request.) The decimation option below is the same protocol with state A repeated
+  at N = 1, 2 and 4.
 - **Diagnostics implemented on the PR #8 branch (approved on director issue #3). None has run
   on hardware.** See [COUNTERS.md](COUNTERS.md) for the output lines.
   - **(a) Missing reports, from the tick deltas, per hand** (`src/wmr_devloss.c`, pure C and
@@ -516,11 +584,73 @@ runs were not repeated.
     Sends only every Nth FF12 record per hand and counts the rest as `decimated` (see
     [TESTING.md](TESTING.md) and [COUNTERS.md](COUNTERS.md)); the STREAM block says
     `DIAGNOSTIC BUILD` when it is on. If `dev_missing` returns toward the idle level at N=2 or
-    4, BLE airtime is a cause. Not run on hardware.
+    4, BLE airtime is a cause. **A fair test needs the controllers at one fixed, stated position
+    for the whole run** (see the three-state protocol above): moving them changes the loss by
+    itself. Not run on hardware.
   - **How to read them:** `dev_missing` per hand with no phone against with a phone shows
     whether BLE traffic changes the upstream loss; `mode` lines show whether a controller enters
     sniff mode when the loss appears; `rssi`/`fcc`/`lq` per hand may show a radio difference
     between LEFT and RIGHT; `vhci_drop` above zero means the ESP32 itself is dropping packets.
+
+### Classic against BLE scheduling: what ESP-IDF v6.1 and the BTstack port expose
+
+**Read from the sources only; nothing here was run or tested, and no firmware was changed.**
+Sources: ESP-IDF v6.1 (`components/bt`, `components/esp_coex`), the BTstack ESP32 port (`e38553977`),
+and this build's `sdkconfig`. The ESP32 controller itself is the precompiled
+`components/bt/controller/lib_esp32/esp32/libbtdm_app.a`; how it shares the radio between BR/EDR
+and BLE is **not visible in any source**, only through the options below.
+
+What exists, and what it is documented to do:
+
+| Option | Where | Documented effect | State in this build |
+| --- | --- | --- | --- |
+| `BTDM_CTRL_AUTO_LATENCY` (`auto_latency` in `esp_bt_controller_config_t`) | `controller/esp32/Kconfig.in`, `esp_bt.h` | "BLE auto latency, used to enhance classic BT performance while classic BT and BLE are enabled at the same time." Dual mode only. The text does not say what it changes; the name suggests it adjusts BLE connection latency, which is a guess | **off** (`# CONFIG_BTDM_CTRL_AUTO_LATENCY is not set`) |
+| `BTDM_CTRL_MODEM_SLEEP` (ORIG mode), `esp_bt_sleep_enable/disable()` | same | "bluetooth controller sleeps between BR/EDR frames and BLE events" and wakes on a schedule. Nothing says it affects loss | **on**, ORIG, main-XTAL low-power clock |
+| `esp_bredr_tx_power_set(min, max)` | `esp_bt.h` | BR/EDR TX power range, applies to inquiry, page and connection; default minimum `ESP_PWR_LVL_N0`, maximum `ESP_PWR_LVL_P3`. Not a scheduling option; it is the ESP32's transmit power towards the controllers | not called; defaults |
+| `esp_coex_preference_set()` (deprecated), `esp_coex_status_bit_set/clear()` | `esp_coex/include/esp_coexist.h` | Arbitrate **Wi-Fi against Bluetooth** (`ESP_COEX_PREFER_WIFI/BT/BALANCE`). The status bits defined for BLE are for BLE Mesh and for BT only A2DP. **No Classic-against-BLE priority exists in this API** | not called |
+| `ESP_COEX_SW_COEXIST_ENABLE` | `esp_coex/Kconfig` | Software Wi-Fi/Bluetooth coexistence. Its help says that if only Bluetooth is used, disabling it reduces binary size (no mention of any other effect) | **on** (the Wi-Fi component is compiled in, but the application and the BTstack port source do not call `esp_wifi_*`; whether the Wi-Fi libraries are initialised at run time was not checked) |
+| `BTDM_CTRL_BR_EDR_MAX_ACL_CONN`, `BTDM_CTRL_BLE_MAX_CONN` | `Kconfig.in` | Maximum connections; each costs static RAM (1.2 KB and 1 KB). Nothing says they change scheduling | 4 and 3, while 2 and 1 are used |
+| `controller_task_prio`, `BTDM_CTRL_PINNED_TO_CORE`, `BTDM_CTRL_HLI` | `esp_bt.h`, `Kconfig.in` | Controller task priority and core, high-level interrupt | core 0, HLI on |
+
+The BTstack ESP32 port (`hci_transport_esp32_vhci.c`) calls `BT_CONTROLLER_INIT_CONFIG_DEFAULT()`
+unchanged and then `esp_bt_controller_enable()`: it sets none of the options above, so every one of
+them is controlled by `sdkconfig`. BTstack itself has only HCI-level knobs (below), nothing about
+Classic-against-BLE priority.
+
+**What I would test (none run), in order of cost, each against the A / B / C protocol at a fixed
+position:** (1) `CONFIG_BTDM_CTRL_AUTO_LATENCY=y` (a one-line `sdkconfig.defaults` change; the only
+option documented as favouring Classic while both are active); (2) `CONFIG_BTDM_CTRL_MODEM_SLEEP=n`
+(rules the controller's sleep schedule in or out; costs power, irrelevant for a mains-powered bench
+unit). Neither is documented as reducing loss, so either could do nothing. Both are build-time
+changes in the user's BTstack tree, not in this repository, so they need a decision before anything
+is changed.
+
+**Other BLE settings that could lower the airtime cost besides batching** (read from BTstack
+`src/hci.c` and the configuration; again nothing measured):
+
+- **Connection interval.** The bridge asks for 7.5-15 ms (`WMR_CFG_CONN_INTERVAL_*`) and the phone
+  chose 15.00 ms with slave latency 1 in the reported runs (the request asked for latency 0, so the
+  phone granted something different). A longer interval means fewer connection events, each with a
+  fixed airtime overhead, but only helps if the controller can send several notifications per
+  event; a shorter one makes more events. Whether the ESP32 controller sends more than one
+  notification per event is **not known** (closed controller; the firmware does not log it).
+- **Slave latency.** It only lets the peripheral skip events when it has nothing to send, so it
+  does not reduce the cost of streaming. The reported `lat=1` is the phone's choice.
+- **Data length.** `ENABLE_LE_DATA_LENGTH_EXTENSION` is defined and BTstack's default is to ask
+  for the maximum (`le_set_data_length_max = true`), so a notification of up to MTU-3 bytes can
+  be carried in fewer link-layer packets if the controller and the phone accept it. The firmware
+  does not log the data-length change event, so whether it took effect is **unknown**.
+- **PHY.** BTstack has `gap_le_set_phy`; whether this ESP32 controller supports anything but the
+  1M PHY was not checked in the sources.
+- **Connection event length.** BTstack's `le_minimum_ce_length` / `le_maximum_ce_length` are
+  connection *creation* parameters of a central; the bridge is the peripheral, and the L2CAP
+  connection parameter update it sends has no event-length field. The phone decides.
+- **Fewer, larger notifications** (the batching sketch under "Proposals" in
+  [PROTOCOL.md](PROTOCOL.md)) and the decimation test are the direct handles.
+
+A cheap, one-time observation that would settle two of the unknowns without recurring traffic:
+log the LE data-length change event and the controller's LE buffer size (Read Buffer Size) at
+connect. Proposed, not made.
 
 ### Not explained
 

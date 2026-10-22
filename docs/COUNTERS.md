@@ -13,8 +13,9 @@ STREAM phone=1 sub=1 stream=decoded mtu=247 conn=[11.25ms lat=0 to=4000ms] q=0/2
 ```
 
 (Values above are illustrative of the format, not measurements.) The `s`
-command prints the same counters without the rate columns, plus per-controller
-connection state (`cid`, `connected`, `descriptor`, `reports`).
+command prints the same counters without the rate columns (and `last5s=-`), plus per-controller
+connection state (`cid`, `connected`, `descriptor`, `reports`). Before this change `s` also
+printed rates and moved their baselines, which contradicted this paragraph; it no longer does.
 
 | Field | Meaning | Limitation |
 | --- | --- | --- |
@@ -74,9 +75,9 @@ Background and caveats: [DECODING.md](DECODING.md), "Investigation notes: upstre
 STREAM phone=1 sub=1 stream=decoded mtu=517 conn=[15.00ms lat=1 to=5000ms] q=0/256 high=3 notify=1234 errors=0
   vhci_drop=0 log_errors=0
   LEFT  rx=600 tx=600 ... rate_rx=147.0/s rate_tx=147.0/s
-  LEFT link: rssi=0 fcc=0 lq=255 mode=active dev_missing=312 (34.2% of expected) period=4.99ms discont=0
+  LEFT link: rssi=0 fcc=0 lq=255 mode=active rate_rx=147.0/s dev_missing=312 last5s=26.5% cum=17.7% period=4.99ms discont=0
   RIGHT rx=...
-  RIGHT link: rssi=0 fcc=0 lq=255 mode=active dev_missing=21 (3.4% of expected) period=4.99ms discont=0
+  RIGHT link: rssi=0 fcc=0 lq=255 mode=active rate_rx=165.0/s dev_missing=21 last5s=3.4% cum=3.4% period=4.99ms discont=0
 ```
 
 (Illustrative format only, not measurements.)
@@ -88,7 +89,8 @@ STREAM phone=1 sub=1 stream=decoded mtu=517 conn=[15.00ms lat=1 to=5000ms] q=0/2
 | `rssi`, `fcc`, `lq` | Read RSSI, Read Failed Contact Counter, Read Link Quality for that Classic link, polled every 5 s; `n/a(0xNN)` = the controller returned HCI status `0xNN` or nothing has been read yet | Semantics for BR/EDR are not verified (see DECODING.md); `n/a (no ACL link)` while the controller is not connected |
 | `mode` | `active`, `sniff`, `hold` or `park` for that link, from Mode Change events | Assumed `active` when the link is created; each change is also logged once |
 | `dev_missing` | Estimated controller reports that never reached the ESP32, from the tick deltas | An estimate (see DECODING.md for the definition and its limits). Resets on each Classic reconnect; not part of the accounting identity above, because these reports never became `rx` |
-| `(x.y% of expected)` | `dev_missing / (reports seen + dev_missing)` | |
+| `cum=x.y%` | `dev_missing / (reports seen + dev_missing)` since the link was created | Hides a change over time: it only creeps while the current loss differs from the running average |
+| `last5s=x.y%` | The same share over the last statistics interval only: growth of `dev_missing` over (that growth + growth of `rx`) | `n/a` right after a reconnect (the missing count restarted) or when nothing was expected; `-` in the `s` output. Printed with `rate_rx` (a copy of the rate on the line above) so a drift is visible without arithmetic |
 | `period` | Estimated controller report period (about 4.99 ms for 200 Hz) | 0 until 16 reports have arrived |
 | `discont` | Tick jumps of more than 5 s, not counted as missing | |
 

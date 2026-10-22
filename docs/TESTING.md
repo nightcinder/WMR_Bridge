@@ -163,19 +163,26 @@ then 517 was requested. Single runs, not repeated. Rows D1, D2, D5, D7, D9 and c
 | Cumulative `dev_missing` | creeps from 13.5 % to 14.3 % (it includes the idle period) |
 | Link health, all runs | `rssi=0 lq=255 fcc=0 mode=active`; `vhci_drop=0 log_errors=0 discont=0`; `period=4.98 ms` |
 
-**The reported finding:** missing device reports per hand went from about 10 % (idle or
-`mtu_skip`) to about 20 % while FF12 actually streams. It fits `rate_rx` falling from 175-183 to
+**The reported finding** (from the part of the run **before the controllers were moved**:
+controllers beside the ESP32, `rssi=0`, `lq=255`): missing device reports per hand went from
+about 10 % (idle or `mtu_skip`) to about 20 % while FF12 actually streams. It fits `rate_rx` falling from 175-183 to
 158-163 against a nominal of about 200/s (a 200/s controller at 160/s is 20 % missing).
 With the earlier FF11 and phone-capture figures it suggests that BLE notification traffic
 costs reports on the Classic link, but the earlier, larger losses had the controllers in the
 user's hands, so other factors are likely too. **Not established.** The decimation option below
 is the next test.
 
-**A figure that does not match.** The report also says "about 45 missing per hand per 5 s on
+**A figure that does not match.** The first report also says "about 45 missing per hand per 5 s on
 1000 expected". 45 in 1000 is 4.5 %, not 20 % (20 % of 1000 is about 200). The `rate_rx`
-figures agree with 20 %, so "45" is probably a different quantity (a difference between two
-intervals, or a typo). It is recorded here as reported and **not used**; the question is
-open on issue #3.
+figures and the later per-interval table (about 208 missing per 1000) agree with 20 %, so "45"
+is probably a different quantity (a difference between two intervals, or a typo). It is
+recorded here as reported and **not used**.
+
+**Later in the same run the user moved both controllers away from the ESP32** (to simulate real
+distance). The loss and link-quality readings that followed changed with the distance and are
+**not** a time-dependent or BLE effect; they are in [DECODING.md](DECODING.md), "Bench runs on the
+diagnostics build". A fair decimation test needs the controllers at one fixed, stated
+position for the whole run.
 
 **Reading `vhci_drop=0 log_errors=0`.** It is consistent with no drops. It cannot distinguish
 that from the log sink not receiving BTstack's message (the sink depends on BTstack's wording),
@@ -230,4 +237,4 @@ cause; if it stays at about 20 %, it is not (or not only).** Build and CI: see t
 | X1 | Default build unchanged | Flash the PR build with `N=1` | `decimated=0` on both hands; no DIAGNOSTIC line; same behaviour as before | not yet run |
 | X2 | N=2 | Rebuild with `WMR_CFG_FF12_DECIMATE=2`, FF12 at MTU 517, 60 s | `DIAGNOSTIC BUILD` line; `tx` about half of `rx`; `decimated` about half of `rx`; identity holds; phone `sequence` steps of 2 | not yet run |
 | X3 | N=4 | Same with 4 | `tx` about a quarter of `rx`; steps of 4 | not yet run |
-| X4 | The test itself | At N=1, 2, 4 and with no phone, same placement and time of day: `rate_rx` and `dev_missing` per hand, 60 s each | Record all four; compare with the idle level | not yet run |
+| X4 | The test itself | At N=1, 2, 4 and with no phone, **controllers at one fixed, stated position for every run (state it, and note `rssi`/`lq`; do not move them)**: `rate_rx`, `last5s` and `cum` per hand, 2 minutes each | Record all four; compare with the idle level | not yet run |

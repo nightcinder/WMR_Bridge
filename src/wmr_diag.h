@@ -119,4 +119,14 @@ bool wmr_diag_parse_link_reply(wmr_linkcmd_t kind, const uint8_t *ret, uint16_t 
 /* "rssi=0 fcc=0 lq=255", with "n/a(0x..)" for anything not available. */
 void wmr_link_health_format(const wmr_link_health_t *h, char *buf, size_t len);
 
+/* Missing-report share over one statistics interval, in permille (0..1000):
+ * dm / (dm + dr), where dm is the growth of the missing-report count and dr the growth
+ * of the received-report count over the same interval. -1 = unknown: the missing count
+ * went down (the tracker was reset by a reconnect) or nothing was expected. */
+int wmr_diag_interval_permille(uint32_t prev_missing, uint32_t missing,
+                               uint32_t prev_received, uint32_t received);
+
+/* "21.2%" for a permille value, "n/a" for a negative one. */
+void wmr_diag_percent_format(int permille, char *buf, size_t len);
+
 #endif /* WMR_DIAG_H */
