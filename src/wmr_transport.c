@@ -156,6 +156,7 @@ static void queue_reset(void){
 }
 
 static void pump_kick(void);
+static uint16_t cfg_read(uint16_t read_offset, uint8_t *buffer, uint16_t buffer_size);
 
 static bool cfg_notify_owed(void){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++)
