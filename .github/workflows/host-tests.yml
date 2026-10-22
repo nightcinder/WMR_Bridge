@@ -19,6 +19,8 @@ jobs:
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_stream_mode.c src/wmr_stream_mode.c src/wmr_decoded.c src/wmr_decode.c -o test_stream_mode
       - name: Build FF14 batching tests
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_batch.c src/wmr_batch.c src/wmr_stream_mode.c src/wmr_queue.c src/wmr_decoded.c src/wmr_decode.c -o test_batch
+      - name: Build FF15 echo tests
+        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_echo.c src/wmr_echo.c -o test_echo
       - name: Build discovery tests
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_discovery.c src/wmr_discovery.c -o test_discovery
       - name: Build link-diagnostics tests
@@ -33,6 +35,8 @@ jobs:
         run: ./test_stream_mode samples/controller_frames.txt
       - name: Run FF14 batching tests
         run: ./test_batch
+      - name: Run FF15 echo tests
+        run: ./test_echo
       - name: Run discovery tests
         run: ./test_discovery
       - name: Run link-diagnostics tests
