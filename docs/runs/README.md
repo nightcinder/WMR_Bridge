@@ -10,6 +10,7 @@ Raw logs and run sheets from the 2026-10-22 bench sessions (everything here is u
 | `left-coex.md` | Auto latency and modem sleep off on LEFT | run, no effect shown |
 | `left-baseline-repeat.md` | How far LEFT drifts with nothing changed | long baseline run |
 | `single-controller.md` | LEFT alone, RIGHT alone, both | run |
+| `contention-2.md` | Staggered connect and Classic link policy variants for issue #18 | **not run** |
 | `closeout.md` | Checks still not run (MTU on the Connect screen, gamepad checks, settings persistence, HID, C7, round-trip rerun) | **not run** |
 
 ## Logs (`logs/`)
