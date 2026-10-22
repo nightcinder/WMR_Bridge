@@ -73,6 +73,10 @@ void wmr_linkdiag_init(void);
 /* HCI events: ACL connect/disconnect, mode change, command complete. */
 void wmr_linkdiag_on_hci_event(uint8_t *packet, uint16_t size);
 
+/* A Classic link whose address was not known at connection-complete time (an incoming
+ * connection identified by name, docs/DISCOVERY.md) now belongs to `hand`. */
+void wmr_linkdiag_link_identified(unsigned hand, uint16_t con_handle);
+
 /* Every report received from a controller, before any queueing. Reads 4 bytes. */
 void wmr_linkdiag_note_report(unsigned hand, const uint8_t *report, uint16_t length);
 

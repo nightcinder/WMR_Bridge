@@ -52,14 +52,37 @@
 #define WMR_HAND_RIGHT       1
 #define WMR_NUM_CONTROLLERS  2
 
-/* Classic Bluetooth addresses of the two paired controllers. Edit these
- * for your own hardware. Incoming connections from any other address are
- * rejected. */
-#ifndef WMR_CFG_LEFT_ADDRESS
-#define WMR_CFG_LEFT_ADDRESS   "2C:4D:79:C8:C9:CC"
+/* Controllers are found by their Bluetooth names ("Motion controller - Left" / "- Right")
+ * and the addresses are stored in NVS; see docs/DISCOVERY.md. There are no default
+ * addresses. Optional fixed override for one or both hands, which skips discovery for that
+ * hand and is never written to NVS, e.g.
+ *   -DWMR_CFG_LEFT_ADDRESS=\"AA:BB:CC:DD:EE:FF\"
+ * Leave undefined to use discovery. */
+/* #define WMR_CFG_LEFT_ADDRESS   "AA:BB:CC:DD:EE:FF" */
+/* #define WMR_CFG_RIGHT_ADDRESS  "AA:BB:CC:DD:EE:FF" */
+
+/* Start discovery by itself after boot when a hand has no address (1), or only from the
+ * console key `d` (0). */
+#ifndef WMR_CFG_DISCOVERY_AUTOSTART
+#define WMR_CFG_DISCOVERY_AUTOSTART     1
 #endif
-#ifndef WMR_CFG_RIGHT_ADDRESS
-#define WMR_CFG_RIGHT_ADDRESS  "2C:4D:79:C8:F9:A9"
+/* Length of one inquiry in 1.28 s units (8 = 10.24 s), and how many inquiry rounds one
+ * discovery runs before giving up on a hand that was not found. Inquiry takes Classic
+ * airtime from a controller that is already streaming, so it is bounded. */
+#ifndef WMR_CFG_DISCOVERY_INQUIRY_LEN
+#define WMR_CFG_DISCOVERY_INQUIRY_LEN   8
+#endif
+#ifndef WMR_CFG_DISCOVERY_ROUNDS
+#define WMR_CFG_DISCOVERY_ROUNDS        6
+#endif
+/* Delay after the stack comes up before automatic discovery starts, so known controllers
+ * that reconnect on their own are not competing with an inquiry. */
+#ifndef WMR_CFG_DISCOVERY_START_DELAY_MS
+#define WMR_CFG_DISCOVERY_START_DELAY_MS 3000
+#endif
+/* BTstack TLV (NVS) tag holding the discovered addresses ('WMRA'). */
+#ifndef WMR_CFG_ADDR_TLV_TAG
+#define WMR_CFG_ADDR_TLV_TAG            0x574D5241u
 #endif
 
 /* Storage BTstack uses to hold HID report descriptors. */

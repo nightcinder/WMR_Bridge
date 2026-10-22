@@ -37,7 +37,8 @@
 
 /*
  * wmr_controller.h - Classic Bluetooth HID host side: the two WMR
- * controllers, their identities and their per-hand connection state.
+ * controllers, their identities (found by name, docs/DISCOVERY.md) and their
+ * per-hand connection state.
  */
 
 #ifndef WMR_CONTROLLER_H
@@ -51,18 +52,40 @@
  * HID callback: copy the bytes if keeping them, and return quickly. */
 typedef void (*wmr_report_sink_t)(unsigned hand, const uint8_t *report, uint16_t length);
 
+/* Where a hand's Bluetooth address came from. */
+typedef enum {
+    WMR_ADDR_NONE = 0,       /* unknown: not discovered yet */
+    WMR_ADDR_OVERRIDE,       /* WMR_CFG_LEFT_ADDRESS / WMR_CFG_RIGHT_ADDRESS */
+    WMR_ADDR_STORED          /* found by name and stored in NVS */
+} wmr_addr_source_t;
+
 typedef struct {
     bool     connected;
     bool     descriptor_available;
     uint32_t reports;   /* reports since the current connection started */
+    wmr_addr_source_t address_source;
+    uint8_t  address[6];         /* valid unless address_source is WMR_ADDR_NONE */
 } wmr_controller_status_t;
 
 typedef enum {
     WMR_BOND_RESET_OK = 0,
-    WMR_BOND_RESET_BUSY      /* controller connected/connecting; nothing done */
+    WMR_BOND_RESET_BUSY,     /* controller connected/connecting; nothing done */
+    WMR_BOND_RESET_NO_ADDRESS    /* the hand has no address, so there is no key to delete */
 } wmr_bond_reset_result_t;
 
-/* Parse controller addresses, init HID host, register the HID handler. */
+typedef enum {
+    WMR_DISCOVERY_STARTED = 0,
+    WMR_DISCOVERY_NOTHING_TO_DO,     /* both hands have an address */
+    WMR_DISCOVERY_BUSY               /* stack not ready, already running, or a connection pending */
+} wmr_discovery_start_result_t;
+
+typedef enum {
+    WMR_FORGET_OK = 0,
+    WMR_FORGET_BUSY          /* a controller is connected or connecting, or discovery runs */
+} wmr_forget_result_t;
+
+/* Apply compile-time address overrides, init HID host, register the HID handler. Stored
+ * addresses are loaded when the stack is up. */
 void wmr_controller_init(wmr_report_sink_t sink);
 
 /* HCI events: pairing responses and stack-state tracking. */
@@ -76,6 +99,18 @@ void wmr_controller_disconnect(unsigned hand);
  * Never called automatically. Refused while the controller is connected or
  * a connection attempt is pending. */
 wmr_bond_reset_result_t wmr_controller_forget_bond(unsigned hand);
+
+/* Look for every hand without an address: bounded inquiry rounds, remote name requests for
+ * devices without a name in the inquiry response, then connect (and pair) what was found.
+ * Also started by itself after boot (WMR_CFG_DISCOVERY_AUTOSTART). */
+wmr_discovery_start_result_t wmr_controller_discover(void);
+
+/* Delete the stored (discovered) addresses of both hands; overrides stay. Link keys are NOT
+ * deleted (that is the bond reset). Refused while a controller is connected or connecting. */
+wmr_forget_result_t wmr_controller_forget_addresses(void);
+
+void wmr_controller_print_addresses(void);
+const char *wmr_controller_address_source_name(wmr_addr_source_t source);
 
 const char *wmr_controller_name(unsigned hand);
 /* Which hand has this Bluetooth address, or -1. */

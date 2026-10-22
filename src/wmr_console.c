@@ -59,6 +59,8 @@ void wmr_console_show_usage(void){
     printf("l (or c): connect LEFT        r: connect RIGHT\n");
     printf("L: disconnect LEFT            R: disconnect RIGHT\n");
     printf("s: status and statistics      ?: help\n");
+    printf("d: discovery - find controllers without an address by name (pairing mode)\n");
+    printf("F: FORGET stored controller addresses (not link keys), then run discovery\n");
     printf("k: BOND RESET LEFT  - delete the ESP32's stored link key for LEFT only\n");
     printf("K: BOND RESET RIGHT - delete the ESP32's stored link key for RIGHT only\n");
     printf("   (manual; controller must be disconnected. Put it in pairing mode afterwards.)\n");
@@ -77,9 +79,14 @@ static void print_controllers(void){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         wmr_controller_status_t s;
         wmr_controller_get_status(i, &s);
-        printf("%s cid=%u connected=%u descriptor=%u reports=%lu\n",
+        char address[18] = "unknown";
+        if (s.address_source != WMR_ADDR_NONE)
+            snprintf(address, sizeof(address), "%02X:%02X:%02X:%02X:%02X:%02X", s.address[0], s.address[1],
+                     s.address[2], s.address[3], s.address[4], s.address[5]);
+        printf("%s cid=%u connected=%u descriptor=%u reports=%lu address=%s (%s)\n",
                wmr_controller_name(i), wmr_controller_cid(i), s.connected,
-               s.descriptor_available, (unsigned long) s.reports);
+               s.descriptor_available, (unsigned long) s.reports, address,
+               wmr_controller_address_source_name(s.address_source));
     }
 }
 
@@ -189,8 +196,23 @@ static void stats_tick(btstack_timer_source_t *timer){
 }
 
 #ifdef HAVE_BTSTACK_STDIN
+static void forget_addresses(void){
+    if (wmr_controller_forget_addresses() != WMR_FORGET_OK){
+        printf("FORGET refused: disconnect both controllers (L, R) and wait for discovery or "
+               "connection attempts to end\n");
+        return;
+    }
+    printf("FORGET: stored controller addresses deleted. Put the controllers in pairing mode.\n");
+    wmr_controller_discover();
+}
+
 static void bond_reset(unsigned hand){
-    if (wmr_controller_forget_bond(hand) == WMR_BOND_RESET_OK){
+    wmr_bond_reset_result_t result = wmr_controller_forget_bond(hand);
+    if (result == WMR_BOND_RESET_NO_ADDRESS){
+        printf("BOND RESET: %s has no address yet; nothing to delete\n", wmr_controller_name(hand));
+        return;
+    }
+    if (result == WMR_BOND_RESET_OK){
         printf("BOND RESET: removed ESP32's stored %s link key only. "
                "Put %s into pairing mode, then press %c.\n",
                wmr_controller_name(hand), wmr_controller_name(hand),
@@ -208,6 +230,8 @@ static void stdin_process(char cmd){
         case 'L': wmr_controller_disconnect(WMR_HAND_LEFT); break;
         case 'R': wmr_controller_disconnect(WMR_HAND_RIGHT); break;
         case 's': print_controllers(); print_stats(false); break;
+        case 'd': wmr_controller_discover(); break;
+        case 'F': forget_addresses(); break;
         case 'k': bond_reset(WMR_HAND_LEFT); break;
         case 'K': bond_reset(WMR_HAND_RIGHT); break;
         case '\r': case '\n': break;

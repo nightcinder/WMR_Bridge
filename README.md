@@ -32,8 +32,10 @@ specified.
 
 ## What it does
 
-- **Controllers.** Acts as the Bluetooth HID host for two specific controllers
-  (LEFT and RIGHT, identified by Bluetooth address). Controllers reconnect to the
+- **Controllers.** Acts as the Bluetooth HID host for two controllers (LEFT and
+  RIGHT), found by their Bluetooth names (`Motion controller - Left` / `- Right`)
+  and remembered by address in NVS ([docs/DISCOVERY.md](docs/DISCOVERY.md); not yet
+  run on hardware). Controllers reconnect to the
   ESP32 on their own (incoming connection); the console can also connect
   outwards. Each hand has its own connection state.
 - **Frames.** Each controller sends 46-byte input reports (`A1`, report ID `01`,
@@ -63,7 +65,7 @@ specified.
 | `tests/`, `samples/` | Host unit tests for the protocol, queue and decoder; sample frames |
 | `tools/` | PC-side capture (`capture_ble.py`, needs hardware and `bleak`) and rotation analysis (`analyze_capture.py`); see [docs/DECODING.md](docs/DECODING.md) |
 | `integration/` | The one BTstack file that must be replaced to build this (`main-CMakeLists.txt`, plus a diff) |
-| `docs/` | Build, protocol, Android, counters, security, reconnect/queue, testing, refactor notes |
+| `docs/` | Build, protocol, Android, counters, security, reconnect/queue, controller discovery, testing, refactor notes |
 
 Module responsibilities, in brief: `wmr_controller` (HID side), `wmr_transport`
 (BLE side, queue pump), `wmr_protocol` and `wmr_queue` (pure C, no BTstack,
@@ -84,9 +86,6 @@ git checkout e38553977a25fb0b55b383c72c289be0975f422c
 git clone <this-repo-url> wmr_bridge
 Copy-Item wmr_bridge\integration\main-CMakeLists.txt port\esp32\main\CMakeLists.txt
 
-# edit the two controller addresses
-notepad wmr_bridge\src\wmr_config.h
-
 # every session
 . C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
 cd port\esp32
@@ -103,10 +102,13 @@ machine, running it directly started Node.js. The supplied CMake file already do
 
 ## Using it
 
-1. Flash, open the monitor. You should see `BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream, FF15 echo)`.
+1. Flash, open the monitor. You should see `BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream)`.
 2. Power on the controllers (already paired): they connect on their own, and the log
    shows `Incoming HID ... accepting` and `descriptor status=0x00` for each.
-   First pairing or recovery: put a controller in pairing mode and press `l` (LEFT) or `r` (RIGHT).
+   First flash: put the controllers in pairing mode within a minute of boot; discovery finds
+   them by name, stores their addresses and pairs ([docs/DISCOVERY.md](docs/DISCOVERY.md)).
+   Later: `d` runs discovery again for a hand without an address, `F` forgets the stored
+   addresses, `l`/`r` reconnect a known controller.
 3. On the Android phone: connect to `WMR Bridge`, request the MTU (e.g. 247 or 517),
    request High connection priority, enable notifications on characteristic `FF11`.
    **Repeat all of this after every reconnect.** See [docs/ANDROID.md](docs/ANDROID.md).
@@ -114,17 +116,16 @@ machine, running it directly started Node.js. The supplied CMake file already do
    flat, `q` should stay near zero.
 
 Console keys: `l`/`c` connect LEFT, `r` connect RIGHT, `L`/`R` disconnect, `s` status
-and counters, `?` help, `k`/`K` **bond reset** LEFT/RIGHT (deletes the ESP32's stored
-link key for that controller only; manual, refused while connected).
+and counters, `?` help, `d` discovery, `F` **forget** stored controller addresses,
+`k`/`K` **bond reset** LEFT/RIGHT (deletes the ESP32's stored link key for that controller
+only; manual, refused while connected).
 
 ## BLE interface (summary)
 
 Service `0000FF10-0000-1000-8000-00805F9B34FB`; raw characteristic
 `0000FF11-0000-1000-8000-00805F9B34FB` (read + notify); decoded characteristic
 `0000FF12-0000-1000-8000-00805F9B34FB` (notify only, 56-byte records, see
-[docs/PROTOCOL.md](docs/PROTOCOL.md)); echo characteristic `0000FF15-...` (write without
-response + notify, round-trip pings answered ahead of the stream; layout approved, not yet run on
-hardware). Each FF11 notification is a
+[docs/PROTOCOL.md](docs/PROTOCOL.md)). Each notification is a
 12-byte little-endian header (`'R'`, hand, u32 sequence, u16 total length,
 u16 offset, u16 chunk length) followed by a chunk of the frame. A read of FF11
 returns a 16-byte status record. Exact layout, fragmentation and reassembly rules:
@@ -172,7 +173,8 @@ Full list and details: [docs/TESTING.md](docs/TESTING.md).
 - Classic pairing confirmations (Secure Simple Pairing) are **accepted automatically** for
   any device; legacy PIN requests are rejected.
 - No flash encryption or secure boot. The serial console is unauthenticated.
-- Single phone, exactly two controllers, fixed addresses compiled in.
+- Single phone, exactly two controllers. Controllers are recognised by name until their
+  addresses are stored; a name can be spoofed (see [docs/DISCOVERY.md](docs/DISCOVERY.md)).
 - `tx` means "accepted by the Bluetooth stack", not "received by the phone".
 
 Details and hardening suggestions: [docs/SECURITY.md](docs/SECURITY.md),
@@ -183,15 +185,16 @@ counters and their limits: [docs/COUNTERS.md](docs/COUNTERS.md).
 - FF12 version 2 batching on a separate characteristic (FF14): several records per notification. Motivated by bench runs in which halving the notification count recovered most of RIGHT's lost reports; see [docs/PROTOCOL.md](docs/PROTOCOL.md) and [docs/DECODING.md](docs/DECODING.md).
 - Explaining and reducing controller-to-ESP32 report loss, in particular LEFT's extra loss while a phone streams (coexistence options to test: [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md)).
 - Calibration (FF13 config blob, designed only) and the remaining unknowns in [docs/DECODING.md](docs/DECODING.md) (accel scale, temperature, battery, input ranges).
-- Controller discovery by name instead of compiled-in addresses ([issue #2](../../issues/2)). The latency side of [issue #1](../../issues/1) is FF12's `rx_time_us` plus the FF15 echo (layout approved; not yet run on hardware).
+- An echo characteristic or device timestamp for true latency ([issue #1](../../issues/1)).
 - BLE security (no pairing or encryption today), see [docs/SECURITY.md](docs/SECURITY.md).
 ## Configuration
 
 Every tunable is a named constant in [src/wmr_config.h](src/wmr_config.h) (controller
-addresses, queue size, frame and notification limits, timers, advertising). Raw hex dumps and
+discovery and optional address overrides, queue size, frame and notification limits, timers, advertising). Raw hex dumps and
 detailed HCI tracing are off by default (`WMR_CFG_REPORT_HEXDUMP`, `WMR_CFG_HCI_TRACE`).
-Note that `wmr_config.h` ships with the author's two controllers' Bluetooth addresses;
-replace them with yours.
+It ships with no controller addresses; `WMR_CFG_LEFT_ADDRESS` / `WMR_CFG_RIGHT_ADDRESS` are
+optional overrides that skip discovery for that hand. Discovery settings:
+`WMR_CFG_DISCOVERY_*`.
 
 ## Running the host tests
 

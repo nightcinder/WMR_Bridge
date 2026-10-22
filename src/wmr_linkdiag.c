@@ -188,6 +188,13 @@ static void cycle_tick(btstack_timer_source_t *timer){
 
 /* ---- events ------------------------------------------------------------------ */
 
+void wmr_linkdiag_link_identified(unsigned hand, uint16_t con_handle){
+    if (hand >= WMR_NUM_CONTROLLERS || (links[hand].connected && links[hand].handle == con_handle)) return;
+    links[hand].connected = true;
+    links[hand].handle = con_handle;
+    link_reset(hand);
+}
+
 void wmr_linkdiag_on_hci_event(uint8_t *packet, uint16_t size){
     (void)size;
     switch (hci_event_packet_get_type(packet)){

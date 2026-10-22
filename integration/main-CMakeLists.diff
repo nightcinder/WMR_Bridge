@@ -22,7 +22,7 @@ index e575a44..24b37e8 100644
 +        "${WMR_BRIDGE_DIR}/src/wmr_decoded.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_devloss.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_diag.c"
-+        "${WMR_BRIDGE_DIR}/src/wmr_echo.c"
++        "${WMR_BRIDGE_DIR}/src/wmr_discovery.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_link.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_linkdiag.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_protocol.c"
