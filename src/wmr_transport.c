@@ -44,6 +44,8 @@
 #include "esp_timer.h"
 #include "wmr_bridge.h"        /* generated from wmr_bridge.gatt: profile_data, ATT_*_HANDLE */
 #include "wmr_batch.h"
+#include "wmr_cfg.h"
+#include "wmr_cfgmgr.h"
 #include "wmr_controller.h"
 #include "wmr_diag.h"
 #include "wmr_echo.h"
@@ -69,6 +71,11 @@
 #define ECHO_VALUE_HANDLE    ATT_CHARACTERISTIC_0000FF15_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
 #define ECHO_CCC_HANDLE      ATT_CHARACTERISTIC_0000FF15_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
 
+/* FF13: controller config block (read window + write cursor + notify), independent of the
+ * stream exclusion. */
+#define CFG_VALUE_HANDLE     ATT_CHARACTERISTIC_0000FF13_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
+#define CFG_CCC_HANDLE       ATT_CHARACTERISTIC_0000FF13_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
+
 #define STATUS_SIZE 16
 
 static hci_con_handle_t phone_handle = HCI_CON_HANDLE_INVALID;
@@ -89,6 +96,11 @@ static wmr_stats_t stats;
 /* FF15: one outstanding echo; sent before any stream data. */
 static wmr_echo_state_t echo;
 static bool echo_subscribed;
+/* FF13: per-connection read cursor and CCC; a state-change notify is owed per hand. */
+static bool cfg_subscribed;
+static uint8_t cfg_cursor_hand;
+static uint32_t cfg_cursor_offset;
+static bool cfg_notify_pending[WMR_NUM_CONTROLLERS];
 
 static btstack_timer_source_t pump_timer;
 /* FF14: fires when the oldest queued record has waited long enough to send a partial batch. */
@@ -144,6 +156,21 @@ static void queue_reset(void){
 }
 
 static void pump_kick(void);
+static uint16_t cfg_read(uint16_t read_offset, uint8_t *buffer, uint16_t buffer_size);
+
+static bool cfg_notify_owed(void){
+    for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++)
+        if (cfg_notify_pending[i]) return true;
+    return false;
+}
+
+/* FF13: the config block state of `hand` changed. Only a subscribed phone is told; others
+ * read the state. */
+static void cfg_state_changed(unsigned hand){
+    if (hand >= WMR_NUM_CONTROLLERS || !cfg_subscribed || phone_handle == HCI_CON_HANDLE_INVALID) return;
+    cfg_notify_pending[hand] = true;
+    pump_kick();
+}
 
 static void batch_timer_fire(btstack_timer_source_t *timer){
     (void)timer;
@@ -172,7 +199,7 @@ static void pump_kick(void){
     wmr_episode_note_queue(&drop_episode, queue.count);
     if (phone_handle == HCI_CON_HANDLE_INVALID || send_pending) return;
     /* A pending echo needs a send opportunity whatever the stream is doing. */
-    if (!echo.pending){
+    if (!echo.pending && !cfg_notify_owed()){
         if (stream_mode == WMR_STREAM_NONE || !queue.count) return;
         if (stream_mode == WMR_STREAM_BATCHED && !batch_due()) return;
     }
@@ -322,6 +349,27 @@ static void pump_send_echo(void){
     pump_kick();
 }
 
+/* FF13: send the 16-byte header (no data) for one hand whose state changed. Not counted in
+ * `notifications`; a failed notify keeps it pending for the retry timer. */
+static void pump_send_cfg(void){
+    for (unsigned hand = 0; hand < WMR_NUM_CONTROLLERS; hand++){
+        if (!cfg_notify_pending[hand]) continue;
+        const uint8_t *blob;
+        uint32_t total;
+        wmr_cfg_blob_state_t state = wmr_cfgmgr_get(hand, &blob, &total);
+        uint8_t value[WMR_CFG_FF13_HEADER_SIZE + WMR_CFG_FF13_WINDOW_MAX];
+        wmr_cfg_pack_window((uint8_t) hand, state, blob, total, 0, value);
+        uint8_t result = att_server_notify(phone_handle, CFG_VALUE_HANDLE, value, WMR_CFG_FF13_HEADER_SIZE);
+        if (result != ERROR_CODE_SUCCESS){
+            stats.errors++;
+            return;
+        }
+        cfg_notify_pending[hand] = false;
+        pump_kick();
+        return;
+    }
+}
+
 /* Send the pending echo (FF15) if there is one, otherwise one fragment (FF11), one record
  * (FF12) or one batch (FF14) from the head of the queue. Runs on ATT_EVENT_CAN_SEND_NOW. */
 static void pump_send_one(void){
@@ -329,6 +377,10 @@ static void pump_send_one(void){
     if (phone_handle == HCI_CON_HANDLE_INVALID) return;
     if (echo.pending){
         pump_send_echo();
+        return;
+    }
+    if (cfg_notify_owed()){
+        pump_send_cfg();
         return;
     }
     if (stream_mode == WMR_STREAM_NONE) return;
@@ -447,6 +499,57 @@ static uint16_t att_read(hci_con_handle_t handle, uint16_t attribute,
         uint8_t ccc[2] = {echo_subscribed ? 1 : 0, 0};
         return att_read_callback_handle_blob(ccc, sizeof(ccc), offset, buffer, buffer_size);
     }
+    if (attribute == CFG_VALUE_HANDLE) return cfg_read(offset, buffer, buffer_size);
+    if (attribute == CFG_CCC_HANDLE){
+        uint8_t ccc[2] = {cfg_subscribed ? 1 : 0, 0};
+        return att_read_callback_handle_blob(ccc, sizeof(ccc), offset, buffer, buffer_size);
+    }
+    return 0;
+}
+
+/* FF13: a phone connect or disconnect clears the CCC, the cursor and owed notifications. */
+static void cfg_reset_connection(void){
+    cfg_subscribed = false;
+    cfg_cursor_hand = 0;
+    cfg_cursor_offset = 0;
+    memset(cfg_notify_pending, 0, sizeof(cfg_notify_pending));
+}
+
+/* FF13 value read: the window at the connection's cursor. The ATT read offset (long reads)
+ * is separate from the cursor offset. */
+static uint16_t cfg_read(uint16_t read_offset, uint8_t *buffer, uint16_t buffer_size){
+    const uint8_t *blob;
+    uint32_t total;
+    wmr_cfg_blob_state_t state = wmr_cfgmgr_get(cfg_cursor_hand, &blob, &total);
+    uint8_t value[WMR_CFG_FF13_HEADER_SIZE + WMR_CFG_FF13_WINDOW_MAX];
+    size_t size = wmr_cfg_pack_window(cfg_cursor_hand, state, blob, total, cfg_cursor_offset, value);
+    return att_read_callback_handle_blob(value, (uint16_t) size, read_offset, buffer, buffer_size);
+}
+
+/* FF13 cursor write (with response): hand u8, offset u32. An invalid hand or length fails
+ * with ATT error 0x80, like the stream CCC refusals. */
+static int cfg_write(const uint8_t *buffer, uint16_t buffer_size){
+    uint8_t hand;
+    uint32_t offset;
+    if (!wmr_cfg_parse_cursor(buffer, buffer_size, &hand, &offset)) return 0x80;
+    cfg_cursor_hand = hand;
+    cfg_cursor_offset = offset;
+    return 0;
+}
+
+static int cfg_ccc_write(hci_con_handle_t handle, uint16_t transaction_mode, uint16_t offset,
+                         const uint8_t *buffer, uint16_t buffer_size){
+    if (transaction_mode != ATT_TRANSACTION_MODE_NONE) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
+    if (offset != 0) return ATT_ERROR_INVALID_OFFSET;
+    if (buffer_size != 2) return ATT_ERROR_INVALID_ATTRIBUTE_VALUE_LENGTH;
+    uint16_t value = little_endian_read_16(buffer, 0);
+    if (value > 1) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
+    if (phone_handle != HCI_CON_HANDLE_INVALID && handle != phone_handle)
+        return ATT_ERROR_WRITE_NOT_PERMITTED;
+    phone_handle = handle;
+    cfg_subscribed = value == 1;
+    if (!cfg_subscribed) memset(cfg_notify_pending, 0, sizeof(cfg_notify_pending));
+    printf("BLE config (FF13) notifications %s\n", cfg_subscribed ? "enabled" : "disabled");
     return 0;
 }
 
@@ -482,6 +585,13 @@ static int att_write(hci_con_handle_t handle, uint16_t attribute,
                      uint16_t transaction_mode, uint16_t offset,
                      uint8_t *buffer, uint16_t buffer_size){
     if (attribute == ECHO_VALUE_HANDLE) return echo_write(handle, buffer, buffer_size);
+    if (attribute == CFG_VALUE_HANDLE){
+        if (transaction_mode != ATT_TRANSACTION_MODE_NONE) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
+        if (offset != 0) return ATT_ERROR_INVALID_OFFSET;
+        return cfg_write(buffer, buffer_size);
+    }
+    if (attribute == CFG_CCC_HANDLE)
+        return cfg_ccc_write(handle, transaction_mode, offset, buffer, buffer_size);
     if (attribute == ECHO_CCC_HANDLE)
         return echo_ccc_write(handle, transaction_mode, offset, buffer, buffer_size);
     wmr_stream_t which;
@@ -532,7 +642,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
         case BTSTACK_EVENT_STATE:
             if (btstack_event_state_get_state(packet) == HCI_STATE_WORKING){
                 gap_advertisements_enable(1);
-                printf("BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream, FF15 echo)\n");
+                printf("BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream, FF15 echo, FF13 config block)\n");
             }
             break;
         case HCI_EVENT_LE_META:
@@ -576,6 +686,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     send_pending = false;
                     echo_subscribed = false;
                     wmr_echo_cancel(&echo);
+                    cfg_reset_connection();
                     printf("BLE phone connected, handle=0x%04x\n", phone_handle);
                     conn_update_pending = false;
                     if (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
@@ -606,6 +717,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                 send_pending = false;
                 echo_subscribed = false;
                 wmr_echo_cancel(&echo);
+                cfg_reset_connection();
                 conn_known = false;
                 conn_update_pending = false;
                 btstack_run_loop_remove_timer(&conn_request_timer);
@@ -622,6 +734,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
 void wmr_transport_init(void){
     wmr_queue_init(&queue);
     wmr_echo_init(&echo);
+    wmr_cfgmgr_init(cfg_state_changed);
     att_server_init(profile_data, att_read, att_write);
     /* General discoverable; do not claim BR/EDR is unsupported. */
     static const uint8_t advertising[] = {

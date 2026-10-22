@@ -368,15 +368,16 @@ before discovery has found them is check D6.
 | D11 | Override | Build with `-DWMR_CFG_LEFT_ADDRESS=\"..\"` | LEFT `compile-time override`; discovery looks only for RIGHT; `F` keeps LEFT | user-reported (2026-10-22): passed; one-line report for the whole checklist, no output pasted, so no figures are recorded |
 
 
-## FF13 config block (PROPOSED; not wired; none run)
+## FF13 config block (APPROVED layout; wired but not built; none run)
 
 Host tests (`tests/test_cfg.c`, CI) cover formats and the reader only. The checks below need
-the GATT wiring, which does not exist yet, and a controller. **Not yet run.**
+the ESP32 build with the new wiring and a controller. **Not yet run.** Watch the console for
+`FF13 LEFT: ...` lines and the statistics `FF13` lines.
 
 | # | Check | Expected | Result |
 | --- | --- | --- | --- |
-| C1 | Controller accepts `06 02 00 FF FF FF FF` (block 0) with no init commands | Response report ID `02`, `len` > 0 | not yet run |
-| C2 | Follow-up `addr` = bytes still to read | Responses continue; `blk_remain` falls by `len` | not yet run |
-| C3 | Block `0x02` size and CRC-32 | Size below 16384; CRC stable across two reads | not yet run |
-| C4 | Input stream during the read | FF11/FF12 sequence numbers stay contiguous | not yet run |
+| C1 | Controller accepts a block-read request with no init commands (the firmware reads block `0x02`, not block 0) | Response report ID `02`, `len` > 0 | user-reported (2026-10-22): both hands reached READY, so yes for block `0x02` via `hid_host_send_report`; block 0 not tried |
+| C2 | Follow-up `addr` = bytes still to read | Responses continue; `blk_remain` falls by `len` | user-reported (2026-10-22): implied by READY (the reader fails on any `blk_remain` mismatch); no raw trace seen |
+| C3 | Block `0x02` size and CRC-32 | Size below 16384; CRC stable across two reads | user-reported (2026-10-22), one read each: LEFT 7147 bytes crc32 `8bc13223`, RIGHT 7148 bytes crc32 `75e8ab85`. Stability across two reads not yet run |
+| C4 | Input stream during the read | FF11/FF12 sequence numbers stay contiguous | inconclusive: no phone stream was on (`sub=0`). The first link lines after the read show `dev_missing` LEFT 78 of 227 (cum 34.4 %), RIGHT 42 of 232 (18.1 %), above the usual 9-11 % no-phone baseline. Not comparable (fresh connection, read in progress) and not shown to be caused by the read; needs a run with the read disabled or repeated after READY |
 | C5 | Phone reads FF13 in 496-byte windows | Reassembled blob CRC matches header | not yet run |

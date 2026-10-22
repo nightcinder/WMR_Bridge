@@ -42,6 +42,8 @@
 #include "btstack_config.h"
 #include "btstack.h"
 #include "btstack_tlv.h"
+#include "wmr_cfg.h"
+#include "wmr_cfgmgr.h"
 #include "wmr_controller.h"
 #include "wmr_discovery.h"
 #include "wmr_linkdiag.h"
@@ -55,6 +57,7 @@ typedef struct {
     bool        connected;
     bool        descriptor_available;
     unsigned long reports;
+    unsigned long other_reports;   /* neither input nor config reports: not forwarded */
 } controller_t;
 
 #ifdef WMR_CFG_LEFT_ADDRESS
@@ -619,6 +622,20 @@ static void handle_report(const uint8_t *packet){
     if (!c) return;
     const uint8_t *report = hid_subevent_report_get_report(packet);
     uint16_t length = hid_subevent_report_get_report_len(packet);
+    /* Classify by report ID before anything is counted or queued (docs/PROTOCOL.md, FF13):
+     * config command responses go to the config reader only and never take a sequence
+     * number or enter the sample stream. */
+    switch (wmr_cfg_classify(report, length)){
+        case WMR_CFG_REPORT_CONFIG:
+            wmr_cfgmgr_on_report((unsigned) (c - controllers), report, length);
+            return;
+        case WMR_CFG_REPORT_OTHER:
+            c->other_reports++;
+            return;
+        case WMR_CFG_REPORT_INPUT:
+        default:
+            break;
+    }
     c->reports++;
     /* Hand EVERY report over before any logging. The report buffer is only
      * valid during this callback; the sink copies what it keeps. */
@@ -674,6 +691,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             if (!c) break;
             c->descriptor_available = status == ERROR_CODE_SUCCESS;
             printf("%s descriptor status=0x%02x\n", c->name, status);
+            if (c->descriptor_available) wmr_cfgmgr_on_descriptor((unsigned) (c - controllers));
             connect_pending = false;
             disc_connect_progress();
             break;
@@ -693,7 +711,9 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             }
             c = controller_for_cid(cid);
             if (!c) break;
-            printf("%s disconnected, total reports=%lu\n", c->name, c->reports);
+            printf("%s disconnected, total reports=%lu other_reports=%lu\n", c->name, c->reports,
+                   c->other_reports);
+            wmr_cfgmgr_on_closed((unsigned) (c - controllers));
             if (!c->connected || !c->descriptor_available) connect_pending = false;
             c->cid = 0;
             c->connected = false;
