@@ -116,7 +116,7 @@ duplicated, interleaved and malformed fragments.
   a gap does **not** yet prove lossless end-to-end delivery: see
   [COUNTERS.md](COUNTERS.md) and [TESTING.md](TESTING.md).
 
-# Decoded stream, FF12 (version 1; implemented in firmware, NOT yet run on hardware)
+# Decoded stream, FF12 (version 1; implemented in firmware, run on hardware: user-reported)
 
 **Status: approved; firmware implemented on branch `ff12-decoded-stream`; host-tested
 and built, but never run on hardware** (checklist in [TESTING.md](TESTING.md)). The
@@ -238,7 +238,7 @@ rotation capture in [DECODING.md](DECODING.md) is done.
   counting through lost samples, so `dt_ticks` is still the true elapsed time.
 - **`rx_time_us`** (ESP32 receive time) includes Bluetooth scheduling jitter and
   is only for measuring latency and jitter, for example against a phone-side
-  clock. It answers the one-way part of issue #1; the round trip is the
+  clock. It answers the one-way part of issue #1 (closed); the round trip is the
   [FF15 echo](#echo-ff15-version-1-approved-implemented-in-firmware-not-yet-run-on-hardware),
   whose answer carries a timestamp on the same clock.
 
@@ -263,7 +263,7 @@ rotation capture in [DECODING.md](DECODING.md) is done.
 - A queued frame that is not a valid 46-byte input report (wrong length, transaction
   header, or report ID) is discarded and counted in the per-hand `dec_err` statistic.
   Config responses are not expected here: they are separated by report ID before this
-  point in the FF13 design, which is not implemented.
+  point in the FF13 design (implemented, see below).
 - Samples of the two hands may interleave freely. Ordering is per hand by `sequence`.
 
 ## Bench-test items (not blockers)
@@ -278,7 +278,7 @@ rotation capture in [DECODING.md](DECODING.md) is done.
 - GATT: FF12 is `NOTIFY | DYNAMIC` in `wmr_bridge.gatt`, directly after FF11 in
   service `FF10`; FF11 is unchanged.
 
-# Batched decoded stream, FF14 (version 2; implemented in firmware, NOT yet run on hardware)
+# Batched decoded stream, FF14 (version 2; implemented in firmware, run on hardware: user-reported)
 
 **Status: firmware implemented on branch `ff14-batching`, host-tested and built, never run
 on hardware** (checklist in [TESTING.md](TESTING.md)). Reference code:
@@ -302,7 +302,7 @@ share per hand):
 | N=2 | 18-20 % | 14-15 % |
 | N=4 | 18-20 % | 12-13 % |
 
-Reading, as given by the director and not independently re-checked here: sending fewer
+Reading, as given by the project owner and not independently re-checked here: sending fewer
 notifications cost RIGHT up to about 20 points less loss, and the effect repeated;
 LEFT rose from about 10 % to about 19 % as soon as the phone streamed and stayed there at
 N=1, 2 and 4, so LEFT's extra loss is **not** explained by notification volume, and
@@ -411,7 +411,7 @@ See [TESTING.md](TESTING.md): FF14 on a phone at MTU 517 and 247, the three orde
 exclusion cases, MTU below 61, and the A/B/A comparison of FF12 and FF14 at one fixed
 position. None has been run.
 
-# Echo, FF15 (version 1; approved, implemented in firmware, NOT yet run on hardware)
+# Echo, FF15 (version 1; approved, implemented in firmware, run on hardware: user-reported)
 
 **Status: layout approved by the project owner (2026-10-22, issue #1); firmware implemented and
 host-tested, never run on hardware** (checklist in [TESTING.md](TESTING.md)). Reference code:
@@ -518,9 +518,9 @@ periodic line ([COUNTERS.md](COUNTERS.md)). Identity: `accepted = sent + cancell
 
 See [TESTING.md](TESTING.md), "FF15 echo". None has been run.
 
-# Controller config block, FF13 (APPROVED layout, wired in firmware, NOT BUILT OR RUN on ESP32 yet)
+# Controller config block, FF13 (APPROVED layout, implemented in firmware, read run on hardware: user-reported)
 
-**Status: layout approved by the project owner (Nick, 2026-10-22); firmware wiring still to do.** The wire formats, the block-read state
+**Status: layout approved by the project owner (Nick, 2026-10-22); firmware wired in (WMR_Bridge #17, #21).** The wire formats, the block-read state
 machine and the FF13 window are a pure-C module (`src/wmr_cfg.c`, `tests/test_cfg.c`,
 host-tested). The BTstack side is wired in: `src/wmr_cfgmgr.c` (cache, timers, sending),
 report-ID routing in `wmr_controller.c`, the characteristic in `wmr_transport.c` and
@@ -711,7 +711,7 @@ the data window follows (496 bytes, then 104 at offset 496). A hand that is not 
 - Reports are classified by report ID in the HID handler (`0x01` input, `0x02`/`0x06` config,
   else other), never by length.
 
-## As implemented (wiring; not built, not run)
+## As implemented (wiring; read run on hardware, user-reported 2026-10-22)
 
 - The read starts 1 s after a hand's HID descriptor becomes available, once per boot per
   hand: when the cache is READY it is **not** re-read and the revision/serial comparison from
@@ -743,9 +743,9 @@ stopping the controller's streaming, or the new routing dropping reports (neithe
 config reports are no longer forwarded). The statistics line now shows `other=` per hand: it
 stays 0 if routing is not the cause.
 
-Fix being tried: after each read (done or failed) send Monado's two enable commands,
+Fix (merged as WMR_Bridge #21; user-reported working on hardware, 2026-10-22, LEFT about 204/s alone): after each read (done or failed) send Monado's two enable commands,
 `06 03 01 00 02` then `06 03 02 E1 02` (rest zero, 10 ms apart). Those bytes come from the
-design notes, not from a source checked here. **Not yet run.** Build with
+design notes, not from a source checked here. Build with
 `-DWMR_CFG_FF13_READ=0` (or set it in `wmr_config.h`) to send no config command at all; input
 must then stream as it did before FF13.
 
@@ -774,4 +774,4 @@ of the BLE service, FF13 has **no authentication or encryption** (see
 
 None at present. The FF12 version 2 batching sketch that was here is now the implemented
 [FF14](#batched-decoded-stream-ff14-version-2-implemented-in-firmware-not-yet-run-on-hardware)
-section above. FF13 (controller config block) is a proposal: formats host-tested, firmware not wired, not yet run.
+section above. FF13 (controller config block) is implemented and approved; see its section above.

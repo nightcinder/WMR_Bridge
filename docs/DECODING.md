@@ -51,8 +51,7 @@ offsets and scales; it does not validate signs or axes.
 FF12 stays uncalibrated. The phone gets each controller's firmware config block from
 the bridge on FF13 ([PROTOCOL.md](PROTOCOL.md#controller-config-block-ff13-proposed-design-only-not-implemented)),
 including how the ESP32 reads it over HID, caches it, and keeps the 78-byte responses
-out of the input stream. **Only the byte formats and the reader state machine exist (host-tested, not wired
-into the firmware); none of it has been tried on hardware.**
+out of the input stream. **The firmware reads and serves the block (WMR_Bridge #17, with the streaming fix #21). User-reported 2026-10-22: the phone read it in 496-byte windows, LEFT 7147 bytes and RIGHT 7148 bytes, CRC-32 matching the firmware's, and the app decoded gyro and accelerometer calibration.**
 
 What the phone does with the blob (all from Monado, `wmr_controller_base.c` and
 `wmr_config.c` at commit `f50c796c32c8`):
@@ -158,8 +157,7 @@ axes, so it cannot detect small misalignments.
 
 ## Calibration: status
 
-**Not done.** The ESP32-side config read (FF13) is a design only. No per-device mix matrix,
-bias or pose has been read or applied.
+**Partly done.** The ESP32 reads the config block (FF13) and the app decodes calibration (user-reported, see above). Applying the per-device mix matrix, bias and pose to the orientation fusion is not done.
 
 ### First loss-free captures (phone app, reported)
 
@@ -167,7 +165,7 @@ Source: `right-20261021-232124.txt` and `left-20261021-232228.txt`, recorded wit
 companion app's Capture screen (wmr-companion PR #4, not merged; not `capture_ble.py`) at
 ATT MTU 517 with 0 sequence gaps on both hands, and analysed with `tools/analyze_capture.py`.
 **These results were reported to the assistant that wrote this section through the
-director issue #3; the capture files are not in this repository and the assistant has not
+WMR_Bridge issue #3 (closed); the capture files are not in this repository and the assistant has not
 seen them or re-run the analysis.** Each line is "as reported" and is not hardware
 verification by the assistant.
 
@@ -195,7 +193,7 @@ verification by the assistant.
 The check: the user ran the companion app (wmr-companion PR #5, FF12 mode, default axis table
 = this mapping) on the Pixel against the flashed PR #5 firmware and reported that the decoded
 3D debug view "appears to be working with correct orientations". This was relayed through the
-director on issue #3; the assistant did not see it. **What it establishes:** the three
+the project owner on issue #3 (closed); the assistant did not see it. **What it establishes:** the three
 rotations and the gravity direction agree with this table through the app's fusion filter, to
 the extent one person looking at a 3D view can tell. **What it does not:** it is not a
 numerical sign check, it was not reported separately for each hand, and a fusion filter can
@@ -438,7 +436,7 @@ runs were not repeated.
 
 ### Bench runs on the diagnostics build (user-reported; the assistant did not run or see them)
 
-Relayed on director issue #3; single runs, the first two partly corrected by the director.
+Relayed on WMR_Bridge issue #3 (closed); single runs, the first two partly corrected by the project owner.
 
 **Near the ESP32 (controllers beside it, `rssi=0`, `lq=255`).** Missing device reports per hand
 were about 10 % with the phone idle or the stream held at `mtu_skip` (MTU 23), and about 20 %
@@ -474,7 +472,7 @@ measured: `rssi` -27 to -29 LEFT and -36 to -37 RIGHT, `lq` about 227 LEFT and 2
 RIGHT is the weaker link).** Per-interval figures come from the `dev_missing` deltas per 5 s
 (about 1000 expected per hand). The runs were **not fixed length**. State A was first reported
 as one full interval (LEFT 158.6/s, about 22 % missing; RIGHT 113.4/s, about 45 %) and then
-replaced by a longer run of 15 full intervals, computed by the director from the pasted `STREAM`
+replaced by a longer run of 15 full intervals, computed by the project owner from the pasted `STREAM`
 lines. Missing percentages use the nominal period of 4.98 ms (about 200.8 reports/s):
 
 | State | Intervals | LEFT `rate_rx` | LEFT missing | RIGHT `rate_rx` | RIGHT missing |
@@ -559,9 +557,9 @@ Real use is at distance, so the weak-link case is the one that matters.
   traffic from the BLE connection; **B against C** separates the connection itself. Because
   slow changes over time are not excluded by one pass, repeat the sequence in reverse order
   (C, B, A) and compare the two passes. (The reversed pass is an addition of this write-up, not
-  a director request.) The decimation option below is the same protocol with state A repeated
+  a request from the project owner.) The decimation option below is the same protocol with state A repeated
   at N = 1, 2 and 4.
-- **Diagnostics implemented on the PR #8 branch (approved on director issue #3). None has run
+- **Diagnostics implemented on the PR #8 branch (approved on WMR_Bridge issue #3 (closed)). None has run
   on hardware.** See [COUNTERS.md](COUNTERS.md) for the output lines.
   - **(a) Missing reports, from the tick deltas, per hand** (`src/wmr_devloss.c`, pure C and
     host-tested). Fed with the 32-bit device tick counter of every received input report (4

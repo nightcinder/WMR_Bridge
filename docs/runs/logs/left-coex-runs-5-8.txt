@@ -1,0 +1,986 @@
+run 5: STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=6/256 high=38 notify=1302 errors=0
+  FF14 batches_tx=1302 records_in_batches=8288 mean=6.37 max=9 batch_full_flushes=263
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=7152 tx=4661 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=160.8/s rate_tx=159.6/s
+  LEFT link: rssi=-18 fcc=0 lq=237 mode=active rate_rx=160.8/s dev_missing=1408 last5s=21.3% cum=16.4% period=4.98ms discont=0
+LINKLOG,45659,LEFT,160.8,218,1408,21.3,16.4,-18,237,0,batched,517,15.00,0,1302,8288,6.37,9,263
+  RIGHT rx=3627 tx=3627 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=159.0/s rate_tx=159.2/s
+  RIGHT link: rssi=-23 fcc=0 lq=233 mode=active rate_rx=159.0/s dev_missing=808 last5s=21.7% cum=18.2% period=4.98ms discont=0
+LINKLOG,45691,RIGHT,159.0,220,808,21.7,18.2,-23,233,0,batched,517,15.00,0,1302,8288,6.37,9,263
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=38 notify=1534 errors=0
+  FF14 batches_tx=1534 records_in_batches=9806 mean=6.39 max=9 batch_full_flushes=305
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=7874 tx=5389 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=144.4/s rate_tx=145.6/s
+  LEFT link: rssi=-18 fcc=0 lq=237 mode=active rate_rx=144.4/s dev_missing=1696 last5s=28.5% cum=17.7% period=4.98ms discont=0
+LINKLOG,50736,LEFT,144.4,288,1696,28.5,17.7,-18,237,0,batched,517,15.00,0,1534,9806,6.39,9,305
+  RIGHT rx=4417 tx=4417 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=158.0/s rate_tx=158.0/s
+  RIGHT link: rssi=-23 fcc=0 lq=232 mode=active rate_rx=158.0/s dev_missing=1040 last5s=22.7% cum=19.1% period=4.98ms discont=0
+LINKLOG,50760,RIGHT,158.0,232,1040,22.7,19.1,-23,232,0,batched,517,15.00,0,1534,9806,6.39,9,305
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=38 notify=1771 errors=0
+  FF14 batches_tx=1771 records_in_batches=11342 mean=6.40 max=9 batch_full_flushes=348
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=8568 tx=6083 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=138.8/s rate_tx=138.8/s
+  LEFT link: rssi=-18 fcc=0 lq=237 mode=active rate_rx=138.8/s dev_missing=2026 last5s=32.2% cum=19.1% period=4.98ms discont=0
+LINKLOG,55809,LEFT,138.8,330,2026,32.2,19.1,-18,237,0,batched,517,15.00,0,1771,11342,6.40,9,348
+  RIGHT rx=5259 tx=5259 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=168.4/s rate_tx=168.4/s
+  RIGHT link: rssi=-23 fcc=0 lq=232 mode=active rate_rx=168.4/s dev_missing=1217 last5s=17.4% cum=18.8% period=4.98ms discont=0
+LINKLOG,55841,RIGHT,168.4,177,1217,17.4,18.8,-23,232,0,batched,517,15.00,0,1771,11342,6.40,9,348
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=38 notify=2005 errors=0
+  FF14 batches_tx=2005 records_in_batches=12889 mean=6.43 max=9 batch_full_flushes=398
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=9301 tx=6815 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=146.6/s rate_tx=146.4/s
+  LEFT link: rssi=-19 fcc=0 lq=236 mode=active rate_rx=146.6/s dev_missing=2310 last5s=27.9% cum=19.9% period=4.98ms discont=0
+LINKLOG,60885,LEFT,146.6,284,2310,27.9,19.9,-19,236,0,batched,517,15.00,0,2005,12889,6.43,9,398
+  RIGHT rx=6077 tx=6074 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.6/s rate_tx=163.0/s
+  RIGHT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=163.6/s dev_missing=1418 last5s=19.7% cum=18.9% period=4.98ms discont=0
+LINKLOG,60913,RIGHT,163.6,201,1418,19.7,18.9,-24,231,0,batched,517,15.00,0,2005,12889,6.43,9,398
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=6/256 high=38 notify=2241 errors=0
+  FF14 batches_tx=2241 records_in_batches=14498 mean=6.47 max=9 batch_full_flushes=449
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=10079 tx=7591 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=155.6/s rate_tx=155.2/s
+  LEFT link: rssi=-20 fcc=0 lq=235 mode=active rate_rx=155.6/s dev_missing=2551 last5s=23.7% cum=20.2% period=4.98ms discont=0
+LINKLOG,65963,LEFT,155.6,241,2551,23.7,20.2,-20,235,0,batched,517,15.00,0,2241,14498,6.47,9,449
+  RIGHT rx=6910 tx=6907 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=166.6/s rate_tx=166.6/s
+  RIGHT link: rssi=-21 fcc=0 lq=234 mode=active rate_rx=166.6/s dev_missing=1602 last5s=18.1% cum=18.8% period=4.98ms discont=0
+LINKLOG,65994,RIGHT,166.6,184,1602,18.1,18.8,-21,234,0,batched,517,15.00,0,2241,14498,6.47,9,449
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=38 notify=2478 errors=0
+  FF14 batches_tx=2478 records_in_batches=16064 mean=6.48 max=9 batch_full_flushes=505
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=10817 tx=8332 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=147.6/s rate_tx=148.2/s
+  LEFT link: rssi=-32 fcc=0 lq=223 mode=active rate_rx=147.6/s dev_missing=2824 last5s=27.0% cum=20.7% period=4.98ms discont=0
+LINKLOG,71036,LEFT,147.6,273,2824,27.0,20.7,-32,223,0,batched,517,15.00,0,2478,16064,6.48,9,505
+  RIGHT rx=7735 tx=7732 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=165.0/s rate_tx=165.0/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=165.0/s dev_missing=1793 last5s=18.8% cum=18.8% period=4.98ms discont=0
+LINKLOG,71061,RIGHT,165.0,191,1793,18.8,18.8,-27,228,0,batched,517,15.00,0,2478,16064,6.48,9,505
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=38 notify=2712 errors=0
+  FF14 batches_tx=2712 records_in_batches=17616 mean=6.50 max=9 batch_full_flushes=563
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=11532 tx=9046 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=143.0/s rate_tx=142.8/s
+  LEFT link: rssi=-32 fcc=0 lq=223 mode=active rate_rx=143.0/s dev_missing=3137 last5s=30.4% cum=21.4% period=4.98ms discont=0
+LINKLOG,76109,LEFT,143.0,313,3137,30.4,21.4,-32,223,0,batched,517,15.00,0,2712,17616,6.50,9,563
+  RIGHT rx=8570 tx=8570 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=167.0/s rate_tx=167.6/s
+  RIGHT link: rssi=-25 fcc=0 lq=231 mode=active rate_rx=167.0/s dev_missing=1974 last5s=17.8% cum=18.7% period=4.98ms discont=0
+LINKLOG,76139,RIGHT,167.0,181,1974,17.8,18.7,-25,231,0,batched,517,15.00,0,2712,17616,6.50,9,563
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=38 notify=2949 errors=0
+  FF14 batches_tx=2949 records_in_batches=19146 mean=6.49 max=9 batch_full_flushes=607
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=12242 tx=9756 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=142.0/s rate_tx=142.0/s
+  LEFT link: rssi=-32 fcc=0 lq=222 mode=active rate_rx=142.0/s dev_missing=3433 last5s=29.4% cum=21.9% period=4.98ms discont=0
+LINKLOG,81187,LEFT,142.0,296,3433,29.4,21.9,-32,222,0,batched,517,15.00,0,2949,19146,6.49,9,607
+  RIGHT rx=9390 tx=9390 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=164.0/s rate_tx=164.0/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=164.0/s dev_missing=2173 last5s=19.5% cum=18.8% period=4.98ms discont=0
+LINKLOG,81217,RIGHT,164.0,199,2173,19.5,18.8,-25,230,0,batched,517,15.00,0,2949,19146,6.49,9,607
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=5/256 high=38 notify=3189 errors=0
+  FF14 batches_tx=3189 records_in_batches=20703 mean=6.49 max=9 batch_full_flushes=659
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=12985 tx=10500 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=148.6/s rate_tx=148.8/s
+  LEFT link: rssi=-32 fcc=0 lq=223 mode=active rate_rx=148.6/s dev_missing=3717 last5s=27.7% cum=22.3% period=4.98ms discont=0
+LINKLOG,86266,LEFT,148.6,284,3717,27.7,22.3,-32,223,0,batched,517,15.00,0,3189,20703,6.49,9,659
+  RIGHT rx=10208 tx=10203 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.6/s rate_tx=162.6/s
+  RIGHT link: rssi=-25 fcc=0 lq=231 mode=active rate_rx=163.6/s dev_missing=2374 last5s=19.7% cum=18.9% period=4.98ms discont=0
+LINKLOG,86294,RIGHT,163.6,201,2374,19.7,18.9,-25,231,0,batched,517,15.00,0,3189,20703,6.49,9,659
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=38 notify=3432 errors=0
+  FF14 batches_tx=3432 records_in_batches=22247 mean=6.48 max=9 batch_full_flushes=709
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=13715 tx=11229 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=146.0/s rate_tx=145.8/s
+  LEFT link: rssi=-33 fcc=0 lq=222 mode=active rate_rx=146.0/s dev_missing=3998 last5s=27.8% cum=22.6% period=4.98ms discont=0
+LINKLOG,91346,LEFT,146.0,281,3998,27.8,22.6,-33,222,0,batched,517,15.00,0,3432,22247,6.48,9,709
+  RIGHT rx=11018 tx=11018 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=162.0/s rate_tx=163.0/s
+  RIGHT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=162.0/s dev_missing=2580 last5s=20.3% cum=19.0% period=4.98ms discont=0
+LINKLOG,91369,RIGHT,162.0,206,2580,20.3,19.0,-24,231,0,batched,517,15.00,0,3432,22247,6.48,9,709
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=38 notify=3671 errors=0
+  FF14 batches_tx=3671 records_in_batches=23765 mean=6.47 max=9 batch_full_flushes=751
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=14401 tx=11914 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=137.2/s rate_tx=137.0/s
+  LEFT link: rssi=-32 fcc=0 lq=223 mode=active rate_rx=137.2/s dev_missing=4342 last5s=33.4% cum=23.2% period=4.98ms discont=0
+LINKLOG,96419,LEFT,137.2,344,4342,33.4,23.2,-32,223,0,batched,517,15.00,0,3671,23765,6.47,9,751
+  RIGHT rx=11853 tx=11851 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=167.0/s rate_tx=166.6/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=167.0/s dev_missing=2764 last5s=18.1% cum=18.9% period=4.98ms discont=0
+LINKLOG,96450,RIGHT,167.0,184,2764,18.1,18.9,-25,230,0,batched,517,15.00,0,3671,23765,6.47,9,751
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=38 notify=3905 errors=0
+  FF14 batches_tx=3905 records_in_batches=25273 mean=6.47 max=9 batch_full_flushes=795
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=15113 tx=12628 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=142.4/s rate_tx=142.8/s
+  LEFT link: rssi=-33 fcc=0 lq=222 mode=active rate_rx=142.4/s dev_missing=4651 last5s=30.3% cum=23.5% period=4.98ms discont=0
+LINKLOG,101495,LEFT,142.4,309,4651,30.3,23.5,-33,222,0,batched,517,15.00,0,3905,25273,6.47,9,795
+  RIGHT rx=12645 tx=12645 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=158.4/s rate_tx=158.8/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=158.4/s dev_missing=2984 last5s=21.7% cum=19.1% period=4.98ms discont=0
+LINKLOG,101519,RIGHT,158.4,220,2984,21.7,19.1,-25,230,0,batched,517,15.00,0,3905,25273,6.47,9,795
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=7/256 high=38 notify=4142 errors=0
+  FF14 batches_tx=4142 records_in_batches=26818 mean=6.47 max=9 batch_full_flushes=846
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=15857 tx=13365 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=148.8/s rate_tx=147.4/s
+  LEFT link: rssi=-33 fcc=0 lq=222 mode=active rate_rx=148.8/s dev_missing=4927 last5s=27.1% cum=23.7% period=4.98ms discont=0
+LINKLOG,106571,LEFT,148.8,276,4927,27.1,23.7,-33,222,0,batched,517,15.00,0,4142,26818,6.47,9,846
+  RIGHT rx=13453 tx=13453 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=161.6/s rate_tx=161.6/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=161.6/s dev_missing=3194 last5s=20.6% cum=19.2% period=4.98ms discont=0
+LINKLOG,106595,RIGHT,161.6,210,3194,20.6,19.2,-25,230,0,batched,517,15.00,0,4142,26818,6.47,9,846
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=38 notify=4379 errors=0
+  FF14 batches_tx=4379 records_in_batches=28285 mean=6.46 max=9 batch_full_flushes=889
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=16494 tx=14009 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=127.4/s rate_tx=128.8/s
+  LEFT link: rssi=-32 fcc=0 lq=223 mode=active rate_rx=127.4/s dev_missing=5310 last5s=37.5% cum=24.4% period=4.98ms discont=0
+LINKLOG,111646,LEFT,127.4,383,5310,37.5,24.4,-32,223,0,batched,517,15.00,0,4379,28285,6.46,9,889
+  RIGHT rx=14276 tx=14276 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=164.6/s rate_tx=164.6/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=164.6/s dev_missing=3388 last5s=19.1% cum=19.2% period=4.98ms discont=0
+LINKLOG,111677,RIGHT,164.6,194,3388,19.1,19.2,-25,230,0,batched,517,15.00,0,4379,28285,6.46,9,889
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=38 notify=4617 errors=0
+  FF14 batches_tx=4617 records_in_batches=29799 mean=6.45 max=9 batch_full_flushes=934
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=17190 tx=14705 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=139.2/s rate_tx=139.2/s
+  LEFT link: rssi=-33 fcc=0 lq=222 mode=active rate_rx=139.2/s dev_missing=5630 last5s=31.5% cum=24.7% period=4.98ms discont=0
+LINKLOG,116720,LEFT,139.2,320,5630,31.5,24.7,-33,222,0,batched,517,15.00,0,4617,29799,6.45,9,934
+  RIGHT rx=15098 tx=15094 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=164.4/s rate_tx=163.6/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=164.4/s dev_missing=3588 last5s=19.6% cum=19.2% period=4.98ms discont=0
+LINKLOG,116751,RIGHT,164.4,200,3588,19.6,19.2,-25,230,0,batched,517,15.00,0,4617,29799,6.45,9,934
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=6/256 high=38 notify=4850 errors=0
+  FF14 batches_tx=4850 records_in_batches=31275 mean=6.45 max=9 batch_full_flushes=977
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=17879 tx=15388 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=137.8/s rate_tx=136.6/s
+  LEFT link: rssi=-33 fcc=0 lq=222 mode=active rate_rx=137.8/s dev_missing=5961 last5s=32.5% cum=25.0% period=4.98ms discont=0
+LINKLOG,121791,LEFT,137.8,331,5961,32.5,25.0,-33,222,0,batched,517,15.00,0,4850,31275,6.45,9,977
+  RIGHT rx=15887 tx=15887 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=157.8/s rate_tx=158.6/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=157.8/s dev_missing=3811 last5s=22.0% cum=19.3% period=4.98ms discont=0
+LINKLOG,121823,RIGHT,157.8,223,3811,22.0,19.3,-25,230,0,batched,517,15.00,0,4850,31275,6.45,9,977
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=38 notify=5086 errors=0
+  FF14 batches_tx=5086 records_in_batches=32797 mean=6.45 max=9 batch_full_flushes=1023
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=18587 tx=16099 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=141.6/s rate_tx=142.2/s
+  LEFT link: rssi=-32 fcc=0 lq=223 mode=active rate_rx=141.6/s dev_missing=6265 last5s=30.0% cum=25.2% period=4.98ms discont=0
+LINKLOG,126864,LEFT,141.6,304,6265,30.0,25.2,-32,223,0,batched,517,15.00,0,5086,32797,6.45,9,1023
+  RIGHT rx=16699 tx=16698 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=162.4/s rate_tx=162.2/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=162.4/s dev_missing=4014 last5s=20.0% cum=19.4% period=4.98ms discont=0
+LINKLOG,126892,RIGHT,162.4,203,4014,20.0,19.4,-25,230,0,batched,517,15.00,0,5086,32797,6.45,9,1023
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=38 notify=5324 errors=0
+  FF14 batches_tx=5324 records_in_batches=34340 mean=6.45 max=9 batch_full_flushes=1077
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=19310 tx=16825 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=144.6/s rate_tx=145.2/s
+  LEFT link: rssi=-33 fcc=0 lq=222 mode=active rate_rx=144.6/s dev_missing=6564 last5s=29.3% cum=25.4% period=4.98ms discont=0
+LINKLOG,131941,LEFT,144.6,299,6564,29.3,25.4,-33,222,0,batched,517,15.00,0,5324,34340,6.45,9,1077
+  RIGHT rx=17517 tx=17515 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.6/s rate_tx=163.4/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=163.6/s dev_missing=4216 last5s=19.8% cum=19.4% period=4.98ms discont=0
+LINKLOG,131970,RIGHT,163.6,202,4216,19.8,19.4,-25,230,0,batched,517,15.00,0,5324,34340,6.45,9,1077
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=7/256 high=38 notify=5559 errors=0
+  FF14 batches_tx=5559 records_in_batches=35855 mean=6.45 max=9 batch_full_flushes=1123
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=20032 tx=17547 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=144.4/s rate_tx=144.4/s
+  LEFT link: rssi=-35 fcc=0 lq=220 mode=active rate_rx=144.4/s dev_missing=6857 last5s=28.9% cum=25.5% period=4.98ms discont=0
+LINKLOG,137019,LEFT,144.4,293,6857,28.9,25.5,-35,220,0,batched,517,15.00,0,5559,35855,6.45,9,1123
+  RIGHT rx=18315 tx=18308 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=159.6/s rate_tx=158.6/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=159.6/s dev_missing=4438 last5s=21.8% cum=19.5% period=4.98ms discont=0
+LINKLOG,137044,RIGHT,159.6,222,4438,21.8,19.5,-25,230,0,batched,517,15.00,0,5559,35855,6.45,9,1123
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=38 notify=5792 errors=0
+  FF14 batches_tx=5792 records_in_batches=37378 mean=6.45 max=9 batch_full_flushes=1174
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=20729 tx=18244 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=139.4/s rate_tx=139.4/s
+  LEFT link: rssi=-33 fcc=0 lq=222 mode=active rate_rx=139.4/s dev_missing=7180 last5s=31.7% cum=25.7% period=4.98ms discont=0
+LINKLOG,142097,LEFT,139.4,323,7180,31.7,25.7,-33,222,0,batched,517,15.00,0,5792,37378,6.45,9,1174
+  RIGHT rx=19136 tx=19134 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=164.2/s rate_tx=165.2/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=164.2/s dev_missing=4630 last5s=19.0% cum=19.5% period=4.98ms discont=0
+LINKLOG,142121,RIGHT,164.2,192,4630,19.0,19.5,-26,229,0,batched,517,15.00,0,5792,37378,6.45,9,1174
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=38 notify=6034 errors=0
+  FF14 batches_tx=6034 records_in_batches=38932 mean=6.45 max=9 batch_full_flushes=1225
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=21420 tx=18935 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=138.2/s rate_tx=138.2/s
+  LEFT link: rssi=-33 fcc=0 lq=222 mode=active rate_rx=138.2/s dev_missing=7512 last5s=32.5% cum=26.0% period=4.98ms discont=0
+LINKLOG,147172,LEFT,138.2,332,7512,32.5,26.0,-33,222,0,batched,517,15.00,0,6034,38932,6.45,9,1225
+  RIGHT rx=20000 tx=19997 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=172.8/s rate_tx=172.6/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=172.8/s dev_missing=4787 last5s=15.4% cum=19.3% period=4.98ms discont=0
+LINKLOG,147204,RIGHT,172.8,157,4787,15.4,19.3,-26,229,0,batched,517,15.00,0,6034,38932,6.45,9,1225
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=38 notify=6273 errors=0
+  FF14 batches_tx=6273 records_in_batches=40460 mean=6.45 max=9 batch_full_flushes=1280
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=22123 tx=19638 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=140.6/s rate_tx=140.6/s
+  LEFT link: rssi=-33 fcc=0 lq=222 mode=active rate_rx=140.6/s dev_missing=7825 last5s=30.8% cum=26.1% period=4.98ms discont=0
+LINKLOG,152247,LEFT,140.6,313,7825,30.8,26.1,-33,222,0,batched,517,15.00,0,6273,40460,6.45,9,1280
+  RIGHT rx=20824 tx=20822 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=164.8/s rate_tx=165.0/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=164.8/s dev_missing=4983 last5s=19.2% cum=19.3% period=4.98ms discont=0
+LINKLOG,152279,RIGHT,164.8,196,4983,19.2,19.3,-26,229,0,batched,517,15.00,0,6273,40460,6.45,9,1280
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=5/256 high=38 notify=6511 errors=0
+  FF14 batches_tx=6511 records_in_batches=41987 mean=6.45 max=9 batch_full_flushes=1325
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=22806 tx=20316 drop=0 offline=2485 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=136.6/s rate_tx=135.6/s
+  LEFT link: rssi=-34 fcc=0 lq=221 mode=active rate_rx=136.6/s dev_missing=8168 last5s=33.4% cum=26.4% period=4.98ms discont=0
+LINKLOG,157318,LEFT,136.6,343,8168,33.4,26.4,-34,221,0,batched,517,15.00,0,6511,41987,6.45,9,1325
+  RIGHT rx=21671 tx=21671 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=169.4/s rate_tx=169.8/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=169.4/s dev_missing=5149 last5s=16.4% cum=19.2% period=4.98ms discont=0
+LINKLOG,157351,RIGHT,169.4,166,5149,16.4,19.2,-25,230,0,batched,517,15.00,0,6511,41987,6.45,9,1325
+
+run 6: 
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=29 notify=1120 errors=0
+  FF14 batches_tx=1120 records_in_batches=6994 mean=6.24 max=9 batch_full_flushes=228
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=6729 tx=4698 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=172.4/s rate_tx=173.8/s
+  LEFT link: rssi=-22 fcc=0 lq=233 mode=active rate_rx=172.4/s dev_missing=1039 last5s=15.2% cum=13.4% period=4.98ms discont=0
+LINKLOG,40586,LEFT,172.4,154,1039,15.2,13.4,-22,233,0,batched,517,15.00,0,1120,6994,6.24,9,228
+  RIGHT rx=2299 tx=2296 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=160.8/s rate_tx=160.2/s
+  RIGHT link: rssi=-30 fcc=0 lq=226 mode=active rate_rx=160.8/s dev_missing=596 last5s=20.9% cum=20.6% period=4.98ms discont=0
+LINKLOG,40617,RIGHT,160.8,213,596,20.9,20.6,-30,226,0,batched,517,15.00,0,1120,6994,6.24,9,228
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=29 notify=1360 errors=0
+  FF14 batches_tx=1360 records_in_batches=8693 mean=6.39 max=9 batch_full_flushes=300
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=7598 tx=5567 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=173.8/s rate_tx=173.8/s
+  LEFT link: rssi=-22 fcc=0 lq=232 mode=active rate_rx=173.8/s dev_missing=1182 last5s=14.1% cum=13.5% period=4.98ms discont=0
+LINKLOG,45660,LEFT,173.8,143,1182,14.1,13.5,-22,232,0,batched,517,15.00,0,1360,8693,6.39,9,300
+  RIGHT rx=3126 tx=3126 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=165.4/s rate_tx=166.0/s
+  RIGHT link: rssi=-29 fcc=0 lq=225 mode=active rate_rx=165.4/s dev_missing=776 last5s=17.9% cum=19.9% period=4.98ms discont=0
+LINKLOG,45688,RIGHT,165.4,180,776,17.9,19.9,-29,225,0,batched,517,15.00,0,1360,8693,6.39,9,300
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=30 notify=1598 errors=0
+  FF14 batches_tx=1598 records_in_batches=10370 mean=6.49 max=9 batch_full_flushes=370
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=8466 tx=6435 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=173.6/s rate_tx=173.6/s
+  LEFT link: rssi=-22 fcc=0 lq=233 mode=active rate_rx=173.6/s dev_missing=1337 last5s=15.2% cum=13.6% period=4.98ms discont=0
+LINKLOG,50737,LEFT,173.6,155,1337,15.2,13.6,-22,233,0,batched,517,15.00,0,1598,10370,6.49,9,370
+  RIGHT rx=3938 tx=3935 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=162.4/s rate_tx=161.8/s
+  RIGHT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=162.4/s dev_missing=994 last5s=21.2% cum=20.2% period=4.98ms discont=0
+LINKLOG,50767,RIGHT,162.4,218,994,21.2,20.2,-28,227,0,batched,517,15.00,0,1598,10370,6.49,9,370
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=32 notify=1838 errors=0
+  FF14 batches_tx=1838 records_in_batches=12040 mean=6.55 max=9 batch_full_flushes=438
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=9354 tx=7323 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=177.6/s rate_tx=177.6/s
+  LEFT link: rssi=-22 fcc=0 lq=233 mode=active rate_rx=177.6/s dev_missing=1468 last5s=12.9% cum=13.6% period=4.98ms discont=0
+LINKLOG,55816,LEFT,177.6,131,1468,12.9,13.6,-22,233,0,batched,517,15.00,0,1838,12040,6.55,9,438
+  RIGHT rx=4719 tx=4717 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=156.2/s rate_tx=156.4/s
+  RIGHT link: rssi=-30 fcc=0 lq=225 mode=active rate_rx=156.2/s dev_missing=1231 last5s=23.3% cum=20.7% period=4.98ms discont=0
+LINKLOG,55844,RIGHT,156.2,237,1231,23.3,20.7,-30,225,0,batched,517,15.00,0,1838,12040,6.55,9,438
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=34 notify=2078 errors=0
+  FF14 batches_tx=2078 records_in_batches=13719 mean=6.60 max=9 batch_full_flushes=516
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=10210 tx=8178 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=171.2/s rate_tx=171.0/s
+  LEFT link: rssi=-22 fcc=0 lq=233 mode=active rate_rx=171.2/s dev_missing=1627 last5s=15.7% cum=13.7% period=4.98ms discont=0
+LINKLOG,60893,LEFT,171.2,159,1627,15.7,13.7,-22,233,0,batched,517,15.00,0,2078,13719,6.60,9,516
+  RIGHT rx=5541 tx=5541 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=164.4/s rate_tx=164.8/s
+  RIGHT link: rssi=-29 fcc=0 lq=226 mode=active rate_rx=164.4/s dev_missing=1424 last5s=19.0% cum=20.4% period=4.98ms discont=0
+LINKLOG,60924,RIGHT,164.4,193,1424,19.0,20.4,-29,226,0,batched,517,15.00,0,2078,13719,6.60,9,516
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=8/256 high=34 notify=2315 errors=0
+  FF14 batches_tx=2315 records_in_batches=15393 mean=6.65 max=9 batch_full_flushes=595
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=11071 tx=9036 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=172.2/s rate_tx=171.6/s
+  LEFT link: rssi=-21 fcc=0 lq=233 mode=active rate_rx=172.2/s dev_missing=1793 last5s=16.2% cum=13.9% period=4.98ms discont=0
+LINKLOG,65972,LEFT,172.2,166,1793,16.2,13.9,-21,233,0,batched,517,15.00,0,2315,15393,6.65,9,595
+  RIGHT rx=6361 tx=6357 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=164.0/s rate_tx=163.2/s
+  RIGHT link: rssi=-29 fcc=0 lq=225 mode=active rate_rx=164.0/s dev_missing=1627 last5s=19.8% cum=20.4% period=4.98ms discont=0
+LINKLOG,66000,RIGHT,164.0,203,1627,19.8,20.4,-29,225,0,batched,517,15.00,0,2315,15393,6.65,9,595
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=5/256 high=34 notify=2551 errors=0
+  FF14 batches_tx=2551 records_in_batches=17082 mean=6.70 max=9 batch_full_flushes=668
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=11897 tx=9866 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=165.2/s rate_tx=166.0/s
+  LEFT link: rssi=-23 fcc=0 lq=232 mode=active rate_rx=165.2/s dev_missing=1982 last5s=18.6% cum=14.3% period=4.98ms discont=0
+LINKLOG,71051,LEFT,165.2,189,1982,18.6,14.3,-23,232,0,batched,517,15.00,0,2551,17082,6.70,9,668
+  RIGHT rx=7221 tx=7216 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=172.0/s rate_tx=171.8/s
+  RIGHT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=172.0/s dev_missing=1785 last5s=15.5% cum=19.8% period=4.98ms discont=0
+LINKLOG,71075,RIGHT,172.0,158,1785,15.5,19.8,-24,231,0,batched,517,15.00,0,2551,17082,6.70,9,668
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=34 notify=2794 errors=0
+  FF14 batches_tx=2794 records_in_batches=18809 mean=6.73 max=9 batch_full_flushes=748
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=12759 tx=10724 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=172.4/s rate_tx=171.6/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=172.4/s dev_missing=2145 last5s=15.9% cum=14.4% period=4.98ms discont=0
+LINKLOG,76124,LEFT,172.4,163,2145,15.9,14.4,-25,230,0,batched,517,15.00,0,2794,18809,6.73,9,748
+  RIGHT rx=8085 tx=8085 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=172.8/s rate_tx=173.8/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=172.8/s dev_missing=1930 last5s=14.4% cum=19.3% period=4.98ms discont=0
+LINKLOG,76152,RIGHT,172.8,145,1930,14.4,19.3,-25,230,0,batched,517,15.00,0,2794,18809,6.73,9,748
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=34 notify=3027 errors=0
+  FF14 batches_tx=3027 records_in_batches=20441 mean=6.75 max=9 batch_full_flushes=820
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=13579 tx=11548 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=164.0/s rate_tx=164.8/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=164.0/s dev_missing=2338 last5s=19.1% cum=14.7% period=4.98ms discont=0
+LINKLOG,81203,LEFT,164.0,193,2338,19.1,14.7,-26,229,0,batched,517,15.00,0,3027,20441,6.75,9,820
+  RIGHT rx=8895 tx=8893 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=162.0/s rate_tx=161.6/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=162.0/s dev_missing=2140 last5s=20.6% cum=19.4% period=4.98ms discont=0
+LINKLOG,81233,RIGHT,162.0,210,2140,20.6,19.4,-25,230,0,batched,517,15.00,0,3027,20441,6.75,9,820
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=37 notify=3274 errors=0
+  FF14 batches_tx=3274 records_in_batches=22141 mean=6.76 max=9 batch_full_flushes=903
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=14417 tx=12386 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=167.6/s rate_tx=167.6/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=167.6/s dev_missing=2521 last5s=17.9% cum=14.9% period=4.98ms discont=0
+LINKLOG,86283,LEFT,167.6,183,2521,17.9,14.9,-26,229,0,batched,517,15.00,0,3274,22141,6.76,9,903
+  RIGHT rx=9755 tx=9755 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=172.0/s rate_tx=172.4/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=172.0/s dev_missing=2303 last5s=15.9% cum=19.1% period=4.98ms discont=0
+LINKLOG,86311,RIGHT,172.0,163,2303,15.9,19.1,-25,230,0,batched,517,15.00,0,3274,22141,6.76,9,903
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=37 notify=3512 errors=0
+  FF14 batches_tx=3512 records_in_batches=23788 mean=6.77 max=9 batch_full_flushes=969
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=15235 tx=13204 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.6/s rate_tx=163.6/s
+  LEFT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=163.6/s dev_missing=2727 last5s=20.1% cum=15.2% period=4.98ms discont=0
+LINKLOG,91361,LEFT,163.6,206,2727,20.1,15.2,-27,228,0,batched,517,15.00,0,3512,23788,6.77,9,969
+  RIGHT rx=10585 tx=10584 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=166.0/s rate_tx=165.8/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=166.0/s dev_missing=2486 last5s=18.1% cum=19.0% period=4.98ms discont=0
+LINKLOG,91392,RIGHT,166.0,183,2486,18.1,19.0,-26,229,0,batched,517,15.00,0,3512,23788,6.77,9,969
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=37 notify=3753 errors=0
+  FF14 batches_tx=3753 records_in_batches=25447 mean=6.78 max=9 batch_full_flushes=1033
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=16082 tx=14047 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=169.4/s rate_tx=168.6/s
+  LEFT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=169.4/s dev_missing=2899 last5s=16.9% cum=15.3% period=4.98ms discont=0
+LINKLOG,96435,LEFT,169.4,172,2899,16.9,15.3,-27,228,0,batched,517,15.00,0,3753,25447,6.78,9,1033
+  RIGHT rx=11400 tx=11400 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.0/s rate_tx=163.2/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=163.0/s dev_missing=2685 last5s=19.6% cum=19.1% period=4.98ms discont=0
+LINKLOG,96458,RIGHT,163.0,199,2685,19.6,19.1,-26,229,0,batched,517,15.00,0,3753,25447,6.78,9,1033
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=8/256 high=37 notify=3988 errors=0
+  FF14 batches_tx=3988 records_in_batches=27086 mean=6.79 max=9 batch_full_flushes=1098
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=16897 tx=14861 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.0/s rate_tx=162.8/s
+  LEFT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=163.0/s dev_missing=3100 last5s=19.8% cum=15.5% period=4.98ms discont=0
+LINKLOG,101510,LEFT,163.0,201,3100,19.8,15.5,-27,228,0,batched,517,15.00,0,3988,27086,6.79,9,1098
+  RIGHT rx=12228 tx=12225 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=165.6/s rate_tx=165.0/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=165.6/s dev_missing=2878 last5s=18.9% cum=19.1% period=4.98ms discont=0
+LINKLOG,101541,RIGHT,165.6,193,2878,18.9,19.1,-25,230,0,batched,517,15.00,0,3988,27086,6.79,9,1098
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=6/256 high=37 notify=4225 errors=0
+  FF14 batches_tx=4225 records_in_batches=28709 mean=6.80 max=9 batch_full_flushes=1170
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=17698 tx=15661 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=160.2/s rate_tx=160.0/s
+  LEFT link: rssi=-26 fcc=0 lq=228 mode=active rate_rx=160.2/s dev_missing=3320 last5s=21.5% cum=15.8% period=4.98ms discont=0
+LINKLOG,106584,LEFT,160.2,220,3320,21.5,15.8,-26,228,0,batched,517,15.00,0,4225,28709,6.80,9,1170
+  RIGHT rx=13048 tx=13048 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=164.0/s rate_tx=164.6/s
+  RIGHT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=164.0/s dev_missing=3075 last5s=19.4% cum=19.1% period=4.98ms discont=0
+LINKLOG,106608,RIGHT,164.0,197,3075,19.4,19.1,-24,231,0,batched,517,15.00,0,4225,28709,6.80,9,1170
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=7/256 high=37 notify=4466 errors=0
+  FF14 batches_tx=4466 records_in_batches=30355 mean=6.80 max=9 batch_full_flushes=1235
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=18501 tx=16467 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=160.6/s rate_tx=161.2/s
+  LEFT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=160.6/s dev_missing=3531 last5s=20.8% cum=16.0% period=4.98ms discont=0
+LINKLOG,111659,LEFT,160.6,211,3531,20.8,16.0,-27,228,0,batched,517,15.00,0,4466,30355,6.80,9,1235
+  RIGHT rx=13892 tx=13888 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=168.8/s rate_tx=168.0/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=168.8/s dev_missing=3251 last5s=17.3% cum=19.0% period=4.98ms discont=0
+LINKLOG,111688,RIGHT,168.8,176,3251,17.3,19.0,-25,230,0,batched,517,15.00,0,4466,30355,6.80,9,1235
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=5/256 high=37 notify=4704 errors=0
+  FF14 batches_tx=4704 records_in_batches=32008 mean=6.80 max=9 batch_full_flushes=1299
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=19335 tx=17301 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=166.8/s rate_tx=166.8/s
+  LEFT link: rssi=-27 fcc=0 lq=227 mode=active rate_rx=166.8/s dev_missing=3716 last5s=18.2% cum=16.1% period=4.98ms discont=0
+LINKLOG,116739,LEFT,166.8,185,3716,18.2,16.1,-27,227,0,batched,517,15.00,0,4704,32008,6.80,9,1299
+  RIGHT rx=14709 tx=14707 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.4/s rate_tx=163.8/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=163.4/s dev_missing=3452 last5s=19.7% cum=19.0% period=4.98ms discont=0
+LINKLOG,116768,RIGHT,163.4,201,3452,19.7,19.0,-25,230,0,batched,517,15.00,0,4704,32008,6.80,9,1299
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=37 notify=4940 errors=0
+  FF14 batches_tx=4940 records_in_batches=33576 mean=6.80 max=9 batch_full_flushes=1360
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=20150 tx=18115 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.0/s rate_tx=162.8/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=163.0/s dev_missing=3926 last5s=20.5% cum=16.3% period=4.98ms discont=0
+LINKLOG,121817,LEFT,163.0,210,3926,20.5,16.3,-28,227,0,batched,517,15.00,0,4940,33576,6.80,9,1360
+  RIGHT rx=15461 tx=15461 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=150.4/s rate_tx=150.8/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=150.4/s dev_missing=3718 last5s=26.1% cum=19.4% period=4.98ms discont=0
+LINKLOG,121848,RIGHT,150.4,266,3718,26.1,19.4,-26,229,0,batched,517,15.00,0,4940,33576,6.80,9,1360
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=37 notify=5177 errors=0
+  FF14 batches_tx=5177 records_in_batches=35208 mean=6.80 max=9 batch_full_flushes=1426
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=20936 tx=18905 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=157.2/s rate_tx=158.0/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=157.2/s dev_missing=4156 last5s=22.6% cum=16.6% period=4.98ms discont=0
+LINKLOG,126896,LEFT,157.2,230,4156,22.6,16.6,-28,227,0,batched,517,15.00,0,5177,35208,6.80,9,1426
+  RIGHT rx=16305 tx=16303 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=168.8/s rate_tx=168.4/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=168.8/s dev_missing=3894 last5s=17.3% cum=19.3% period=4.98ms discont=0
+LINKLOG,126927,RIGHT,168.8,176,3894,17.3,19.3,-26,229,0,batched,517,15.00,0,5177,35208,6.80,9,1426
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=7/256 high=37 notify=5412 errors=0
+  FF14 batches_tx=5412 records_in_batches=36810 mean=6.80 max=9 batch_full_flushes=1501
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=21743 tx=19707 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=161.4/s rate_tx=160.4/s
+  LEFT link: rssi=-29 fcc=0 lq=227 mode=active rate_rx=161.4/s dev_missing=4368 last5s=20.8% cum=16.7% period=4.98ms discont=0
+LINKLOG,131981,LEFT,161.4,212,4368,20.8,16.7,-29,227,0,batched,517,15.00,0,5412,36810,6.80,9,1501
+  RIGHT rx=17105 tx=17103 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=160.0/s rate_tx=160.0/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=160.0/s dev_missing=4110 last5s=21.3% cum=19.4% period=4.98ms discont=0
+LINKLOG,132004,RIGHT,160.0,216,4110,21.3,19.4,-26,229,0,batched,517,15.00,0,5412,36810,6.80,9,1501
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=37 notify=5646 errors=0
+  FF14 batches_tx=5646 records_in_batches=38420 mean=6.80 max=9 batch_full_flushes=1570
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=22576 tx=20544 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=166.6/s rate_tx=167.4/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=166.6/s dev_missing=4554 last5s=18.3% cum=16.8% period=4.98ms discont=0
+LINKLOG,137051,LEFT,166.6,186,4554,18.3,16.8,-28,227,0,batched,517,15.00,0,5646,38420,6.80,9,1570
+  RIGHT rx=17876 tx=17876 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=154.2/s rate_tx=154.6/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=154.2/s dev_missing=4356 last5s=24.2% cum=19.6% period=4.98ms discont=0
+LINKLOG,137083,RIGHT,154.2,246,4356,24.2,19.6,-27,228,0,batched,517,15.00,0,5646,38420,6.80,9,1570
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=37 notify=5890 errors=0
+  FF14 batches_tx=5890 records_in_batches=40104 mean=6.81 max=9 batch_full_flushes=1640
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=23422 tx=21389 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=169.2/s rate_tx=169.0/s
+  LEFT link: rssi=-28 fcc=0 lq=226 mode=active rate_rx=169.2/s dev_missing=4728 last5s=17.1% cum=16.8% period=4.98ms discont=0
+LINKLOG,142132,LEFT,169.2,174,4728,17.1,16.8,-28,226,0,batched,517,15.00,0,5890,40104,6.81,9,1640
+  RIGHT rx=18715 tx=18715 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=167.8/s rate_tx=167.8/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=167.8/s dev_missing=4535 last5s=17.6% cum=19.5% period=4.98ms discont=0
+LINKLOG,142162,RIGHT,167.8,179,4535,17.6,19.5,-26,229,0,batched,517,15.00,0,5890,40104,6.81,9,1640
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=37 notify=6128 errors=0
+  FF14 batches_tx=6128 records_in_batches=41746 mean=6.81 max=9 batch_full_flushes=1716
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=24249 tx=22218 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=165.4/s rate_tx=165.8/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=165.4/s dev_missing=4917 last5s=18.6% cum=16.9% period=4.98ms discont=0
+LINKLOG,147213,LEFT,165.4,189,4917,18.6,16.9,-28,227,0,batched,517,15.00,0,6128,41746,6.81,9,1716
+  RIGHT rx=19529 tx=19528 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=162.8/s rate_tx=162.6/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=162.8/s dev_missing=4737 last5s=19.9% cum=19.5% period=4.98ms discont=0
+LINKLOG,147237,RIGHT,162.8,202,4737,19.9,19.5,-27,228,0,batched,517,15.00,0,6128,41746,6.81,9,1716
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=37 notify=6371 errors=0
+  FF14 batches_tx=6371 records_in_batches=43398 mean=6.81 max=9 batch_full_flushes=1786
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=25083 tx=23052 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=166.8/s rate_tx=166.8/s
+  LEFT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=166.8/s dev_missing=5102 last5s=18.2% cum=16.9% period=4.98ms discont=0
+LINKLOG,152289,LEFT,166.8,185,5102,18.2,16.9,-27,228,0,batched,517,15.00,0,6371,43398,6.81,9,1786
+  RIGHT rx=20346 tx=20346 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.4/s rate_tx=163.6/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=163.4/s dev_missing=4939 last5s=19.8% cum=19.5% period=4.98ms discont=0
+LINKLOG,152313,RIGHT,163.4,202,4939,19.8,19.5,-27,228,0,batched,517,15.00,0,6371,43398,6.81,9,1786
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=37 notify=6612 errors=0
+  FF14 batches_tx=6612 records_in_batches=45012 mean=6.81 max=9 batch_full_flushes=1858
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=25874 tx=23843 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=158.2/s rate_tx=158.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=158.2/s dev_missing=5330 last5s=22.4% cum=17.1% period=4.98ms discont=0
+LINKLOG,157365,LEFT,158.2,228,5330,22.4,17.1,-28,227,0,batched,517,15.00,0,6612,45012,6.81,9,1858
+  RIGHT rx=21169 tx=21169 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=164.6/s rate_tx=164.6/s
+  RIGHT link: rssi=-26 fcc=0 lq=228 mode=active rate_rx=164.6/s dev_missing=5132 last5s=19.0% cum=19.5% period=4.98ms discont=0
+LINKLOG,157395,RIGHT,164.6,193,5132,19.0,19.5,-26,228,0,batched,517,15.00,0,6612,45012,6.81,9,1858
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=7/256 high=37 notify=6855 errors=0
+  FF14 batches_tx=6855 records_in_batches=46653 mean=6.81 max=9 batch_full_flushes=1931
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=26706 tx=24673 drop=0 offline=2031 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=166.4/s rate_tx=166.0/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=166.4/s dev_missing=5521 last5s=18.7% cum=17.1% period=4.98ms discont=0
+LINKLOG,162441,LEFT,166.4,191,5521,18.7,17.1,-28,227,0,batched,517,15.00,0,6855,46653,6.81,9,1931
+  RIGHT rx=21985 tx=21980 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.2/s rate_tx=162.2/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=163.2/s dev_missing=5334 last5s=19.8% cum=19.5% period=4.98ms discont=0
+LINKLOG,162464,RIGHT,163.2,202,5334,19.8,19.5,-26,229,0,batched,517,15.00,0,6855,46653,6.81,9,1931
+
+run 7:
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=32 notify=1184 errors=0
+  FF14 batches_tx=1184 records_in_batches=7944 mean=6.71 max=9 batch_full_flushes=311
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=7879 tx=3998 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=166.4/s rate_tx=167.0/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=166.4/s dev_missing=1681 last5s=17.5% cum=17.6% period=4.98ms discont=0
+LINKLOG,50721,LEFT,166.4,177,1681,17.5,17.6,-28,227,0,batched,517,15.00,0,1184,7944,6.71,9,311
+  RIGHT rx=4818 tx=3946 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=164.6/s rate_tx=164.6/s
+  RIGHT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=164.6/s dev_missing=1212 last5s=19.7% cum=20.1% period=4.98ms discont=0
+LINKLOG,50753,RIGHT,164.6,202,1212,19.7,20.1,-28,227,0,batched,517,15.00,0,1184,7944,6.71,9,311
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=6/256 high=32 notify=1424 errors=0
+  FF14 batches_tx=1424 records_in_batches=9566 mean=6.72 max=9 batch_full_flushes=374
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=8676 tx=4791 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=159.4/s rate_tx=158.6/s
+  LEFT link: rssi=-29 fcc=0 lq=226 mode=active rate_rx=159.4/s dev_missing=1910 last5s=22.3% cum=18.0% period=4.98ms discont=0
+LINKLOG,55795,LEFT,159.4,229,1910,22.3,18.0,-29,226,0,batched,517,15.00,0,1424,9566,6.72,9,374
+  RIGHT rx=5646 tx=4775 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=165.6/s rate_tx=165.8/s
+  RIGHT link: rssi=-27 fcc=0 lq=227 mode=active rate_rx=165.6/s dev_missing=1400 last5s=18.5% cum=19.9% period=4.98ms discont=0
+LINKLOG,55821,RIGHT,165.6,188,1400,18.5,19.9,-27,227,0,batched,517,15.00,0,1424,9566,6.72,9,374
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=32 notify=1668 errors=0
+  FF14 batches_tx=1668 records_in_batches=11196 mean=6.71 max=9 batch_full_flushes=448
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=9494 tx=5612 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=163.6/s rate_tx=164.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=163.6/s dev_missing=2107 last5s=19.4% cum=18.2% period=4.98ms discont=0
+LINKLOG,60871,LEFT,163.6,197,2107,19.4,18.2,-28,227,0,batched,517,15.00,0,1668,11196,6.71,9,448
+  RIGHT rx=6453 tx=5584 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=161.4/s rate_tx=161.8/s
+  RIGHT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=161.4/s dev_missing=1609 last5s=20.6% cum=20.0% period=4.98ms discont=0
+LINKLOG,60896,RIGHT,161.4,209,1609,20.6,20.0,-28,227,0,batched,517,15.00,0,1668,11196,6.71,9,448
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=32 notify=1907 errors=0
+  FF14 batches_tx=1907 records_in_batches=12825 mean=6.73 max=9 batch_full_flushes=514
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=10311 tx=6428 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=163.4/s rate_tx=163.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=163.4/s dev_missing=2313 last5s=20.1% cum=18.3% period=4.98ms discont=0
+LINKLOG,65946,LEFT,163.4,206,2313,20.1,18.3,-28,227,0,batched,517,15.00,0,1907,12825,6.73,9,514
+  RIGHT rx=7267 tx=6397 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=162.8/s rate_tx=162.6/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=162.8/s dev_missing=1812 last5s=20.0% cum=20.0% period=4.98ms discont=0
+LINKLOG,65973,RIGHT,162.8,203,1812,20.0,20.0,-27,228,0,batched,517,15.00,0,1907,12825,6.73,9,514
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=32 notify=2145 errors=0
+  FF14 batches_tx=2145 records_in_batches=14407 mean=6.72 max=9 batch_full_flushes=561
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=11121 tx=7239 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=162.0/s rate_tx=162.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=162.0/s dev_missing=2520 last5s=20.4% cum=18.5% period=4.98ms discont=0
+LINKLOG,71024,LEFT,162.0,207,2520,20.4,18.5,-28,227,0,batched,517,15.00,0,2145,14407,6.72,9,561
+  RIGHT rx=8037 tx=7168 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=154.0/s rate_tx=154.2/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=154.0/s dev_missing=2061 last5s=24.4% cum=20.4% period=4.98ms discont=0
+LINKLOG,71050,RIGHT,154.0,249,2061,24.4,20.4,-27,228,0,batched,517,15.00,0,2145,14407,6.72,9,561
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=32 notify=2392 errors=0
+  FF14 batches_tx=2392 records_in_batches=16112 mean=6.74 max=9 batch_full_flushes=625
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=12003 tx=8121 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=176.4/s rate_tx=176.4/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=176.4/s dev_missing=2656 last5s=13.4% cum=18.1% period=4.98ms discont=0
+LINKLOG,76100,LEFT,176.4,136,2656,13.4,18.1,-28,227,0,batched,517,15.00,0,2392,16112,6.74,9,625
+  RIGHT rx=8862 tx=7991 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=165.0/s rate_tx=164.6/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=165.0/s dev_missing=2256 last5s=19.1% cum=20.3% period=4.98ms discont=0
+LINKLOG,76123,RIGHT,165.0,195,2256,19.1,20.3,-27,228,0,batched,517,15.00,0,2392,16112,6.74,9,625
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=32 notify=2634 errors=0
+  FF14 batches_tx=2634 records_in_batches=17764 mean=6.74 max=9 batch_full_flushes=694
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=12837 tx=8956 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=166.8/s rate_tx=167.0/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=166.8/s dev_missing=2839 last5s=18.0% cum=18.1% period=4.98ms discont=0
+LINKLOG,81171,LEFT,166.8,183,2839,18.0,18.1,-28,227,0,batched,517,15.00,0,2634,17764,6.74,9,694
+  RIGHT rx=9679 tx=8808 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=163.4/s rate_tx=163.4/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=163.4/s dev_missing=2450 last5s=19.2% cum=20.2% period=4.98ms discont=0
+LINKLOG,81204,RIGHT,163.4,194,2450,19.2,20.2,-26,229,0,batched,517,15.00,0,2634,17764,6.74,9,694
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=32 notify=2877 errors=0
+  FF14 batches_tx=2877 records_in_batches=19442 mean=6.76 max=9 batch_full_flushes=755
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=13710 tx=9826 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=174.6/s rate_tx=174.0/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=174.6/s dev_missing=2993 last5s=15.0% cum=17.9% period=4.98ms discont=0
+LINKLOG,86248,LEFT,174.6,154,2993,15.0,17.9,-28,227,0,batched,517,15.00,0,2877,19442,6.76,9,755
+  RIGHT rx=10485 tx=9616 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=161.2/s rate_tx=161.6/s
+  RIGHT link: rssi=-27 fcc=0 lq=230 mode=active rate_rx=161.2/s dev_missing=2666 last5s=21.1% cum=20.3% period=4.98ms discont=0
+LINKLOG,86274,RIGHT,161.2,216,2666,21.1,20.3,-27,230,0,batched,517,15.00,0,2877,19442,6.76,9,755
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=32 notify=3120 errors=0
+  FF14 batches_tx=3120 records_in_batches=21092 mean=6.76 max=9 batch_full_flushes=816
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=14570 tx=10689 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=172.0/s rate_tx=172.6/s
+  LEFT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=172.0/s dev_missing=3146 last5s=15.1% cum=17.8% period=4.98ms discont=0
+LINKLOG,91321,LEFT,172.0,153,3146,15.1,17.8,-27,228,0,batched,517,15.00,0,3120,21092,6.76,9,816
+  RIGHT rx=11276 tx=10403 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=158.2/s rate_tx=157.4/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=158.2/s dev_missing=2892 last5s=22.2% cum=20.4% period=4.98ms discont=0
+LINKLOG,91351,RIGHT,158.2,226,2892,22.2,20.4,-25,230,0,batched,517,15.00,0,3120,21092,6.76,9,816
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=5/256 high=32 notify=3364 errors=0
+  FF14 batches_tx=3364 records_in_batches=22755 mean=6.76 max=9 batch_full_flushes=876
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=15415 tx=11534 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=169.0/s rate_tx=169.0/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=169.0/s dev_missing=3323 last5s=17.3% cum=17.7% period=4.98ms discont=0
+LINKLOG,96400,LEFT,169.0,177,3323,17.3,17.7,-28,227,0,batched,517,15.00,0,3364,22755,6.76,9,876
+  RIGHT rx=12095 tx=11221 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=163.8/s rate_tx=163.6/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=163.8/s dev_missing=3087 last5s=19.2% cum=20.3% period=4.98ms discont=0
+LINKLOG,96430,RIGHT,163.8,195,3087,19.2,20.3,-25,230,0,batched,517,15.00,0,3364,22755,6.76,9,876
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=32 notify=3605 errors=0
+  FF14 batches_tx=3605 records_in_batches=24423 mean=6.77 max=9 batch_full_flushes=948
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=16264 tx=12380 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=169.8/s rate_tx=169.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=169.8/s dev_missing=3497 last5s=17.0% cum=17.7% period=4.98ms discont=0
+LINKLOG,101486,LEFT,169.8,174,3497,17.0,17.7,-28,227,0,batched,517,15.00,0,3605,24423,6.77,9,948
+  RIGHT rx=12913 tx=12043 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=163.6/s rate_tx=164.4/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=163.6/s dev_missing=3291 last5s=20.0% cum=20.3% period=4.98ms discont=0
+LINKLOG,101515,RIGHT,163.6,204,3291,20.0,20.3,-26,229,0,batched,517,15.00,0,3605,24423,6.77,9,948
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=32 notify=3855 errors=0
+  FF14 batches_tx=3855 records_in_batches=26153 mean=6.78 max=9 batch_full_flushes=1015
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=17145 tx=13263 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=176.2/s rate_tx=176.6/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=176.2/s dev_missing=3632 last5s=13.3% cum=17.5% period=4.98ms discont=0
+LINKLOG,106566,LEFT,176.2,135,3632,13.3,17.5,-28,227,0,batched,517,15.00,0,3855,26153,6.78,9,1015
+  RIGHT rx=13760 tx=12890 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=169.4/s rate_tx=169.4/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=169.4/s dev_missing=3457 last5s=16.4% cum=20.1% period=4.98ms discont=0
+LINKLOG,106589,RIGHT,169.4,166,3457,16.4,20.1,-26,229,0,batched,517,15.00,0,3855,26153,6.78,9,1015
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=32 notify=4101 errors=0
+  FF14 batches_tx=4101 records_in_batches=27862 mean=6.79 max=9 batch_full_flushes=1080
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=18026 tx=14142 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=176.2/s rate_tx=175.8/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=176.2/s dev_missing=3764 last5s=13.0% cum=17.3% period=4.98ms discont=0
+LINKLOG,111641,LEFT,176.2,132,3764,13.0,17.3,-28,227,0,batched,517,15.00,0,4101,27862,6.79,9,1080
+  RIGHT rx=14589 tx=13720 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=165.8/s rate_tx=166.0/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=165.8/s dev_missing=3653 last5s=19.1% cum=20.0% period=4.98ms discont=0
+LINKLOG,111670,RIGHT,165.8,196,3653,19.1,20.0,-27,228,0,batched,517,15.00,0,4101,27862,6.79,9,1080
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=32 notify=4348 errors=0
+  FF14 batches_tx=4348 records_in_batches=29515 mean=6.79 max=9 batch_full_flushes=1135
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=18872 tx=14991 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=169.2/s rate_tx=169.8/s
+  LEFT link: rssi=-28 fcc=0 lq=228 mode=active rate_rx=169.2/s dev_missing=3938 last5s=17.1% cum=17.3% period=4.98ms discont=0
+LINKLOG,116722,LEFT,169.2,174,3938,17.1,17.3,-28,228,0,batched,517,15.00,0,4348,29515,6.79,9,1135
+  RIGHT rx=15395 tx=14524 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=161.2/s rate_tx=160.8/s
+  RIGHT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=161.2/s dev_missing=3866 last5s=20.9% cum=20.1% period=4.98ms discont=0
+LINKLOG,116752,RIGHT,161.2,213,3866,20.9,20.1,-28,227,0,batched,517,15.00,0,4348,29515,6.79,9,1135
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=32 notify=4588 errors=0
+  FF14 batches_tx=4588 records_in_batches=31122 mean=6.78 max=9 batch_full_flushes=1189
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=19707 tx=15826 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=167.0/s rate_tx=167.0/s
+  LEFT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=167.0/s dev_missing=4122 last5s=18.1% cum=17.3% period=4.98ms discont=0
+LINKLOG,121801,LEFT,167.0,184,4122,18.1,17.3,-27,228,0,batched,517,15.00,0,4588,31122,6.78,9,1189
+  RIGHT rx=16165 tx=15296 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=154.0/s rate_tx=154.4/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=154.0/s dev_missing=4103 last5s=23.5% cum=20.2% period=4.98ms discont=0
+LINKLOG,121829,RIGHT,154.0,237,4103,23.5,20.2,-27,228,0,batched,517,15.00,0,4588,31122,6.78,9,1189
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=5/256 high=32 notify=4827 errors=0
+  FF14 batches_tx=4827 records_in_batches=32753 mean=6.79 max=9 batch_full_flushes=1246
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=20570 tx=16687 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=172.6/s rate_tx=172.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=172.6/s dev_missing=4286 last5s=16.0% cum=17.2% period=4.98ms discont=0
+LINKLOG,126879,LEFT,172.6,164,4286,16.0,17.2,-28,227,0,batched,517,15.00,0,4827,32753,6.79,9,1246
+  RIGHT rx=16938 tx=16066 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=154.6/s rate_tx=154.0/s
+  RIGHT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=154.6/s dev_missing=4357 last5s=24.7% cum=20.5% period=4.98ms discont=0
+LINKLOG,126910,RIGHT,154.6,254,4357,24.7,20.5,-28,227,0,batched,517,15.00,0,4827,32753,6.79,9,1246
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=32 notify=5070 errors=0
+  FF14 batches_tx=5070 records_in_batches=34387 mean=6.78 max=9 batch_full_flushes=1298
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=21396 tx=17515 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=165.2/s rate_tx=165.6/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=165.2/s dev_missing=4466 last5s=17.9% cum=17.3% period=4.98ms discont=0
+LINKLOG,131960,LEFT,165.2,180,4466,17.9,17.3,-28,227,0,batched,517,15.00,0,5070,34387,6.78,9,1298
+  RIGHT rx=17742 tx=16872 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=160.8/s rate_tx=161.2/s
+  RIGHT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=160.8/s dev_missing=4569 last5s=20.9% cum=20.5% period=4.98ms discont=0
+LINKLOG,131992,RIGHT,160.8,212,4569,20.9,20.5,-28,227,0,batched,517,15.00,0,5070,34387,6.78,9,1298
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=32 notify=5317 errors=0
+  FF14 batches_tx=5317 records_in_batches=36042 mean=6.78 max=9 batch_full_flushes=1364
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=22265 tx=18381 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=173.8/s rate_tx=173.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=173.8/s dev_missing=4624 last5s=15.4% cum=17.2% period=4.98ms discont=0
+LINKLOG,137043,LEFT,173.8,158,4624,15.4,17.2,-28,227,0,batched,517,15.00,0,5317,36042,6.78,9,1364
+  RIGHT rx=18530 tx=17661 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=157.6/s rate_tx=157.8/s
+  RIGHT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=157.6/s dev_missing=4798 last5s=22.5% cum=20.6% period=4.98ms discont=0
+LINKLOG,137066,RIGHT,157.6,229,4798,22.5,20.6,-28,227,0,batched,517,15.00,0,5317,36042,6.78,9,1364
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=8/256 high=32 notify=5558 errors=0
+  FF14 batches_tx=5558 records_in_batches=37633 mean=6.77 max=9 batch_full_flushes=1413
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=23084 tx=19200 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=163.8/s rate_tx=163.8/s
+  LEFT link: rssi=-29 fcc=0 lq=227 mode=active rate_rx=163.8/s dev_missing=4832 last5s=20.3% cum=17.3% period=4.98ms discont=0
+LINKLOG,142117,LEFT,163.8,208,4832,20.3,17.3,-29,227,0,batched,517,15.00,0,5558,37633,6.77,9,1413
+  RIGHT rx=19307 tx=18433 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=155.4/s rate_tx=154.4/s
+  RIGHT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=155.4/s dev_missing=5041 last5s=23.8% cum=20.7% period=4.98ms discont=0
+LINKLOG,142147,RIGHT,155.4,243,5041,23.8,20.7,-28,227,0,batched,517,15.00,0,5558,37633,6.77,9,1413
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=32 notify=5800 errors=0
+  FF14 batches_tx=5800 records_in_batches=39251 mean=6.77 max=9 batch_full_flushes=1466
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=23933 tx=20051 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=169.8/s rate_tx=170.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=169.8/s dev_missing=5000 last5s=16.5% cum=17.3% period=4.98ms discont=0
+LINKLOG,147191,LEFT,169.8,168,5000,16.5,17.3,-28,227,0,batched,517,15.00,0,5800,39251,6.77,9,1466
+  RIGHT rx=20069 tx=19200 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=152.4/s rate_tx=153.4/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=152.4/s dev_missing=5293 last5s=24.9% cum=20.9% period=4.98ms discont=0
+LINKLOG,147221,RIGHT,152.4,252,5293,24.9,20.9,-27,228,0,batched,517,15.00,0,5800,39251,6.77,9,1466
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=32 notify=6047 errors=0
+  FF14 batches_tx=6047 records_in_batches=40924 mean=6.77 max=9 batch_full_flushes=1519
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=24784 tx=20900 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=170.2/s rate_tx=169.8/s
+  LEFT link: rssi=-27 fcc=0 lq=227 mode=active rate_rx=170.2/s dev_missing=5172 last5s=16.8% cum=17.3% period=4.98ms discont=0
+LINKLOG,152278,LEFT,170.2,172,5172,16.8,17.3,-27,227,0,batched,517,15.00,0,6047,40924,6.77,9,1519
+  RIGHT rx=20894 tx=20024 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=165.0/s rate_tx=164.8/s
+  RIGHT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=165.0/s dev_missing=5489 last5s=19.2% cum=20.8% period=4.98ms discont=0
+LINKLOG,152301,RIGHT,165.0,196,5489,19.2,20.8,-28,227,0,batched,517,15.00,0,6047,40924,6.77,9,1519
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=32 notify=6292 errors=0
+  FF14 batches_tx=6292 records_in_batches=42616 mean=6.77 max=9 batch_full_flushes=1583
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=25660 tx=21775 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=175.2/s rate_tx=175.0/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=175.2/s dev_missing=5315 last5s=14.0% cum=17.2% period=4.98ms discont=0
+LINKLOG,157355,LEFT,175.2,143,5315,14.0,17.2,-28,227,0,batched,517,15.00,0,6292,42616,6.77,9,1583
+  RIGHT rx=21710 tx=20841 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=163.2/s rate_tx=163.4/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=163.2/s dev_missing=5691 last5s=19.8% cum=20.8% period=4.98ms discont=0
+LINKLOG,157378,RIGHT,163.2,202,5691,19.8,20.8,-27,228,0,batched,517,15.00,0,6292,42616,6.77,9,1583
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=32 notify=6533 errors=0
+  FF14 batches_tx=6533 records_in_batches=44237 mean=6.77 max=9 batch_full_flushes=1644
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=26522 tx=22641 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=172.4/s rate_tx=173.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=172.4/s dev_missing=5471 last5s=15.3% cum=17.1% period=4.98ms discont=0
+LINKLOG,162429,LEFT,172.4,156,5471,15.3,17.1,-28,227,0,batched,517,15.00,0,6533,44237,6.77,9,1644
+  RIGHT rx=22467 tx=21596 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=151.4/s rate_tx=151.0/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=151.4/s dev_missing=5952 last5s=25.6% cum=20.9% period=4.98ms discont=0
+LINKLOG,162461,RIGHT,151.4,261,5952,25.6,20.9,-27,228,0,batched,517,15.00,0,6533,44237,6.77,9,1644
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=32 notify=6775 errors=0
+  FF14 batches_tx=6775 records_in_batches=45877 mean=6.77 max=9 batch_full_flushes=1691
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=27357 tx=23473 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=167.0/s rate_tx=166.4/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=167.0/s dev_missing=5656 last5s=18.1% cum=17.1% period=4.98ms discont=0
+LINKLOG,167502,LEFT,167.0,185,5656,18.1,17.1,-28,227,0,batched,517,15.00,0,6775,45877,6.77,9,1691
+  RIGHT rx=23273 tx=22404 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=161.2/s rate_tx=161.6/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=161.2/s dev_missing=6159 last5s=20.4% cum=20.9% period=4.98ms discont=0
+LINKLOG,167531,RIGHT,161.2,207,6159,20.4,20.9,-26,229,0,batched,517,15.00,0,6775,45877,6.77,9,1691
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=32 notify=7017 errors=0
+  FF14 batches_tx=7017 records_in_batches=47506 mean=6.77 max=9 batch_full_flushes=1742
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=28208 tx=24327 drop=0 offline=3294 purged=0 mtu_skip=587 dec_err=0 decimated=0 rate_rx=170.2/s rate_tx=170.8/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=170.2/s dev_missing=5822 last5s=16.3% cum=17.1% period=4.98ms discont=0
+LINKLOG,172579,LEFT,170.2,166,5822,16.3,17.1,-28,227,0,batched,517,15.00,0,7017,47506,6.77,9,1742
+  RIGHT rx=24050 tx=23179 drop=0 offline=275 purged=0 mtu_skip=594 dec_err=0 decimated=0 rate_rx=155.4/s rate_tx=155.0/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=155.4/s dev_missing=6399 last5s=23.6% cum=21.0% period=4.98ms discont=0
+LINKLOG,172610,RIGHT,155.4,240,6399,23.6,21.0,-26,229,0,batched,517,15.00,0,7017,47506,6.77,9,1742
+
+run 8:
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=34 notify=1215 errors=0
+  FF14 batches_tx=1215 records_in_batches=8156 mean=6.71 max=9 batch_full_flushes=302
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=5868 tx=3917 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=152.4/s rate_tx=152.4/s
+  LEFT link: rssi=-30 fcc=0 lq=225 mode=active rate_rx=152.4/s dev_missing=1659 last5s=25.3% cum=22.0% period=4.98ms discont=0
+LINKLOG,40605,LEFT,152.4,258,1659,25.3,22.0,-30,225,0,batched,517,15.00,0,1215,8156,6.71,9,302
+  RIGHT rx=5863 tx=4239 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.6/s rate_tx=164.0/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=163.6/s dev_missing=1262 last5s=19.7% cum=17.7% period=4.98ms discont=0
+LINKLOG,40637,RIGHT,163.6,201,1262,19.7,17.7,-26,229,0,batched,517,15.00,0,1215,8156,6.71,9,302
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=34 notify=1457 errors=0
+  FF14 batches_tx=1457 records_in_batches=9722 mean=6.67 max=9 batch_full_flushes=357
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=6573 tx=4622 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=141.0/s rate_tx=141.0/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=141.0/s dev_missing=1970 last5s=30.6% cum=23.1% period=4.98ms discont=0
+LINKLOG,45680,LEFT,141.0,311,1970,30.6,23.1,-28,227,0,batched,517,15.00,0,1457,9722,6.67,9,357
+  RIGHT rx=6724 tx=5100 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=172.2/s rate_tx=172.2/s
+  RIGHT link: rssi=-26 fcc=0 lq=228 mode=active rate_rx=172.2/s dev_missing=1418 last5s=15.3% cum=17.4% period=4.98ms discont=0
+LINKLOG,45708,RIGHT,172.2,156,1418,15.3,17.4,-26,228,0,batched,517,15.00,0,1457,9722,6.67,9,357
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=38 notify=1700 errors=0
+  FF14 batches_tx=1700 records_in_batches=11335 mean=6.67 max=9 batch_full_flushes=416
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=7357 tx=5408 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=156.8/s rate_tx=157.2/s
+  LEFT link: rssi=-29 fcc=0 lq=226 mode=active rate_rx=156.8/s dev_missing=2205 last5s=23.1% cum=23.1% period=4.98ms discont=0
+LINKLOG,50759,LEFT,156.8,235,2205,23.1,23.1,-29,226,0,batched,517,15.00,0,1700,11335,6.67,9,416
+  RIGHT rx=7553 tx=5927 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=165.8/s rate_tx=165.4/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=165.8/s dev_missing=1611 last5s=18.9% cum=17.6% period=4.98ms discont=0
+LINKLOG,50789,RIGHT,165.8,193,1611,18.9,17.6,-26,229,0,batched,517,15.00,0,1700,11335,6.67,9,416
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=7/256 high=38 notify=1937 errors=0
+  FF14 batches_tx=1937 records_in_batches=12923 mean=6.67 max=9 batch_full_flushes=471
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=8145 tx=6189 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=157.6/s rate_tx=156.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=157.6/s dev_missing=2438 last5s=22.8% cum=23.0% period=4.98ms discont=0
+LINKLOG,55834,LEFT,157.6,233,2438,22.8,23.0,-28,227,0,batched,517,15.00,0,1937,12923,6.67,9,471
+  RIGHT rx=8358 tx=6734 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=161.0/s rate_tx=161.4/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=161.0/s dev_missing=1807 last5s=19.6% cum=17.8% period=4.98ms discont=0
+LINKLOG,55859,RIGHT,161.0,196,1807,19.6,17.8,-27,228,0,batched,517,15.00,0,1937,12923,6.67,9,471
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=38 notify=2175 errors=0
+  FF14 batches_tx=2175 records_in_batches=14514 mean=6.67 max=9 batch_full_flushes=535
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=8891 tx=6940 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=149.2/s rate_tx=150.2/s
+  LEFT link: rssi=-29 fcc=0 lq=226 mode=active rate_rx=149.2/s dev_missing=2710 last5s=26.7% cum=23.4% period=4.98ms discont=0
+LINKLOG,60909,LEFT,149.2,272,2710,26.7,23.4,-29,226,0,batched,517,15.00,0,2175,14514,6.67,9,535
+  RIGHT rx=9200 tx=7574 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=168.4/s rate_tx=168.0/s
+  RIGHT link: rssi=-26 fcc=0 lq=228 mode=active rate_rx=168.4/s dev_missing=1998 last5s=18.5% cum=17.8% period=4.98ms discont=0
+LINKLOG,60941,RIGHT,168.4,191,1998,18.5,17.8,-26,228,0,batched,517,15.00,0,2175,14514,6.67,9,535
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=7/256 high=38 notify=2408 errors=0
+  FF14 batches_tx=2408 records_in_batches=16031 mean=6.66 max=9 batch_full_flushes=578
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=9619 tx=7664 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=145.6/s rate_tx=144.8/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=145.6/s dev_missing=3002 last5s=28.6% cum=23.8% period=4.98ms discont=0
+LINKLOG,65981,LEFT,145.6,292,3002,28.6,23.8,-28,227,0,batched,517,15.00,0,2408,16031,6.66,9,578
+  RIGHT rx=9992 tx=8367 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=158.4/s rate_tx=158.6/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=158.4/s dev_missing=2220 last5s=21.9% cum=18.2% period=4.98ms discont=0
+LINKLOG,66013,RIGHT,158.4,222,2220,21.9,18.2,-27,228,0,batched,517,15.00,0,2408,16031,6.66,9,578
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=8/256 high=38 notify=2645 errors=0
+  FF14 batches_tx=2645 records_in_batches=17625 mean=6.66 max=9 batch_full_flushes=636
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=10380 tx=8428 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=152.2/s rate_tx=152.8/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=152.2/s dev_missing=3258 last5s=25.2% cum=23.9% period=4.98ms discont=0
+LINKLOG,71054,LEFT,152.2,256,3258,25.2,23.9,-28,227,0,batched,517,15.00,0,2645,17625,6.66,9,636
+  RIGHT rx=10826 tx=9197 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=166.8/s rate_tx=166.0/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=166.8/s dev_missing=2406 last5s=18.2% cum=18.2% period=4.98ms discont=0
+LINKLOG,71085,RIGHT,166.8,186,2406,18.2,18.2,-27,228,0,batched,517,15.00,0,2645,17625,6.66,9,636
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=5/256 high=38 notify=2878 errors=0
+  FF14 batches_tx=2878 records_in_batches=19166 mean=6.66 max=9 batch_full_flushes=687
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=11103 tx=9152 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=144.6/s rate_tx=144.8/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=144.6/s dev_missing=3548 last5s=28.6% cum=24.2% period=4.98ms discont=0
+LINKLOG,76136,LEFT,144.6,290,3548,28.6,24.2,-28,227,0,batched,517,15.00,0,2878,19166,6.66,9,687
+  RIGHT rx=11641 tx=10014 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.0/s rate_tx=163.4/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=163.0/s dev_missing=2608 last5s=19.9% cum=18.3% period=4.98ms discont=0
+LINKLOG,76164,RIGHT,163.0,202,2608,19.9,18.3,-27,228,0,batched,517,15.00,0,2878,19166,6.66,9,687
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=38 notify=3111 errors=0
+  FF14 batches_tx=3111 records_in_batches=20698 mean=6.65 max=9 batch_full_flushes=741
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=11874 tx=9925 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=154.2/s rate_tx=154.6/s
+  LEFT link: rssi=-29 fcc=0 lq=226 mode=active rate_rx=154.2/s dev_missing=3796 last5s=24.3% cum=24.2% period=4.98ms discont=0
+LINKLOG,81215,LEFT,154.2,248,3796,24.3,24.2,-29,226,0,batched,517,15.00,0,3111,20698,6.65,9,741
+  RIGHT rx=12398 tx=10773 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=151.4/s rate_tx=151.8/s
+  RIGHT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=151.4/s dev_missing=2865 last5s=25.3% cum=18.8% period=4.98ms discont=0
+LINKLOG,81244,RIGHT,151.4,257,2865,25.3,18.8,-27,228,0,batched,517,15.00,0,3111,20698,6.65,9,741
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=38 notify=3346 errors=0
+  FF14 batches_tx=3346 records_in_batches=22290 mean=6.66 max=9 batch_full_flushes=793
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=12625 tx=10676 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=150.2/s rate_tx=150.2/s
+  LEFT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=150.2/s dev_missing=4061 last5s=26.1% cum=24.3% period=4.98ms discont=0
+LINKLOG,86292,LEFT,150.2,265,4061,26.1,24.3,-27,228,0,batched,517,15.00,0,3346,22290,6.66,9,793
+  RIGHT rx=13238 tx=11614 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=168.0/s rate_tx=168.2/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=168.0/s dev_missing=3044 last5s=17.6% cum=18.7% period=4.98ms discont=0
+LINKLOG,86322,RIGHT,168.0,179,3044,17.6,18.7,-25,230,0,batched,517,15.00,0,3346,22290,6.66,9,793
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=38 notify=3586 errors=0
+  FF14 batches_tx=3586 records_in_batches=23914 mean=6.67 max=9 batch_full_flushes=846
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=13395 tx=11445 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=154.0/s rate_tx=153.8/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=154.0/s dev_missing=4316 last5s=24.9% cum=24.4% period=4.98ms discont=0
+LINKLOG,91373,LEFT,154.0,255,4316,24.9,24.4,-28,227,0,batched,517,15.00,0,3586,23914,6.67,9,846
+  RIGHT rx=14093 tx=12469 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=171.0/s rate_tx=171.0/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=171.0/s dev_missing=3208 last5s=16.1% cum=18.5% period=4.98ms discont=0
+LINKLOG,91398,RIGHT,171.0,164,3208,16.1,18.5,-26,229,0,batched,517,15.00,0,3586,23914,6.67,9,846
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=8/256 high=38 notify=3822 errors=0
+  FF14 batches_tx=3822 records_in_batches=25488 mean=6.67 max=9 batch_full_flushes=895
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=14162 tx=12210 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=153.4/s rate_tx=153.0/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=153.4/s dev_missing=4572 last5s=25.0% cum=24.4% period=4.98ms discont=0
+LINKLOG,96449,LEFT,153.4,256,4572,25.0,24.4,-28,227,0,batched,517,15.00,0,3822,25488,6.67,9,895
+  RIGHT rx=14907 tx=13278 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=162.8/s rate_tx=161.8/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=162.8/s dev_missing=3399 last5s=19.0% cum=18.6% period=4.98ms discont=0
+LINKLOG,96474,RIGHT,162.8,191,3399,19.0,18.6,-26,229,0,batched,517,15.00,0,3822,25488,6.67,9,895
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=38 notify=4051 errors=0
+  FF14 batches_tx=4051 records_in_batches=27060 mean=6.68 max=9 batch_full_flushes=957
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=14966 tx=13017 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=160.8/s rate_tx=161.4/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=160.8/s dev_missing=4785 last5s=20.9% cum=24.2% period=4.98ms discont=0
+LINKLOG,101523,LEFT,160.8,213,4785,20.9,24.2,-28,227,0,batched,517,15.00,0,4051,27060,6.68,9,957
+  RIGHT rx=15669 tx=14043 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=152.4/s rate_tx=153.0/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=152.4/s dev_missing=3668 last5s=26.1% cum=19.0% period=4.98ms discont=0
+LINKLOG,101548,RIGHT,152.4,269,3668,26.1,19.0,-26,229,0,batched,517,15.00,0,4051,27060,6.68,9,957
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=38 notify=4287 errors=0
+  FF14 batches_tx=4287 records_in_batches=28616 mean=6.68 max=9 batch_full_flushes=1013
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=15727 tx=13778 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=152.2/s rate_tx=152.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=152.2/s dev_missing=5044 last5s=25.4% cum=24.3% period=4.98ms discont=0
+LINKLOG,106600,LEFT,152.2,259,5044,25.4,24.3,-28,227,0,batched,517,15.00,0,4287,28616,6.68,9,1013
+  RIGHT rx=16462 tx=14838 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=158.6/s rate_tx=159.0/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=158.6/s dev_missing=3892 last5s=22.0% cum=19.1% period=4.98ms discont=0
+LINKLOG,106625,RIGHT,158.6,224,3892,22.0,19.1,-26,229,0,batched,517,15.00,0,4287,28616,6.68,9,1013
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=7/256 high=38 notify=4527 errors=0
+  FF14 batches_tx=4527 records_in_batches=30244 mean=6.68 max=9 batch_full_flushes=1077
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=16518 tx=14567 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=158.2/s rate_tx=157.8/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=158.2/s dev_missing=5271 last5s=22.3% cum=24.2% period=4.98ms discont=0
+LINKLOG,111675,LEFT,158.2,227,5271,22.3,24.2,-28,227,0,batched,517,15.00,0,4527,30244,6.68,9,1077
+  RIGHT rx=17306 tx=15677 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=168.8/s rate_tx=167.8/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=168.8/s dev_missing=4066 last5s=17.1% cum=19.0% period=4.98ms discont=0
+LINKLOG,111702,RIGHT,168.8,174,4066,17.1,19.0,-26,229,0,batched,517,15.00,0,4527,30244,6.68,9,1077
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=7/256 high=38 notify=4762 errors=0
+  FF14 batches_tx=4762 records_in_batches=31815 mean=6.68 max=9 batch_full_flushes=1127
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=17261 tx=15309 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=148.6/s rate_tx=148.4/s
+  LEFT link: rssi=-29 fcc=0 lq=226 mode=active rate_rx=148.6/s dev_missing=5549 last5s=27.2% cum=24.3% period=4.98ms discont=0
+LINKLOG,116752,LEFT,148.6,278,5549,27.2,24.3,-29,226,0,batched,517,15.00,0,4762,31815,6.68,9,1127
+  RIGHT rx=18134 tx=16506 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=165.6/s rate_tx=165.8/s
+  RIGHT link: rssi=-24 fcc=0 lq=230 mode=active rate_rx=165.6/s dev_missing=4256 last5s=18.7% cum=19.0% period=4.98ms discont=0
+LINKLOG,116783,RIGHT,165.6,190,4256,18.7,19.0,-24,230,0,batched,517,15.00,0,4762,31815,6.68,9,1127
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=6/256 high=38 notify=4999 errors=0
+  FF14 batches_tx=4999 records_in_batches=33393 mean=6.68 max=9 batch_full_flushes=1181
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=18019 tx=16070 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=151.6/s rate_tx=152.2/s
+  LEFT link: rssi=-29 fcc=0 lq=226 mode=active rate_rx=151.6/s dev_missing=5797 last5s=24.7% cum=24.3% period=4.98ms discont=0
+LINKLOG,121830,LEFT,151.6,248,5797,24.7,24.3,-29,226,0,batched,517,15.00,0,4999,33393,6.68,9,1181
+  RIGHT rx=18953 tx=17323 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=163.8/s rate_tx=163.4/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=163.8/s dev_missing=4455 last5s=19.5% cum=19.0% period=4.98ms discont=0
+LINKLOG,121863,RIGHT,163.8,199,4455,19.5,19.0,-26,229,0,batched,517,15.00,0,4999,33393,6.68,9,1181
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=38 notify=5232 errors=0
+  FF14 batches_tx=5232 records_in_batches=34952 mean=6.68 max=9 batch_full_flushes=1239
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=18772 tx=16823 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=150.6/s rate_tx=150.6/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=150.6/s dev_missing=6073 last5s=26.8% cum=24.4% period=4.98ms discont=0
+LINKLOG,126906,LEFT,150.6,276,6073,26.8,24.4,-28,227,0,batched,517,15.00,0,5232,34952,6.68,9,1239
+  RIGHT rx=19755 tx=18129 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=160.4/s rate_tx=161.2/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=160.4/s dev_missing=4669 last5s=21.1% cum=19.1% period=4.98ms discont=0
+LINKLOG,126937,RIGHT,160.4,214,4669,21.1,19.1,-26,229,0,batched,517,15.00,0,5232,34952,6.68,9,1239
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=6/256 high=38 notify=5464 errors=0
+  FF14 batches_tx=5464 records_in_batches=36450 mean=6.67 max=9 batch_full_flushes=1293
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=19506 tx=17556 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=146.8/s rate_tx=146.6/s
+  LEFT link: rssi=-29 fcc=0 lq=226 mode=active rate_rx=146.8/s dev_missing=6358 last5s=28.0% cum=24.6% period=4.98ms discont=0
+LINKLOG,131978,LEFT,146.8,285,6358,28.0,24.6,-29,226,0,batched,517,15.00,0,5464,36450,6.67,9,1293
+  RIGHT rx=20523 tx=18894 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=153.6/s rate_tx=153.0/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=153.6/s dev_missing=4919 last5s=24.6% cum=19.3% period=4.98ms discont=0
+LINKLOG,132010,RIGHT,153.6,250,4919,24.6,19.3,-26,229,0,batched,517,15.00,0,5464,36450,6.67,9,1293
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=38 notify=5705 errors=0
+  FF14 batches_tx=5705 records_in_batches=38024 mean=6.67 max=9 batch_full_flushes=1347
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=20246 tx=18297 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=148.0/s rate_tx=148.2/s
+  LEFT link: rssi=-28 fcc=0 lq=226 mode=active rate_rx=148.0/s dev_missing=6639 last5s=27.5% cum=24.7% period=4.98ms discont=0
+LINKLOG,137061,LEFT,148.0,281,6639,27.5,24.7,-28,226,0,batched,517,15.00,0,5705,38024,6.67,9,1347
+  RIGHT rx=21354 tx=19727 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=166.2/s rate_tx=166.6/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=166.2/s dev_missing=5099 last5s=17.8% cum=19.3% period=4.98ms discont=0
+LINKLOG,137084,RIGHT,166.2,180,5099,17.8,19.3,-25,230,0,batched,517,15.00,0,5705,38024,6.67,9,1347
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=8/256 high=38 notify=5936 errors=0
+  FF14 batches_tx=5936 records_in_batches=39532 mean=6.66 max=9 batch_full_flushes=1399
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=20949 tx=18992 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=140.6/s rate_tx=139.0/s
+  LEFT link: rssi=-29 fcc=0 lq=226 mode=active rate_rx=140.6/s dev_missing=6958 last5s=31.2% cum=24.9% period=4.98ms discont=0
+LINKLOG,142132,LEFT,140.6,319,6958,31.2,24.9,-29,226,0,batched,517,15.00,0,5936,39532,6.66,9,1399
+  RIGHT rx=22164 tx=20540 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=162.0/s rate_tx=162.6/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=162.0/s dev_missing=5309 last5s=20.6% cum=19.3% period=4.98ms discont=0
+LINKLOG,142157,RIGHT,162.0,210,5309,20.6,19.3,-26,229,0,batched,517,15.00,0,5936,39532,6.66,9,1399
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=38 notify=6173 errors=0
+  FF14 batches_tx=6173 records_in_batches=41105 mean=6.66 max=9 batch_full_flushes=1463
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=21726 tx=19777 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=155.4/s rate_tx=157.0/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=155.4/s dev_missing=7199 last5s=23.7% cum=24.9% period=4.98ms discont=0
+LINKLOG,147209,LEFT,155.4,241,7199,23.7,24.9,-28,227,0,batched,517,15.00,0,6173,41105,6.66,9,1463
+  RIGHT rx=22952 tx=21328 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=157.6/s rate_tx=157.6/s
+  RIGHT link: rssi=-25 fcc=0 lq=229 mode=active rate_rx=157.6/s dev_missing=5540 last5s=22.7% cum=19.4% period=4.98ms discont=0
+LINKLOG,147241,RIGHT,157.6,231,5540,22.7,19.4,-25,229,0,batched,517,15.00,0,6173,41105,6.66,9,1463
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=38 notify=6407 errors=0
+  FF14 batches_tx=6407 records_in_batches=42644 mean=6.66 max=9 batch_full_flushes=1506
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=22465 tx=20513 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=147.8/s rate_tx=147.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=147.8/s dev_missing=7479 last5s=27.5% cum=25.0% period=4.98ms discont=0
+LINKLOG,152284,LEFT,147.8,280,7479,27.5,25.0,-28,227,0,batched,517,15.00,0,6407,42644,6.66,9,1506
+  RIGHT rx=23755 tx=22131 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=160.6/s rate_tx=160.6/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=160.6/s dev_missing=5753 last5s=21.0% cum=19.5% period=4.98ms discont=0
+LINKLOG,152316,RIGHT,160.6,213,5753,21.0,19.5,-26,229,0,batched,517,15.00,0,6407,42644,6.66,9,1506
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=38 notify=6651 errors=0
+  FF14 batches_tx=6651 records_in_batches=44325 mean=6.66 max=9 batch_full_flushes=1571
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=23256 tx=21304 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=158.2/s rate_tx=158.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=158.2/s dev_missing=7706 last5s=22.3% cum=24.9% period=4.98ms discont=0
+LINKLOG,157356,LEFT,158.2,227,7706,22.3,24.9,-28,227,0,batched,517,15.00,0,6651,44325,6.66,9,1571
+  RIGHT rx=24645 tx=23021 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=178.0/s rate_tx=178.0/s
+  RIGHT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=178.0/s dev_missing=5882 last5s=12.7% cum=19.3% period=4.98ms discont=0
+LINKLOG,157388,RIGHT,178.0,129,5882,12.7,19.3,-26,229,0,batched,517,15.00,0,6651,44325,6.66,9,1571
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=6/256 high=38 notify=6888 errors=0
+  FF14 batches_tx=6888 records_in_batches=45961 mean=6.67 max=9 batch_full_flushes=1633
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=24046 tx=22094 drop=0 offline=1949 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=158.0/s rate_tx=158.0/s
+  LEFT link: rssi=-29 fcc=0 lq=226 mode=active rate_rx=158.0/s dev_missing=7935 last5s=22.5% cum=24.8% period=4.98ms discont=0
+LINKLOG,162432,LEFT,158.0,229,7935,22.5,24.8,-29,226,0,batched,517,15.00,0,6888,45961,6.67,9,1633
+  RIGHT rx=25494 tx=23867 drop=0 offline=1624 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=169.8/s rate_tx=169.2/s
+  RIGHT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=169.8/s dev_missing=6048 last5s=16.4% cum=19.2% period=4.98ms discont=0
+LINKLOG,162457,RIGHT,169.8,166,6048,16.4,19.2,-25,230,0,batched,517,15.00,0,6888,45961,6.67,9,1633

@@ -49,6 +49,10 @@ otherwise).
 The FF13 change adds `wmr_cfg.c` and `wmr_cfgmgr.c` the same way (refresh `integration\main-CMakeLists.txt`
 over `port\esp32\main\CMakeLists.txt`; the link fails without them).
 
+**Simplest rule: re-copy `main-CMakeLists.txt` with `-Force` after every pull** (`Copy-Item wmr_bridge\integration\main-CMakeLists.txt port\esp32\main\CMakeLists.txt -Force`). When updating the copy at `wmr_bridge` with `robocopy ... /E`, note that robocopy does not delete files: source files removed or renamed upstream stay in the folder, which is harmless as long as the CMake file does not list them. Robocopy exit codes below 8 are success.
+
+**FF13 config read switch.** `WMR_CFG_FF13_READ` (default 1, `src/wmr_config.h`) makes the bridge read each controller's config block after the descriptor arrives. Set it to 0 (edit the header, or `-DWMR_CFG_FF13_READ=0`) to send no config command; input then streams as it did before FF13 and FF13 state stays 0. Check C7 in [TESTING.md](TESTING.md) is the test for this and has not been run.
+
 The FF15 echo change adds `wmr_echo.c` in the same way (undefined `wmr_echo_*` without a
 fresh copy).
 

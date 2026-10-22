@@ -3,7 +3,7 @@
 ESP32 firmware, built on [BTstack](https://github.com/bluekitchen/btstack), that
 connects to **two Windows Mixed Reality motion controllers** over Classic
 Bluetooth and forwards their input to an **Android phone** over a custom BLE GATT
-service, either as raw frames (FF11) or as decoded IMU and input records (FF12). The
+service, either as raw frames (FF11), as decoded IMU and input records (FF12), or as batches of those records (FF14). The
 phone side is the companion app [wmr-companion](https://github.com/nightcinder/wmr-companion);
 the overall state, hardware results and roadmap are in its
 [docs/STATUS.md](https://github.com/nightcinder/wmr-companion/blob/main/docs/STATUS.md).
@@ -19,14 +19,19 @@ byte-for-byte, with per-hand sequence numbers. The decoded stream (FF12) carries
 56-byte records with the sensor clock (`device_ticks`), gyro, accel, buttons, stick,
 trackpad, trigger and battery. It sends raw IMU values, not a quaternion, and neither
 stream filters or calibrates; orientation fusion runs on the phone. The two streams
-are mutually exclusive per connection. Batched decoded records (FF14) are being
-specified.
+are mutually exclusive per connection, and so is the batched stream (FF14); the
+app uses FF14. A controller configuration block (FF13, read from the controllers and
+served to the phone) and an echo characteristic for round-trip timing (FF15) are also
+implemented; see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 > **Project status: experimental, partly verified.** Both streams work in bench
 > tests with two controllers and a phone, and the app shows correct 3D orientation
 > from FF12 (checked visually, user-reported). Controller-to-ESP32 report loss
-> (about 10 % idle, 20 to 40 % while streaming, worse on RIGHT) is the main open
-> problem and is being investigated; see [docs/DECODING.md](docs/DECODING.md). Many
+> (about 9 to 13 % with no phone connected, about 19 % per controller with both
+> connected and a phone streaming FF14, user-reported; one controller alone lost about
+> 0.5 % (LEFT) and 10.8 % (RIGHT)) is the main open problem; contention for the ESP32
+> radio is the working hypothesis, not proven. See [docs/DECODING.md](docs/DECODING.md) and
+> the run records in [docs/runs/](docs/runs/README.md). Many
 > checks in [docs/TESTING.md](docs/TESTING.md) have not been run. Read
 > [What is and isn't tested](#what-is-and-isnt-tested) before relying on it.
 
@@ -109,8 +114,9 @@ machine, running it directly started Node.js. The supplied CMake file already do
    them by name, stores their addresses and pairs ([docs/DISCOVERY.md](docs/DISCOVERY.md)).
    Later: `d` runs discovery again for a hand without an address, `F` forgets the stored
    addresses, `l`/`r` reconnect a known controller.
-3. On the Android phone: connect to `WMR Bridge`, request the MTU (e.g. 247 or 517),
-   request High connection priority, enable notifications on characteristic `FF11`.
+3. On the Android phone: connect to `WMR Bridge`, request the MTU **517** (the app does;
+   the smallest MTU FF14 batching accepts is 61), request High connection priority, enable
+   notifications on one of `FF11`, `FF12` or `FF14` (only one at a time).
    **Repeat all of this after every reconnect.** See [docs/ANDROID.md](docs/ANDROID.md).
 4. Read the statistics lines: `rate_tx` should match `rate_rx`, `drop` should stay
    flat, `q` should stay near zero.
@@ -124,8 +130,10 @@ only; manual, refused while connected).
 
 Service `0000FF10-0000-1000-8000-00805F9B34FB`; raw characteristic
 `0000FF11-0000-1000-8000-00805F9B34FB` (read + notify); decoded characteristic
-`0000FF12-0000-1000-8000-00805F9B34FB` (notify only, 56-byte records, see
-[docs/PROTOCOL.md](docs/PROTOCOL.md)). Each notification is a
+`0000FF12-0000-1000-8000-00805F9B34FB` (notify only, 56-byte records); batched
+decoded `FF14` (notify only, up to 9 records per notification at MTU 517); controller
+config block `FF13` (read in 496-byte windows, CRC-32); echo `FF15` (4-byte request, 20-byte
+answer, independent of the stream exclusion). All layouts: [docs/PROTOCOL.md](docs/PROTOCOL.md). Each notification is a
 12-byte little-endian header (`'R'`, hand, u32 sequence, u16 total length,
 u16 offset, u16 chunk length) followed by a chunk of the frame. A read of FF11
 returns a 16-byte status record. Exact layout, fragmentation and reassembly rules:
@@ -148,15 +156,14 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
   handed to the BLE stack. Nothing on the phone has checked sequence numbers, so
   loss between the ESP32 and the app is checked only in a few bench captures (the
   companion app counts sequence gaps and reported none); no long run.
-- **Duration.** Nothing longer than about 15 seconds of streaming; no soak test; no
+- **Duration.** Longest user-reported run is about 25 minutes (a baseline); no soak test; no
   look at memory, error counters, or queue behavior over hours.
 - **Reconnects.** Controller power-cycle while streaming, controller disconnect while the
   phone stays connected, phone disconnect/reconnect with re-subscribe, and what the
   counters do across those events. The behavior is designed and documented
   ([docs/RECONNECT_AND_QUEUE.md](docs/RECONNECT_AND_QUEUE.md)) but unobserved on hardware.
 - **Outgoing connect** (`l`/`r`) and the **bond reset** (`k`/`K`) with this version.
-- **Phone side.** The phone's own negotiated MTU (the 517 above is the ESP32's view), whether
-  High priority was applied, other phones and Android versions. Only one phone, one pair of
+- **Phone side.** The phone's own negotiated MTU as shown by the app (the 517 above is the ESP32's view), other phones and Android versions. Only one phone, one pair of
   controllers and one ESP32 board have been used.
 - **Sample captures** labelled by hand. `samples/controller_frames.txt` comes from earlier
   bring-up sessions where LEFT/RIGHT was not recorded.
@@ -180,13 +187,20 @@ Full list and details: [docs/TESTING.md](docs/TESTING.md).
 Details and hardening suggestions: [docs/SECURITY.md](docs/SECURITY.md),
 counters and their limits: [docs/COUNTERS.md](docs/COUNTERS.md).
 
-## Planned, not done
+## Done since the first release, open items
 
-- FF12 version 2 batching on a separate characteristic (FF14): several records per notification. Motivated by bench runs in which halving the notification count recovered most of RIGHT's lost reports; see [docs/PROTOCOL.md](docs/PROTOCOL.md) and [docs/DECODING.md](docs/DECODING.md).
-- Explaining and reducing controller-to-ESP32 report loss, in particular LEFT's extra loss while a phone streams (coexistence options to test: [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md)).
-- Calibration (FF13 config blob, designed only) and the remaining unknowns in [docs/DECODING.md](docs/DECODING.md) (accel scale, temperature, battery, input ranges).
-- An echo characteristic or device timestamp for true latency ([issue #1](../../issues/1)).
+Done: FF14 batching, the FF13 config block read (the app decodes calibration from it), the FF15
+echo for round-trip timing, discovery by name. Hardware results are user-reported and listed in
+[docs/TESTING.md](docs/TESTING.md); [HANDOFF notes](https://github.com/nightcinder/wmr-companion/blob/main/HANDOFF.md)
+in the app repo list what is still not run.
+
+Open:
+
+- Explaining and reducing controller-to-ESP32 report loss (issue [#18](../../issues/18)); coexistence options tested so far showed no effect ([docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md), [docs/runs/](docs/runs/README.md)).
+- The remaining unknowns in [docs/DECODING.md](docs/DECODING.md) (accel scale, temperature, battery, input ranges).
+- Where the roughly 40 ms phone round trip goes (median, user-reported first run).
 - BLE security (no pairing or encryption today), see [docs/SECURITY.md](docs/SECURITY.md).
+
 ## Configuration
 
 Every tunable is a named constant in [src/wmr_config.h](src/wmr_config.h) (controller

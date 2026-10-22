@@ -11,7 +11,7 @@ asynchronously to `onMtuChanged(gatt, mtu, status)`; it is the smaller of
 what the phone asks for and what the ESP32 allows, and it can be lower than
 requested. Never assume the requested value.
 
-- Android allows requests up to 517. 247 is a common safe value.
+- Android allows requests up to 517. The companion app requests 517; FF14 batching needs at least 61 and carries up to 9 records per notification at 517 (4 at 247).
 - Until negotiation completes the MTU is 23 and each 46-byte frame is sent
   as 6 notifications; this works but costs throughput.
 - The bridge reads the negotiated MTU itself on every send, so it adapts. It
@@ -25,7 +25,7 @@ requested. Never assume the requested value.
 
 1. Scan for the name `WMR Bridge` or service `0xFF10`; `connectGatt(...)`.
 2. After `onConnectionStateChange(... STATE_CONNECTED)`, call
-   `gatt.requestMtu(247)` (or 517) and wait for `onMtuChanged`; record the
+   `gatt.requestMtu(517)` and wait for `onMtuChanged`; record the
    negotiated MTU.
 3. Call `gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)`.
    This asks for a short connection interval. It is a request, not a

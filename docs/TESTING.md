@@ -95,7 +95,7 @@ installed.
 
 Firmware: FF12 as merged to `main` (PR #5). **Results marked "Reported" or "PARTIAL" were
 run by the user (Pixel with nRF Connect, a pasted ESP32 log and one screenshot) and relayed through
-director issue #3; the assistant did not run or see them, and they are not claimed as verified by
+WMR_Bridge issue #3 (closed); the assistant did not run or see them, and they are not claimed as verified by
 it.** Rows still saying "not yet run" have no report at all. What the assistant ran is host-only: the pure CCC-exclusion rule, the minimum-MTU rule and the
 raw-frame-to-record path (`tests/test_stream_mode.c`, in CI) and a full ESP-IDF build
 (the command and result are in the pull request). Beyond the rows below, nothing over the
@@ -128,10 +128,10 @@ Record the date, the build, the phone/client and the observed numbers in the Res
 Do not flash from this repository's CI or from an assistant session; flashing and the
 runs above are done by hand.
 
-## Link diagnostics: bench-test checklist (hardware, **not yet run**)
+## Link diagnostics: bench-test checklist (hardware; `LINKLOG` and link lines have been used in every 2026-10-22 run, user-reported)
 
-Firmware: the PR #8 branch. Added to find where controller reports are lost (director issue
-#3). Everything below is **not yet run**; what the assistant ran is host-only (`tests/test_diag.c`
+Firmware: the PR #8 branch. Added to find where controller reports are lost (issue
+#3, closed). Everything below is **not yet run**; what the assistant ran is host-only (`tests/test_diag.c`
 in CI: the missing-report estimator, log classification, mode tracking and reply parsing) and a
 full ESP-IDF build.
 
@@ -150,7 +150,7 @@ full ESP-IDF build.
 
 ## PR #8 diagnostics build: first bench data (user-reported; the assistant did not run or see it)
 
-Relayed on director issue #3. Setup as reported: both controllers right next to the ESP32, one
+Relayed on WMR_Bridge issue #3 (closed). Setup as reported: both controllers right next to the ESP32, one
 per side; Pixel with nRF Connect; FF12 subscribed; the MTU stayed at 23 for the first part,
 then 517 was requested. Single runs, not repeated. Rows D1, D2, D5, D7, D9 and checks 13 and
 14 above are filled in from this report.
@@ -174,7 +174,7 @@ user's hands, so other factors are likely too. **Not established.** The decimati
 is the next test.
 
 **Per-interval figure.** The first report's "about 45 missing per hand" was corrected by the
-director to about 45 per **second**, i.e. about 225 per 5 s or about 22 %, which agrees with
+project owner to about 45 per **second**, i.e. about 225 per 5 s or about 22 %, which agrees with
 `rate_rx` 158 to 163 against about 200 and with the later per-interval table (about 208 missing
 per 1000).
 
@@ -239,7 +239,7 @@ cause; if it stays at about 20 %, it is not (or not only).** Build and CI: see t
 | X3 | N=4 | Same with 4 | `tx` about a quarter of `rx`; steps of 4 | not yet run |
 | X4 | The test itself | At N=1, 2, 4 and with no phone, **controllers at one fixed, stated position for every run (state it, and note `rssi`/`lq`; do not move them)**: `rate_rx`, `last5s` and `cum` per hand, 2 minutes each | Record all four; compare with the idle level | not yet run |
 
-## New log lines (PR #9; hardware, **not yet run**)
+## New log lines (PR #9; run on hardware as part of the 2026-10-22 sessions, user-reported)
 
 Logging only; no new HCI traffic. Lines are described in [COUNTERS.md](COUNTERS.md).
 
@@ -251,7 +251,7 @@ Logging only; no new HCI traffic. Lines are described in [COUNTERS.md](COUNTERS.
 | L4 | LE buffer size | Read the boot log | One `HCI LE buffers: ACL packet length N bytes, M packets` line during start-up (or none, which would mean the event was not seen by the handler) | not yet run |
 | L5 | Data length | Connect the phone | A `BLE data length changed: tx ... rx ...` line, or `BLE data length: no change event seen since connect` about 0.5 s after connect | not yet run |
 
-## FF14 batched stream (branch `ff14-batching`; hardware, **not yet run**)
+## FF14 batched stream (merged; hardware: partly user-reported, see the Result column)
 
 What was run (host only, by the assistant): `tests/test_batch.c` (golden bytes for a batch of 1, 2 and
 the maximum of 9; the MTU rule at 0, 23, 59, 60, 61, 116, 117, 247, 285, 517; the flush rule
@@ -261,7 +261,7 @@ wraparound behaviour; a failed send keeping its records), plus the extended `LIN
 `tests/test_diag.c`. These ran locally with `zig cc` (0 failures); the CI result is on the pull request. The ESP-IDF build
 (`EXAMPLE=wmr_bridge`) is clean with 0 warnings. **Not tested anywhere:** `pump_send_batch`,
 the hold timer and `att_server_notify` in `wmr_transport.c` (they need BTstack and a radio), and
-everything below. Nothing about FF14 is verified on hardware.
+everything below. Hardware results are in the Result column; user-reported 2026-10-22 runs with nRF Connect (MTU 517) showed batches of mean 6.4 to 6.7 records, max 9, and the counters adding up.
 
 **One BTstack-side file changes with this branch:** `integration/main-CMakeLists.txt` lists
 `wmr_batch.c` as a new source. Copy it over `port\esp32\main\CMakeLists.txt` again (as in
@@ -274,18 +274,18 @@ everything below. Nothing about FF14 is verified on hardware.
 | --- | --- | --- | --- | --- |
 | B1 | FF14 exists | Connect, discover service FF10 | A notify-only `0000FF14-...` characteristic with a CCC, after FF12; FF11 and FF12 still present and unchanged | not yet run |
 | B2 | Exclusion, all six orders | With FF11 / FF12 / FF14 in turn enabled, try to enable each of the other two (six pairs) | Every second enable fails with ATT error `0x80` and the first stream keeps running; after writing `0x0000` to the active CCC the other enables | not yet run |
-| B3 | Batches at MTU 517 | Subscribe to FF14, both controllers streaming, 60 s | Values start `02 NN`; `NN` between 1 and 9; value length `2 + 56 x NN`; STREAM `FF14` line shows `batches_tx` rising, `mean` between 1 and 9, `max` up to 9; **`notify` rises by `batches_tx`, much slower than FF12's ~320/s** (the expectation is of the order of 70 to 100 per second at a 15 ms interval; not measured) | not yet run |
+| B3 | Batches at MTU 517 | Subscribe to FF14, both controllers streaming, 60 s | Values start `02 NN`; `NN` between 1 and 9; value length `2 + 56 x NN`; STREAM `FF14` line shows `batches_tx` rising, `mean` between 1 and 9, `max` up to 9; **`notify` rises by `batches_tx`, much slower than FF12's ~320/s** (the expectation is of the order of 70 to 100 per second at a 15 ms interval; not measured) | user-reported 2026-10-22 (nRF Connect, MTU 517, 15 ms): values start `02 NN`, mean 6.4 to 6.7 records, max 9, about 48 notifications/s against about 300/s on FF12 |
 | B4 | Nothing lost to batching | Same run; on the phone, per hand, `sequence` gaps | Gaps equal the FF12 gaps for the same run (missing reports from the controllers show as gaps, batching adds none); no repeated or reordered `sequence` within a hand | not yet run |
-| B5 | Identity | STREAM and `LEFT`/`RIGHT` lines at the end of B3 | `rx = tx + drop + offline + purged + mtu_skip + dec_err + decimated + q` per hand, with `tx` in records; `tx` (both hands) grew by `records_in_batches`; `notify` grew by `batches_tx` | not yet run |
+| B5 | Identity | STREAM and `LEFT`/`RIGHT` lines at the end of B3 | `rx = tx + drop + offline + purged + mtu_skip + dec_err + decimated + q` per hand, with `tx` in records; `tx` (both hands) grew by `records_in_batches`; `notify` grew by `batches_tx` | user-reported 2026-10-22: `rx = tx + q` per hand, `tx` over both hands equals `records_in_batches`; `drop=0` |
 | B6 | MTU 247 | Cap the phone's MTU at 247 | `max` is at most 4; values at most 226 bytes | not yet run |
 | B7 | MTU below 61 | MTU 23, then (if the phone allows) 59 or 60 | Nothing arrives on FF14; `mtu_skip` rises for both hands; `batches_tx` stays 0. At 59/60 FF12 still works and FF14 does not | not yet run |
 | B8 | Partial flush | Only one controller connected (about 160 to 200 reports/s) | Batches smaller than full: `mean` about the reports that arrive in one connection interval (roughly 3 at 15 ms, not measured); `batch_full_flushes` stays near 0; the phone still sees every record | not yet run |
 | B9 | Latency of a record | Use `rx_time_us` against the phone's arrival time for a few seconds of FF12, then FF14 (needs the app to log both) | FF14 arrival-minus-`rx_time_us` is larger by at most about one connection interval; **not measured so far** | not yet run |
 | B10 | FF12 and FF11 unchanged | Re-run X1 (FF12 at `N=1`) and the FF11 checks | Identical to before; `FF14` line stays at zero | not yet run |
 | B11 | Switching | FF12, then `0x0000`, then FF14, then `0x0000`, then FF11 | Each switch starts a fresh stream (the queue is cleared, `purged` counts what was dropped), no stale batch | not yet run |
-| B12 | `LINKLOG` | Capture a B3 run | Header and lines have the same number of fields; the last five are `batches_tx,records_in_batches,batch_mean,batch_max,batch_full_flushes`; the first fourteen are unchanged | not yet run |
+| B12 | `LINKLOG` | Capture a B3 run | Header and lines have the same number of fields; the last five are `batches_tx,records_in_batches,batch_mean,batch_max,batch_full_flushes`; the first fourteen are unchanged | user-reported 2026-10-22: `LINKLOG` lines parsed with the 19-field header (the batch fields are the last five) |
 
-### The comparison the director asked for (user to run; the assistant has not)
+### The comparison the project owner asked for (user to run; the assistant has not)
 
 Question: does sending the same samples in far fewer notifications reduce the missing-report
 share the way decimation did? Use the default build (decimation off, `N=1`), the **same fixed,
@@ -304,7 +304,7 @@ capture).
 
 How to read it, so the conclusion is not chosen after the fact: in the decimation runs RIGHT fell
 from 28 to 36 % at N=1 to 12 to 15 % at N=2 and 4, and LEFT stayed at about 18 to 20 % at every N
-(director-reported, one position, one session). If FF14 brings RIGHT down toward that range,
+(user-reported, one position, one session). If FF14 brings RIGHT down toward that range,
 notification count is part of RIGHT's loss and FF14 helps it without dropping samples. If RIGHT
 stays near its FF12 level, batching does not help at this position. **LEFT is not expected to
 change and a change would be a new finding; do not claim FF14 fixes LEFT.** One session at one
@@ -368,10 +368,10 @@ before discovery has found them is check D6.
 | D11 | Override | Build with `-DWMR_CFG_LEFT_ADDRESS=\"..\"` | LEFT `compile-time override`; discovery looks only for RIGHT; `F` keeps LEFT | user-reported (2026-10-22): passed; one-line report for the whole checklist, no output pasted, so no figures are recorded |
 
 
-## FF13 config block (APPROVED layout; wired but not built; none run)
+## FF13 config block (APPROVED layout; merged; C1-C3, C5, C6 user-reported, C4 inconclusive, C7 not run)
 
 Host tests (`tests/test_cfg.c`, CI) cover formats and the reader only. The checks below need
-the ESP32 build with the new wiring and a controller. **Not yet run.** Watch the console for
+the ESP32 build and a controller. Results per check are in the table. Watch the console for
 `FF13 LEFT: ...` lines and the statistics `FF13` lines.
 
 | # | Check | Expected | Result |

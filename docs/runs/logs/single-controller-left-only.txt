@@ -1,0 +1,1008 @@
+Left
+
+LINKLOG_FIELDS,t_ms,hand,rate_rx,dev_missing_delta,dev_missing_cum,last5s_pct,cum_pct,rssi,lq,fcc,stream,mtu,conn_interval_ms,decimated,batches_tx,records_in_batches,batch_mean,batch_max,batch_full_flushes
+
+LINKLOG,55874,RIGHT,0.0,0,0,,0.0,,,,none,0,,0,0,0,,0,0
+BLE phone connected, handle=0x0000
+BLE connection parameters at connect: 15.00ms lat=0 to=5000ms (meets request)
+BLE data length: no change event seen since connect
+BLE connection parameter update requested (interval 6-12 x 1.25 ms, latency 0, timeout 400 x 10 ms): sent (rc=0)
+BLE connection parameters updated: 15.00ms lat=0 to=4000ms (meets request)
+BLE data length changed: tx 251 octets / 2120 us, rx 251 octets / 2120 us
+STREAM phone=1 sub=0 stream=none mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=0 notify=0 errors=0
+  FF14 batches_tx=0 records_in_batches=0 mean=n/a max=0 batch_full_flushes=0
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=10748 tx=0 drop=0 offline=10748 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=202.2/s rate_tx=0.0/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=202.2/s dev_missing=9 last5s=0.8% cum=0.1% period=4.98ms discont=3
+LINKLOG,60921,LEFT,202.2,8,9,0.8,0.1,-25,230,0,none,517,15.00,0,0,0,,0,0
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,60946,RIGHT,0.0,0,0,,0.0,,,,none,517,15.00,0,0,0,,0,0
+BLE batched notifications enabled
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=8 notify=159 errors=0
+  FF14 batches_tx=159 records_in_batches=684 mean=4.30 max=8 batch_full_flushes=0
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=11767 tx=684 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=136.8/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=203.8/s dev_missing=9 last5s=0.0% cum=0.1% period=4.98ms discont=3
+LINKLOG,66001,LEFT,203.8,0,9,0.0,0.1,-26,229,0,batched,517,15.00,0,159,684,4.30,8,0
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,66031,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,159,684,4.30,8,0
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=9 notify=393 errors=0
+  FF14 batches_tx=393 records_in_batches=1699 mean=4.32 max=9 batch_full_flushes=3
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=12785 tx=1699 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=203.0/s
+  LEFT link: rssi=-28 fcc=0 lq=226 mode=active rate_rx=203.6/s dev_missing=11 last5s=0.2% cum=0.1% period=4.98ms discont=3
+LINKLOG,71084,LEFT,203.6,2,11,0.2,0.1,-28,226,0,batched,517,15.00,0,393,1699,4.32,9,3
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,71107,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,393,1699,4.32,9,3
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=17 notify=630 errors=0
+  FF14 batches_tx=630 records_in_batches=2718 mean=4.31 max=9 batch_full_flushes=5
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=13803 tx=2718 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=203.8/s
+  LEFT link: rssi=-32 fcc=0 lq=223 mode=active rate_rx=203.6/s dev_missing=13 last5s=0.2% cum=0.1% period=4.98ms discont=3
+LINKLOG,76164,LEFT,203.6,2,13,0.2,0.1,-32,223,0,batched,517,15.00,0,630,2718,4.31,9,5
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,76196,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,630,2718,4.31,9,5
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=17 notify=866 errors=0
+  FF14 batches_tx=866 records_in_batches=3733 mean=4.31 max=9 batch_full_flushes=8
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=14818 tx=3733 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.0/s rate_tx=203.0/s
+  LEFT link: rssi=-24 fcc=0 lq=229 mode=active rate_rx=203.0/s dev_missing=18 last5s=0.5% cum=0.1% period=4.98ms discont=3
+LINKLOG,81245,LEFT,203.0,5,18,0.5,0.1,-24,229,0,batched,517,15.00,0,866,3733,4.31,9,8
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,81276,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,866,3733,4.31,9,8
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=17 notify=1095 errors=0
+  FF14 batches_tx=1095 records_in_batches=4751 mean=4.34 max=9 batch_full_flushes=11
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=15836 tx=4751 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=203.6/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=203.6/s dev_missing=20 last5s=0.2% cum=0.1% period=4.98ms discont=3
+LINKLOG,86328,LEFT,203.6,2,20,0.2,0.1,-24,231,0,batched,517,15.00,0,1095,4751,4.34,9,11
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,86359,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,1095,4751,4.34,9,11
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=17 notify=1320 errors=0
+  FF14 batches_tx=1320 records_in_batches=5762 mean=4.37 max=9 batch_full_flushes=15
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=16848 tx=5762 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=202.4/s rate_tx=202.2/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=202.4/s dev_missing=28 last5s=0.8% cum=0.2% period=4.98ms discont=3
+LINKLOG,91411,LEFT,202.4,8,28,0.8,0.2,-25,230,0,batched,517,15.00,0,1320,5762,4.37,9,15
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,91441,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,1320,5762,4.37,9,15
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=17 notify=1550 errors=0
+  FF14 batches_tx=1550 records_in_batches=6782 mean=4.38 max=9 batch_full_flushes=19
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=17866 tx=6782 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=204.0/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=203.6/s dev_missing=31 last5s=0.3% cum=0.2% period=4.98ms discont=3
+LINKLOG,96491,LEFT,203.6,3,31,0.3,0.2,-25,230,0,batched,517,15.00,0,1550,6782,4.38,9,19
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,96522,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,1550,6782,4.38,9,19
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=17 notify=1782 errors=0
+  FF14 batches_tx=1782 records_in_batches=7799 mean=4.38 max=9 batch_full_flushes=22
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=18884 tx=7799 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=203.4/s
+  LEFT link: rssi=-23 fcc=0 lq=231 mode=active rate_rx=203.6/s dev_missing=32 last5s=0.1% cum=0.2% period=4.98ms discont=3
+LINKLOG,101576,LEFT,203.6,1,32,0.1,0.2,-23,231,0,batched,517,15.00,0,1782,7799,4.38,9,22
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,101599,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,1782,7799,4.38,9,22
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=17 notify=2018 errors=0
+  FF14 batches_tx=2018 records_in_batches=8819 mean=4.37 max=9 batch_full_flushes=24
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=19905 tx=8819 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.2/s rate_tx=204.0/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=204.2/s dev_missing=32 last5s=0.0% cum=0.2% period=4.98ms discont=3
+LINKLOG,106659,LEFT,204.2,0,32,0.0,0.2,-24,231,0,batched,517,15.00,0,2018,8819,4.37,9,24
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,106683,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,2018,8819,4.37,9,24
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=17 notify=2254 errors=0
+  FF14 batches_tx=2254 records_in_batches=9842 mean=4.37 max=9 batch_full_flushes=27
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=20925 tx=9842 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=204.6/s
+  LEFT link: rssi=-23 fcc=0 lq=232 mode=active rate_rx=204.0/s dev_missing=33 last5s=0.1% cum=0.2% period=4.98ms discont=3
+LINKLOG,111741,LEFT,204.0,1,33,0.1,0.2,-23,232,0,batched,517,15.00,0,2254,9842,4.37,9,27
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,111772,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,2254,9842,4.37,9,27
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=17 notify=2489 errors=0
+  FF14 batches_tx=2489 records_in_batches=10862 mean=4.36 max=9 batch_full_flushes=32
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=21945 tx=10862 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=204.0/s
+  LEFT link: rssi=-23 fcc=0 lq=232 mode=active rate_rx=204.0/s dev_missing=34 last5s=0.1% cum=0.2% period=4.98ms discont=3
+LINKLOG,116828,LEFT,204.0,1,34,0.1,0.2,-23,232,0,batched,517,15.00,0,2489,10862,4.36,9,32
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,116860,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,2489,10862,4.36,9,32
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=7/256 high=17 notify=2722 errors=0
+  FF14 batches_tx=2722 records_in_batches=11874 mean=4.36 max=9 batch_full_flushes=35
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=22964 tx=11874 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=202.4/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=203.8/s dev_missing=35 last5s=0.1% cum=0.2% period=4.98ms discont=3
+LINKLOG,121911,LEFT,203.8,1,35,0.1,0.2,-24,231,0,batched,517,15.00,0,2722,11874,4.36,9,35
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,121943,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,2722,11874,4.36,9,35
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=17 notify=2954 errors=0
+  FF14 batches_tx=2954 records_in_batches=12896 mean=4.37 max=9 batch_full_flushes=39
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=23982 tx=12896 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=204.4/s
+  LEFT link: rssi=-23 fcc=0 lq=232 mode=active rate_rx=203.6/s dev_missing=37 last5s=0.2% cum=0.2% period=4.98ms discont=3
+LINKLOG,126993,LEFT,203.6,2,37,0.2,0.2,-23,232,0,batched,517,15.00,0,2954,12896,4.37,9,39
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,127024,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,2954,12896,4.37,9,39
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=3190 errors=0
+  FF14 batches_tx=3190 records_in_batches=13917 mean=4.36 max=9 batch_full_flushes=42
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=25001 tx=13917 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=204.2/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=203.8/s dev_missing=38 last5s=0.1% cum=0.2% period=4.98ms discont=3
+LINKLOG,132075,LEFT,203.8,1,38,0.1,0.2,-24,231,0,batched,517,15.00,0,3190,13917,4.36,9,42
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,132106,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,3190,13917,4.36,9,42
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=3428 errors=0
+  FF14 batches_tx=3428 records_in_batches=14931 mean=4.36 max=9 batch_full_flushes=46
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=26015 tx=14931 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=202.8/s rate_tx=202.8/s
+  LEFT link: rssi=-24 fcc=0 lq=230 mode=active rate_rx=202.8/s dev_missing=44 last5s=0.6% cum=0.2% period=4.98ms discont=3
+LINKLOG,137158,LEFT,202.8,6,44,0.6,0.2,-24,230,0,batched,517,15.00,0,3428,14931,4.36,9,46
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,137181,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,3428,14931,4.36,9,46
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=3664 errors=0
+  FF14 batches_tx=3664 records_in_batches=15951 mean=4.35 max=9 batch_full_flushes=49
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=27035 tx=15951 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=204.0/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=204.0/s dev_missing=45 last5s=0.1% cum=0.2% period=4.98ms discont=3
+LINKLOG,142244,LEFT,204.0,1,45,0.1,0.2,-25,230,0,batched,517,15.00,0,3664,15951,4.35,9,49
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,142266,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,3664,15951,4.35,9,49
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=18 notify=3898 errors=0
+  FF14 batches_tx=3898 records_in_batches=16968 mean=4.35 max=9 batch_full_flushes=52
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=28054 tx=16968 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=203.4/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=203.8/s dev_missing=46 last5s=0.1% cum=0.2% period=4.98ms discont=3
+LINKLOG,147325,LEFT,203.8,1,46,0.1,0.2,-24,231,0,batched,517,15.00,0,3898,16968,4.35,9,52
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,147357,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,3898,16968,4.35,9,52
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=18 notify=4134 errors=0
+  FF14 batches_tx=4134 records_in_batches=17988 mean=4.35 max=9 batch_full_flushes=57
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=29071 tx=17988 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.4/s rate_tx=204.0/s
+  LEFT link: rssi=-32 fcc=0 lq=225 mode=active rate_rx=203.4/s dev_missing=48 last5s=0.2% cum=0.2% period=4.98ms discont=3
+LINKLOG,152406,LEFT,203.4,2,48,0.2,0.2,-32,225,0,batched,517,15.00,0,4134,17988,4.35,9,57
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,152436,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,4134,17988,4.35,9,57
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=18 notify=4367 errors=0
+  FF14 batches_tx=4367 records_in_batches=19005 mean=4.35 max=9 batch_full_flushes=60
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=30091 tx=19005 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=203.4/s
+  LEFT link: rssi=-29 fcc=0 lq=226 mode=active rate_rx=204.0/s dev_missing=49 last5s=0.1% cum=0.2% period=4.98ms discont=3
+LINKLOG,157490,LEFT,204.0,1,49,0.1,0.2,-29,226,0,batched,517,15.00,0,4367,19005,4.35,9,60
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,157515,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,4367,19005,4.35,9,60
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=4610 errors=0
+  FF14 batches_tx=4610 records_in_batches=20028 mean=4.34 max=9 batch_full_flushes=62
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=31112 tx=20028 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.2/s rate_tx=204.6/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=204.2/s dev_missing=49 last5s=0.0% cum=0.2% period=4.98ms discont=3
+LINKLOG,162577,LEFT,204.2,0,49,0.0,0.2,-28,227,0,batched,517,15.00,0,4610,20028,4.34,9,62
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,162601,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,4610,20028,4.34,9,62
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=18 notify=4854 errors=0
+  FF14 batches_tx=4854 records_in_batches=21048 mean=4.34 max=9 batch_full_flushes=65
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=32131 tx=21048 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=204.0/s
+  LEFT link: rssi=-27 fcc=0 lq=229 mode=active rate_rx=203.8/s dev_missing=50 last5s=0.1% cum=0.2% period=4.98ms discont=3
+LINKLOG,167661,LEFT,203.8,1,50,0.1,0.2,-27,229,0,batched,517,15.00,0,4854,21048,4.34,9,65
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,167685,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,4854,21048,4.34,9,65
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=5096 errors=0
+  FF14 batches_tx=5096 records_in_batches=22066 mean=4.33 max=9 batch_full_flushes=68
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=33150 tx=22066 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=203.6/s
+  LEFT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=203.8/s dev_missing=52 last5s=0.2% cum=0.2% period=4.98ms discont=3
+LINKLOG,172745,LEFT,203.8,2,52,0.2,0.2,-27,228,0,batched,517,15.00,0,5096,22066,4.33,9,68
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,172770,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,5096,22066,4.33,9,68
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=5336 errors=0
+  FF14 batches_tx=5336 records_in_batches=23084 mean=4.33 max=9 batch_full_flushes=72
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=34168 tx=23084 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=203.6/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=203.6/s dev_missing=55 last5s=0.3% cum=0.2% period=4.98ms discont=3
+LINKLOG,177828,LEFT,203.6,3,55,0.3,0.2,-25,230,0,batched,517,15.00,0,5336,23084,4.33,9,72
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,177858,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,5336,23084,4.33,9,72
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=6/256 high=18 notify=5573 errors=0
+  FF14 batches_tx=5573 records_in_batches=24098 mean=4.32 max=9 batch_full_flushes=76
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=35187 tx=24098 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=202.8/s
+  LEFT link: rssi=-28 fcc=0 lq=228 mode=active rate_rx=203.8/s dev_missing=57 last5s=0.2% cum=0.2% period=4.98ms discont=3
+LINKLOG,182909,LEFT,203.8,2,57,0.2,0.2,-28,228,0,batched,517,15.00,0,5573,24098,4.32,9,76
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,182940,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,5573,24098,4.32,9,76
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=5815 errors=0
+  FF14 batches_tx=5815 records_in_batches=25117 mean=4.32 max=9 batch_full_flushes=79
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=36201 tx=25117 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=202.8/s rate_tx=203.8/s
+  LEFT link: rssi=-30 fcc=0 lq=225 mode=active rate_rx=202.8/s dev_missing=62 last5s=0.5% cum=0.2% period=4.98ms discont=3
+LINKLOG,187994,LEFT,202.8,5,62,0.5,0.2,-30,225,0,batched,517,15.00,0,5815,25117,4.32,9,79
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,188017,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,5815,25117,4.32,9,79
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=18 notify=6056 errors=0
+  FF14 batches_tx=6056 records_in_batches=26135 mean=4.32 max=9 batch_full_flushes=81
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=37222 tx=26135 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.2/s rate_tx=203.6/s
+  LEFT link: rssi=-32 fcc=0 lq=224 mode=active rate_rx=204.2/s dev_missing=62 last5s=0.0% cum=0.2% period=4.98ms discont=3
+LINKLOG,193071,LEFT,204.2,0,62,0.0,0.2,-32,224,0,batched,517,15.00,0,6056,26135,4.32,9,81
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,193102,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,6056,26135,4.32,9,81
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=6294 errors=0
+  FF14 batches_tx=6294 records_in_batches=27159 mean=4.32 max=9 batch_full_flushes=83
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=38243 tx=27159 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.2/s rate_tx=204.8/s
+  LEFT link: rssi=-30 fcc=0 lq=225 mode=active rate_rx=204.2/s dev_missing=62 last5s=0.0% cum=0.2% period=4.98ms discont=3
+LINKLOG,198161,LEFT,204.2,0,62,0.0,0.2,-30,225,0,batched,517,15.00,0,6294,27159,4.32,9,83
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,198193,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,6294,27159,4.32,9,83
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=18 notify=6529 errors=0
+  FF14 batches_tx=6529 records_in_batches=28172 mean=4.31 max=9 batch_full_flushes=87
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=39257 tx=28172 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=202.8/s rate_tx=202.6/s
+  LEFT link: rssi=-34 fcc=0 lq=222 mode=active rate_rx=202.8/s dev_missing=68 last5s=0.6% cum=0.2% period=4.98ms discont=3
+LINKLOG,203240,LEFT,202.8,6,68,0.6,0.2,-34,222,0,batched,517,15.00,0,6529,28172,4.31,9,87
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,203271,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,6529,28172,4.31,9,87
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=18 notify=6766 errors=0
+  FF14 batches_tx=6766 records_in_batches=29192 mean=4.31 max=9 batch_full_flushes=89
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=40275 tx=29192 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=204.0/s
+  LEFT link: rssi=-30 fcc=0 lq=225 mode=active rate_rx=203.6/s dev_missing=69 last5s=0.1% cum=0.2% period=4.98ms discont=3
+LINKLOG,208325,LEFT,203.6,1,69,0.1,0.2,-30,225,0,batched,517,15.00,0,6766,29192,4.31,9,89
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,208350,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,6766,29192,4.31,9,89
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=18 notify=6994 errors=0
+  FF14 batches_tx=6994 records_in_batches=30183 mean=4.32 max=9 batch_full_flushes=91
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=41268 tx=30183 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=198.6/s rate_tx=198.2/s
+  LEFT link: rssi=-31 fcc=0 lq=224 mode=active rate_rx=198.6/s dev_missing=97 last5s=2.7% cum=0.2% period=4.98ms discont=3
+LINKLOG,213407,LEFT,198.6,28,97,2.7,0.2,-31,224,0,batched,517,15.00,0,6994,30183,4.32,9,91
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,213438,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,6994,30183,4.32,9,91
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=6/256 high=18 notify=7225 errors=0
+  FF14 batches_tx=7225 records_in_batches=31190 mean=4.32 max=9 batch_full_flushes=94
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=42279 tx=31190 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=202.2/s rate_tx=201.4/s
+  LEFT link: rssi=-30 fcc=0 lq=224 mode=active rate_rx=202.2/s dev_missing=106 last5s=0.9% cum=0.3% period=4.98ms discont=3
+LINKLOG,218492,LEFT,202.2,9,106,0.9,0.3,-30,224,0,batched,517,15.00,0,7225,31190,4.32,9,94
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,218516,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,7225,31190,4.32,9,94
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=7456 errors=0
+  FF14 batches_tx=7456 records_in_batches=32189 mean=4.32 max=9 batch_full_flushes=97
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=43273 tx=32189 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=198.8/s rate_tx=199.8/s
+  LEFT link: rssi=-32 fcc=0 lq=225 mode=active rate_rx=198.8/s dev_missing=133 last5s=2.6% cum=0.3% period=4.98ms discont=3
+LINKLOG,223577,LEFT,198.8,27,133,2.6,0.3,-32,225,0,batched,517,15.00,0,7456,32189,4.32,9,97
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,223601,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,7456,32189,4.32,9,97
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=7697 errors=0
+  FF14 batches_tx=7697 records_in_batches=33208 mean=4.31 max=9 batch_full_flushes=99
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=44292 tx=33208 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=203.8/s
+  LEFT link: rssi=-30 fcc=0 lq=225 mode=active rate_rx=203.8/s dev_missing=135 last5s=0.2% cum=0.3% period=4.98ms discont=3
+LINKLOG,228662,LEFT,203.8,2,135,0.2,0.3,-30,225,0,batched,517,15.00,0,7697,33208,4.31,9,99
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,228685,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,7697,33208,4.31,9,99
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=7935 errors=0
+  FF14 batches_tx=7935 records_in_batches=34202 mean=4.31 max=9 batch_full_flushes=103
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=45286 tx=34202 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=198.8/s rate_tx=198.8/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=198.8/s dev_missing=161 last5s=2.5% cum=0.4% period=4.98ms discont=3
+LINKLOG,233741,LEFT,198.8,26,161,2.5,0.4,-26,229,0,batched,517,15.00,0,7935,34202,4.31,9,103
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,233772,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,7935,34202,4.31,9,103
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=18 notify=8169 errors=0
+  FF14 batches_tx=8169 records_in_batches=35188 mean=4.31 max=9 batch_full_flushes=107
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=46275 tx=35188 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=197.8/s rate_tx=197.2/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=197.8/s dev_missing=194 last5s=3.2% cum=0.4% period=4.98ms discont=3
+LINKLOG,238834,LEFT,197.8,33,194,3.2,0.4,-26,229,0,batched,517,15.00,0,8169,35188,4.31,9,107
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,238858,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,8169,35188,4.31,9,107
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=6/256 high=18 notify=8403 errors=0
+  FF14 batches_tx=8403 records_in_batches=36173 mean=4.30 max=9 batch_full_flushes=110
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=47262 tx=36173 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=197.4/s rate_tx=197.0/s
+  LEFT link: rssi=-25 fcc=0 lq=229 mode=active rate_rx=197.4/s dev_missing=227 last5s=3.2% cum=0.5% period=4.98ms discont=3
+LINKLOG,243917,LEFT,197.4,33,227,3.2,0.5,-25,229,0,batched,517,15.00,0,8403,36173,4.30,9,110
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,243948,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,8403,36173,4.30,9,110
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=7/256 high=18 notify=8637 errors=0
+  FF14 batches_tx=8637 records_in_batches=37159 mean=4.30 max=9 batch_full_flushes=112
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=48249 tx=37159 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=197.4/s rate_tx=197.2/s
+  LEFT link: rssi=-28 fcc=0 lq=227 mode=active rate_rx=197.4/s dev_missing=261 last5s=3.3% cum=0.5% period=4.98ms discont=3
+LINKLOG,248999,LEFT,197.4,34,261,3.3,0.5,-28,227,0,batched,517,15.00,0,8637,37159,4.30,9,112
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,249030,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,8637,37159,4.30,9,112
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=18 notify=8874 errors=0
+  FF14 batches_tx=8874 records_in_batches=38165 mean=4.30 max=9 batch_full_flushes=113
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=49252 tx=38165 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=200.6/s rate_tx=201.2/s
+  LEFT link: rssi=-29 fcc=0 lq=226 mode=active rate_rx=200.6/s dev_missing=278 last5s=1.7% cum=0.6% period=4.98ms discont=3
+LINKLOG,254083,LEFT,200.6,17,278,1.7,0.6,-29,226,0,batched,517,15.00,0,8874,38165,4.30,9,113
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,254106,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,8874,38165,4.30,9,113
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=18 notify=9107 errors=0
+  FF14 batches_tx=9107 records_in_batches=39168 mean=4.30 max=9 batch_full_flushes=117
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=50254 tx=39168 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=200.4/s rate_tx=200.6/s
+  LEFT link: rssi=-29 fcc=0 lq=225 mode=active rate_rx=200.4/s dev_missing=297 last5s=1.9% cum=0.6% period=4.98ms discont=3
+LINKLOG,259169,LEFT,200.4,19,297,1.9,0.6,-29,225,0,batched,517,15.00,0,9107,39168,4.30,9,117
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,259193,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,9107,39168,4.30,9,117
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=18 notify=9341 errors=0
+  FF14 batches_tx=9341 records_in_batches=40167 mean=4.30 max=9 batch_full_flushes=121
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=51250 tx=40167 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=199.2/s rate_tx=199.8/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=199.2/s dev_missing=321 last5s=2.4% cum=0.6% period=4.98ms discont=3
+LINKLOG,264252,LEFT,199.2,24,321,2.4,0.6,-26,229,0,batched,517,15.00,0,9341,40167,4.30,9,121
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,264283,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,9341,40167,4.30,9,121
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=18 notify=9582 errors=0
+  FF14 batches_tx=9582 records_in_batches=41177 mean=4.30 max=9 batch_full_flushes=124
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=52263 tx=41177 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=202.6/s rate_tx=202.0/s
+  LEFT link: rssi=-27 fcc=0 lq=229 mode=active rate_rx=202.6/s dev_missing=329 last5s=0.8% cum=0.6% period=4.98ms discont=3
+LINKLOG,269335,LEFT,202.6,8,329,0.8,0.6,-27,229,0,batched,517,15.00,0,9582,41177,4.30,9,124
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,269366,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,9582,41177,4.30,9,124
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=18 notify=9815 errors=0
+  FF14 batches_tx=9815 records_in_batches=42185 mean=4.30 max=9 batch_full_flushes=127
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=53270 tx=42185 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=201.4/s rate_tx=201.6/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=201.4/s dev_missing=342 last5s=1.3% cum=0.6% period=4.98ms discont=3
+LINKLOG,274421,LEFT,201.4,13,342,1.3,0.6,-26,229,0,batched,517,15.00,0,9815,42185,4.30,9,127
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,274444,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,9815,42185,4.30,9,127
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=18 notify=10047 errors=0
+  FF14 batches_tx=10047 records_in_batches=43192 mean=4.30 max=9 batch_full_flushes=131
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=54275 tx=43192 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=201.0/s rate_tx=201.4/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=201.0/s dev_missing=358 last5s=1.6% cum=0.7% period=4.98ms discont=3
+LINKLOG,279505,LEFT,201.0,16,358,1.6,0.7,-26,229,0,batched,517,15.00,0,10047,43192,4.30,9,131
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,279536,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,10047,43192,4.30,9,131
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=18 notify=10282 errors=0
+  FF14 batches_tx=10282 records_in_batches=44209 mean=4.30 max=9 batch_full_flushes=134
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=55294 tx=44209 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=203.4/s
+  LEFT link: rssi=-25 fcc=0 lq=229 mode=active rate_rx=203.8/s dev_missing=359 last5s=0.1% cum=0.6% period=4.98ms discont=3
+LINKLOG,284585,LEFT,203.8,1,359,0.1,0.6,-25,229,0,batched,517,15.00,0,10282,44209,4.30,9,134
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,284615,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,10282,44209,4.30,9,134
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=18 notify=10514 errors=0
+  FF14 batches_tx=10514 records_in_batches=45228 mean=4.30 max=9 batch_full_flushes=137
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=56315 tx=45228 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.2/s rate_tx=203.8/s
+  LEFT link: rssi=-26 fcc=0 lq=228 mode=active rate_rx=204.2/s dev_missing=360 last5s=0.1% cum=0.6% period=4.98ms discont=3
+LINKLOG,289676,LEFT,204.2,1,360,0.1,0.6,-26,228,0,batched,517,15.00,0,10514,45228,4.30,9,137
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,289708,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,10514,45228,4.30,9,137
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=5/256 high=18 notify=10741 errors=0
+  FF14 batches_tx=10741 records_in_batches=46245 mean=4.31 max=9 batch_full_flushes=140
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=57333 tx=46245 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=203.4/s
+  LEFT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=203.6/s dev_missing=362 last5s=0.2% cum=0.6% period=4.98ms discont=3
+LINKLOG,294756,LEFT,203.6,2,362,0.2,0.6,-27,228,0,batched,517,15.00,0,10741,46245,4.31,9,140
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,294787,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,10741,46245,4.31,9,140
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=18 notify=10970 errors=0
+  FF14 batches_tx=10970 records_in_batches=47266 mean=4.31 max=9 batch_full_flushes=142
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=58352 tx=47266 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=204.2/s
+  LEFT link: rssi=-27 fcc=0 lq=228 mode=active rate_rx=203.8/s dev_missing=362 last5s=0.0% cum=0.6% period=4.98ms discont=3
+LINKLOG,299838,LEFT,203.8,0,362,0.0,0.6,-27,228,0,batched,517,15.00,0,10970,47266,4.31,9,142
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,299869,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,10970,47266,4.31,9,142
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=6/256 high=18 notify=11201 errors=0
+  FF14 batches_tx=11201 records_in_batches=48281 mean=4.31 max=9 batch_full_flushes=146
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=59370 tx=48281 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=203.0/s
+  LEFT link: rssi=-27 fcc=0 lq=229 mode=active rate_rx=203.6/s dev_missing=365 last5s=0.3% cum=0.6% period=4.98ms discont=3
+LINKLOG,304920,LEFT,203.6,3,365,0.3,0.6,-27,229,0,batched,517,15.00,0,11201,48281,4.31,9,146
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,304950,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,11201,48281,4.31,9,146
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=18 notify=11429 errors=0
+  FF14 batches_tx=11429 records_in_batches=49302 mean=4.31 max=9 batch_full_flushes=150
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=60388 tx=49302 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=204.2/s
+  LEFT link: rssi=-32 fcc=0 lq=228 mode=active rate_rx=203.6/s dev_missing=367 last5s=0.2% cum=0.6% period=4.98ms discont=3
+LINKLOG,310004,LEFT,203.6,2,367,0.2,0.6,-32,228,0,batched,517,15.00,0,11429,49302,4.31,9,150
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,310028,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,11429,49302,4.31,9,150
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=18 notify=11662 errors=0
+  FF14 batches_tx=11662 records_in_batches=50323 mean=4.32 max=9 batch_full_flushes=154
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=61406 tx=50323 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=204.2/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=203.6/s dev_missing=369 last5s=0.2% cum=0.6% period=4.98ms discont=3
+LINKLOG,315088,LEFT,203.6,2,369,0.2,0.6,-25,230,0,batched,517,15.00,0,11662,50323,4.32,9,154
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,315119,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,11662,50323,4.32,9,154
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=18 notify=11896 errors=0
+  FF14 batches_tx=11896 records_in_batches=51341 mean=4.32 max=9 batch_full_flushes=156
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=62427 tx=51341 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.2/s rate_tx=203.6/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=204.2/s dev_missing=369 last5s=0.0% cum=0.6% period=4.98ms discont=3
+LINKLOG,320168,LEFT,204.2,0,369,0.0,0.6,-25,230,0,batched,517,15.00,0,11896,51341,4.32,9,156
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,320200,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,11896,51341,4.32,9,156
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=18 notify=12130 errors=0
+  FF14 batches_tx=12130 records_in_batches=52359 mean=4.32 max=9 batch_full_flushes=159
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=63442 tx=52359 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.0/s rate_tx=203.6/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=203.0/s dev_missing=373 last5s=0.4% cum=0.6% period=4.98ms discont=3
+LINKLOG,325251,LEFT,203.0,4,373,0.4,0.6,-25,230,0,batched,517,15.00,0,12130,52359,4.32,9,159
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,325281,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,12130,52359,4.32,9,159
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=12361 errors=0
+  FF14 batches_tx=12361 records_in_batches=53377 mean=4.32 max=9 batch_full_flushes=162
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=64461 tx=53377 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=203.6/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=203.8/s dev_missing=375 last5s=0.2% cum=0.6% period=4.98ms discont=3
+LINKLOG,330332,LEFT,203.8,2,375,0.2,0.6,-25,230,0,batched,517,15.00,0,12361,53377,4.32,9,162
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,330363,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,12361,53377,4.32,9,162
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=12602 errors=0
+  FF14 batches_tx=12602 records_in_batches=54394 mean=4.32 max=9 batch_full_flushes=165
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=65478 tx=54394 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.4/s rate_tx=203.4/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=203.4/s dev_missing=378 last5s=0.3% cum=0.6% period=4.98ms discont=3
+LINKLOG,335413,LEFT,203.4,3,378,0.3,0.6,-25,230,0,batched,517,15.00,0,12602,54394,4.32,9,165
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,335444,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,12602,54394,4.32,9,165
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=12847 errors=0
+  FF14 batches_tx=12847 records_in_batches=55414 mean=4.31 max=9 batch_full_flushes=167
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=66498 tx=55414 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=204.0/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=204.0/s dev_missing=378 last5s=0.0% cum=0.6% period=4.98ms discont=3
+LINKLOG,340498,LEFT,204.0,0,378,0.0,0.6,-26,229,0,batched,517,15.00,0,12847,55414,4.31,9,167
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,340522,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,12847,55414,4.31,9,167
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=18 notify=13085 errors=0
+  FF14 batches_tx=13085 records_in_batches=56432 mean=4.31 max=9 batch_full_flushes=170
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=67519 tx=56432 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.2/s rate_tx=203.6/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=204.2/s dev_missing=378 last5s=0.0% cum=0.6% period=4.98ms discont=3
+LINKLOG,345578,LEFT,204.2,0,378,0.0,0.6,-26,229,0,batched,517,15.00,0,13085,56432,4.31,9,170
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,345610,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,13085,56432,4.31,9,170
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=18 notify=13327 errors=0
+  FF14 batches_tx=13327 records_in_batches=57452 mean=4.31 max=9 batch_full_flushes=173
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=68539 tx=57452 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=204.0/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=204.0/s dev_missing=378 last5s=0.0% cum=0.5% period=4.98ms discont=3
+LINKLOG,350660,LEFT,204.0,0,378,0.0,0.5,-26,229,0,batched,517,15.00,0,13327,57452,4.31,9,173
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,350691,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,13327,57452,4.31,9,173
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=18 notify=13564 errors=0
+  FF14 batches_tx=13564 records_in_batches=58473 mean=4.31 max=9 batch_full_flushes=176
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=69556 tx=58473 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.4/s rate_tx=204.2/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=203.4/s dev_missing=380 last5s=0.2% cum=0.5% period=4.98ms discont=3
+LINKLOG,355744,LEFT,203.4,2,380,0.2,0.5,-25,230,0,batched,517,15.00,0,13564,58473,4.31,9,176
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,355768,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,13564,58473,4.31,9,176
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=18 notify=13801 errors=0
+  FF14 batches_tx=13801 records_in_batches=59490 mean=4.31 max=9 batch_full_flushes=179
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=70576 tx=59490 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=203.4/s
+  LEFT link: rssi=-26 fcc=0 lq=227 mode=active rate_rx=204.0/s dev_missing=381 last5s=0.1% cum=0.5% period=4.98ms discont=3
+LINKLOG,360830,LEFT,204.0,1,381,0.1,0.5,-26,227,0,batched,517,15.00,0,13801,59490,4.31,9,179
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,360854,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,13801,59490,4.31,9,179
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=18 notify=14033 errors=0
+  FF14 batches_tx=14033 records_in_batches=60509 mean=4.31 max=9 batch_full_flushes=182
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=71592 tx=60509 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.2/s rate_tx=203.8/s
+  LEFT link: rssi=-23 fcc=0 lq=229 mode=active rate_rx=203.2/s dev_missing=383 last5s=0.2% cum=0.5% period=4.98ms discont=3
+LINKLOG,365914,LEFT,203.2,2,383,0.2,0.5,-23,229,0,batched,517,15.00,0,14033,60509,4.31,9,182
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,365938,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,14033,60509,4.31,9,182
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=18 notify=14265 errors=0
+  FF14 batches_tx=14265 records_in_batches=61529 mean=4.31 max=9 batch_full_flushes=186
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=72614 tx=61529 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.4/s rate_tx=204.0/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=204.4/s dev_missing=385 last5s=0.2% cum=0.5% period=4.98ms discont=3
+LINKLOG,370995,LEFT,204.4,2,385,0.2,0.5,-24,231,0,batched,517,15.00,0,14265,61529,4.31,9,186
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,371026,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,14265,61529,4.31,9,186
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=18 notify=14499 errors=0
+  FF14 batches_tx=14499 records_in_batches=62548 mean=4.31 max=9 batch_full_flushes=188
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=73633 tx=62548 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=203.8/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=203.8/s dev_missing=385 last5s=0.0% cum=0.5% period=4.98ms discont=3
+LINKLOG,376072,LEFT,203.8,0,385,0.0,0.5,-24,231,0,batched,517,15.00,0,14499,62548,4.31,9,188
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,376103,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,14499,62548,4.31,9,188
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=18 notify=14728 errors=0
+  FF14 batches_tx=14728 records_in_batches=63567 mean=4.32 max=9 batch_full_flushes=191
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=74652 tx=63567 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=203.8/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=203.8/s dev_missing=387 last5s=0.2% cum=0.5% period=4.98ms discont=3
+LINKLOG,381164,LEFT,203.8,2,387,0.2,0.5,-26,229,0,batched,517,15.00,0,14728,63567,4.32,9,191
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,381187,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,14728,63567,4.32,9,191
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=14956 errors=0
+  FF14 batches_tx=14956 records_in_batches=64587 mean=4.32 max=9 batch_full_flushes=194
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=75671 tx=64587 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.8/s rate_tx=204.0/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=203.8/s dev_missing=388 last5s=0.1% cum=0.5% period=4.98ms discont=3
+LINKLOG,386249,LEFT,203.8,1,388,0.1,0.5,-24,231,0,batched,517,15.00,0,14956,64587,4.32,9,194
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,386272,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,14956,64587,4.32,9,194
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=18 notify=15190 errors=0
+  FF14 batches_tx=15190 records_in_batches=65603 mean=4.32 max=9 batch_full_flushes=198
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=76689 tx=65603 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=203.2/s
+  LEFT link: rssi=-26 fcc=0 lq=230 mode=active rate_rx=203.6/s dev_missing=391 last5s=0.3% cum=0.5% period=4.98ms discont=3
+LINKLOG,391333,LEFT,203.6,3,391,0.3,0.5,-26,230,0,batched,517,15.00,0,15190,65603,4.32,9,198
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,391356,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,15190,65603,4.32,9,198
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=18 notify=15431 errors=0
+  FF14 batches_tx=15431 records_in_batches=66619 mean=4.32 max=9 batch_full_flushes=202
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=77705 tx=66619 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.2/s rate_tx=203.2/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=203.2/s dev_missing=396 last5s=0.5% cum=0.5% period=4.98ms discont=3
+LINKLOG,396414,LEFT,203.2,5,396,0.5,0.5,-25,230,0,batched,517,15.00,0,15431,66619,4.32,9,202
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,396446,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,15431,66619,4.32,9,202
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=18 notify=15671 errors=0
+  FF14 batches_tx=15671 records_in_batches=67640 mean=4.32 max=9 batch_full_flushes=205
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=78725 tx=67640 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=204.2/s
+  LEFT link: rssi=-24 fcc=0 lq=230 mode=active rate_rx=204.0/s dev_missing=396 last5s=0.0% cum=0.5% period=4.98ms discont=3
+LINKLOG,401495,LEFT,204.0,0,396,0.0,0.5,-24,230,0,batched,517,15.00,0,15671,67640,4.32,9,205
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,401526,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,15671,67640,4.32,9,205
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=15909 errors=0
+  FF14 batches_tx=15909 records_in_batches=68662 mean=4.32 max=9 batch_full_flushes=208
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=79746 tx=68662 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.2/s rate_tx=204.4/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=204.2/s dev_missing=396 last5s=0.0% cum=0.5% period=4.98ms discont=3
+LINKLOG,406585,LEFT,204.2,0,396,0.0,0.5,-24,231,0,batched,517,15.00,0,15909,68662,4.32,9,208
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,406616,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,15909,68662,4.32,9,208
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=18 notify=16146 errors=0
+  FF14 batches_tx=16146 records_in_batches=69679 mean=4.32 max=9 batch_full_flushes=211
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=80763 tx=69679 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.4/s rate_tx=203.4/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=203.4/s dev_missing=398 last5s=0.2% cum=0.5% period=4.98ms discont=3
+LINKLOG,411669,LEFT,203.4,2,398,0.2,0.5,-25,230,0,batched,517,15.00,0,16146,69679,4.32,9,211
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,411693,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,16146,69679,4.32,9,211
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=18 notify=16386 errors=0
+  FF14 batches_tx=16386 records_in_batches=70700 mean=4.31 max=9 batch_full_flushes=214
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=81783 tx=70700 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=204.2/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=204.0/s dev_missing=399 last5s=0.1% cum=0.5% period=4.98ms discont=3
+LINKLOG,416754,LEFT,204.0,1,399,0.1,0.5,-24,231,0,batched,517,15.00,0,16386,70700,4.31,9,214
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,416778,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,16386,70700,4.31,9,214
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=4/256 high=18 notify=16623 errors=0
+  FF14 batches_tx=16623 records_in_batches=71714 mean=4.31 max=9 batch_full_flushes=217
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=82801 tx=71714 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=202.8/s
+  LEFT link: rssi=-24 fcc=0 lq=230 mode=active rate_rx=203.6/s dev_missing=403 last5s=0.4% cum=0.5% period=4.98ms discont=3
+LINKLOG,421840,LEFT,203.6,4,403,0.4,0.5,-24,230,0,batched,517,15.00,0,16623,71714,4.31,9,217
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,421864,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,16623,71714,4.31,9,217
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=18 notify=16855 errors=0
+  FF14 batches_tx=16855 records_in_batches=72724 mean=4.31 max=9 batch_full_flushes=222
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=83809 tx=72724 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=201.6/s rate_tx=202.0/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=201.6/s dev_missing=414 last5s=1.1% cum=0.5% period=4.98ms discont=3
+LINKLOG,426926,LEFT,201.6,11,414,1.1,0.5,-24,231,0,batched,517,15.00,0,16855,72724,4.31,9,222
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,426950,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,16855,72724,4.31,9,222
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=19 notify=17097 errors=0
+  FF14 batches_tx=17097 records_in_batches=73746 mean=4.31 max=9 batch_full_flushes=225
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=84831 tx=73746 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.4/s rate_tx=204.4/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=204.4/s dev_missing=415 last5s=0.1% cum=0.5% period=4.98ms discont=3
+LINKLOG,432012,LEFT,204.4,1,415,0.1,0.5,-24,231,0,batched,517,15.00,0,17097,73746,4.31,9,225
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,432036,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,17097,73746,4.31,9,225
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=19 notify=17340 errors=0
+  FF14 batches_tx=17340 records_in_batches=74765 mean=4.31 max=9 batch_full_flushes=227
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=85851 tx=74765 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=203.8/s
+  LEFT link: rssi=-24 fcc=0 lq=231 mode=active rate_rx=204.0/s dev_missing=415 last5s=0.0% cum=0.5% period=4.98ms discont=3
+LINKLOG,437098,LEFT,204.0,0,415,0.0,0.5,-24,231,0,batched,517,15.00,0,17340,74765,4.31,9,227
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,437122,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,17340,74765,4.31,9,227
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=19 notify=17582 errors=0
+  FF14 batches_tx=17582 records_in_batches=75785 mean=4.31 max=9 batch_full_flushes=232
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=86868 tx=75785 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.4/s rate_tx=204.0/s
+  LEFT link: rssi=-23 fcc=0 lq=232 mode=active rate_rx=203.4/s dev_missing=419 last5s=0.4% cum=0.5% period=4.98ms discont=3
+LINKLOG,442181,LEFT,203.4,4,419,0.4,0.5,-23,232,0,batched,517,15.00,0,17582,75785,4.31,9,232
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,442213,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,17582,75785,4.31,9,232
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=19 notify=17821 errors=0
+  FF14 batches_tx=17821 records_in_batches=76802 mean=4.31 max=9 batch_full_flushes=235
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=87888 tx=76802 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=203.4/s
+  LEFT link: rssi=-23 fcc=0 lq=232 mode=active rate_rx=204.0/s dev_missing=420 last5s=0.1% cum=0.5% period=4.98ms discont=3
+LINKLOG,447261,LEFT,204.0,1,420,0.1,0.5,-23,232,0,batched,517,15.00,0,17821,76802,4.31,9,235
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,447292,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,17821,76802,4.31,9,235
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=19 notify=18056 errors=0
+  FF14 batches_tx=18056 records_in_batches=77823 mean=4.31 max=9 batch_full_flushes=238
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=88908 tx=77823 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=204.2/s
+  LEFT link: rssi=-23 fcc=0 lq=232 mode=active rate_rx=204.0/s dev_missing=421 last5s=0.1% cum=0.5% period=4.98ms discont=3
+LINKLOG,452349,LEFT,204.0,1,421,0.1,0.5,-23,232,0,batched,517,15.00,0,18056,77823,4.31,9,238
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,452381,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,18056,77823,4.31,9,238
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=19 notify=18292 errors=0
+  FF14 batches_tx=18292 records_in_batches=78843 mean=4.31 max=9 batch_full_flushes=240
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=89928 tx=78843 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=204.0/s
+  LEFT link: rssi=-23 fcc=0 lq=232 mode=active rate_rx=204.0/s dev_missing=421 last5s=0.0% cum=0.5% period=4.98ms discont=3
+LINKLOG,457433,LEFT,204.0,0,421,0.0,0.5,-23,232,0,batched,517,15.00,0,18292,78843,4.31,9,240
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,457464,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,18292,78843,4.31,9,240
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=2/256 high=19 notify=18525 errors=0
+  FF14 batches_tx=18525 records_in_batches=79861 mean=4.31 max=9 batch_full_flushes=243
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=90946 tx=79861 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=203.6/s
+  LEFT link: rssi=-23 fcc=0 lq=231 mode=active rate_rx=203.6/s dev_missing=423 last5s=0.2% cum=0.5% period=4.98ms discont=3
+LINKLOG,462515,LEFT,203.6,2,423,0.2,0.5,-23,231,0,batched,517,15.00,0,18525,79861,4.31,9,243
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,462547,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,18525,79861,4.31,9,243
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=3/256 high=19 notify=18761 errors=0
+  FF14 batches_tx=18761 records_in_batches=80878 mean=4.31 max=9 batch_full_flushes=247
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=91964 tx=80878 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.6/s rate_tx=203.4/s
+  LEFT link: rssi=-23 fcc=0 lq=231 mode=active rate_rx=203.6/s dev_missing=425 last5s=0.2% cum=0.5% period=4.98ms discont=3
+LINKLOG,467599,LEFT,203.6,2,425,0.2,0.5,-23,231,0,batched,517,15.00,0,18761,80878,4.31,9,247
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,467624,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,18761,80878,4.31,9,247
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=0/256 high=19 notify=18996 errors=0
+  FF14 batches_tx=18996 records_in_batches=81898 mean=4.31 max=9 batch_full_flushes=250
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=92981 tx=81898 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=203.4/s rate_tx=204.0/s
+  LEFT link: rssi=-25 fcc=0 lq=230 mode=active rate_rx=203.4/s dev_missing=426 last5s=0.1% cum=0.5% period=4.98ms discont=3
+LINKLOG,472684,LEFT,203.4,1,426,0.1,0.5,-25,230,0,batched,517,15.00,0,18996,81898,4.31,9,250
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,472708,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,18996,81898,4.31,9,250
+STREAM phone=1 sub=1 stream=batched mtu=517 conn=[15.00ms lat=0 to=4000ms] q=1/256 high=19 notify=19230 errors=0
+  FF14 batches_tx=19230 records_in_batches=82917 mean=4.31 max=9 batch_full_flushes=253
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
+  FF13 LEFT state=2 total=7147 crc32=8bc13223 send_errors=0
+  FF13 RIGHT state=0 total=0 crc32=00000000 send_errors=0
+  vhci_drop=0 log_errors=0
+  LEFT rx=94001 tx=82917 drop=0 offline=11083 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=204.0/s rate_tx=203.8/s
+  LEFT link: rssi=-26 fcc=0 lq=229 mode=active rate_rx=204.0/s dev_missing=430 last5s=0.4% cum=0.5% period=4.98ms discont=3
+LINKLOG,477765,LEFT,204.0,4,430,0.4,0.5,-26,229,0,batched,517,15.00,0,19230,82917,4.31,9,253
+  RIGHT rx=0 tx=0 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 other=0 rate_rx=0.0/s rate_tx=0.0/s
+  RIGHT link: n/a (no ACL link) mode=active rate_rx=0.0/s dev_missing=0 last5s=n/a cum=0.0% period=0.00ms discont=0
+LINKLOG,477796,RIGHT,0.0,0,0,,0.0,,,,batched,517,15.00,0,19230,82917,4.31,9,253
