@@ -97,3 +97,42 @@ STREAM phone=1 sub=1 stream=decoded mtu=517 conn=[15.00ms lat=1 to=5000ms] q=0/2
 **HCI traffic added by the polling:** 3 commands per connected link every 5 s, so 1.2 commands per
 second (and 1.2 Command Complete events per second) with both controllers connected, sent one at a
 time at least 100 ms apart.
+
+## Machine-readable line (`LINKLOG`) and one-off log lines (not yet run on hardware)
+
+Logging only; none of these adds HCI traffic. The HCI budget above is unchanged.
+
+```
+LINKLOG_FIELDS,t_ms,hand,rate_rx,dev_missing_delta,dev_missing_cum,last5s_pct,cum_pct,rssi,lq,fcc,stream,mtu,conn_interval_ms,decimated
+LINKLOG,12345,LEFT,157.8,1124,9000,21.2,17.7,-28,227,0,decoded,517,15.00,0
+```
+
+(Illustrative format only, not measurements.) The header is printed once, before the first
+line; then one `LINKLOG,...` line per hand per statistics interval (5 s), after the `link:` line
+with the same numbers. Filter on the prefix `LINKLOG,`.
+
+| Field | Meaning |
+| --- | --- |
+| `t_ms` | Milliseconds since boot when the line was printed |
+| `hand` | `LEFT` or `RIGHT` |
+| `rate_rx` | Reports per second received from that controller over the last interval (same as `rate_rx` on the `rx` line) |
+| `dev_missing_delta` | Growth of `dev_missing` over the interval; empty after a reconnect restarted it |
+| `dev_missing_cum` | `dev_missing` since the link was created |
+| `last5s_pct`, `cum_pct` | Missing share over the interval and since the link was created, in percent, without the `%` sign |
+| `rssi`, `lq`, `fcc` | The last polled link-health values; empty if the controller is not connected or refused the command |
+| `stream`, `mtu` | `none`, `raw` or `decoded`; the negotiated ATT MTU (0 = no phone) |
+| `conn_interval_ms` | The BLE connection interval in use, empty if not yet known |
+| `decimated` | Cumulative reports skipped by `WMR_CFG_FF12_DECIMATE` (0 when off) |
+
+Unknown values are empty fields, never `n/a`, so a CSV reader sees a missing value.
+
+Other log lines added in the same change, each printed at most once per event:
+
+- `LEFT queue full: first drop of this episode, stream=raw mtu=23 q=256/256 errors=0`: the first
+  queue-full drop since the queue last drained to empty. Later drops in the same episode are
+  only counted in `drop`.
+- `HCI LE buffers: ACL packet length 251 bytes, 12 packets`: from the controller's LE Read
+  Buffer Size reply, read once during stack start-up (v1 or v2 command). Not polled.
+- `BLE data length changed: tx 251 octets / 2120 us, rx 251 octets / 2120 us`: the LE Data
+  Length Change event for the phone link. If no such event arrives, about 0.5 s after connect
+  the firmware prints `BLE data length: no change event seen since connect`.

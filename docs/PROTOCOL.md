@@ -440,6 +440,14 @@ of the BLE service, FF13 has **no authentication or encryption** (see
 Nothing in this section is in the firmware or changes the FF11 or FF12 version 1 formats
 above. It is a sketch for the maintainer and the app author to decide on.
 
+**Status: on hold, depends on the decimation experiments.** Batching is not to be built before
+the decimation checklist X1 to X4 in [TESTING.md](TESTING.md) has been run at one fixed,
+stated controller position. If sending half or a quarter of the notifications does not reduce
+the missing-report figure, batching is not the fix and should not be built. If it does, the
+recommendation below is a separate characteristic (FF14) rather than an opt-in flag, so a
+receiver that did not ask for version 2 can never be sent one. Do not implement before the
+user decides.
+
 ## FF12 version 2: several records per notification
 
 **Why.** Both hands stream about 160 reports/s each (reported), so FF12 version 1 sends about

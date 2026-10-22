@@ -241,6 +241,66 @@ static void test_interval_share(void){
     CHECK(strcmp(text, "n/a") == 0);
 }
 
+static void test_linklog(void){
+    printf("diag: LINKLOG line, drop episode, LE buffers and data length\n");
+    char text[200];
+    wmr_link_health_t h;
+    memset(&h, 0, sizeof(h));
+    h.valid[WMR_LINKCMD_RSSI] = h.valid[WMR_LINKCMD_QUALITY] = h.valid[WMR_LINKCMD_FAILED_CONTACT] = true;
+    h.rssi = -28; h.quality = 227; h.failed_contacts = 0;
+    wmr_linklog_t r;
+    memset(&r, 0, sizeof(r));
+    r.t_ms = 12345; r.hand = "LEFT"; r.rate_rx_tenths = 1578; r.missing_delta = 1124; r.missing_cum = 9000;
+    r.last5s_permille = 212; r.cum_permille = 177; r.health = &h; r.stream = "decoded"; r.mtu = 517;
+    r.conn_interval_us = 15000; r.decimated = 0;
+    wmr_linklog_format(&r, text, sizeof(text));
+    CHECK(strcmp(text, "LINKLOG,12345,LEFT,157.8,1124,9000,21.2,17.7,-28,227,0,decoded,517,15.00,0") == 0);
+    /* unknown values stay empty */
+    r.rate_rx_tenths = -1; r.missing_delta = -1; r.last5s_permille = -1; r.health = NULL;
+    r.conn_interval_us = 0; r.mtu = 0; r.stream = "none"; r.decimated = 42; r.hand = "RIGHT";
+    wmr_linklog_format(&r, text, sizeof(text));
+    CHECK(strcmp(text, "LINKLOG,12345,RIGHT,,,9000,,17.7,,,,none,0,,42") == 0);
+    /* a refused command leaves its field empty */
+    memset(&h, 0, sizeof(h));
+    h.valid[WMR_LINKCMD_RSSI] = true; h.rssi = 0;
+    h.status[WMR_LINKCMD_QUALITY] = 0x01;
+    r.health = &h; r.rate_rx_tenths = 1750; r.conn_interval_us = 11250; r.hand = "LEFT";
+    wmr_linklog_format(&r, text, sizeof(text));
+    CHECK(strcmp(text, "LINKLOG,12345,LEFT,175.0,,9000,,17.7,0,,,none,0,11.25,42") == 0);
+    CHECK(strncmp(WMR_LINKLOG_HEADER, "LINKLOG_FIELDS,", 15) == 0);
+    /* header and a line have the same number of fields */
+    unsigned header_fields = 0, line_fields = 0;
+    for (const char *p = WMR_LINKLOG_HEADER; *p; p++) header_fields += *p == ',';
+    for (const char *p = text; *p; p++) line_fields += *p == ',';
+    CHECK(header_fields == line_fields);
+
+    wmr_episode_t e = {0};
+    CHECK(wmr_episode_note_drop(&e));                   /* first drop: log */
+    CHECK(!wmr_episode_note_drop(&e));                  /* the rest of the episode: silent */
+    wmr_episode_note_queue(&e, 200);
+    CHECK(!wmr_episode_note_drop(&e));                  /* queue not empty: same episode */
+    wmr_episode_note_queue(&e, 0);                      /* drained: episode over */
+    CHECK(wmr_episode_note_drop(&e));
+    wmr_diag_format_drop(text, sizeof(text), "LEFT", "raw", 23, 256, 256, 0);
+    CHECK(strcmp(text, "LEFT queue full: first drop of this episode, stream=raw mtu=23 q=256/256 errors=0") == 0);
+
+    uint16_t acl_length = 0;
+    uint8_t acl_count = 0;
+    const uint8_t buffers_v1[] = {0x00, 0xFB, 0x00, 0x0C};
+    CHECK(wmr_diag_parse_le_buffer_size(buffers_v1, sizeof(buffers_v1), &acl_length, &acl_count));
+    CHECK(acl_length == 251 && acl_count == 12);
+    const uint8_t buffers_v2[] = {0x00, 0xFB, 0x00, 0x0C, 0x00, 0x00, 0x00};     /* v2 adds ISO fields */
+    CHECK(wmr_diag_parse_le_buffer_size(buffers_v2, sizeof(buffers_v2), &acl_length, &acl_count));
+    CHECK(acl_length == 251 && acl_count == 12);
+    const uint8_t buffers_bad[] = {0x01, 0xFB, 0x00, 0x0C};
+    CHECK(!wmr_diag_parse_le_buffer_size(buffers_bad, sizeof(buffers_bad), &acl_length, &acl_count));   /* status */
+    CHECK(!wmr_diag_parse_le_buffer_size(buffers_v1, 3, &acl_length, &acl_count));                      /* too short */
+    wmr_diag_format_le_buffers(text, sizeof(text), 251, 12);
+    CHECK(strcmp(text, "HCI LE buffers: ACL packet length 251 bytes, 12 packets") == 0);
+    wmr_diag_format_data_length(text, sizeof(text), 251, 2120, 27, 328);
+    CHECK(strcmp(text, "BLE data length changed: tx 251 octets / 2120 us, rx 27 octets / 328 us") == 0);
+}
+
 int main(void){
     test_clean_stream();
     test_warmup();
@@ -256,6 +316,7 @@ int main(void){
     test_link_replies();
     test_command_rate();
     test_interval_share();
+    test_linklog();
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

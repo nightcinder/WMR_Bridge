@@ -129,4 +129,56 @@ int wmr_diag_interval_permille(uint32_t prev_missing, uint32_t missing,
 /* "21.2%" for a permille value, "n/a" for a negative one. */
 void wmr_diag_percent_format(int permille, char *buf, size_t len);
 
+/* ---- LINKLOG: one machine-readable line per hand per statistics interval ---- */
+
+/* Printed once before the first LINKLOG line. Scripts filter on the prefix "LINKLOG,". */
+#define WMR_LINKLOG_HEADER \
+    "LINKLOG_FIELDS,t_ms,hand,rate_rx,dev_missing_delta,dev_missing_cum,last5s_pct,cum_pct," \
+    "rssi,lq,fcc,stream,mtu,conn_interval_ms,decimated"
+
+typedef struct {
+    uint32_t    t_ms;               /* milliseconds since boot */
+    const char *hand;               /* "LEFT" / "RIGHT" */
+    int32_t     rate_rx_tenths;     /* reports per second x 10 over the last interval; < 0 = unknown */
+    int64_t     missing_delta;      /* growth of dev_missing over the interval; < 0 = unknown */
+    uint32_t    missing_cum;        /* dev_missing since the link was created */
+    int         last5s_permille;    /* < 0 = unknown */
+    int         cum_permille;
+    const wmr_link_health_t *health;/* NULL = no Classic link (rssi, lq, fcc left empty) */
+    const char *stream;             /* "none" / "raw" / "decoded" */
+    uint16_t    mtu;                /* 0 = no phone */
+    uint32_t    conn_interval_us;   /* 0 = unknown */
+    uint32_t    decimated;          /* cumulative, see WMR_CFG_FF12_DECIMATE */
+} wmr_linklog_t;
+
+/* "LINKLOG,12345,LEFT,157.8,1124,17.7,21.2,17.7,-28,227,0,decoded,517,15.00,0". Unknown or
+ * unavailable values are left empty (",,"), never "n/a", so a CSV reader sees a missing value. */
+void wmr_linklog_format(const wmr_linklog_t *r, char *buf, size_t len);
+
+/* ---- First queue-full drop of each episode -------------------------------- */
+
+typedef struct { bool active; } wmr_episode_t;
+
+/* Returns true only for the first drop since the queue last drained (log one line then). */
+bool wmr_episode_note_drop(wmr_episode_t *e);
+/* Call with the current queue depth; an empty queue ends the episode. */
+void wmr_episode_note_queue(wmr_episode_t *e, unsigned queue_count);
+
+/* "LEFT queue full: first drop of this episode, stream=raw mtu=23 q=256/256 errors=0" */
+void wmr_diag_format_drop(char *buf, size_t len, const char *hand_name, const char *stream_name,
+                          uint16_t mtu, unsigned queue_count, unsigned queue_capacity, uint32_t errors);
+
+/* ---- LE buffer size and data length (read once, logged, no polling) ---------- */
+
+/* Return parameters of LE Read Buffer Size (v1 or v2; the first four bytes agree):
+ * status(1), LE ACL data packet length(2), total number of LE ACL data packets(1). */
+bool wmr_diag_parse_le_buffer_size(const uint8_t *ret, uint16_t len, uint16_t *acl_length, uint8_t *acl_count);
+
+/* "HCI LE buffers: ACL packet length 251 bytes, 12 packets" */
+void wmr_diag_format_le_buffers(char *buf, size_t len, uint16_t acl_length, uint8_t acl_count);
+
+/* "BLE data length changed: tx 251 octets / 2120 us, rx 251 octets / 2120 us" */
+void wmr_diag_format_data_length(char *buf, size_t len, uint16_t tx_octets, uint16_t tx_time_us,
+                                 uint16_t rx_octets, uint16_t rx_time_us);
+
 #endif /* WMR_DIAG_H */
