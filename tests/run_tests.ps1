@@ -45,6 +45,11 @@ $exeEcho = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_echo.exe"
 if ($LASTEXITCODE -ne 0) { throw "compile failed (echo)" }
 & $exeEcho
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeCfg = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_cfg.exe"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_cfg.c" "$root\src\wmr_cfg.c" -o $exeCfg
+if ($LASTEXITCODE -ne 0) { throw "compile failed (cfg)" }
+& $exeCfg
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $exeDisc = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_discovery.exe"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_discovery.c" "$root\src\wmr_discovery.c" -o $exeDisc
 if ($LASTEXITCODE -ne 0) { throw "compile failed (discovery)" }

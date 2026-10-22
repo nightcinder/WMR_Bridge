@@ -51,8 +51,8 @@ offsets and scales; it does not validate signs or axes.
 FF12 stays uncalibrated. The phone gets each controller's firmware config block from
 the bridge on FF13 ([PROTOCOL.md](PROTOCOL.md#controller-config-block-ff13-proposed-design-only-not-implemented)),
 including how the ESP32 reads it over HID, caches it, and keeps the 78-byte responses
-out of the input stream. **That is a design only; no firmware for it exists and none of
-it has been tried on hardware.**
+out of the input stream. **Only the byte formats and the reader state machine exist (host-tested, not wired
+into the firmware); none of it has been tried on hardware.**
 
 What the phone does with the blob (all from Monado, `wmr_controller_base.c` and
 `wmr_config.c` at commit `f50c796c32c8`):
