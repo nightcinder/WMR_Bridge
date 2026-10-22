@@ -353,10 +353,10 @@ the assistant that wrote this):**
   `capture_ble.py`, so `tools/analyze_capture.py` stays the analyzer. `capture_ble.py`
   remains available for quick checks, but treat a desktop capture as valid only if its own
   loss lines are under 5 %.
-- **Nothing is confirmed by the lossy captures.** The gyro scale, the tick unit
-  (100 ns per tick), the axis directions and signs, and the other items under "Unknown"
-  above stay **unconfirmed** until a clean capture, with a loss line under 5 %, has been
-  analysed.
+- **Nothing is confirmed by the lossy desktop captures.** What the first loss-free phone
+  captures (0 sequence gaps) do and do not confirm is under "Calibration: status" above:
+  the tick unit and gyro scale are reported confirmed; the axis mapping is only probable
+  and the Y-axis sign is still open. Everything else under "Unknown" stays **unconfirmed**.
 
 **Repeat capture** (firmware from `main`, which includes the link diagnostics, flashed by
 the user; nothing here flashes anything):
