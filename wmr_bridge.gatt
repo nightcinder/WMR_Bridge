@@ -12,3 +12,6 @@ CHARACTERISTIC, 0000FF12-0000-1000-8000-00805F9B34FB, NOTIFY | DYNAMIC,
 // FF14: batched decoded records (2-byte header + 1..9 FF12 records), notify only. Mutually
 // exclusive with FF11 and FF12 notifications.
 CHARACTERISTIC, 0000FF14-0000-1000-8000-00805F9B34FB, NOTIFY | DYNAMIC,
+// FF15: echo. The phone writes a 4-byte ping, the ESP32 notifies a 20-byte answer ahead of
+// any queued stream data. Independent of the FF11/FF12/FF14 exclusion.
+CHARACTERISTIC, 0000FF15-0000-1000-8000-00805F9B34FB, WRITE_WITHOUT_RESPONSE | NOTIFY | DYNAMIC,

@@ -41,6 +41,8 @@ is modified; the stock `port/esp32/sdkconfig.defaults` is used.
 **Re-copy `main-CMakeLists.txt` after pulling the FF14 change:** the file lists the
 application's sources, and `wmr_batch.c` was added. Without the new copy the link
 fails with undefined `wmr_batch_*` symbols.
+The FF15 echo change adds `wmr_echo.c` in the same way (undefined `wmr_echo_*` without a
+fresh copy).
 Edit the controller addresses in `src\wmr_config.h` first.
 
 ## Build

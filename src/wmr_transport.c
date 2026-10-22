@@ -46,6 +46,7 @@
 #include "wmr_batch.h"
 #include "wmr_controller.h"
 #include "wmr_diag.h"
+#include "wmr_echo.h"
 #include "wmr_linkdiag.h"
 #include "wmr_link.h"
 #include "wmr_decoded.h"
@@ -64,6 +65,9 @@
 #define DECODED_CCC_HANDLE   ATT_CHARACTERISTIC_0000FF12_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
 #define BATCHED_VALUE_HANDLE ATT_CHARACTERISTIC_0000FF14_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
 #define BATCHED_CCC_HANDLE   ATT_CHARACTERISTIC_0000FF14_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
+/* FF15: echo (write without response + notify), independent of the stream exclusion. */
+#define ECHO_VALUE_HANDLE    ATT_CHARACTERISTIC_0000FF15_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
+#define ECHO_CCC_HANDLE      ATT_CHARACTERISTIC_0000FF15_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
 
 #define STATUS_SIZE 16
 
@@ -82,6 +86,9 @@ static wmr_episode_t drop_episode;
 static bool data_length_seen;
 static uint16_t send_offset;       /* bytes of the head frame already sent */
 static wmr_stats_t stats;
+/* FF15: one outstanding echo; sent before any stream data. */
+static wmr_echo_state_t echo;
+static bool echo_subscribed;
 
 static btstack_timer_source_t pump_timer;
 /* FF14: fires when the oldest queued record has waited long enough to send a partial batch. */
@@ -163,9 +170,12 @@ static bool batch_due(void){
 
 static void pump_kick(void){
     wmr_episode_note_queue(&drop_episode, queue.count);
-    if (stream_mode == WMR_STREAM_NONE || phone_handle == HCI_CON_HANDLE_INVALID ||
-        !queue.count || send_pending) return;
-    if (stream_mode == WMR_STREAM_BATCHED && !batch_due()) return;
+    if (phone_handle == HCI_CON_HANDLE_INVALID || send_pending) return;
+    /* A pending echo needs a send opportunity whatever the stream is doing. */
+    if (!echo.pending){
+        if (stream_mode == WMR_STREAM_NONE || !queue.count) return;
+        if (stream_mode == WMR_STREAM_BATCHED && !batch_due()) return;
+    }
     send_pending = true;
     att_server_request_can_send_now_event(phone_handle);
 }
@@ -298,11 +308,30 @@ static void pump_send_batch(void){
     pump_kick();
 }
 
-/* Send one fragment (FF11), one record (FF12) or one batch (FF14) from the head of the
- * queue. Runs on ATT_EVENT_CAN_SEND_NOW. */
+/* FF15: send the pending echo. Not counted in `notifications` (that counter stays the
+ * stream's, so the FF14 identity holds); a failed notify keeps it for the retry timer. */
+static void pump_send_echo(void){
+    uint8_t value[WMR_ECHO_RESPONSE_SIZE];
+    if (!wmr_echo_build(&echo, (uint64_t) esp_timer_get_time(), value)) return;
+    uint8_t result = att_server_notify(phone_handle, ECHO_VALUE_HANDLE, value, sizeof(value));
+    if (result != ERROR_CODE_SUCCESS){
+        stats.errors++;
+        return;
+    }
+    wmr_echo_sent(&echo);
+    pump_kick();
+}
+
+/* Send the pending echo (FF15) if there is one, otherwise one fragment (FF11), one record
+ * (FF12) or one batch (FF14) from the head of the queue. Runs on ATT_EVENT_CAN_SEND_NOW. */
 static void pump_send_one(void){
     send_pending = false;
-    if (stream_mode == WMR_STREAM_NONE || phone_handle == HCI_CON_HANDLE_INVALID) return;
+    if (phone_handle == HCI_CON_HANDLE_INVALID) return;
+    if (echo.pending){
+        pump_send_echo();
+        return;
+    }
+    if (stream_mode == WMR_STREAM_NONE) return;
     const wmr_frame_t *frame = wmr_queue_peek(&queue);
     if (!frame) return;
     if (stream_mode == WMR_STREAM_DECODED){
@@ -351,6 +380,10 @@ static void status_tick_handler(btstack_timer_source_t *timer){
 
 const wmr_stats_t *wmr_transport_stats(void){
     return &stats;
+}
+
+const wmr_echo_state_t *wmr_transport_echo(void){
+    return &echo;
 }
 
 void wmr_transport_get_info(wmr_transport_info_t *info){
@@ -410,12 +443,47 @@ static uint16_t att_read(hci_con_handle_t handle, uint16_t attribute,
         uint8_t ccc[2] = {wmr_stream_mode_ccc_enabled(stream_mode, which) ? 1 : 0, 0};
         return att_read_callback_handle_blob(ccc, sizeof(ccc), offset, buffer, buffer_size);
     }
+    if (attribute == ECHO_CCC_HANDLE){
+        uint8_t ccc[2] = {echo_subscribed ? 1 : 0, 0};
+        return att_read_callback_handle_blob(ccc, sizeof(ccc), offset, buffer, buffer_size);
+    }
+    return 0;
+}
+
+/* FF15 echo request (write without response: the return value is not sent). Stamped here,
+ * in the ATT callback, so the turnaround starts when the request arrived. */
+static int echo_write(hci_con_handle_t handle, const uint8_t *buffer, uint16_t buffer_size){
+    const uint64_t now = (uint64_t) esp_timer_get_time();
+    const bool subscribed = echo_subscribed && handle == phone_handle;
+    const uint16_t depth = queue.count > UINT16_MAX ? UINT16_MAX : (uint16_t) queue.count;
+    if (wmr_echo_on_write(&echo, subscribed, buffer, buffer_size, now, depth) == WMR_ECHO_ACCEPTED)
+        pump_kick();
+    return 0;
+}
+
+/* FF15 CCC: independent of the FF11/FF12/FF14 exclusion. */
+static int echo_ccc_write(hci_con_handle_t handle, uint16_t transaction_mode, uint16_t offset,
+                          const uint8_t *buffer, uint16_t buffer_size){
+    if (transaction_mode != ATT_TRANSACTION_MODE_NONE) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
+    if (offset != 0) return ATT_ERROR_INVALID_OFFSET;
+    if (buffer_size != 2) return ATT_ERROR_INVALID_ATTRIBUTE_VALUE_LENGTH;
+    uint16_t value = little_endian_read_16(buffer, 0);
+    if (value > 1) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
+    if (phone_handle != HCI_CON_HANDLE_INVALID && handle != phone_handle)
+        return ATT_ERROR_WRITE_NOT_PERMITTED;
+    phone_handle = handle;
+    echo_subscribed = value == 1;
+    if (!echo_subscribed) wmr_echo_cancel(&echo);
+    printf("BLE echo notifications %s\n", echo_subscribed ? "enabled" : "disabled");
     return 0;
 }
 
 static int att_write(hci_con_handle_t handle, uint16_t attribute,
                      uint16_t transaction_mode, uint16_t offset,
                      uint8_t *buffer, uint16_t buffer_size){
+    if (attribute == ECHO_VALUE_HANDLE) return echo_write(handle, buffer, buffer_size);
+    if (attribute == ECHO_CCC_HANDLE)
+        return echo_ccc_write(handle, transaction_mode, offset, buffer, buffer_size);
     wmr_stream_t which;
     if (!ccc_stream(attribute, &which)) return 0;
     if (transaction_mode != ATT_TRANSACTION_MODE_NONE) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
@@ -464,7 +532,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
         case BTSTACK_EVENT_STATE:
             if (btstack_event_state_get_state(packet) == HCI_STATE_WORKING){
                 gap_advertisements_enable(1);
-                printf("BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream)\n");
+                printf("BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream, FF15 echo)\n");
             }
             break;
         case HCI_EVENT_LE_META:
@@ -506,6 +574,8 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     queue_reset();
                     stream_mode = WMR_STREAM_NONE;
                     send_pending = false;
+                    echo_subscribed = false;
+                    wmr_echo_cancel(&echo);
                     printf("BLE phone connected, handle=0x%04x\n", phone_handle);
                     conn_update_pending = false;
                     if (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
@@ -534,6 +604,8 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                 phone_handle = HCI_CON_HANDLE_INVALID;
                 stream_mode = WMR_STREAM_NONE;
                 send_pending = false;
+                echo_subscribed = false;
+                wmr_echo_cancel(&echo);
                 conn_known = false;
                 conn_update_pending = false;
                 btstack_run_loop_remove_timer(&conn_request_timer);
@@ -549,6 +621,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
 
 void wmr_transport_init(void){
     wmr_queue_init(&queue);
+    wmr_echo_init(&echo);
     att_server_init(profile_data, att_read, att_write);
     /* General discoverable; do not claim BR/EDR is unsupported. */
     static const uint8_t advertising[] = {

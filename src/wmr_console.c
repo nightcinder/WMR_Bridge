@@ -102,6 +102,11 @@ static void print_stats(bool periodic){
            (unsigned long) st->batches_tx, (unsigned long) st->records_in_batches,
            batch_mean[0] ? batch_mean : "n/a", (unsigned long) st->batch_max,
            (unsigned long) st->batch_full_flushes);
+    const wmr_echo_state_t *echo = wmr_transport_echo();
+    printf("  FF15 echo accepted=%lu sent=%lu pending=%u busy=%lu bad=%lu unsubscribed=%lu cancelled=%lu\n",
+           (unsigned long) echo->accepted, (unsigned long) echo->sent, echo->pending ? 1u : 0u,
+           (unsigned long) echo->busy, (unsigned long) echo->bad,
+           (unsigned long) echo->unsubscribed, (unsigned long) echo->cancelled);
     printf("  vhci_drop=%lu log_errors=%lu\n",
            (unsigned long) wmr_linkdiag_vhci_drops(), (unsigned long) wmr_linkdiag_log_errors());
 #if WMR_CFG_FF12_DECIMATE > 1

@@ -309,3 +309,31 @@ notification count is part of RIGHT's loss and FF14 helps it without dropping sa
 stays near its FF12 level, batching does not help at this position. **LEFT is not expected to
 change and a change would be a new finding; do not claim FF14 fixes LEFT.** One session at one
 position cannot say more than that.
+
+## FF15 echo (issue #1; hardware, **not yet run**)
+
+What was run (host only, by the assistant): `tests/test_echo.c` (golden bytes of the request and
+the answer; rejected lengths and versions; one outstanding echo, `busy`, `unsubscribed`,
+`cancelled`, a retry restamping the turnaround, saturation). The firmware sources were also
+syntax-checked with gcc against current BTstack `master` headers and a `wmr_bridge.gatt` compiled
+with BTstack's `compile_gatt.py` (FF15 value handle 0x0012, CCC 0x0013; all earlier handles
+unchanged). **Not built with ESP-IDF, not flashed, not run.** Not tested anywhere: the pump giving
+the echo priority, `att_server_notify` for FF15, and everything below.
+
+**One BTstack-side file changes:** `integration/main-CMakeLists.txt` lists `wmr_echo.c`. Copy it over
+`port\esp32\main\CMakeLists.txt` again before building, or the link fails with undefined
+`wmr_echo_*` references.
+
+| # | Check | How | Expect | Result |
+| --- | --- | --- | --- | --- |
+| E1 | FF15 exists | Connect, discover service FF10 | `0000FF15-...` with write-without-response and notify, and a CCC, after FF14; FF11, FF12, FF14 unchanged | not yet run |
+| E2 | Echo, no stream | Enable FF15 only, write `01 00 01 00` | One 20-byte answer starting `01 00 01 00`; `queue_depth` 0; `FF15 echo accepted=1 sent=1` | not yet run |
+| E3 | Not subscribed | FF15 CCC off, write a ping | No answer; `unsubscribed` rises | not yet run |
+| E4 | Bad request | Write 3 bytes, and a version 2 request | No answer; `bad` rises by 2 | not yet run |
+| E5 | Independent of the exclusion | With FF12 (then FF14, then FF11) active, enable FF15 | Accepted, never `0x80`; the stream keeps running | not yet run |
+| E6 | RTT at load | FF12 at MTU 517 with both controllers, one ping every 100 ms for 60 s (needs the app or a script to log `t1`, `t4`, the answer) | RTT distribution; `turnaround_us` small (expected well under 1 ms, not measured); RTT does not grow with `queue_depth` | not yet run |
+| E7 | RTT idle vs FF14 | Repeat E6 with no stream, then FF14 | The three distributions side by side; FF14 is not expected to add a batch hold to the echo | not yet run |
+| E8 | Busy | Send two pings back to back | One answer for the first `ping_id`, `busy` rises for the second (only if the second arrives before the first answer is sent; may not reproduce) | not yet run |
+| E9 | Counters and identity | `s` after E2-E8 | `accepted = sent + cancelled + pending`; `notify` did not grow from echo answers | not yet run |
+| E10 | Loss unchanged | Compare `last5s` with and without pings during FF12 | No visible change at 10 pings/s (an echo is 20 bytes on air per 100 ms) | not yet run |
+

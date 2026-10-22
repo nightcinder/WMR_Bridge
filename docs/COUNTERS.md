@@ -9,6 +9,7 @@ reconnect. They wrap after 2^32 events. They live in `wmr_stats_t`
 ```
 STREAM phone=1 sub=1 stream=decoded mtu=247 conn=[11.25ms lat=0 to=4000ms] q=0/256 high=3 notify=1234 errors=0
   FF14 batches_tx=0 records_in_batches=0 mean=n/a max=0 batch_full_flushes=0
+  FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
   LEFT  rx=600 tx=600 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=60.0/s rate_tx=60.0/s
   RIGHT rx=600 tx=600 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=60.0/s rate_tx=60.0/s
 ```
@@ -28,7 +29,7 @@ printed rates and moved their baselines, which contradicted this paragraph; it n
 | `q=n/N` | Frames queued now / queue capacity | Counts frames, both hands together; a partly sent frame counts as queued |
 | `high` | Peak queue depth since boot | Never decreases |
 | `notify` | BLE notifications accepted by `att_server_notify` | FF11: fragments, not frames. FF12: one per record. FF14: one per **batch** (so it equals `batches_tx` while FF14 streams) |
-| `errors` | `att_server_notify` calls that returned an error | Each failed attempt counts; the frame is kept and retried, not lost |
+| `errors` | `att_server_notify` calls that returned an error (stream and FF15 echo) | Each failed attempt counts; the frame or echo answer is kept and retried, not lost |
 | `rx` | Reports received from that controller | Counts every report, including those never forwarded |
 | `tx` | FF11: frames whose last fragment was accepted by `att_server_notify`. FF12: records accepted by `att_server_notify`. FF14: valid records inside batches accepted by `att_server_notify` (records, not notifications) | **Handed to the BLE stack, not confirmed received by the phone** |
 | `drop` | Reports discarded because the queue was full, or the length was 0 or over `WMR_CFG_MAX_FRAME` (64) | Drop-newest: queued frames are kept |
@@ -42,6 +43,11 @@ printed rates and moved their baselines, which contradicted this paragraph; it n
 | `mean` | `records_in_batches / batches_tx`, two decimals (`n/a` before the first batch) | Depends on the link, the MTU and the hold time (one connection interval); at 15 ms and about 320 reports/s the expectation is a little under 5, not measured |
 | `max` | Most records in one batch since boot | At most `(MTU - 3 - 2) / 56`, never more than 9 |
 | `batch_full_flushes` | FF14 only: batches sent because a full notification's worth was queued | The remaining `batches_tx - batch_full_flushes` were sent because the oldest record had waited one connection interval |
+| FF15 `accepted` | Echo requests taken (valid, FF15 subscribed, none waiting) | `accepted = sent + cancelled + pending` |
+| FF15 `sent` | Echo answers accepted by `att_server_notify` | Not counted in `notify` |
+| FF15 `pending` | 1 while an answer waits to be sent | At most one |
+| FF15 `busy`, `bad`, `unsubscribed` | Requests ignored: another answer was waiting; wrong length or version; FF15 notifications off | Write without response, so the phone gets no error; it only misses the answer |
+| FF15 `cancelled` | Waiting answers discarded by an FF15 unsubscribe or a phone connect/disconnect | |
 | `rate_rx`, `rate_tx` | (change in `rx` / `tx` since the previous periodic line) / 5 s | Uses the nominal 5 s interval, not a measured one; `s` does not print or disturb them |
 
 The per-hand `sequence` counter (the number placed on the wire) always equals `rx`.

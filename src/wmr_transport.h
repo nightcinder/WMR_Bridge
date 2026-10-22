@@ -37,8 +37,8 @@
 
 /*
  * wmr_transport.h - BLE peripheral side: advertising, the FF10 GATT service
- * (FF11 raw stream, FF12 decoded stream), the frame queue and the notification
- * pump.
+ * (FF11 raw stream, FF12 decoded stream, FF14 batched stream, FF15 echo), the frame
+ * queue and the notification pump.
  */
 
 #ifndef WMR_TRANSPORT_H
@@ -46,6 +46,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "wmr_echo.h"
 #include "wmr_stats.h"
 #include "wmr_link.h"
 #include "wmr_stream_mode.h"
@@ -75,5 +76,7 @@ void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t 
 
 const wmr_stats_t *wmr_transport_stats(void);
 void wmr_transport_get_info(wmr_transport_info_t *info);
+/* FF15 echo counters and pending state. */
+const wmr_echo_state_t *wmr_transport_echo(void);
 
 #endif /* WMR_TRANSPORT_H */

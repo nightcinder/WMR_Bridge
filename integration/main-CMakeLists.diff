@@ -2,7 +2,7 @@ diff --git a/port/esp32/main/CMakeLists.txt b/port/esp32/main/CMakeLists.txt
 index e575a44..24b37e8 100644
 --- a/port/esp32/main/CMakeLists.txt
 +++ b/port/esp32/main/CMakeLists.txt
-@@ -8,24 +8,46 @@ else()
+@@ -8,24 +8,47 @@ else()
      set(EXAMPLE $ENV{EXAMPLE})
  endif()
  
@@ -22,6 +22,7 @@ index e575a44..24b37e8 100644
 +        "${WMR_BRIDGE_DIR}/src/wmr_decoded.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_devloss.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_diag.c"
++        "${WMR_BRIDGE_DIR}/src/wmr_echo.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_link.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_linkdiag.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_protocol.c"
@@ -61,7 +62,7 @@ index e575a44..24b37e8 100644
  
  include(BTstackUtils)
  
-@@ -33,7 +55,42 @@ include(BTstackUtils)
+@@ -33,7 +56,42 @@ include(BTstackUtils)
  message("\n===")
  if ( DEFINED GATT_PATH )
      message("${BUILD_MESSAGE} with GATT DB")
