@@ -81,6 +81,12 @@ wmr_cfg_report_class_t wmr_cfg_classify(const uint8_t *data, uint16_t size);
 /* ---- Commands and responses --------------------------------------------------------- */
 void wmr_cfg_pack_read_request(uint8_t block, uint32_t addr, uint8_t out[WMR_CFG_CMD_SIZE]);
 
+/* The two commands Monado sends after its config reads to put the controller back into
+ * streaming ("06 03 01 00 02" then "06 03 02 E1 02", rest zero). Step 0 or 1; other values
+ * are treated as 1. Layout taken from the FF13 design notes; the bytes are unverified here. */
+#define WMR_CFG_ENABLE_STEPS    2
+void wmr_cfg_pack_enable_streaming(unsigned step, uint8_t out[WMR_CFG_CMD_SIZE]);
+
 typedef struct {
     uint8_t        report_id;
     uint8_t        command;

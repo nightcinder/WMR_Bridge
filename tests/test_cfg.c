@@ -89,6 +89,19 @@ static void test_request(void){
     CHECK(memcmp(out, golden2, sizeof(golden2)) == 0);
 }
 
+static void test_enable(void){
+    printf("enable-streaming commands\n");
+    uint8_t out[WMR_CFG_CMD_SIZE];
+    memset(out, 0xEE, sizeof(out));
+    wmr_cfg_pack_enable_streaming(0, out);
+    uint8_t g0[WMR_CFG_CMD_SIZE] = {0x06, 0x03, 0x01, 0x00, 0x02};
+    CHECK(memcmp(out, g0, sizeof(g0)) == 0);
+    wmr_cfg_pack_enable_streaming(1, out);
+    uint8_t g1[WMR_CFG_CMD_SIZE] = {0x06, 0x03, 0x02, 0xE1, 0x02};
+    CHECK(memcmp(out, g1, sizeof(g1)) == 0);
+    CHECK(WMR_CFG_ENABLE_STEPS == 2);
+}
+
 /* Build a response: block `blk`, `remain` bytes left after this one, `len` bytes from `src`. */
 static void make_resp(uint8_t out[WMR_CFG_RESP_SIZE], uint8_t blk, uint32_t remain,
                       const uint8_t *src, uint8_t len){
@@ -284,6 +297,7 @@ int main(void){
     test_crc();
     test_classify();
     test_request();
+    test_enable();
     test_response();
     test_reader();
     test_timeout();

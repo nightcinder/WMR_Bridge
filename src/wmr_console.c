@@ -84,9 +84,9 @@ static void print_controllers(void){
         if (s.address_source != WMR_ADDR_NONE)
             snprintf(address, sizeof(address), "%02X:%02X:%02X:%02X:%02X:%02X", s.address[0], s.address[1],
                      s.address[2], s.address[3], s.address[4], s.address[5]);
-        printf("%s cid=%u connected=%u descriptor=%u reports=%lu address=%s (%s)\n",
+        printf("%s cid=%u connected=%u descriptor=%u reports=%lu other=%lu address=%s (%s)\n",
                wmr_controller_name(i), wmr_controller_cid(i), s.connected,
-               s.descriptor_available, (unsigned long) s.reports, address,
+               s.descriptor_available, (unsigned long) s.reports, (unsigned long) s.other_reports, address,
                wmr_controller_address_source_name(s.address_source));
     }
 }
@@ -126,6 +126,8 @@ static void print_stats(bool periodic){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         wmr_linkdiag_hand_t ld;
         wmr_linkdiag_get_hand(i, &ld);
+        wmr_controller_status_t cs;
+        wmr_controller_get_status(i, &cs);
         /* Rates and the interval figures are deltas, so only the periodic call prints
          * them and moves the baselines; `s` leaves both alone. */
         char rates[64] = "";
@@ -163,12 +165,12 @@ static void print_stats(bool periodic){
             last_tx[i] = st->tx[i];
             last_missing[i] = ld.missing;
         }
-        printf("  %s rx=%lu tx=%lu drop=%lu offline=%lu purged=%lu mtu_skip=%lu dec_err=%lu decimated=%lu%s\n",
+        printf("  %s rx=%lu tx=%lu drop=%lu offline=%lu purged=%lu mtu_skip=%lu dec_err=%lu decimated=%lu other=%lu%s\n",
                wmr_controller_name(i), (unsigned long) st->rx[i],
                (unsigned long) st->tx[i], (unsigned long) st->drop[i],
                (unsigned long) st->offline[i], (unsigned long) st->purged[i],
                (unsigned long) st->mtu_skipped[i], (unsigned long) st->decode_errors[i],
-               (unsigned long) st->decimated[i], rates);
+               (unsigned long) st->decimated[i], (unsigned long) cs.other_reports, rates);
         char health[64];
         wmr_link_health_format(&ld.health, health, sizeof(health));
         unsigned long period_us = (unsigned long) ld.period_ticks / 10ul;      /* 100 ns ticks */

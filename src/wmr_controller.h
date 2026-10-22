@@ -63,6 +63,7 @@ typedef struct {
     bool     connected;
     bool     descriptor_available;
     uint32_t reports;   /* reports since the current connection started */
+    uint32_t other_reports;   /* neither input nor config reports; dropped, not forwarded */
     wmr_addr_source_t address_source;
     uint8_t  address[6];         /* valid unless address_source is WMR_ADDR_NONE */
 } wmr_controller_status_t;
