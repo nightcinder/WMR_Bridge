@@ -151,6 +151,20 @@
 #define WMR_CFG_STATS_INTERVAL_MS  5000
 #endif
 
+/* ---- Diagnostic build option: FF12 decimation ---------------------------- */
+
+/* Default 1 = off (every decoded record is sent). With N > 1 only every Nth report of
+ * each hand is sent on FF12 and the rest are counted as `decimated`; the phone then sees
+ * `sequence` jump by N. FF11 is never decimated. It exists to test whether BLE airtime
+ * costs controller reports: if the missing-report figure falls back towards the idle
+ * level at N=2 or 4, it does. Not for normal use. */
+#ifndef WMR_CFG_FF12_DECIMATE
+#define WMR_CFG_FF12_DECIMATE             1
+#endif
+#if WMR_CFG_FF12_DECIMATE < 1
+#error "WMR_CFG_FF12_DECIMATE must be 1 (off) or more"
+#endif
+
 /* ---- Link diagnostics (wmr_linkdiag.c) ----------------------------------- */
 
 /* Every interval each connected Classic link is polled with 3 HCI commands (Read RSSI,

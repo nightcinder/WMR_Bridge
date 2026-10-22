@@ -117,8 +117,8 @@ Record the date, the build, the phone/client and the observed numbers in the Res
 | 10 | Switching | Write `0x0000` to the active CCC, then enable the other | Both writes succeed; the other stream starts; the first stops; no records of the old format after the switch | Reported OK: `BLE decoded notifications disabled` then `BLE raw notifications enabled` worked. Absence of records in the old format after the switch: not reported. |
 | 11 | CCC read-back | Read both CCCs in each state | Only the active one reads `0x0001` | not yet run |
 | 12 | Disabling the inactive stream | While FF12 is active, write `0x0000` to the FF11 CCC | Succeeds; FF12 unaffected | not yet run |
-| 13 | Small MTU | Enable FF12 while the ATT MTU is below 59 (default 23, before MTU exchange, or a client that will not negotiate) | No FF12 notifications; `mtu_skip` rises on both hands; `drop` and `q` do not | not yet run |
-| 14 | Recovery after small MTU | Raise the MTU to 59 or more while subscribed | Records start flowing; the first `sequence` is higher than the last one before (the skipped reports); `mtu_skip` stops rising | not yet run |
+| 13 | Small MTU | Enable FF12 while the ATT MTU is below 59 (default 23, before MTU exchange, or a client that will not negotiate) | No FF12 notifications; `mtu_skip` rises on both hands; `drop` and `q` do not | Reported OK (user, Pixel with nRF Connect, PR #8 diagnostics build; relayed on issue #3): at MTU 23 with FF12 subscribed, `mtu_skip` equals `rx` minus `offline` on both hands, `drop=0`, `q=0`, `notify=0`. |
+| 14 | Recovery after small MTU | Raise the MTU to 59 or more while subscribed | Records start flowing; the first `sequence` is higher than the last one before (the skipped reports); `mtu_skip` stops rising | Reported OK (same run), except the sequence part: after requesting MTU 517 `mtu_skip` stopped rising (final 16936 / 17041), `rate_tx` equals `rate_rx` at about 160/s per hand, one notification per record (notify delta 1615 per 5 s = LEFT tx delta 800 + RIGHT 815), queue empty, no drops since the transition. The sequence numbers seen by the phone were not reported. |
 | 15 | Reconnect | Disconnect and reconnect the phone | Subscription is not remembered (`stream=none` until the CCC is written again); no stale records | not yet run |
 | 16 | FF11 unchanged | Subscribe to FF11 instead | Fragmented frames as before; the golden-packet format in PROTOCOL.md; `stream=raw`; same rates as the earlier bench run | not yet run |
 | 17 | `rx_time_us` | Compare record timestamps | Monotonic per hand across a controller reconnect; spacing matches `device_ticks` x 100 ns within jitter | PARTIAL: `rx_time_us` monotonic, but bursty: three consecutive hand-1 records arrived 2,437 us and 155 us apart while their `device_ticks` are 4.990 ms apart, so arrival time is not the sensor clock (as specified). Across a controller reconnect: not run. |
@@ -136,13 +136,98 @@ full ESP-IDF build.
 
 | # | Check | How | Expect | Result |
 | --- | --- | --- | --- | --- |
-| D1 | Boots and prints the new lines | Flash, both controllers connected | `vhci_drop=` / `log_errors=` line and a `<HAND> link:` line per hand in each `STREAM` block; no other new output | not yet run |
-| D2 | Link health answered | Watch the `link:` lines for 30 s | `rssi`, `fcc`, `lq` show numbers, or `n/a(0xNN)` with a status (record which, per hand) | not yet run |
+| D1 | Boots and prints the new lines | Flash, both controllers connected | `vhci_drop=` / `log_errors=` line and a `<HAND> link:` line per hand in each `STREAM` block; no other new output | Reported OK (user): the `vhci_drop`, `log_errors` and per-hand `link:` fields were read from the `STREAM` blocks. Whether any other new output appeared was not reported. |
+| D2 | Link health answered | Watch the `link:` lines for 30 s | `rssi`, `fcc`, `lq` show numbers, or `n/a(0xNN)` with a status (record which, per hand) | Reported: the controllers answered all three commands. In all runs `rssi=0 lq=255 fcc=0`; RIGHT showed `rssi` -3 to -7 and `lq` 248 to 251 before the MTU change. No refusal reported. What the values mean for a Classic link is still the unverified reading in DECODING.md. |
 | D3 | HCI cost | Count commands for 60 s (e.g. with `WMR_CFG_HCI_TRACE` set, or a sniffer) | About 72 Read RSSI / Failed Contact / Link Quality commands per minute (1.2/s), none closer than 100 ms | not yet run |
 | D4 | Tick-based estimate vs the analyzer | Same controller, phone capture and the ESP32 `dev_missing` over the same period | `dev_missing` and the analyzer's `device reports missing` roughly agree (the analyzer's window is the whole phase, the ESP32's is the last 256 deltas) | not yet run |
-| D5 | Estimate on a clean stream | A controller very close to the ESP32, nothing else on | `dev_missing` stays near 0 and `period` is about 4.99 ms | not yet run |
+| D5 | Estimate on a clean stream | A controller very close to the ESP32, nothing else on | `dev_missing` stays near 0 and `period` is about 4.99 ms | Reported, **expectation not met**: with both controllers right next to the ESP32, one per side (a phone connected and FF12 subscribed, nothing sent), `dev_missing` was 9 to 11.5 % of expected per hand, not near 0; `period` 4.98 ms. So a nearby controller does not by itself give a clean stream. |
 | D6 | Reconnect | Power-cycle a controller | `link:` shows `n/a (no ACL link)` while down; `dev_missing` and `discont` restart from 0 on reconnect, with no spike | not yet run |
-| D7 | Mode changes | Leave a controller idle, then move it | A `LEFT link mode: active -> sniff ...` line appears only if the link really changes mode, once per change; none otherwise | not yet run |
+| D7 | Mode changes | Leave a controller idle, then move it | A `LEFT link mode: active -> sniff ...` line appears only if the link really changes mode, once per change; none otherwise | PARTIAL (reported): no mode change was seen in any run and `mode=active` throughout. The idle-then-move case specifically was not reported, and a controller that never enters sniff in these runs does not show the log line works. |
 | D8 | VHCI drop counter | Normal streaming for 10 minutes | `vhci_drop` stays 0, or rises, which would be a finding; also try the old tick-based shortfall against it | not yet run |
-| D9 | Does the diagnostics build change the rates? | Compare `rate_rx` per hand with the earlier reports (no phone: LEFT 175-181, RIGHT 164-184) | Similar; record any difference | not yet run |
+| D9 | Does the diagnostics build change the rates? | Compare `rate_rx` per hand with the earlier reports (no phone: LEFT 175-181, RIGHT 164-184) | Similar; record any difference | Reported: with FF12 subscribed at MTU 23 and nothing sent, `rate_rx` was LEFT 175 to 183, RIGHT 175 to 184, the same as the earlier no-phone figures. No difference is claimed from single runs. |
 | D10 | Experiments in DECODING.md | No phone / not subscribed / FF11 / FF12; each controller alone; positions swapped | Record `rate_rx`, `dev_missing`, `mode`, `rssi` per case | not yet run |
+
+## PR #8 diagnostics build: first bench data (user-reported; the assistant did not run or see it)
+
+Relayed on director issue #3. Setup as reported: both controllers right next to the ESP32, one
+per side; Pixel with nRF Connect; FF12 subscribed; the MTU stayed at 23 for the first part,
+then 517 was requested. Single runs, not repeated. Rows D1, D2, D5, D7, D9 and checks 13 and
+14 above are filled in from this report.
+
+| Observation (reported) | Value |
+| --- | --- |
+| At MTU 23, FF12 subscribed, nothing sent: `rate_rx` | LEFT 175 to 183/s, RIGHT 175 to 184/s |
+| At MTU 23: `dev_missing` | 9 to 11.5 % per hand |
+| After MTU 517, FF12 streaming: `rate_rx` / `rate_tx` | 158 to 163/s per hand, `rate_tx` equal to `rate_rx` |
+| After MTU 517: `dev_missing` | about 20 % per hand, per interval |
+| Cumulative `dev_missing` | creeps from 13.5 % to 14.3 % (it includes the idle period) |
+| Link health, all runs | `rssi=0 lq=255 fcc=0 mode=active`; `vhci_drop=0 log_errors=0 discont=0`; `period=4.98 ms` |
+
+**The reported finding:** missing device reports per hand went from about 10 % (idle or
+`mtu_skip`) to about 20 % while FF12 actually streams. It fits `rate_rx` falling from 175-183 to
+158-163 against a nominal of about 200/s (a 200/s controller at 160/s is 20 % missing).
+With the earlier FF11 and phone-capture figures it suggests that BLE notification traffic
+costs reports on the Classic link, but the earlier, larger losses had the controllers in the
+user's hands, so other factors are likely too. **Not established.** The decimation option below
+is the next test.
+
+**A figure that does not match.** The report also says "about 45 missing per hand per 5 s on
+1000 expected". 45 in 1000 is 4.5 %, not 20 % (20 % of 1000 is about 200). The `rate_rx`
+figures agree with 20 %, so "45" is probably a different quantity (a difference between two
+intervals, or a typo). It is recorded here as reported and **not used**; the question is
+open on issue #3.
+
+**Reading `vhci_drop=0 log_errors=0`.** It is consistent with no drops. It cannot distinguish
+that from the log sink not receiving BTstack's message (the sink depends on BTstack's wording),
+because no error-level message has appeared at all to show the sink works.
+
+### The `drop=1200 / purged=12,7 / high=256` counters after the MTU change
+
+Reported: after the MTU change `drop` is 1200 / 1213, `purged` 12 / 7 and `high` 256, constant
+since, and FF12 below MTU 59 should not queue anything. What the code allows (read from
+`src/wmr_transport.c`, nothing measured):
+
+1. **FF12 cannot have filled the queue at MTU 23.** `wmr_transport_submit_report` returns
+   (counting `mtu_skip`) before it pushes anything while the stream is FF12 and the MTU is
+   below 59, and `pump_send_decoded` removes and counts any frame that was queued before the
+   MTU was known to be too small. The MTU cannot go down inside a connection, and the queue is
+   emptied when the phone connects and on every subscription change. So the check-13 phase
+   itself did not queue.
+2. **The counters are since boot, not since connection or subscription.** `drop`, `purged` and
+   `notifications` are free-running and are reset only by a reboot ([COUNTERS.md](COUNTERS.md)),
+   and `high` is the peak since boot and never decreases. So `drop=1200`, `purged=12/7` and
+   `high=256` can have been set at any time since the last reboot, including before this run,
+   and "constant since the MTU change" only says nothing was added after it.
+3. **The most likely source is an earlier FF11 phase in the same boot at MTU 23** (not proven).
+   FF11 has no MTU rule: at MTU 23 it queues, the queue fills to 256 and the newest reports
+   are dropped. The earlier "MTU 23, queue full and dropping, about 135/s each" data point is
+   exactly that situation. Switching FF11 off then purges whatever is queued (`purged`). About
+   1200 drops in total is roughly 600 per hand, a few seconds at 135/s per hand, which fits a
+   short test, but the number alone does not prove it.
+4. **A stall inside FF12 after the MTU rose is the alternative that cannot be ruled out from
+   the counters.** If the can-send-now event was delayed during the MTU exchange, FF12 records
+   would queue (about 320/s, so 256 in under a second) and then drop until sending resumed. A
+   stall of about 4 to 5 s would be needed for 1200 drops. `errors` would rise if
+   `att_server_notify` failed (its value was not reported); a delayed event would not raise it.
+5. **What separates the two:** the `STREAM` block printed **just before** the MTU request
+   (if `drop` is already 1200 and `high` 256 there, it predates the transition, which points to
+   item 3), the value of `errors`, and a run from a fresh reboot with FF12 only. A firmware
+   change that would remove the ambiguity (log the first drop of each episode with the stream
+   mode, MTU and queue depth) is **proposed, not made**.
+
+## Diagnostic build option: FF12 decimation (`WMR_CFG_FF12_DECIMATE`; not yet run on hardware)
+
+Default `1` = off, no behaviour change. Set `N` in `src/wmr_config.h` (or before including it)
+to send only every Nth report of each hand on FF12; the rest are counted per hand as
+`decimated` and the STREAM block prints `DIAGNOSTIC BUILD: FF12 sends every Nth report`. The
+phone's `sequence` then jumps by N (the skipped reports keep their numbers, as with
+`mtu_skip`). FF11 is not decimated. It tests whether BLE airtime costs controller reports:
+**if `dev_missing` falls back toward the idle level (about 10 %) at N=2 or 4, airtime is a
+cause; if it stays at about 20 %, it is not (or not only).** Build and CI: see the pull request.
+
+| # | Check | How | Expect | Result |
+| --- | --- | --- | --- | --- |
+| X1 | Default build unchanged | Flash the PR build with `N=1` | `decimated=0` on both hands; no DIAGNOSTIC line; same behaviour as before | not yet run |
+| X2 | N=2 | Rebuild with `WMR_CFG_FF12_DECIMATE=2`, FF12 at MTU 517, 60 s | `DIAGNOSTIC BUILD` line; `tx` about half of `rx`; `decimated` about half of `rx`; identity holds; phone `sequence` steps of 2 | not yet run |
+| X3 | N=4 | Same with 4 | `tx` about a quarter of `rx`; steps of 4 | not yet run |
+| X4 | The test itself | At N=1, 2, 4 and with no phone, same placement and time of day: `rate_rx` and `dev_missing` per hand, 60 s each | Record all four; compare with the idle level | not yet run |

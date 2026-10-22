@@ -148,6 +148,12 @@ void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t 
         stats.mtu_skipped[hand]++;
         return;
     }
+    /* Diagnostic build option, off by default (see wmr_config.h). */
+    if (stream_mode == WMR_STREAM_DECODED &&
+        !wmr_decoded_decimate_keep(sequence, WMR_CFG_FF12_DECIMATE)){
+        stats.decimated[hand]++;
+        return;
+    }
     wmr_frame_t frame;
     if (!length || length > WMR_CFG_MAX_FRAME){
         stats.drop[hand]++;

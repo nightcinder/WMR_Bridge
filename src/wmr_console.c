@@ -95,13 +95,18 @@ static void print_stats(bool periodic){
            (unsigned long) st->notifications, (unsigned long) st->errors);
     printf("  vhci_drop=%lu log_errors=%lu\n",
            (unsigned long) wmr_linkdiag_vhci_drops(), (unsigned long) wmr_linkdiag_log_errors());
+#if WMR_CFG_FF12_DECIMATE > 1
+    printf("  DIAGNOSTIC BUILD: FF12 sends every %dth report per hand (WMR_CFG_FF12_DECIMATE)\n",
+           WMR_CFG_FF12_DECIMATE);
+#endif
     const double seconds = WMR_CFG_STATS_INTERVAL_MS / 1000.0;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
-        printf("  %s rx=%lu tx=%lu drop=%lu offline=%lu purged=%lu mtu_skip=%lu dec_err=%lu rate_rx=%.1f/s rate_tx=%.1f/s\n",
+        printf("  %s rx=%lu tx=%lu drop=%lu offline=%lu purged=%lu mtu_skip=%lu dec_err=%lu decimated=%lu rate_rx=%.1f/s rate_tx=%.1f/s\n",
                wmr_controller_name(i), (unsigned long) st->rx[i],
                (unsigned long) st->tx[i], (unsigned long) st->drop[i],
                (unsigned long) st->offline[i], (unsigned long) st->purged[i],
                (unsigned long) st->mtu_skipped[i], (unsigned long) st->decode_errors[i],
+               (unsigned long) st->decimated[i],
                (st->rx[i] - last_rx[i]) / seconds,
                (st->tx[i] - last_tx[i]) / seconds);
         last_rx[i] = st->rx[i];

@@ -100,6 +100,11 @@ bool wmr_decoded_unpack(const uint8_t *packet, uint16_t size, wmr_decoded_t *out
 
 bool wmr_decoded_mtu_ok(uint16_t att_mtu);
 
+/* Diagnostic decimation (WMR_CFG_FF12_DECIMATE): true if the report with this per-hand
+ * sequence number is to be sent. n <= 1 keeps every report; otherwise only the reports
+ * whose sequence is a multiple of n. */
+bool wmr_decoded_decimate_keep(uint32_t sequence, unsigned n);
+
 /* Decode a queued raw frame into a packed FF12 record. Uses frame->hand,
  * frame->sequence and frame->rx_time_us. Returns false (out untouched) if the
  * frame is not a valid 46-byte input report. The CALIBRATED flag stays 0. */

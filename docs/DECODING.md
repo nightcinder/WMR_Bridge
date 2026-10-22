@@ -236,10 +236,15 @@ Where it happens is **not established**; see [Investigation notes](#investigatio
 - Where the thumbstick centre is: resting values are not 0 (see below).
 - **The cause of the upstream report loss.** The BLE-load hypothesis (reports drop while the
   ESP32 is also notifying on BLE) is **not established**; the reported rates are mixed (see
-  "Investigation notes"). The link diagnostics added for this have **not run on hardware**:
-  whether this ESP32 controller answers Read RSSI / Read Failed Contact Counter / Read Link
-  Quality for Classic links, whether the VHCI drop message wording matches what the counter
-  looks for, and what the tick-based estimate reads on the real stream are all unknown.
+  "Investigation notes"). First bench data from the diagnostics build (user-reported, single
+  runs): the controllers answered the three link-quality commands (`rssi=0 lq=255 fcc=0`,
+  RIGHT slightly lower before the MTU change); no mode change was seen; and the tick-based
+  missing-report figure rose from about 10 % to about 20 % per hand while FF12 was actually
+  streaming. That points at BLE notification traffic costing reports but does not establish it;
+  `WMR_CFG_FF12_DECIMATE` (below) is the next test. Still unknown: what the link-quality
+  values mean for a Classic link, and whether the VHCI drop message wording matches what the
+  counter looks for (`vhci_drop=0 log_errors=0` cannot tell "no drops" from "sink not
+  receiving").
 
 ### First-frame transient in `sessionA-0`
 
@@ -400,6 +405,8 @@ this repository and the BTstack ESP32 port it is built with (`e38553977`).
 | FF11 streaming to the Pixel at MTU 517, `rate_rx` | about 147/s | 165-172/s |
 | FF11 at MTU 23, queue full and dropping, `rate_rx` | about 135/s | about 135/s |
 | First FF12 interval after subscribing, `rate_rx` | 180/s | 163/s |
+| Diagnostics build, FF12 subscribed at MTU 23 (nothing sent), `rate_rx` / `dev_missing` | 175-183/s, 9-11.5 % | 175-184/s, 9-11.5 % |
+| Diagnostics build, FF12 streaming at MTU 517, `rate_rx` / `dev_missing` (per interval) | 158-163/s, about 20 % | 158-163/s, about 20 % |
 
 The controllers produce about 200 reports/s (median tick period about 4.99 ms). Every run
 is below 200, the shortfall changes from run to run, and **LEFT is not always the worse
@@ -505,6 +512,11 @@ runs were not repeated.
     different wording would be counted in `log_errors` but not in `vhci_drop`); the callback runs
     on the Bluetooth controller task, so the counters are atomic; and the sink is not installed
     if `CONFIG_BTSTACK_HCI_DUMP_STDOUT` is set, in which case both stay 0.
+  - **Test option, off by default: `WMR_CFG_FF12_DECIMATE=N`** (`src/wmr_config.h`).
+    Sends only every Nth FF12 record per hand and counts the rest as `decimated` (see
+    [TESTING.md](TESTING.md) and [COUNTERS.md](COUNTERS.md)); the STREAM block says
+    `DIAGNOSTIC BUILD` when it is on. If `dev_missing` returns toward the idle level at N=2 or
+    4, BLE airtime is a cause. Not run on hardware.
   - **How to read them:** `dev_missing` per hand with no phone against with a phone shows
     whether BLE traffic changes the upstream loss; `mode` lines show whether a controller enters
     sniff mode when the loss appears; `rssi`/`fcc`/`lq` per hand may show a radio difference
