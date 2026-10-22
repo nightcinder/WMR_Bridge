@@ -46,6 +46,8 @@ first flash and stores their addresses ([DISCOVERY.md](DISCOVERY.md)). Put them 
 mode within the first minute after boot. **Re-copy `main-CMakeLists.txt` after pulling the
 discovery change:** it adds `wmr_discovery.c` (undefined `wmr_discovery_*` symbols
 otherwise).
+The FF15 echo change adds `wmr_echo.c` in the same way (undefined `wmr_echo_*` without a
+fresh copy).
 
 ## Build
 
