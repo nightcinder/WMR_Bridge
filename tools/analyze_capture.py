@@ -150,8 +150,57 @@ def loss_fraction(frames):
     return missing / total if total else 0.0
 
 
+def device_loss(frames):
+    """Reports the controller sent that never reached the capture, from tick deltas.
+
+    The ESP32 numbers a report only when it receives it, so a report lost between the
+    controller and the ESP32 leaves NO gap in `sequence`; the controller's own tick
+    counter does show it. The controller's report period is estimated robustly (median of
+    the deltas not longer than 1.5x the 10th-percentile delta, so heavy loss does not
+    inflate it); each delta then implies round(delta / period) - 1 missing reports.
+    Limit: if EVERY delta is the same multiple of the real period (perfectly uniform loss) it
+    cannot be told from a slower controller, and nothing is reported missing.
+    `runs` maps a missing-run length to how many times it occurred: isolated losses
+    (1) point somewhere different from bursts or periodic runs.
+    """
+    dts = tick_deltas(frames)
+    if len(dts) < 10:
+        return None
+    ordered = sorted(dts)
+    ref = ordered[len(ordered) // 10]
+    base = [d for d in dts if 0 < d <= 1.5 * ref]
+    if not base:
+        return None
+    period = median(base)
+    if period <= 0:
+        return None
+    missing = 0
+    runs = {}
+    for d in dts:
+        k = int(round(d / period)) - 1
+        if k > 0:
+            missing += k
+            runs[k] = runs.get(k, 0) + 1
+    total = len(frames) + missing
+    return {"period_ticks": period, "period_ms": period * TICK_SECONDS * 1000.0,
+            "nominal_hz": 1.0 / (period * TICK_SECONDS), "missing": missing,
+            "expected": total, "loss_fraction": missing / total if total else 0.0,
+            "runs": {str(k): runs[k] for k in sorted(runs)}}
+
+
+def device_loss_text(dl):
+    if not dl:
+        return "device reports missing: not enough frames to tell"
+    runs = ", ".join("%sx%d" % (k, n) for k, n in dl["runs"].items()) or "none"
+    return ("device reports missing (from tick deltas, i.e. lost before the ESP32; the sequence "
+            "numbers cannot show these): %d of %d expected (%.1f%%), controller period %.2f ms "
+            "(~%.0f Hz), missing-run lengths: %s"
+            % (dl["missing"], dl["expected"], 100 * dl["loss_fraction"], dl["period_ms"],
+               dl["nominal_hz"], runs))
+
+
 def analyse_still(frames):
-    r = {"frames": len(frames), "loss_fraction": loss_fraction(frames)}
+    r = {"frames": len(frames), "loss_fraction": loss_fraction(frames), "device_loss": device_loss(frames)}
     if len(frames) < 10:
         r["error"] = "fewer than 10 frames"
         return r
@@ -194,7 +243,8 @@ def analyse_still(frames):
 
 
 def analyse_rotation(name, frames, bias):
-    r = {"phase": name, "frames": len(frames), "loss_fraction": loss_fraction(frames)}
+    r = {"phase": name, "frames": len(frames), "loss_fraction": loss_fraction(frames),
+         "device_loss": device_loss(frames)}
     if len(frames) < 10:
         r["error"] = "fewer than 10 frames"
         return r
@@ -274,6 +324,18 @@ def verdict(report):
         lines.append("accel magnitude %.2f (about 10 expected on Monado's scale, 9.81 if exact)" % a)
         axis, sign = s["gravity_axis"]
         lines.append("gravity (upright pose): accel reads %s%s" % ("+" if sign > 0 else "-", axis))
+    dev = []
+    if s and s.get("device_loss"):
+        dev.append(("still", s["device_loss"]))
+    for name in EXPECTED:
+        rot = report["rotations"].get(name)
+        if rot and rot.get("device_loss"):
+            dev.append((name, rot["device_loss"]))
+    if dev:
+        lines.append("device reports missing upstream of the ESP32 (from tick deltas): " +
+                     ", ".join("%s %.0f%%" % (n, 100 * d["loss_fraction"]) for n, d in dev) +
+                     ". Integration bridges these gaps with a trapezoid between the samples either side; "
+                       "its effect on the angles is not quantified.")
     mapping = {}
     for name, (world, _) in EXPECTED.items():
         rot = report["rotations"].get(name)
@@ -350,6 +412,7 @@ def print_report(rep):
     if s and "error" not in s:
         print("\nstill: %d frames over %.1f s (%.1f Hz), %d sequence gaps (%.1f%% of produced frames lost), median %.0f ticks/frame"
               % (s["frames"], s["wall_seconds"], s["rate_hz"] or 0, s["seq_gaps"], 100 * s["loss_fraction"], s["median_dticks"]))
+        print("  " + device_loss_text(s.get("device_loss")))
         print("  gyro bias  [rad/s]: %s" % " ".join("%+.4f" % x for x in s["gyro_bias_rad_s"]))
         print("  gyro noise [rad/s]: %s" % " ".join("%.4f" % x for x in s["gyro_noise_rad_s"]))
         print("  accel mean        : %s |a|=%.2f" % (" ".join("%+.2f" % x for x in s["accel_mean"]), s["accel_magnitude"]))
@@ -365,6 +428,7 @@ def print_report(rep):
             continue
         print("\n%s: %d frames over %.1f s, %d sequence gaps (%.1f%% of produced frames lost), %d gaps >100 ms"
               % (name, r["frames"], r["duration_s"], r["seq_gaps"], 100 * r["loss_fraction"], r["gaps_over_100ms"]))
+        print("  " + device_loss_text(r.get("device_loss")))
         print("  net angle [deg] X/Y/Z: %s  (expected %s)" % (" ".join("%+.0f" % x for x in r["net_angle_deg"]), r["expected"]))
     print("\nSummary")
     for line in rep["summary"]:

@@ -105,7 +105,7 @@ reassembly, file format and analysis are unit-tested on synthetic data
    | Phase | What to do |
    | --- | --- |
    | `still` | Hold still and upright for at least 5 seconds after pressing Enter. Start the recording **right after** the controller connects if you can: that is what settles the `sessionA` first-frame question |
-   | `twist_cw` | Twist about the handle like tightening a screw, clockwise seen from above, one full 360 degree turn over about 4 s, ending in the same pose |
+   | `twist_cw` | Start upright, trigger side facing away from you. Twist about the handle like tightening a screw: **the trigger side (the side facing away from you) swings to your RIGHT and the button side (facing you) swings to your LEFT**, which is clockwise seen from above. One full 360 degree turn over about 4 s, ending in the same pose. (The first phone capture was done the opposite way, button side to the right, which is counterclockwise; see 'Calibration: status') |
    | `flip_away` | Tip the top of the ring away from you and over: one forward somersault, about 4 s |
    | `lean_right` | Tip the top of the ring to your right and over: one cartwheel, about 4 s |
 
@@ -143,6 +143,10 @@ rightward cartwheel is negative about +Z).
   gravity direction from `still` (a stationary accelerometer reads +1 g along world
   +Y; if that disagrees with the twist result, either an axis is inverted or the pose
   was not as instructed).
+- Per phase and hand: **device reports missing**, derived from the tick deltas (elapsed ticks
+  over the controller's median period, minus frames received), printed next to the
+  sequence-gap line, with the lengths of the missing runs. Sequence gaps count only what
+  was lost after the ESP32 numbered a report; this counts what was lost before it.
 - `still`: sequence gaps, gyro bias and noise, per-second view of the first 8 seconds
   (gyro deviation, temperature word, battery byte) to show whether `sessionA`'s
   first-frame difference is a startup transient.
@@ -154,29 +158,82 @@ axes, so it cannot detect small misalignments.
 
 ## Calibration: status
 
-**Not done.** The ESP32-side config read (FF13) is a design, and no capture has been
-taken with the new tools.
+**Not done.** The ESP32-side config read (FF13) is a design only. No per-device mix matrix,
+bias or pose has been read or applied.
 
-### Confirmed (from the stationary samples only)
+### First loss-free captures (phone app, reported)
 
-- Accel scale: magnitude 10.0 for a stationary controller (1 g), consistent with
-  `raw / 49000`.
-- Gyro scale is at least the right order of magnitude (noise about 0.016 rad/s).
-- Ticks increase monotonically within each session.
-- The tick unit (100 ns) is from Monado's code, **not** measured here.
+Source: `right-20261021-232124.txt` and `left-20261021-232228.txt`, recorded with the
+companion app's Capture screen (wmr-companion PR #4, not merged; not `capture_ble.py`) at
+ATT MTU 517 with 0 sequence gaps on both hands, and analysed with `tools/analyze_capture.py`.
+**These results were reported to the assistant that wrote this section through the
+director issue #3; the capture files are not in this repository and the assistant has not
+seen them or re-run the analysis.** Each line is "as reported" and is not hardware
+verification by the assistant.
 
-### Unknown (to be answered by the hardware session above unless noted)
+**Confirmed by these captures (both hands):**
 
-- Gyro and accel **axis directions and signs** of the raw sensor axes.
-- Gyro scale in a real rotation (`1e-5` is Monado's value; unconfirmed here).
-- Tick unit on these controllers, and whether the timer restarts on reconnect.
+- **Tick unit is 100 ns.** Ticks over wall-clock: 1.0016 (RIGHT) and 1.0083 (LEFT). Median
+  report period 49,896 (RIGHT) and 49,816 (LEFT) ticks, about 4.99 ms, i.e. a nominal
+  200 Hz.
+- **Gyro scale is rad/s** (`raw * 1e-5`). Net angle for the three nominal 360 degree turns:
+  LEFT 353 / 352 / 361, RIGHT 330 / 346 / 351 degrees, i.e. 0.92 to 1.00 of 360. The spread
+  is attributed to hand technique, not to the scale.
+- **Accel magnitude** 9.92 (RIGHT) and 9.95 (LEFT). Whether the scale is 9.81 or 10 is
+  **not resolved**: both are within about 1.5 %.
+- **Gravity in the upright pose reads +X** (sensor X) on both hands.
+- **Gyro bias at rest:** RIGHT (-0.004, -0.000, +0.007) rad/s, LEFT (+0.024, +0.010,
+  -0.004) rad/s. Per-sample noise 0.021 to 0.030 rad/s.
+- **From `flip_away` and `lean_right`** (both hands agree): sensor -Y = world +X and
+  sensor +Z = world +Z.
+
+**Probable, NOT verified (sensor-to-world axes):** world X = -sensor Y, world Y = +sensor X,
+world Z = +sensor Z (world: X right, Y up, Z toward the user, as in the analyzer). This is a
+proper rotation (determinant +1) and gravity, flip and lean all agree with it.
+
+The one disagreement is `twist_cw`, which came out as a **positive** rotation about sensor X
+on both hands; read literally that gives sensor -X = world +Y, which contradicts gravity
+(+X = world +Y) and would be a mirror image (determinant -1). The likely explanation is that
+the twist was performed the other way from the instruction: the user held the controller
+upright with the buttons toward him and twisted "to the right", which moved the button side
+toward his right, i.e. **counterclockwise** seen from above (the instruction asked for
+clockwise). The user's wording is ambiguous, so this stays **probable, not verified**. It
+becomes confirmed when either (a) a repeat `twist_cw`, clearly clockwise from above, comes
+out as a **negative** rotation about sensor +X, or (b) the app's 3D view driven by this
+mapping follows all three rotations correctly. **Do not write a final sensor-to-world matrix
+and do not remove the "unconfirmed" wording until one of those has happened.**
+
+The twist instruction in the procedure above has been rewritten to say which way the
+trigger side moves, so it cannot be misread again. (The companion app's own instruction text
+needs the same change.)
+
+### Reports missing upstream of the ESP32 (open problem)
+
+Sequence numbers cannot show this: the bridge numbers a report only when it receives it. The
+controller's tick counter can. During `still`, LEFT arrived at 108 Hz and RIGHT at 192.7 Hz
+while the median tick delta says the controllers produce about 200 Hz and elapsed ticks match
+wall-clock time. For the 5.6 s LEFT `still`, about 1,120 reports were expected and 608
+arrived, so roughly half of the LEFT reports never reached the ESP32's queue (reported, not
+re-derived). The ESP32's own statistics lines (about 150 reports/s per hand) agree that fewer
+than 200 per second arrive.
+
+Since the phone saw 0 sequence gaps, the loss is **before** the bridge numbers a report: in
+the Classic Bluetooth link, the ESP32's Bluetooth controller or its host interface, or the
+controller itself. `tools/analyze_capture.py` now reports it per phase and hand (see below).
+Where it happens is **not established**; see [Investigation notes](#investigation-notes-upstream-report-loss).
+
+### Unknown (do not record as confirmed)
+
+- The **sign of the Y axis mapping** (the `twist_cw` conflict above).
 - Per-device mix matrix, bias and pose (needs the config block; not captured).
+- Whether the tick timer restarts when a controller reconnects, and the 2^32 wrap (about
+  7 minutes of controller time) has not been observed.
 - Battery and temperature scales, and bytes 32-43 of the payload.
 - Whether the init/quiesce/enable commands are needed to read the config block, and
   whether sending them disturbs the input stream.
 - The controller's HID report descriptor (needed to choose the right report type for the
-  config commands).
-- Block sizes on these controllers.
+  config commands) and the block sizes on these controllers.
+- Where the thumbstick centre is: resting values are not 0 (see below).
 
 ### First-frame transient in `sessionA-0`
 
@@ -186,18 +243,29 @@ instead of (-8.4, 4.6, 3.0), magnitude 10.07; temperature raw 1409 instead of ab
 3030; battery 156 instead of 131-133; a tick count of 56,034,506 (about 5.6 s at
 100 ns per tick) with the next frame at 186,461,378.
 
-The data show the controller was moving and in a different orientation at that
-moment, and that the temperature word was still far from its settled value. Frame
-spacing in the sample file is sparse, so this cannot say whether the temperature or
-battery word settles over seconds or is a startup artefact. The data cannot
-distinguish a real startup transient from the controller being picked up. **Not
-resolved**; the `still` phase, started right after connect, is meant to settle it.
+The data show the controller was moving and in a different orientation at that moment,
+and that the temperature word was still far from its settled value. The phone captures
+show **no** such transient, but they were not started right after the controller connected,
+so the question is **unresolved**: a `still` recording begun immediately after connect is
+still needed.
+
+### Thumbstick resting values are not zero
+
+In the first FF12 bench check (user-run, reported) the resting stick values were hand 0
+(-0.029, 0.014) and hand 1 (-0.064, 0.148). The decoder defines the centre as raw `0x7FF`
+(2047 of 0..4095): `value = (raw - 0x7FF) / 0x7FF`, clamped to 1.0, which maps `0x7FF` to
+exactly 0 (tested in `tests/test_decode.c`) and is Monado's formula, with no dead zone and
+no centre calibration. The resting values therefore correspond to raw readings of about
+1988 and 2076 (hand 0) and 1916 and 2350 (hand 1): the **controller reports a resting
+position away from 2047**, not a firmware mapping error. Nothing in the firmware or the
+decoder is wrong as far as this shows; a dead zone or a learned centre belongs on the
+phone. How far the stick travels on each side (the real min and max) has not been measured.
 
 ### Other caveats
 
-- Thumbstick, trackpad, trigger and buttons were not exercised by the samples (nothing
-  held); only the synthetic tests cover them. Capture frames while moving the stick
-  and pressing buttons, labelled by hand.
+- Trackpad, trigger and buttons were not exercised by the captures (nothing held); only the
+  synthetic tests cover them. Capture frames while moving the stick and pressing buttons,
+  labelled by hand.
 - No pose/orientation fusion (Monado uses `m_imu_3dof`); fusion runs on the phone.
 
 ## Attribution
@@ -306,3 +374,86 @@ python tools/analyze_capture.py captures/<file>.txt --hand LEFT
 Report with each capture: the printed MTU, the `conn=[...]` text, the per-phase loss lines
 from `capture_ble.py`, and the STREAM/`rx`/`tx`/`drop` lines from the monitor during the
 `still` phase.
+
+## Investigation notes: upstream report loss
+
+**Status: reading of code, configuration and the reported numbers only. Nothing was
+measured by the assistant, no firmware was changed, and no cause is established.** The
+statements about hardware are the maintainer's reports; the statements about code are from
+this repository and the BTstack ESP32 port it is built with (`e38553977`).
+
+### What the numbers say
+
+| Source (reported) | LEFT | RIGHT |
+| --- | --- | --- |
+| First bench (about 15 s, both streaming to a phone), reports/s at the ESP32 | about 174 | about 154 |
+| PR #6 bench, ESP32 statistics | about 150 | about 150 |
+| Phone capture, `still` phase, arrival rate | 108 Hz | 192.7 Hz |
+| FF12 first interval after subscribing (`tx` count; interval length not stated) | 377 | 310 |
+
+The controllers produce about 200 reports/s (median tick period about 4.99 ms). Every run
+is below 200, the shortfall changes from run to run, and **LEFT is not always the worse
+hand** (it was the higher of the two in the first bench). So the asymmetry is not a fixed
+property of one controller as far as these numbers show; it may depend on position, radio
+conditions or timing. The phone saw no sequence gaps, so the reports are lost before the
+bridge numbers them.
+
+### Where a report can be lost, and what would show it
+
+1. **Radio, controller to ESP32.** Classic ACL retransmits, but a controller can flush a
+   report that is too late. Would predict: depends on distance, orientation and other
+   2.4 GHz traffic; mostly isolated losses and short runs. The firmware collects no signal
+   quality data (no RSSI, failed-contact counter or link quality is read).
+2. **Radio shared with BLE.** The ESP32 has one radio for two Classic links and the BLE link
+   to the phone (connection events every 15 ms as granted in the PR #6 bench, up to about 133
+   per second if 7.5 ms were granted). Would predict: loss runs that line up with the BLE
+   interval (about three reports per 15 ms), and a higher rate with no phone connected. This
+   can be tested with the current firmware (experiments below).
+3. **Sniff mode.** `wmr_bridge_main.c` enables sniff mode in the default link policy
+   (`LM_LINK_POLICY_ENABLE_SNIFF_MODE | LM_LINK_POLICY_ENABLE_ROLE_SWITCH`), so a
+   controller may request it and the ESP32's controller will accept. In sniff mode a device
+   transmits only at anchor points. **Mode changes are not logged anywhere**
+   (`HCI_EVENT_MODE_CHANGE` is not handled and not in the HCI trace list), so this cannot be
+   ruled in or out from the logs.
+4. **Packets dropped inside the ESP32 before the HID handler.** In
+   `hci_transport_esp32_vhci.c`, `host_recv_pkt_cb` discards an incoming HCI packet when the
+   receive ring buffer has no room and only calls `log_error`. In this build
+   `ENABLE_LOG_ERROR` is defined but `CONFIG_BTSTACK_HCI_DUMP_STDOUT` is **not set**, so
+   such a message is not printed: **a drop here would be silent.** Controller-to-host flow
+   control is enabled with 20 buffers (`HCI_HOST_ACL_PACKET_NUM`), so the controller should
+   not overrun the host and overflow is not expected, but nothing in the firmware would
+   show it. Would predict: loss that follows host load rather than distance. Console output
+   is a small contributor at most: a `STREAM` block of about 400 characters at 115200 baud
+   takes about 35 ms, about 7 reports per hand per 5 s (0.7 %), if it blocks the BTstack
+   task at all (not verified), far less than the shortfalls above.
+5. **The controller.** Its own firmware may drop reports under radio contention or buffer
+   limits. Not observable from here. (The battery bytes of the two hands in the FF12 check,
+   133 and 131, do not suggest a difference.)
+
+### How to tell them apart
+
+- **Run-length histogram, no new capture needed.** `tools/analyze_capture.py` now prints, per
+  phase and hand, how many reports are missing according to the tick deltas and how long the
+  missing runs are (`1x40, 3x12, ...`). Isolated runs of 1 and no pattern point to 1; runs
+  of about three at a steady rhythm point to 2; a few very long runs (tens of ms or more)
+  point to stalls (3 or 4). Run it on the existing LEFT and RIGHT captures.
+  *Limit:* if every delta is the same multiple of the real period (perfectly uniform loss)
+  it looks like a slower controller and nothing is reported.
+- **Experiments with the current firmware** (read `rate_rx` per hand from the 5 s `STREAM`
+  lines, at least 60 s each, same physical placement):
+  1. No phone connected (the `offline` counter counts every report): baseline per-hand rate.
+  2. Phone connected, not subscribed (`stream=none`), then FF11, then FF12.
+  3. Each controller on its own, then both.
+  4. The two controllers swapped in position / right next to the ESP32 antenna.
+  If the rate with no phone is already below 200, BLE sharing (2) is not the main cause.
+- **Diagnostics that would need a firmware change (not made; for approval):**
+  (a) a per-hand count of missing reports from the tick deltas, computed at the ESP32 (it
+  reads 4 bytes of the report), shown in the `STREAM` line, so upstream loss is measured
+  without a phone; (b) log `HCI_EVENT_MODE_CHANGE`; (c) read RSSI, failed-contact counter and
+  link quality for each Classic link every few seconds; (d) make the VHCI ring-buffer drop
+  visible (a counter in the port, or enabling the HCI dump, which is very verbose).
+
+### Not explained
+
+- The `SET_PROTOCOL handshake status=0x03` logged for each controller (first noted in the
+  README) is unexplained; whether it affects the report rate is unknown.
