@@ -518,14 +518,14 @@ periodic line ([COUNTERS.md](COUNTERS.md)). Identity: `accepted = sent + cancell
 
 See [TESTING.md](TESTING.md), "FF15 echo". None has been run.
 
-# Controller config block, FF13 (PROPOSED, host-tested formats only, not wired, not yet run)
+# Controller config block, FF13 (APPROVED layout, host-tested formats only, not wired, not yet run)
 
-**Status: proposal awaiting the project owner's OK.** The wire formats, the block-read state
+**Status: layout approved by the project owner (Nick, 2026-10-22); firmware wiring still to do.** The wire formats, the block-read state
 machine and the FF13 window are implemented as a pure-C module (`src/wmr_cfg.c`,
 `tests/test_cfg.c`) and host-tested. It is **not** wired into the HID handler or the GATT
 database, `FF13` is **not** in `wmr_bridge.gatt`, and nothing has run on an ESP32, a
-controller or a phone. The UUID and layout below are a proposal; the app must not build on
-them until they are approved.
+controller or a phone. The UUID and layout below were approved on 2026-10-22; they are still
+unverified on hardware.
 
 **Design basis.** The commands below are what Monado does
 (commit `f50c796c32c811f5fd371f77fd8a749d2ad7df08`, `wmr_controller_base.c`,
