@@ -204,6 +204,10 @@ def test_build_argv_sets_project_version():
     check("-DPROJECT_VER=0.2.0" in argv,
           "the firmware project version is the packaged version")
     check(argv[-1] == "build", "the build subcommand comes last")
+    check(build.version_fits_app_desc("0.2.0"), "a normal version fits the descriptor")
+    check(build.version_fits_app_desc("x" * 31), "31 bytes fit the descriptor")
+    check(not build.version_fits_app_desc("x" * 32),
+          "32 bytes are rejected before the descriptor truncates them")
 
 
 def test_flasher_page_contract():

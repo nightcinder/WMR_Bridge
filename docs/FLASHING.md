@@ -24,7 +24,7 @@ There are two audiences:
 3. copies `integration/main-CMakeLists.txt` over
    `port/esp32/main/CMakeLists.txt`,
 4. builds with `EXAMPLE=wmr_bridge`, running `idf.py -B <work>/build-wmr-bridge
-   build` from `<work>/btstack/port/esp32`,
+   -DPROJECT_VER=<version> build` from `<work>/btstack/port/esp32`,
 5. packages the images, a merged factory image, the flasher manifest and the
    browser installer page into `dist/`,
 6. optionally flashes a serial port.
@@ -56,7 +56,7 @@ PowerShell profile as above. To build without flashing, omit `--flash`.
 
 | Option | Meaning |
 | --- | --- |
-| `--version VERSION` | Version written to the manifest, `build-info.json` and the firmware (FF16/console `v`). Default: `git describe --tags --always --dirty`, or `GITHUB_REF_NAME` when set to a `v*` tag. |
+| `--version VERSION` | Version written to the manifest, `build-info.json` and the firmware (FF16/console `v`). At most 31 bytes; a longer value is refused. Default: `git describe --tags --always --dirty`, or `GITHUB_REF_NAME` when set to a `v*` tag. |
 | `--out DIR` | Artifact directory. Default `dist/`. |
 | `--work DIR` | Managed BTstack/build directory. Default `.fw-build/`. |
 | `--flash PORT` | Flash `COM5`, `/dev/ttyUSB0`, ... after a successful build. |
