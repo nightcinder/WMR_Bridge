@@ -56,7 +56,8 @@ PowerShell profile as above. To build without flashing, omit `--flash`.
 
 | Option | Meaning |
 | --- | --- |
-| `--version VERSION` | Version written to the manifest, `build-info.json` and the firmware (FF16/console `v`). At most 31 bytes; a longer value is refused. Default: `git describe --tags --always --dirty`, or `GITHUB_REF_NAME` when set to a `v*` tag. |
+| `--version VERSION` | Version written to the manifest, `build-info*.json` and the firmware (FF16/console `v`). At most 31 bytes; a longer value is refused. Default: `git describe --tags --always --dirty`, or `GITHUB_REF_NAME` when set to a `v*` tag. |
+| `--variant both\|left\|right` | Which hands the image serves. `both` (default) is today's build. `left` / `right` are compile-time single-hand images that advertise `WMR Bridge L` / `WMR Bridge R`; see [Two bridges](#two-bridges-one-hand-each). |
 | `--out DIR` | Artifact directory. Default `dist/`. |
 | `--work DIR` | Managed BTstack/build directory. Default `.fw-build/`. |
 | `--flash PORT` | Flash `COM5`, `/dev/ttyUSB0`, ... after a successful build. |
@@ -77,8 +78,14 @@ environment are needed. The script itself is standard-library Python 3.8+.
 | `wmr-bridge-bootloader.bin` | Bootloader image (`0x1000`). |
 | `wmr-bridge-partition-table.bin` | Partition table (`0x8000`). |
 | `manifest.json` | [ESP Web Tools](https://esphome.github.io/esp-web-tools/) manifest, one merged part at offset 0. |
-| `build-info.json` | Source commit, dirty flag, BTstack commit, ESP-IDF version, build time, flash settings. |
+| `build-info.json` | Variant, flag values, source commit, dirty flag, BTstack commit, ESP-IDF version, build time, flash settings. |
 | `index.html` | The browser installer page. |
+
+The `both` build keeps those exact names. `--variant left` and `--variant right`
+insert the variant before the role and in the manifest/build-info names:
+`wmr-bridge-left-factory.bin`, `manifest-left.json`, `build-info-left.json`,
+and likewise `-right`. That lets all three variants sit in one `dist/` without
+overwriting each other; the browser page uses the three manifests.
 
 To use the installer locally, serve `dist/` over HTTP (Web Serial requires
 HTTPS or `localhost`):
@@ -91,15 +98,79 @@ python3 -m http.server 8000 --directory dist
 Opening `index.html` directly from disk does not work because the browser
 cannot fetch the manifest over `file://`.
 
+## Two bridges (one hand each)
+
+`--variant left` and `--variant right` build the single-hand images described in
+[docs/runs/sheets/multi-bridge.md](runs/sheets/multi-bridge.md). Use them when
+one bridge carrying both controllers loses packets: put one controller on each
+board, so each bridge serves one hand and does not accept the other.
+
+```powershell
+# Windows PowerShell, one board per command. --flash is optional.
+python tools\firmware\build.py --variant left  --flash COM5
+python tools\firmware\build.py --variant right --flash COM6
+```
+
+```bash
+# Linux / macOS
+python3 tools/firmware/build.py --variant left  --idf-export ~/esp/esp-idf/export.sh --flash /dev/ttyUSB0
+python3 tools/firmware/build.py --variant right --idf-export ~/esp/esp-idf/export.sh --flash /dev/ttyUSB1
+```
+
+The flags are compile-time defines only. The script appends them to
+`EXTRA_CFLAGS`; it never edits `src/wmr_config.h`:
+
+| Variant | `WMR_CFG_BRIDGE_HANDS` | `WMR_CFG_BLE_NAME` | Advertised name |
+| --- | --- | --- | --- |
+| `both` | 0 (default, no define) | `WMR_CFG_BLE_NAME_BOTH` (default, no define) | `WMR Bridge` |
+| `left` | 1 | `WMR_CFG_BLE_NAME_LEFT` | `WMR Bridge L` |
+| `right` | 2 | `WMR_CFG_BLE_NAME_RIGHT` | `WMR Bridge R` |
+
+The `WMR Bridge` prefix is load-bearing: clients find the bridge by prefix, so
+the single-hand names keep it.
+
+Each variant uses its own build directory (`build-wmr-bridge`,
+`build-wmr-bridge-left`, `build-wmr-bridge-right`). `EXTRA_CFLAGS` is read at
+configure time, so a shared directory could silently reuse the previous
+variant's defines. `--variant both` still uses `build-wmr-bridge` and produces
+today's artifact names.
+
+### One board, single-hand mode
+
+The same command works with a single board: `--variant left` flashes a board
+that serves only LEFT. That is the cheap route for the one-board validation
+sitting in plan M12.3' — no hand-edited rebuild and no second Classic ESP32.
+Use `--variant right` if you want to validate the RIGHT path instead. The
+boot banner and `STREAM` line show which image is running
+(`WMR Bridge L`, `bridge_hands=1`).
+
+### Build all three images for the browser installer
+
+Build each variant into the same output directory; order does not matter:
+
+```bash
+python3 tools/firmware/build.py --variant both  --idf-export ~/esp/esp-idf/export.sh --out dist
+python3 tools/firmware/build.py --variant left  --idf-export ~/esp/esp-idf/export.sh --out dist
+python3 tools/firmware/build.py --variant right --idf-export ~/esp/esp-idf/export.sh --out dist
+```
+
+The result is three manifests (`manifest.json`, `manifest-left.json`,
+`manifest-right.json`), three merged images and three `build-info*.json` files.
+The browser installer offers all three. If only one variant was built, the page
+marks the others as not included in that build.
+
 ## Browser flasher (end users)
 
 The flasher is a static page using ESP Web Tools. The user connects the board
-over USB, clicks **Install WMR Bridge**, and picks the serial port; the browser
-writes the merged image. There is no ESP-IDF, Arduino IDE or Python install.
+over USB, clicks the install button for the image they want (**Both hands**,
+**LEFT** or **RIGHT**), and picks the serial port; the browser writes that
+variant's merged image. There is no ESP-IDF, Arduino IDE or Python install.
 
 The source page lives in `docs/flasher/index.html` and is copied into `dist/`
-by the build script. It needs three files served next to it:
-`manifest.json`, `wmr-bridge-factory.bin` and (optionally) `build-info.json`.
+by the build script. It loads `manifest.json` / `manifest-left.json` /
+`manifest-right.json` plus the matching `wmr-bridge*-factory.bin` files from the
+same directory; `build-info*.json` is optional and only fills in the version
+labels.
 
 ### Hosting
 
@@ -175,11 +246,14 @@ git tag -a v0.1.0 -m "WMR Bridge v0.1.0"
 git push origin v0.1.0
 ```
 
-The release job writes `manifest.json` with `"version": "0.1.0"` (the leading
-`v` is stripped) and `build-info.json` with the source and toolchain commits.
-The same value is passed to ESP-IDF as `PROJECT_VER`, so the running firmware
-reports it on the console (`v`) and over the read-only FF16 characteristic; a
-client can compare it with `manifest.json` without a serial log.
+The release job writes `manifest.json` (and the single-hand
+`manifest-left.json` / `manifest-right.json`) with `"version": "0.1.0"` (the
+leading `v` is stripped) and `build-info*.json` with the variant, flag values,
+source and toolchain commits. The same version is passed to ESP-IDF as
+`PROJECT_VER`, so the running firmware reports it on the console (`v`) and over
+the read-only FF16 characteristic; a client can compare it with the manifest
+without a serial log. CI builds all three variants into one `dist/` so the
+browser installer can offer them.
 
 ## Tests
 
@@ -187,8 +261,11 @@ client can compare it with `manifest.json` without a serial log.
 toolchain: parsing `flasher_args.json`, ordering flash offsets, the
 `idf.py merge-bin` invocation, the manifest shape, version normalisation, the
 `PROJECT_VER` build argument, the repo-to-BTstack copy layout, the flasher page
-contract and JSON round trips. The host-tests workflow runs it on every push
-and pull request.
+contract and JSON round trips. It also covers the variants: `both` keeps every
+original name and manifest field, `left`/`right` carry the variant in artifact,
+manifest and build-info names, the manifest label names the hand, `build-info`
+records the variant and flag values, and the build environment/build directory
+are per-variant. The host-tests workflow runs it on every push and pull request.
 
 It does **not** prove that the firmware builds or that a board boots. Those
 still need the firmware CI job and a hardware report.

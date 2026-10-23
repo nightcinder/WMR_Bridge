@@ -101,6 +101,10 @@ flasher page. To install a released build without ESP-IDF, use the browser
 installer described in [docs/FLASHING.md](docs/FLASHING.md); for a local build,
 serve `dist/` over HTTP.
 
+For one hand per bridge (or single-hand testing on a single board), add
+`--variant left` or `--variant right`; `--variant both` is the default and is
+unchanged. See [Two bridges](docs/FLASHING.md#two-bridges-one-hand-each).
+
 The manual steps remain in [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md).
 Short version: put this repo at `<btstack>\wmr_bridge`, copy
 `integration\main-CMakeLists.txt` over `port\esp32\main\CMakeLists.txt`, then

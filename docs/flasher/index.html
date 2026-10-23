@@ -40,6 +40,28 @@
     margin: 20px 0;
   }
   .install { text-align: center; margin: 28px 0; }
+  .variant .install { text-align: left; margin: 12px 0 0; }
+  .variants { display: grid; gap: 18px; margin-top: 20px; }
+  .variant { border-top: 1px solid var(--line); padding-top: 16px; }
+  .variant:first-child { border-top: 0; padding-top: 0; }
+  .variant h2 { margin: 0 0 4px; font-size: 1.05rem; }
+  .variant .when { margin: 0; }
+  .variant .meta { margin: 10px 0 0; font-size: 0.8rem; min-height: 1.2em; }
+  .variant.unavailable .install { display: none; }
+  .variant.unavailable { opacity: 0.62; }
+  .tag {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .note { color: var(--text); }
   .install esp-web-install-button { display: inline-block; }
   .install button {
     font: inherit;
@@ -70,33 +92,92 @@
 <body>
 <main>
   <h1>Install WMR Bridge</h1>
-  <p class="version" id="version">Experimental firmware for the ESP32 (classic).</p>
+  <p class="version">Experimental firmware for the ESP32 (classic).</p>
 
   <div class="panel">
     <p>
       This installs the <strong>WMR Bridge</strong> firmware on an ESP32 board from
       Chrome or Edge on a desktop, over USB. ESP-IDF is not needed. The board then
-      connects two Windows Mixed Reality motion controllers and forwards their
-      input to the companion Android app.
+      connects Windows Mixed Reality motion controllers and forwards their input
+      to the companion Android app.
     </p>
     <p class="warn">
       ESP32-S3 and other chips without Classic Bluetooth are not supported.
       You need a classic ESP32 board with at least 2&nbsp;MB flash.
     </p>
+    <p class="note">
+      Use <strong>Both hands</strong> for the normal single-bridge install. Flash
+      <strong>LEFT</strong> and <strong>RIGHT</strong> to two bridges when one
+      bridge carrying both controllers is losing packets: each bridge then serves
+      one controller, ignores the other, and advertises its own name.
+      <strong>LEFT</strong> (or <strong>RIGHT</strong>) also gives a single board
+      a one-command single-hand build for validation.
+    </p>
 
-    <div class="install">
-      <esp-web-install-button manifest="./manifest.json">
-        <button slot="activate" type="button">Install WMR Bridge</button>
-        <span slot="unsupported">
-          Your browser does not support Web Serial. Use Chrome or Edge on a
-          desktop, served over HTTPS or from <code>localhost</code>.
-        </span>
-        <span slot="not-allowed">
-          The installer needs a secure context. Open this page over HTTPS or
-          from <code>localhost</code>.
-        </span>
-      </esp-web-install-button>
+    <div class="variants">
+      <section class="variant" data-variant="both"
+               data-manifest="./manifest.json" data-info="./build-info.json">
+        <h2>Both hands <span class="tag">default</span></h2>
+        <p class="when">One bridge serves both controllers, as before.</p>
+        <div class="install">
+          <esp-web-install-button manifest="./manifest.json">
+            <button slot="activate" type="button">Install both hands</button>
+            <span slot="unsupported">
+              Your browser does not support Web Serial. Use Chrome or Edge on a
+              desktop, served over HTTPS or from <code>localhost</code>.
+            </span>
+            <span slot="not-allowed">
+              The installer needs a secure context. Open this page over HTTPS or
+              from <code>localhost</code>.
+            </span>
+          </esp-web-install-button>
+        </div>
+        <p class="meta" data-version></p>
+      </section>
+
+      <section class="variant" data-variant="left"
+               data-manifest="./manifest-left.json" data-info="./build-info-left.json">
+        <h2>LEFT hand only</h2>
+        <p class="when">Advertises <code>WMR Bridge L</code>; controller
+          <strong>LEFT</strong> is served, RIGHT is declined.</p>
+        <div class="install">
+          <esp-web-install-button manifest="./manifest-left.json">
+            <button slot="activate" type="button">Install LEFT hand</button>
+            <span slot="unsupported">
+              Your browser does not support Web Serial. Use Chrome or Edge on a
+              desktop, served over HTTPS or from <code>localhost</code>.
+            </span>
+            <span slot="not-allowed">
+              The installer needs a secure context. Open this page over HTTPS or
+              from <code>localhost</code>.
+            </span>
+          </esp-web-install-button>
+        </div>
+        <p class="meta" data-version></p>
+      </section>
+
+      <section class="variant" data-variant="right"
+               data-manifest="./manifest-right.json" data-info="./build-info-right.json">
+        <h2>RIGHT hand only</h2>
+        <p class="when">Advertises <code>WMR Bridge R</code>; controller
+          <strong>RIGHT</strong> is served, LEFT is declined.</p>
+        <div class="install">
+          <esp-web-install-button manifest="./manifest-right.json">
+            <button slot="activate" type="button">Install RIGHT hand</button>
+            <span slot="unsupported">
+              Your browser does not support Web Serial. Use Chrome or Edge on a
+              desktop, served over HTTPS or from <code>localhost</code>.
+            </span>
+            <span slot="not-allowed">
+              The installer needs a secure context. Open this page over HTTPS or
+              from <code>localhost</code>.
+            </span>
+          </esp-web-install-button>
+        </div>
+        <p class="meta" data-version></p>
+      </section>
     </div>
+
     <p id="file-warning" class="danger hidden">
       This page was opened as a local file, so the firmware manifest cannot be
       loaded. In the build output directory, run
@@ -116,18 +197,20 @@
   <h2>Steps</h2>
   <ol>
     <li>Connect the ESP32 to the computer with the USB cable.</li>
-    <li>Click <strong>Install WMR Bridge</strong> and choose the board's serial
-      port. If you see several ports, unplug the board and plug it back in to
-      see which one appears.</li>
+    <li>Click the install button for the image you need: <strong>Both hands</strong>
+      for one bridge, or <strong>LEFT</strong> / <strong>RIGHT</strong> for two
+      bridges. Then choose the board's serial port. If you see several ports,
+      unplug the board and plug it back in to see which one appears.</li>
     <li>Let the installer erase and flash the board. This takes about a minute.
       If it says "Failed to connect", hold the board's <strong>BOOT</strong>
       button while it retries, and make sure no serial monitor has the port open.</li>
     <li>Open a serial monitor at <strong>115200</strong> baud to check the boot
-      log. You should see
-      <code>BLE advertising: WMR Bridge</code>.</li>
-    <li>On first boot, put both controllers into pairing mode within a minute.
-      The bridge finds them by name and stores their addresses. Later they
-      reconnect on their own.</li>
+      log. The advertised name tells you which image is running:
+      <code>BLE advertising: WMR Bridge</code> (both hands),
+      <code>WMR Bridge L</code> or <code>WMR Bridge R</code>.</li>
+    <li>On first boot, put the controller(s) this image serves into pairing
+      mode within a minute. The bridge finds them by name and stores their
+      addresses. Later they reconnect on their own.</li>
   </ol>
 
   <div class="panel">
@@ -146,8 +229,8 @@
       This page and the images next to it are built from
       <a href="https://github.com/nightcinder/WMR_Bridge">nightcinder/WMR_Bridge</a>
       by the firmware workflow. Do not flash an image from anywhere else.
-      The build metadata (commit, BTstack commit, ESP-IDF version) is in
-      <a href="./build-info.json">build-info.json</a>.
+      The build metadata (variant, flag values, commit, BTstack commit,
+      ESP-IDF version) is in <code>build-info*.json</code> next to the image.
     </p>
     <p>
       Developers: see
@@ -162,20 +245,35 @@
   </p>
 </main>
 <script>
-  if (location.protocol === "file:") {
-    document.getElementById("file-warning").classList.remove("hidden");
-  }
-  fetch("./build-info.json")
-    .then(function (response) { return response.ok ? response.json() : null; })
-    .then(function (info) {
-      if (!info) return;
-      var text = "Version " + info.version;
-      if (info.commit) text += " (" + info.commit + (info.dirty ? ", dirty" : "") + ")";
-      text += " \u00b7 " + (info.chip || "esp32") + " \u00b7 " +
-        (info.idfVersion || "ESP-IDF");
-      document.getElementById("version").textContent = text;
-    })
-    .catch(function () { /* the manifest is still usable without this */ });
+  (function () {
+    if (location.protocol === "file:") {
+      document.getElementById("file-warning").classList.remove("hidden");
+      return;
+    }
+    var cards = document.querySelectorAll(".variant");
+    Array.prototype.forEach.call(cards, function (card) {
+      var meta = card.querySelector(".meta");
+      var variant = card.getAttribute("data-variant");
+      fetch(card.getAttribute("data-info"))
+        .then(function (response) { return response.ok ? response.json() : null; })
+        .then(function (info) {
+          if (!info) throw new Error("missing build info");
+          var text = "Version " + info.version;
+          if (info.commit) {
+            text += " (" + info.commit + (info.dirty ? ", dirty" : "") + ")";
+          }
+          text += " \u00b7 " + (info.chip || "esp32") + " \u00b7 " +
+            (info.idfVersion || "ESP-IDF");
+          meta.textContent = text;
+        })
+        .catch(function () {
+          /* A local single-variant build has only that variant's files. */
+          card.classList.add("unavailable");
+          meta.textContent = "Not included in this build. Build it with --variant " +
+            variant + ".";
+        });
+    });
+  })();
 </script>
 </body>
 </html>
