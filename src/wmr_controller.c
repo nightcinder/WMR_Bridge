@@ -118,7 +118,6 @@ static void stagger_retry_pending(void);
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
 typedef enum {
     POLICY_IDLE = 0,
-    POLICY_EXIT_SNIFF,      /* V2: leave sniff before writing the policy */
     POLICY_WRITE,
     POLICY_READ
 } policy_state_t;
@@ -207,7 +206,6 @@ static const char *role_name(hci_role_t role){
 
 static const char *policy_state_name(policy_state_t state){
     switch (state){
-        case POLICY_EXIT_SNIFF: return "exit sniff";
         case POLICY_WRITE:      return "write";
         case POLICY_READ:       return "read";
         default:                return "idle";
@@ -251,17 +249,11 @@ static void policy_pump(void){
             return;
         }
         uint8_t status;
-        switch (p->state){
-            case POLICY_EXIT_SNIFF:
-                status = gap_sniff_mode_exit(p->handle);
-                break;
-            case POLICY_WRITE:
-                status = hci_send_cmd(&hci_write_link_policy_settings, p->handle,
-                                      classic_policy_settings());
-                break;
-            default:
-                status = hci_send_cmd(&hci_read_link_policy_settings, p->handle);
-                break;
+        if (p->state == POLICY_WRITE){
+            status = hci_send_cmd(&hci_write_link_policy_settings, p->handle,
+                                  classic_policy_settings());
+        } else {
+            status = hci_send_cmd(&hci_read_link_policy_settings, p->handle);
         }
         if (status == ERROR_CODE_SUCCESS){
             p->awaiting = true;
@@ -293,8 +285,7 @@ static void policy_log_read(const char *name, uint8_t status, uint16_t handle, u
 
 static void policy_on_command_complete(const uint8_t *packet){
     uint16_t opcode = hci_event_command_complete_get_command_opcode(packet);
-    if (opcode != HCI_OPCODE_HCI_EXIT_SNIFF_MODE &&
-        opcode != HCI_OPCODE_HCI_WRITE_LINK_POLICY_SETTINGS &&
+    if (opcode != HCI_OPCODE_HCI_WRITE_LINK_POLICY_SETTINGS &&
         opcode != HCI_OPCODE_HCI_READ_LINK_POLICY_SETTINGS) return;
     const uint8_t *ret = hci_event_command_complete_get_return_parameters(packet);
     uint8_t status = ret[0];
@@ -302,11 +293,7 @@ static void policy_on_command_complete(const uint8_t *packet){
     for (unsigned hand = 0; hand < WMR_NUM_CONTROLLERS; hand++){
         link_policy_t *p = &policies[hand];
         if (!p->awaiting || p->handle != handle) continue;
-        if (opcode == HCI_OPCODE_HCI_EXIT_SNIFF_MODE && p->state == POLICY_EXIT_SNIFF){
-            printf("POLICY: %s exit sniff handle=0x%04x status=0x%02x\n",
-                   controllers[hand].name, handle, status);
-            p->state = POLICY_WRITE;
-        } else if (opcode == HCI_OPCODE_HCI_WRITE_LINK_POLICY_SETTINGS && p->state == POLICY_WRITE){
+        if (opcode == HCI_OPCODE_HCI_WRITE_LINK_POLICY_SETTINGS && p->state == POLICY_WRITE){
             printf("POLICY: %s write handle=0x%04x settings=0x%04x status=0x%02x\n",
                    controllers[hand].name, handle, classic_policy_settings(), status);
             p->state = POLICY_READ;
@@ -338,11 +325,7 @@ static void policy_link_opened(unsigned hand, hci_con_handle_t handle, const bd_
     link_policy_t *p = &policies[hand];
     p->handle = handle;
     p->awaiting = false;
-#if WMR_CFG_CLASSIC_NO_SNIFF
-    p->state = POLICY_EXIT_SNIFF;
-#else
     p->state = POLICY_WRITE;
-#endif
 #if WMR_CFG_CLASSIC_FORCE_MASTER
     hci_role_t role = gap_get_role(handle);
     printf("ROLE: %s handle=0x%04x role=%s\n", controllers[hand].name, handle, role_name(role));
