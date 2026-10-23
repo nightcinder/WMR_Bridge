@@ -118,7 +118,8 @@ Required export fields are in §9. If the M8.2 header uses different names, past
 3. Open the debug screen, connect to the bridge, and select **Batched FF14** (the app default). If the M8.2 export only supports FF12, use **Decoded FF12** for the whole tracking session instead; do not mix streams inside a block. Confirm `STREAM` shows the matching `stream=` and a live `rate_rx`.
 4. Read config for both hands: select LEFT and tap **“Read config (LEFT)”**, then select RIGHT and tap **“Read config (RIGHT)”**. Paste the result lines (length, CRC-32, READY) and confirm no error. If a read fails, continue with the calibration-off blocks and (d), skip every calibration-on block, and say which read failed.
 5. Set **Madgwick**, beta **0.05**, both calibration switches **off**. Select LEFT in the hand selector and press **“Recalibrate gyro bias”**; select RIGHT and press it again. Wait until the debug panel says each hand is calibrated, then wait another 5 s.
-6. Record the cold-start battery and temperature with a 5 s spot export before moving anything (§8.3). If this sitting is shared with latency-2, do this before the latency session starts.
+6. Leave the axis table at its default (the Flip X/Y/Z and Gyro X/Y/Z chips untouched). If it has to change, record the change and do not mix runs from before and after it.
+7. Record the cold-start battery and temperature with a 5 s spot export before moving anything (§8.3). If this sitting is shared with latency-2, do this before the latency session starts.
 
 Pose for the static and drift runs: both controllers upright in the same pose (ring top up, trigger away from you), propped against a fixed block; tape the block, not the controller. If they cannot be held upright, lay them flat and record that pose once; the drift number is comparable only within the sitting because the pose changes which gyro axes see gravity. The other hand is a still control while one hand is moved.
 
@@ -132,7 +133,7 @@ Recommended order:
 2. **Tracking quality (this sheet),** blocks (a) → (b) → (c) → (d). It needs the controllers moved for (b), so it cannot preserve latency-2’s taped position.
 3. **Latency-2 (wmr-companion PR #35),** after re-taping the phone and controllers to its fixed position. Its 12 main runs plus interval pass take about 75–90 min.
 
-If latency-2 must go first, do the cold spot before it, then treat the 30 min temperature point as the first tracking run after the latency session and record the actual elapsed time. Do not interleave the two sheets: a 90° turn during a latency pair invalidates that pair.
+Plan about 60–75 min for the tracking blocks and their setup, so the shared sitting is about 2.5 h before breaks. If latency-2 must go first, do the cold spot before it, then treat the 30 min temperature point as the first tracking run after the latency session and record the actual elapsed time. Do not interleave the two sheets: a 90° turn during a latency pair invalidates that pair.
 
 Do not change firmware, app, phone, stream mode or calibration state in the middle of either session. If a latency run has to be repeated, finish it before starting a tracking block.
 
@@ -225,7 +226,7 @@ Use one **5 s spot export** at each point; it covers both hands. Keep the contro
 |---|---|---|
 | Cold start | Controllers off for at least 10 min, before any streaming in this sitting | `battery`, `temperature_raw`, ambient °C, local time |
 | +30 min | The first quiet moment after 30 min of streaming (a block boundary; do not stop a block mid-run) | same, plus the actual elapsed time |
-| End | Before disconnecting at the end of the sitting | same |
+| End | After the last run in the sitting (including latency-2 if it is shared), before disconnecting | same |
 
 The spot exports are `d-spot-cold`, `d-spot-30min` and `d-spot-end`. The 30 min point may fall during the latency-2 session if that is run first; record the elapsed time and take the reading at the next break rather than interrupting a latency run.
 
