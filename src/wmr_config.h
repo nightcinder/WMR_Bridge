@@ -46,11 +46,53 @@
 #ifndef WMR_CONFIG_H
 #define WMR_CONFIG_H
 
+#include <stdbool.h>
+
 /* ---- Controllers ------------------------------------------------------- */
 
 #define WMR_HAND_LEFT        0
 #define WMR_HAND_RIGHT       1
 #define WMR_NUM_CONTROLLERS  2
+
+/* Which controllers this build serves. 0 = both (default, current behaviour), 1 = LEFT
+ * only, 2 = RIGHT only. The excluded hand is ignored by discovery, refused by the outgoing
+ * connect, declined on an incoming connection and never written to NVS. Compile-time so one
+ * commit can build the REF and the two single-hand images; see
+ * docs/runs/sheets/two-bridge-hands.md for the EXTRA_CFLAGS route. */
+#ifndef WMR_CFG_BRIDGE_HANDS
+#define WMR_CFG_BRIDGE_HANDS              0
+#endif
+#if WMR_CFG_BRIDGE_HANDS < 0 || WMR_CFG_BRIDGE_HANDS > 2
+#error "WMR_CFG_BRIDGE_HANDS must be 0 (both), 1 (LEFT only) or 2 (RIGHT only)"
+#endif
+
+/* True if a bridge built for `bridge_hands` serves `hand`. Kept as a function so the host
+ * tests can check all three values without rebuilding. `hand` outside the two hands is
+ * never served. */
+static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
+    if (hand < 0 || hand >= WMR_NUM_CONTROLLERS) return false;
+    if (bridge_hands == 0) return true;
+    return hand + 1 == bridge_hands;
+}
+
+/* The compile-time answer used by the firmware. */
+#define WMR_BRIDGE_HAND_ENABLED(hand)  wmr_bridge_hand_enabled(WMR_CFG_BRIDGE_HANDS, (int) (hand))
+
+/* BLE advertised name. Default is unchanged; the GATT database and its device-name value
+ * are not touched (GATT layout and handles stay as they are). A single-hand build
+ * normally keeps the `WMR Bridge` prefix so prefix-matching clients still find it.
+ *
+ * ESP-IDF's EXTRA_CFLAGS is split on every space (tools/cmake/project.cmake ->
+ * spaces2list), so a literal `"WMR Bridge L"` cannot be passed there as one macro value.
+ * Select one of these quoted tokens in that route instead:
+ *   $env:EXTRA_CFLAGS = "-DWMR_CFG_BRIDGE_HANDS=1 -DWMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_LEFT"
+ * Must be a string literal of 1..22 characters to fit the legacy advertising packet. */
+#define WMR_CFG_BLE_NAME_BOTH                "WMR Bridge"
+#define WMR_CFG_BLE_NAME_LEFT                "WMR Bridge L"
+#define WMR_CFG_BLE_NAME_RIGHT               "WMR Bridge R"
+#ifndef WMR_CFG_BLE_NAME
+#define WMR_CFG_BLE_NAME                     WMR_CFG_BLE_NAME_BOTH
+#endif
 
 /* Controllers are found by their Bluetooth names ("Motion controller - Left" / "- Right")
  * and the addresses are stored in NVS; see docs/DISCOVERY.md. There are no default

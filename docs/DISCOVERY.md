@@ -82,6 +82,21 @@ runs headless in normal use.
   has no address. The address is then stored. Otherwise it is declined. Only one such check
   runs at a time; a second unknown device meanwhile is declined.
 
+## One hand per bridge (`WMR_CFG_BRIDGE_HANDS`)
+
+A build can serve only one controller: `WMR_CFG_BRIDGE_HANDS` is `0` (both, default), `1`
+(LEFT only) or `2` (RIGHT only). The excluded hand is ignored during inquiry and remote name
+requests, refused by the outgoing connect (`l`/`r` and the discovery connect), declined on an
+incoming connection even if its address is still in NVS from an older both-hands build, and
+its address is never written back to NVS. Discovery for the excluded hand is not started, so
+a single-hand image does not keep inquiring for a hand it will not use.
+
+`WMR_CFG_BLE_NAME` defaults to `WMR Bridge` (unchanged). The single-hand images normally
+advertise `WMR Bridge L` / `WMR Bridge R`, keeping the prefix for clients that match on it.
+The GATT database, including its device-name value, is unchanged. The build route for the
+three images is in
+[runs/sheets/two-bridge-hands.md](runs/sheets/two-bridge-hands.md).
+
 ## Forgetting addresses (`F`)
 
 `F` deletes the stored addresses of both hands (overrides stay) and starts discovery. It is

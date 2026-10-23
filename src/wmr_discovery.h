@@ -105,8 +105,9 @@ typedef enum {
 } wmr_disc_result_t;
 
 typedef struct {
-    bool     wanted[WMR_NUM_CONTROLLERS];    /* hands that had no address when the run started */
+    bool     wanted[WMR_NUM_CONTROLLERS];    /* hands this build serves that had no address */
     bool     found[WMR_NUM_CONTROLLERS];
+    int      bridge_hands;                   /* WMR_CFG_BRIDGE_HANDS for this run */
     uint8_t  found_address[WMR_NUM_CONTROLLERS][6];
     wmr_discovery_device_t pending[WMR_DISCOVERY_MAX_PENDING];
     unsigned pending_count;
@@ -119,8 +120,13 @@ typedef struct {
     unsigned skipped;                        /* WMR_DISC_QUEUE_FULL */
 } wmr_discovery_t;
 
-/* Start a run that looks for every hand with known[hand] == false. */
+/* Start a run that looks for every served hand with known[hand] == false. */
 void wmr_discovery_start(wmr_discovery_t *d, const bool known[WMR_NUM_CONTROLLERS]);
+
+/* Same, with an explicit hand selection; the host tests use this to cover all three
+ * WMR_CFG_BRIDGE_HANDS values without rebuilding. */
+void wmr_discovery_start_config(wmr_discovery_t *d, const bool known[WMR_NUM_CONTROLLERS],
+                                int bridge_hands);
 
 /* True while some wanted hand has no candidate yet. */
 bool wmr_discovery_incomplete(const wmr_discovery_t *d);
@@ -140,8 +146,12 @@ wmr_disc_result_t wmr_discovery_on_name(wmr_discovery_t *d, const uint8_t addres
 /* ---- Incoming connection from an address that is not stored --------------- */
 
 /* Decide on an incoming connection from an unknown address once its name is known (name NULL
- * if the name request failed). Accepted only if the name matches a hand that has no address:
- * returns that hand, otherwise -1. */
+ * if the name request failed). Accepted only if the name matches a hand this build serves
+ * and that hand has no address: returns that hand, otherwise -1. */
 int wmr_discovery_incoming_hand(const bool known[WMR_NUM_CONTROLLERS], const uint8_t *name, size_t len);
+
+/* Same, with an explicit hand selection (host tests). */
+int wmr_discovery_incoming_hand_config(const bool known[WMR_NUM_CONTROLLERS], int bridge_hands,
+                                       const uint8_t *name, size_t len);
 
 #endif /* WMR_DISCOVERY_H */

@@ -119,9 +119,17 @@ bool wmr_addr_parse(const char *text, uint8_t out[6]){
 
 /* ---- One discovery run --------------------------------------------------- */
 
-void wmr_discovery_start(wmr_discovery_t *d, const bool known[WMR_NUM_CONTROLLERS]){
+void wmr_discovery_start_config(wmr_discovery_t *d, const bool known[WMR_NUM_CONTROLLERS],
+                                int bridge_hands){
     memset(d, 0, sizeof(*d));
-    for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++) d->wanted[h] = !known[h];
+    d->bridge_hands = bridge_hands;
+    for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
+        d->wanted[h] = wmr_bridge_hand_enabled(bridge_hands, (int) h) && !known[h];
+    }
+}
+
+void wmr_discovery_start(wmr_discovery_t *d, const bool known[WMR_NUM_CONTROLLERS]){
+    wmr_discovery_start_config(d, known, WMR_CFG_BRIDGE_HANDS);
 }
 
 bool wmr_discovery_incomplete(const wmr_discovery_t *d){
@@ -147,7 +155,9 @@ static int pending_index(const wmr_discovery_t *d, const uint8_t address[6]){
 
 /* A device of `hand` (or -1) was identified. */
 static wmr_disc_result_t classify(wmr_discovery_t *d, const uint8_t address[6], int hand){
-    if (hand < 0) return WMR_DISC_IGNORED;
+    /* A hand this build does not serve is treated exactly like a non-controller device:
+     * its name is ignored during inquiry and remote name requests. */
+    if (!wmr_bridge_hand_enabled(d->bridge_hands, hand)) return WMR_DISC_IGNORED;
     if (!d->wanted[hand]) return WMR_DISC_ALREADY_KNOWN;
     if (d->found[hand]){
         if (memcmp(d->found_address[hand], address, 6) == 0) return WMR_DISC_IGNORED;
@@ -192,8 +202,13 @@ wmr_disc_result_t wmr_discovery_on_name(wmr_discovery_t *d, const uint8_t addres
     return classify(d, address, wmr_discovery_hand_for_name(name, len));
 }
 
-int wmr_discovery_incoming_hand(const bool known[WMR_NUM_CONTROLLERS], const uint8_t *name, size_t len){
+int wmr_discovery_incoming_hand_config(const bool known[WMR_NUM_CONTROLLERS], int bridge_hands,
+                                       const uint8_t *name, size_t len){
     int hand = wmr_discovery_hand_for_name(name, len);
-    if (hand < 0 || known[hand]) return -1;
+    if (hand < 0 || !wmr_bridge_hand_enabled(bridge_hands, hand) || known[hand]) return -1;
     return hand;
+}
+
+int wmr_discovery_incoming_hand(const bool known[WMR_NUM_CONTROLLERS], const uint8_t *name, size_t len){
+    return wmr_discovery_incoming_hand_config(known, WMR_CFG_BRIDGE_HANDS, name, len);
 }
