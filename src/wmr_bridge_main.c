@@ -106,8 +106,19 @@ int btstack_main(int argc, const char *argv[]){
     wmr_transport_init();                               /* ATT server + handler */
     wmr_linkdiag_init();                                /* diagnostics: log sink + polling timers */
 
+#if WMR_CFG_CLASSIC_FORCE_MASTER
+    /* V3: outgoing connections must not ask for a role switch; the per-handle write in
+     * wmr_controller.c disables role switch and sniff after each ACL comes up. */
+    gap_set_allow_role_switch(false);
     gap_set_default_link_policy_settings(
         LM_LINK_POLICY_ENABLE_SNIFF_MODE | LM_LINK_POLICY_ENABLE_ROLE_SWITCH);
+#elif WMR_CFG_CLASSIC_NO_SNIFF
+    /* V2: default policy without sniff. wmr_controller.c also writes it per handle. */
+    gap_set_default_link_policy_settings(LM_LINK_POLICY_ENABLE_ROLE_SWITCH);
+#else
+    gap_set_default_link_policy_settings(
+        LM_LINK_POLICY_ENABLE_SNIFF_MODE | LM_LINK_POLICY_ENABLE_ROLE_SWITCH);
+#endif
     hci_set_master_slave_policy(HCI_ROLE_MASTER);
     hci_registration.callback = wmr_bridge_hci_handler;
     hci_add_event_handler(&hci_registration);
