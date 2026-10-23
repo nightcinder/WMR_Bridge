@@ -128,7 +128,7 @@ supplied CMake file already does this.
    flat, `q` should stay near zero.
 
 Console keys: `l`/`c` connect LEFT, `r` connect RIGHT, `L`/`R` disconnect, `s` status
-and counters, `?` help, `d` discovery, `F` **forget** stored controller addresses,
+and counters, `v` firmware version, `?` help, `d` discovery, `F` **forget** stored controller addresses,
 `k`/`K` **bond reset** LEFT/RIGHT (deletes the ESP32's stored link key for that controller
 only; manual, refused while connected).
 
@@ -139,7 +139,8 @@ Service `0000FF10-0000-1000-8000-00805F9B34FB`; raw characteristic
 `0000FF12-0000-1000-8000-00805F9B34FB` (notify only, 56-byte records); batched
 decoded `FF14` (notify only, up to 9 records per notification at MTU 517); controller
 config block `FF13` (read in 496-byte windows, CRC-32); echo `FF15` (4-byte request, 20-byte
-answer, independent of the stream exclusion). All layouts: [docs/PROTOCOL.md](docs/PROTOCOL.md). Each notification is a
+answer, independent of the stream exclusion); firmware version `FF16` (read-only UTF-8
+string). All layouts: [docs/PROTOCOL.md](docs/PROTOCOL.md). Each notification is a
 12-byte little-endian header (`'R'`, hand, u32 sequence, u16 total length,
 u16 offset, u16 chunk length) followed by a chunk of the frame. A read of FF11
 returns a 16-byte status record. Exact layout, fragmentation and reassembly rules:

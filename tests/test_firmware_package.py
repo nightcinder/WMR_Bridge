@@ -199,6 +199,17 @@ def test_sync_source_into_btstack_layout():
               "port/esp32/main/CMakeLists.txt is replaced with the integration file")
 
 
+def test_build_argv_sets_project_version():
+    argv = build.build_argv("/tmp/build", "0.2.0")
+    check("-DPROJECT_VER=0.2.0" in argv,
+          "the firmware project version is the packaged version")
+    check(argv[-1] == "build", "the build subcommand comes last")
+    check(build.version_fits_app_desc("0.2.0"), "a normal version fits the descriptor")
+    check(build.version_fits_app_desc("x" * 31), "31 bytes fit the descriptor")
+    check(not build.version_fits_app_desc("x" * 32),
+          "32 bytes are rejected before the descriptor truncates them")
+
+
 def test_flasher_page_contract():
     path = os.path.join(HERE, "..", "docs", "flasher", "index.html")
     with open(path, encoding="utf-8") as fh:

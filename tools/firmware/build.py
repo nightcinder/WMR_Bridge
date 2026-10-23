@@ -202,6 +202,31 @@ def pick_version(repo, override):
     return fwpackage.normalise_version(described)
 
 
+# esp_app_desc_t.version is 32 bytes including the terminator; FF16 and the boot line
+# read it as a C string.
+MAX_PROJECT_VERSION_BYTES = 31
+
+
+def version_fits_app_desc(version):
+    return len(version.encode("utf-8")) <= MAX_PROJECT_VERSION_BYTES
+
+
+def build_argv(build_dir, version):
+    """`idf.py build` arguments, including the version the firmware reports.
+
+    PROJECT_VER becomes esp_app_get_description()->version, so the value the
+    bridge serves on FF16 and prints on the console is the same value in
+    manifest.json and build-info.json (see docs/FLASHING.md).
+    """
+    return [
+        "idf.py",
+        "-B",
+        str(build_dir),
+        "-DPROJECT_VER=%s" % version,
+        "build",
+    ]
+
+
 def package_outputs(artifacts, out, version, repo_commit, repo_dirty,
                     btstack_commit, idf_ver, port_dir, build_dir, env):
     out.mkdir(parents=True, exist_ok=True)
@@ -321,6 +346,10 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
 
     version = pick_version(REPO_ROOT, args.version)
+    if not version_fits_app_desc(version):
+        fail("version %r is longer than %d bytes; ESP-IDF's application descriptor "
+             "(and FF16) holds at most that many bytes" %
+             (version, MAX_PROJECT_VERSION_BYTES))
     repo_commit, repo_dirty = repo_state(REPO_ROOT)
     log("building WMR_Bridge %s (source %s%s)" % (
         version, repo_commit, "+dirty" if repo_dirty else ""))
@@ -334,7 +363,7 @@ def main():
     env["EXAMPLE"] = "wmr_bridge"
     idf_ver = idf_version(port_dir, env)
     log("using %s" % idf_ver)
-    run(["idf.py", "-B", str(build_dir), "build"], cwd=port_dir, env=env)
+    run(build_argv(build_dir, version), cwd=port_dir, env=env)
 
     artifacts = fwpackage.collect_artifacts(build_dir)
     package_outputs(

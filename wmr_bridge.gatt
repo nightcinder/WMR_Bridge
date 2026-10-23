@@ -19,3 +19,6 @@ CHARACTERISTIC, 0000FF15-0000-1000-8000-00805F9B34FB, WRITE_WITHOUT_RESPONSE | N
 // 16-byte header plus up to 496 data bytes; notify carries the header when a hand's state changes.
 // Independent of the FF11/FF12/FF14 exclusion.
 CHARACTERISTIC, 0000FF13-0000-1000-8000-00805F9B34FB, READ | WRITE | NOTIFY | DYNAMIC,
+// FF16: firmware version, a read-only UTF-8 string with no terminator. It is the same
+// PROJECT_VER value that tools/firmware/build.py writes to manifest.json and build-info.json.
+CHARACTERISTIC, 0000FF16-0000-1000-8000-00805F9B34FB, READ | DYNAMIC,

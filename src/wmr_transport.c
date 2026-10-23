@@ -41,6 +41,7 @@
 #include <string.h>
 #include "btstack_config.h"
 #include "btstack.h"
+#include "esp_app_desc.h"
 #include "esp_timer.h"
 #include "wmr_bridge.h"        /* generated from wmr_bridge.gatt: profile_data, ATT_*_HANDLE */
 #include "wmr_batch.h"
@@ -75,6 +76,9 @@
  * stream exclusion. */
 #define CFG_VALUE_HANDLE     ATT_CHARACTERISTIC_0000FF13_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
 #define CFG_CCC_HANDLE       ATT_CHARACTERISTIC_0000FF13_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
+
+/* FF16: the firmware version (ESP-IDF PROJECT_VER), read-only. */
+#define VERSION_VALUE_HANDLE ATT_CHARACTERISTIC_0000FF16_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
 
 #define STATUS_SIZE 16
 
@@ -495,6 +499,12 @@ static bool ccc_stream(uint16_t attribute, wmr_stream_t *which){
 static uint16_t att_read(hci_con_handle_t handle, uint16_t attribute,
                          uint16_t offset, uint8_t *buffer, uint16_t buffer_size){
     (void)handle;
+    if (attribute == VERSION_VALUE_HANDLE){
+        const esp_app_desc_t *app = esp_app_get_description();
+        return att_read_callback_handle_blob((const uint8_t *) app->version,
+                                             (uint16_t) strlen(app->version),
+                                             offset, buffer, buffer_size);
+    }
     if (attribute == STREAM_VALUE_HANDLE){
         uint8_t status[STATUS_SIZE];
         build_status(status);
