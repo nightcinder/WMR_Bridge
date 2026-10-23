@@ -6,6 +6,10 @@ sdkconfig.old
 # Hardware capture output (tools/capture_ble.py)
 captures/
 
+# Firmware build and release artifacts (tools/firmware/build.py)
+.fw-build/
+dist/
+
 # Python bytecode
 __pycache__/
 *.pyc

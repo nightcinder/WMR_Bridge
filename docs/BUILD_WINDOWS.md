@@ -1,5 +1,10 @@
 # Build and flash (Windows PowerShell)
 
+> **One-command alternative.** `tools/firmware/build.py` performs the setup,
+> build and optional flash described below, and packages a browser-installable
+> image. See [FLASHING.md](FLASHING.md). The manual steps here are kept for
+> troubleshooting and for understanding exactly what the script does.
+
 ## Versions actually used
 
 | Component | Version / identifier |
