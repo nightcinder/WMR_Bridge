@@ -13,6 +13,7 @@ Raw logs and run sheets from the 2026-10-22 bench sessions (everything here is u
 | `contention-2.md` | Staggered connect and Classic link policy variants for issue #18 | run sheet (variants V2, V3 tested) |
 | `contention-2-results.md` | Results of contention-2 runs (role check, V2 no-sniff, RTT separation) for issue #18 | **run** (user-reported): V3 no-op (master confirmed), V2 sniff=clear 17.5%/23.2% (no effect shown), ~40 ms RTT is BLE stack bound |
 | `closeout.md` | Checks still not run (MTU on the Connect screen, gamepad checks, settings persistence, HID, C7, round-trip rerun) | **not run** |
+| `robustness.md` | Remaining TESTING.md items in one sitting: still-required 2–6, 9, 11; FF12 5–7, 11, 12, 15; B4, B6–B8, B10, B11 | **not run** |
 
 ## Logs (`logs/`)
 
