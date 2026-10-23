@@ -945,11 +945,20 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
         case HCI_EVENT_CONNECTION_COMPLETE: {
             uint8_t status = hci_event_connection_complete_get_status(packet);
             hci_event_connection_complete_get_bd_addr(packet, address);
+            hci_con_handle_t handle = hci_event_connection_complete_get_connection_handle(packet);
             hci_role_t role = HCI_ROLE_INVALID;
             if (status == ERROR_CODE_SUCCESS){
-                role = gap_get_role(hci_event_connection_complete_get_connection_handle(packet));
+                role = gap_get_role(handle);
             }
             log_link_role(address, status, role, "conn_complete");
+#if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
+            if (status == ERROR_CODE_SUCCESS){
+                int hand = wmr_controller_hand_for_address(address);
+                if (hand >= 0){
+                    policy_link_opened((unsigned) hand, handle, address);
+                }
+            }
+#endif
             break;
         }
         case HCI_EVENT_ROLE_CHANGE: {
@@ -960,6 +969,13 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
                 role = (hci_role_t) hci_event_role_change_get_role(packet);
             }
             log_link_role(address, status, role, "role_change");
+#if WMR_CFG_CLASSIC_FORCE_MASTER
+            int hand = wmr_controller_hand_for_address(address);
+            printf("ROLE: %s change status=0x%02x role=%s\n",
+                   hand >= 0 ? controllers[hand].name : bd_addr_to_str(address),
+                   status,
+                   role_name(role));
+#endif
             break;
         }
         case HCI_EVENT_PIN_CODE_REQUEST:
@@ -973,34 +989,12 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
             gap_ssp_confirmation_response(address);
             break;
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
-        case HCI_EVENT_CONNECTION_COMPLETE: {
-            if (hci_event_connection_complete_get_status(packet) != ERROR_CODE_SUCCESS) break;
-            hci_event_connection_complete_get_bd_addr(packet, address);
-            int hand = wmr_controller_hand_for_address(address);
-            if (hand >= 0){
-                policy_link_opened((unsigned) hand,
-                                   hci_event_connection_complete_get_connection_handle(packet),
-                                   address);
-            }
-            break;
-        }
         case HCI_EVENT_DISCONNECTION_COMPLETE:
             policy_link_down(hci_event_disconnection_complete_get_connection_handle(packet));
             break;
         case HCI_EVENT_COMMAND_COMPLETE:
             policy_on_command_complete(packet);
             break;
-#endif
-#if WMR_CFG_CLASSIC_FORCE_MASTER
-        case HCI_EVENT_ROLE_CHANGE: {
-            hci_event_role_change_get_bd_addr(packet, address);
-            int hand = wmr_controller_hand_for_address(address);
-            printf("ROLE: %s change status=0x%02x role=%s\n",
-                   hand >= 0 ? controllers[hand].name : bd_addr_to_str(address),
-                   hci_event_role_change_get_status(packet),
-                   role_name((hci_role_t) hci_event_role_change_get_role(packet)));
-            break;
-        }
 #endif
         default:
             break;
