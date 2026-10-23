@@ -18,6 +18,7 @@ Standard library only.
 
 import json
 import os
+import re
 from pathlib import Path
 
 MANIFEST_NAME = "manifest.json"
@@ -211,19 +212,20 @@ def make_build_info(
     }
 
 
+VERSION_RE = re.compile(r"^v?(\d+(?:\.\d+)+)")
+
+
 def normalise_version(raw):
     """Make a git description safe to show in the manifest.
 
-    `v0.2.0` becomes `0.2.0`; anything that is not a version (a bare commit
-    hash, for instance) becomes `0.0.0+<value>`.
+    `v0.2.0` becomes `0.2.0`; anything that is not a dotted version (a bare
+    commit hash, for instance) becomes `0.0.0+<value>`.
     """
     value = (raw or "").strip()
     if not value:
         return "0.0.0+unknown"
-    if value[0] == "v" and len(value) > 1 and value[1].isdigit():
-        value = value[1:]
-    if value[0].isdigit():
-        return value
+    if VERSION_RE.match(value):
+        return value[1:] if value.startswith("v") else value
     return "0.0.0+" + value
 
 
