@@ -69,41 +69,47 @@ implemented; see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 | `wmr_bridge.gatt` | GATT database |
 | `tests/`, `samples/` | Host unit tests for the protocol, queue and decoder; sample frames |
 | `tools/` | PC-side capture (`capture_ble.py`, needs hardware and `bleak`) and rotation analysis (`analyze_capture.py`); see [docs/DECODING.md](docs/DECODING.md) |
+| `tools/firmware/` | One-command build, packaging and flash (`build.py`) plus the browser-flasher manifest logic; see [docs/FLASHING.md](docs/FLASHING.md) |
 | `integration/` | The one BTstack file that must be replaced to build this (`main-CMakeLists.txt`, plus a diff) |
-| `docs/` | Build, protocol, Android, counters, security, reconnect/queue, controller discovery, testing, refactor notes |
+| `docs/` | Build, flashing, protocol, Android, counters, security, reconnect/queue, controller discovery, testing, refactor notes |
 
 Module responsibilities, in brief: `wmr_controller` (HID side), `wmr_transport`
 (BLE side, queue pump), `wmr_protocol` and `wmr_queue` (pure C, no BTstack,
 unit-tested), `wmr_console`, `wmr_bridge_main` (init and event routing only),
 `wmr_config.h` (all tunables).
 
-## Build and flash (Windows)
+## Build and flash
 
-This repo is not standalone: it builds inside the BTstack ESP32 port. Short
-version (full steps, versions and troubleshooting in
-[docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md)):
+This repo is not standalone: it builds inside the BTstack ESP32 port, with one
+BTstack file replaced. The one-command path does that setup for you and writes
+a browser-installable image ([docs/FLASHING.md](docs/FLASHING.md)):
 
 ```powershell
-# one time: BTstack at the tested commit, this repo inside it, one file replaced
-git clone https://github.com/bluekitchen/btstack.git
-cd btstack
-git checkout e38553977a25fb0b55b383c72c289be0975f422c
-git clone <this-repo-url> wmr_bridge
-Copy-Item wmr_bridge\integration\main-CMakeLists.txt port\esp32\main\CMakeLists.txt
-
-# every session
+# Windows PowerShell: load ESP-IDF once per terminal
 . C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
-cd port\esp32
-$env:EXAMPLE = "wmr_bridge"
-idf.py -B build-wmr-bridge build
-idf.py -B build-wmr-bridge -p COM5 -b 115200 flash
-idf.py -B build-wmr-bridge -p COM5 -b 115200 monitor    # needs a real terminal; Ctrl+] exits
+python tools\firmware\build.py --flash COM5
 ```
 
+```bash
+# Linux / macOS
+python3 tools/firmware/build.py --idf-export ~/esp/esp-idf/export.sh --flash /dev/ttyUSB0
+```
+
+The first run clones the pinned BTstack commit into `.fw-build/`; later runs
+reuse it. The output in `dist/` includes a merged factory image and a browser
+flasher page. To install a released build without ESP-IDF, use the browser
+installer described in [docs/FLASHING.md](docs/FLASHING.md); for a local build,
+serve `dist/` over HTTP.
+
+The manual steps remain in [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md).
+Short version: put this repo at `<btstack>\wmr_bridge`, copy
+`integration\main-CMakeLists.txt` over `port\esp32\main\CMakeLists.txt`, then
+build `EXAMPLE=wmr_bridge` with `idf.py` from `port\esp32`.
+
 Tested with: ESP-IDF v6.1 (`fff9895c82d7`), BTstack `e38553977a25`, ESP32 rev v1.1
-(2 MB flash), Windows 11. Run `idf.py` from `port\esp32`, not from this repo's folder.
-`compile_gatt.py` must be run through Python explicitly; on the author's Windows
-machine, running it directly started Node.js. The supplied CMake file already does this.
+(2 MB flash), Windows 11. `compile_gatt.py` must be run through Python explicitly;
+on the author's Windows machine, running it directly started Node.js. The
+supplied CMake file already does this.
 
 ## Using it
 

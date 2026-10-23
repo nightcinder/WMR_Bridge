@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install WMR Bridge</title>
+<meta name="description" content="Flash the WMR Bridge firmware to an ESP32 from a browser, without ESP-IDF.">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101318;
+    --panel: #181d25;
+    --line: #2b3341;
+    --text: #e6ebf2;
+    --muted: #9aa7b8;
+    --accent: #58a6ff;
+    --warn: #ffcc66;
+    --danger: #ff7b72;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 40px 20px 64px; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 1.15rem; margin: 32px 0 8px; }
+  p, li { color: var(--muted); }
+  strong { color: var(--text); }
+  a { color: var(--accent); }
+  code { color: var(--text); background: #0b0e13; padding: 1px 5px; border-radius: 4px; }
+  .version { margin: 0 0 24px; font-size: 0.9rem; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px;
+    margin: 20px 0;
+  }
+  .install { text-align: center; margin: 28px 0; }
+  .install esp-web-install-button { display: inline-block; }
+  .install button {
+    font: inherit;
+    font-weight: 600;
+    color: #06121f;
+    background: var(--accent);
+    border: 0;
+    border-radius: 8px;
+    padding: 13px 26px;
+    cursor: pointer;
+  }
+  .install button:hover { filter: brightness(1.08); }
+  .install button[disabled] { opacity: 0.5; cursor: default; }
+  .warn { color: var(--warn); }
+  .danger { color: var(--danger); }
+  ol { padding-left: 22px; }
+  li + li { margin-top: 8px; }
+  details { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 16px; }
+  summary { cursor: pointer; color: var(--text); }
+  .footer { margin-top: 40px; font-size: 0.85rem; }
+  .hidden { display: none; }
+</style>
+<script type="module"
+        src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"
+        integrity="sha384-f+fR3K1mnKB2tVps4hdEh+qJvLgH2bKw81Yn+eNE3+gE8YpqocjkxQON4k19I3e/"
+        crossorigin="anonymous"></script>
+</head>
+<body>
+<main>
+  <h1>Install WMR Bridge</h1>
+  <p class="version" id="version">Experimental firmware for the ESP32 (classic).</p>
+
+  <div class="panel">
+    <p>
+      This installs the <strong>WMR Bridge</strong> firmware on an ESP32 board from
+      Chrome or Edge on a desktop, over USB. ESP-IDF is not needed. The board then
+      connects two Windows Mixed Reality motion controllers and forwards their
+      input to the companion Android app.
+    </p>
+    <p class="warn">
+      ESP32-S3 and other chips without Classic Bluetooth are not supported.
+      You need a classic ESP32 board with at least 2&nbsp;MB flash.
+    </p>
+
+    <div class="install">
+      <esp-web-install-button manifest="./manifest.json">
+        <button slot="activate" type="button">Install WMR Bridge</button>
+        <span slot="unsupported">
+          Your browser does not support Web Serial. Use Chrome or Edge on a
+          desktop, served over HTTPS or from <code>localhost</code>.
+        </span>
+        <span slot="not-allowed">
+          The installer needs a secure context. Open this page over HTTPS or
+          from <code>localhost</code>.
+        </span>
+      </esp-web-install-button>
+    </div>
+    <p id="file-warning" class="danger hidden">
+      This page was opened as a local file, so the firmware manifest cannot be
+      loaded. In the build output directory, run
+      <code>python3 -m http.server 8000</code> and open
+      <code>http://localhost:8000</code>.
+    </p>
+  </div>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>An ESP32 board with 2 MB flash and a USB <strong>data</strong> cable.</li>
+    <li>Chrome or Edge on Windows, macOS or Linux. Firefox and Safari do not
+      support Web Serial.</li>
+    <li>Nothing else: no Arduino IDE, no ESP-IDF, no Python.</li>
+  </ul>
+
+  <h2>Steps</h2>
+  <ol>
+    <li>Connect the ESP32 to the computer with the USB cable.</li>
+    <li>Click <strong>Install WMR Bridge</strong> and choose the board's serial
+      port. If you see several ports, unplug the board and plug it back in to
+      see which one appears.</li>
+    <li>Let the installer erase and flash the board. This takes about a minute.
+      If it says "Failed to connect", hold the board's <strong>BOOT</strong>
+      button while it retries, and make sure no serial monitor has the port open.</li>
+    <li>Open a serial monitor at <strong>115200</strong> baud to check the boot
+      log. You should see
+      <code>BLE advertising: WMR Bridge</code>.</li>
+    <li>On first boot, put both controllers into pairing mode within a minute.
+      The bridge finds them by name and stores their addresses. Later they
+      reconnect on their own.</li>
+  </ol>
+
+  <div class="panel">
+    <p>
+      <strong>Read this before using it.</strong> WMR Bridge is experimental
+      test firmware, not a finished product. Its BLE service is unauthenticated
+      and unencrypted, and the board ships with secure boot and flash encryption
+      disabled. Anyone in radio range can receive the controller data.
+      See <a href="https://github.com/nightcinder/WMR_Bridge/blob/main/docs/SECURITY.md">docs/SECURITY.md</a>.
+    </p>
+  </div>
+
+  <details>
+    <summary>Where this firmware comes from</summary>
+    <p>
+      This page and the images next to it are built from
+      <a href="https://github.com/nightcinder/WMR_Bridge">nightcinder/WMR_Bridge</a>
+      by the firmware workflow. Do not flash an image from anywhere else.
+      The build metadata (commit, BTstack commit, ESP-IDF version) is in
+      <a href="./build-info.json">build-info.json</a>.
+    </p>
+    <p>
+      Developers: see
+      <a href="https://github.com/nightcinder/WMR_Bridge/blob/main/docs/FLASHING.md">docs/FLASHING.md</a>
+      for the one-command local build and the release process.
+    </p>
+  </details>
+
+  <p class="footer">
+    <a href="https://github.com/nightcinder/WMR_Bridge">WMR_Bridge on GitHub</a>
+    &middot; experimental, no warranty
+  </p>
+</main>
+<script>
+  if (location.protocol === "file:") {
+    document.getElementById("file-warning").classList.remove("hidden");
+  }
+  fetch("./build-info.json")
+    .then(function (response) { return response.ok ? response.json() : null; })
+    .then(function (info) {
+      if (!info) return;
+      var text = "Version " + info.version;
+      if (info.commit) text += " (" + info.commit + (info.dirty ? ", dirty" : "") + ")";
+      text += " \u00b7 " + (info.chip || "esp32") + " \u00b7 " +
+        (info.idfVersion || "ESP-IDF");
+      document.getElementById("version").textContent = text;
+    })
+    .catch(function () { /* the manifest is still usable without this */ });
+</script>
+</body>
+</html>
