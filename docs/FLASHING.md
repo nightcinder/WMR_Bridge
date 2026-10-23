@@ -174,15 +174,28 @@ labels.
 
 ### Hosting
 
+The installer is live at **<https://nightcinder.github.io/WMR_Bridge/>**,
+serving the `v0.1.0-rc1` images (all three variants).
+
 `.github/workflows/firmware.yml` deploys `dist/` to GitHub Pages on a `v*`
 tag. This keeps the manifest and the images same-origin, which the browser
 requires. GitHub release assets do not send CORS headers, so the flasher
 cannot load images straight from a release. A manual dispatch only builds and
 uploads the workflow artifact; it never overwrites the live installer.
 
-Enable Pages once in the repository: **Settings -> Pages -> Build and
-deployment -> Source: GitHub Actions**. Until that is done, the Pages job
-fails but the release job still publishes the images.
+Two repository settings have to be right, and both were only found by tagging:
+
+- **Settings -> Pages -> Build and deployment -> Source: GitHub Actions.** A
+  site left on the legacy branch source is not deployable by
+  `actions/deploy-pages`; `actions/configure-pages` only sets the build type
+  when it creates the site, so an already-enabled legacy site stays legacy.
+- **Settings -> Environments -> `github-pages` -> Deployment branches and
+  tags.** GitHub seeds this with the default branch only, so a run triggered by
+  a tag is refused before the deploy step. A `v*` entry of type *tag* is
+  required.
+
+If either is wrong the Pages job fails, but the release job still publishes the
+images.
 
 The page is intentionally kept out of the normal docs build: it is only useful
 when a matching manifest and images are next to it.
@@ -231,7 +244,10 @@ developer can build uncommitted changes. The `commit` and `dirty` fields in
   touching a board.
 - **Tags `v*`** additionally attach every file in `dist/` to the GitHub
   release and deploy `dist/` to GitHub Pages, which updates the browser
-  flasher.
+  flasher. A tag with a suffix (`v0.1.0-rc1`) is published as a prerelease and
+  is not offered as "Latest"; a plain `v0.1.0` is. The tag name is also the
+  version the firmware reports over FF16, so `v0.1.0-rc1` boots as
+  `0.1.0-rc1`.
 - **Manual dispatch** builds and uploads the workflow artifact but does not
   deploy to Pages. Serve `dist/` locally to test the installer before tagging.
 

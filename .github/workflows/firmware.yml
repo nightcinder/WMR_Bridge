@@ -77,6 +77,13 @@ jobs:
           files: dist/*
           generate_release_notes: true
           fail_on_unmatched_files: true
+          # A tag with a suffix (v0.1.0-rc1) is a prerelease and must not be
+          # offered as "Latest"; a plain version tag (v0.1.0) is a release.
+          # Without this the action leaves prerelease unset, which GitHub reads
+          # as a full release — v0.1.0-rc1 was published that way and had to be
+          # corrected by hand.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
 
   pages:
     name: Deploy browser flasher
