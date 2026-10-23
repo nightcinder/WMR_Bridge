@@ -203,7 +203,7 @@ def pick_version(repo, override):
 
 
 def package_outputs(artifacts, out, version, repo_commit, repo_dirty,
-                    btstack_commit, idf_ver):
+                    btstack_commit, idf_ver, port_dir, build_dir, env):
     out.mkdir(parents=True, exist_ok=True)
     copies = (
         (artifacts["app_bin"], fwpackage.APP_NAME),
@@ -215,10 +215,10 @@ def package_outputs(artifacts, out, version, repo_commit, repo_dirty,
         log("packaged %s" % (out / name))
 
     factory = out / fwpackage.FACTORY_NAME
-    argv = fwpackage.merge_bin_argv(sys.executable, factory, artifacts)
-    run(argv)
+    argv = fwpackage.merge_bin_argv("idf.py", build_dir, factory)
+    run(argv, cwd=port_dir, env=env)
     if not factory.is_file():
-        fail("esptool did not produce %s" % factory)
+        fail("idf.py merge-bin did not produce %s" % factory)
 
     manifest = fwpackage.make_manifest(version, chip=artifacts["chip"])
     fwpackage.write_json(out / fwpackage.MANIFEST_NAME, manifest)
@@ -345,6 +345,9 @@ def main():
         repo_dirty=repo_dirty,
         btstack_commit=BTSTACK_COMMIT,
         idf_ver=idf_ver,
+        port_dir=port_dir,
+        build_dir=build_dir,
+        env=env,
     )
 
     if args.flash:

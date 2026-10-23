@@ -118,19 +118,9 @@ def test_collect_missing_app_fails():
 
 
 def test_merge_argv():
-    with tempfile.TemporaryDirectory() as root:
-        make_build(root)
-        art = fp.collect_artifacts(root)
-        argv = fp.merge_bin_argv("/usr/bin/python3", "/out/factory.bin", art)
-        check(argv[:5] == ["/usr/bin/python3", "-m", "esptool", "--chip", "esp32"],
-              "esptool merge command prefix")
-        check("merge_bin" in argv and "-o" in argv, "merge_bin with -o")
-        check(argv[argv.index("-o") + 1] == "/out/factory.bin", "output path")
-        check(argv[argv.index("--flash_mode") + 1] == "dio", "flash mode flag")
-        check(argv[argv.index("--flash_freq") + 1] == "40m", "flash freq flag")
-        check(argv[argv.index("--flash_size") + 1] == "2MB", "flash size flag")
-        offsets = [item for item in argv if item.startswith("0x")]
-        check(offsets == ["0x1000", "0x8000", "0x10000"], "argv offsets ordered")
+    argv = fp.merge_bin_argv("idf.py", "/build", "/out/factory.bin")
+    check(argv == ["idf.py", "-B", "/build", "merge-bin", "-o", "/out/factory.bin"],
+          "idf.py merge-bin command uses the build's own flash args")
 
 
 def test_manifest():

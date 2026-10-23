@@ -152,29 +152,21 @@ def _image_named(flash_files, needle):
     return None
 
 
-def merge_bin_argv(python, output, artifacts):
-    """Arguments for `esptool merge_bin` that produce one image at offset 0."""
-    argv = [
-        str(python),
-        "-m",
-        "esptool",
-        "--chip",
-        artifacts["chip"],
-        "merge_bin",
+def merge_bin_argv(idf_py, build_dir, output):
+    """Arguments for `idf.py merge-bin`.
+
+    IDF reads the build's own `flash_args` file, so the merge uses exactly the
+    flash mode, size and offsets that `idf.py flash` would write. This avoids
+    depending on the esptool CLI spelling, which changed between v4 and v5.
+    """
+    return [
+        str(idf_py),
+        "-B",
+        str(build_dir),
+        "merge-bin",
         "-o",
         str(output),
     ]
-    for key, flag in (
-        ("flash_mode", "--flash_mode"),
-        ("flash_freq", "--flash_freq"),
-        ("flash_size", "--flash_size"),
-    ):
-        value = artifacts["flash_settings"].get(key)
-        if value:
-            argv.extend([flag, str(value)])
-    for offset, path in artifacts["flash_files"].items():
-        argv.extend([offset, str(path)])
-    return argv
 
 
 def chip_family(chip):

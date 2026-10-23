@@ -179,9 +179,10 @@ The release job writes `manifest.json` with `"version": "0.1.0"` (the leading
 ## Tests
 
 `tests/test_firmware_package.py` covers the packaging logic without a
-toolchain: parsing `flasher_args.json`, ordering flash offsets, building the
-esptool merge command, the manifest shape, version normalisation and JSON
-round trips. The host-tests workflow runs it on every push and pull request.
+toolchain: parsing `flasher_args.json`, ordering flash offsets, the
+`idf.py merge-bin` invocation, the manifest shape, version normalisation, the
+repo-to-BTstack copy layout and JSON round trips. The host-tests workflow runs
+it on every push and pull request.
 
 It does **not** prove that the firmware builds or that a board boots. Those
 still need the firmware CI job and a hardware report.
