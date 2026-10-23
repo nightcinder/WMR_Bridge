@@ -61,6 +61,8 @@ implemented; see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 - **Console.** Serial keys to connect/disconnect each controller, print status,
   and (manually) delete a stored Bluetooth bond.
 
+The default firmware build operates in the dual-controller topology described above (two controllers connected to one ESP32 bridge). A single-hand / multi-bridge topology (one ESP32 bridge per hand) is also supported via compile-time flags (`WMR_CFG_BRIDGE_HANDS=1` for LEFT only, `2` for RIGHT only) and advertised BLE name suffixes (`WMR Bridge L` / `WMR Bridge R`, via `WMR_CFG_BLE_NAME`). In single-hand mode, inquiry, incoming connections, outgoing connections, and address persistence are gated strictly to the designated hand; this topology is untested on hardware. The BLE GATT protocol, record formats, and characteristics are identical; see [docs/PROTOCOL.md](docs/PROTOCOL.md).
+
 ## Repository layout
 
 | Path | Contents |
