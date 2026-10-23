@@ -208,7 +208,8 @@ python tools\firmware\build.py --variant right --out $dist
 Each command prints the variant flags and writes its own artifacts:
 `wmr-bridge-factory.bin` / `manifest.json` / `build-info.json` for REF, and
 `wmr-bridge-left-factory.bin` / `manifest-left.json` / `build-info-left.json` (then `-right`)
-for the single-hand images. Check `build-info*.json` instead of a hand-typed folder:
+for the single-hand images. Check `build-info*.json` for what the build was asked for, then
+check `compile_commands.json` for the define the compiler actually received:
 
 ```powershell
 foreach ($v in @("", "-left", "-right")) {
@@ -217,10 +218,15 @@ foreach ($v in @("", "-left", "-right")) {
 # REF: "variant": "both",  hands 0, WMR_CFG_BLE_NAME_BOTH
 # L:   "variant": "left",  hands 1, WMR_CFG_BLE_NAME_LEFT
 # R:   "variant": "right", hands 2, WMR_CFG_BLE_NAME_RIGHT
+
+Select-String .fw-build\build-wmr-bridge\compile_commands.json -Pattern "WMR_CFG_BRIDGE_HANDS|WMR_CFG_BLE_NAME"   # expect no match (defaults)
+Select-String .fw-build\build-wmr-bridge-left\compile_commands.json -Pattern "WMR_CFG_BRIDGE_HANDS=1|WMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_LEFT"   # must show both
+Select-String .fw-build\build-wmr-bridge-right\compile_commands.json -Pattern "WMR_CFG_BRIDGE_HANDS=2|WMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_RIGHT" # must show both
 ```
 
-If a `build-info*.json` does not show the expected variant and hand, stop; that image is not
-the variant. The flags are recorded by the build, not typed from memory.
+If a `build-info*.json` or `compile_commands.json` check does not show the expected value,
+stop; that image is not the variant. The flags are recorded by the build, not typed from
+memory.
 
 Flash a finished image with `--flash`; the script reuses that variant's build directory and
 does not erase NVS, so the stored addresses and link keys survive a reflash:
@@ -233,14 +239,18 @@ python tools\firmware\build.py --variant right --out $dist --flash $portB   # R 
 # After S1, swap: --variant left --flash $portB, --variant right --flash $portA.
 ```
 
-To flash again later without rebuilding, write the merged image at offset 0 (the browser
-flasher does the same):
+To flash again later without rebuilding, use that build's own `flash_args` (the same images
+`idf.py flash` writes; NVS is not touched):
 
 ```powershell
-python -m esptool --chip esp32 -p $portA -b 115200 write_flash 0x0 "$dist\wmr-bridge-left-factory.bin"
+cd .fw-build\build-wmr-bridge-left
+Test-Path flash_args                      # must be True
+python -m esptool --chip esp32 -p $portA -b 115200 write_flash "@flash_args"
 ```
 
-**Do not run `idf.py erase-flash` between runs**; that erases the pairing state and §1 must be
+Do **not** write the merged factory image at `0x0` to keep the pairing: the merge fills the
+`0x9000`–`0x10000` NVS/PHY gap with `0xFF` and would erase NVS. **Do not run
+`idf.py erase-flash` between runs**; that also erases the pairing state and §1 must be
 repeated.
 
 ### 2.1 One board instead of two (plan M12.3')

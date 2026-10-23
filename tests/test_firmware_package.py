@@ -394,6 +394,8 @@ def test_flasher_page_contract():
           "flasher offers the LEFT image")
     check('manifest="./manifest-right.json"' in page,
           "flasher offers the RIGHT image")
+    check("fetch(manifestUrl" in page,
+          "availability is checked against the manifest, not the optional build-info")
     check("two bridges" in page.lower(),
           "flasher explains when to use LEFT/RIGHT instead of both")
     check("esp-web-tools@10.4.0" in page, "ESP Web Tools is version-pinned")

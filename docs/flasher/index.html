@@ -254,10 +254,20 @@
     Array.prototype.forEach.call(cards, function (card) {
       var meta = card.querySelector(".meta");
       var variant = card.getAttribute("data-variant");
-      fetch(card.getAttribute("data-info"))
-        .then(function (response) { return response.ok ? response.json() : null; })
+      var manifestUrl = card.getAttribute("data-manifest");
+      var infoUrl = card.getAttribute("data-info");
+      fetch(manifestUrl, { cache: "no-store" })
+        .then(function (response) {
+          if (!response.ok) throw new Error("missing manifest");
+          return fetch(infoUrl)
+            .then(function (infoResponse) {
+              return infoResponse.ok ? infoResponse.json() : null;
+            })
+            .catch(function () { return null; });
+        })
         .then(function (info) {
-          if (!info) throw new Error("missing build info");
+          /* build-info is optional: the manifest is enough to install. */
+          if (!info) return;
           var text = "Version " + info.version;
           if (info.commit) {
             text += " (" + info.commit + (info.dirty ? ", dirty" : "") + ")";
