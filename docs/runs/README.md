@@ -15,6 +15,7 @@ Raw logs and run sheets from the 2026-10-22 bench sessions (everything here is u
 | `tracking-quality.md` | Static calibration check, 90° turns about each axis, yaw drift against Madgwick beta, and the #19 trigger/trackpad/battery/temperature unknowns (M8.1) | **not run** |
 | `multi-bridge.md` | Two bridges, one hand each, against one bridge; S1/S2/X for RIGHT's own loss (M6.2) | **not run** |
 | `closeout.md` | Checks still not run (MTU on the Connect screen, gamepad checks, settings persistence, HID, C7, round-trip rerun) | **not run** |
+| `robustness.md` | Remaining TESTING.md items in one sitting: still-required 2–6, 9, 11; FF12 5–7, 11, 12, 15; B4, B6–B8, B10, B11 | **not run** |
 
 ## Logs (`logs/`)
 
