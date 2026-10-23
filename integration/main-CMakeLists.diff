@@ -61,7 +61,7 @@ index e575a44..24b37e8 100644
  idf_component_register(
      SRCS "main.c" "${EXAMPLE_SOURCE}"
 -    REQUIRES btstack esp_phy bt esp_driver_gpio esp_driver_i2s)
-+    REQUIRES btstack esp_phy bt esp_driver_gpio esp_driver_i2s esp_timer)
++    REQUIRES btstack esp_phy bt esp_driver_gpio esp_driver_i2s esp_timer esp_app_format)
  
  include(BTstackUtils)
  

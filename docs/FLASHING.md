@@ -56,7 +56,7 @@ PowerShell profile as above. To build without flashing, omit `--flash`.
 
 | Option | Meaning |
 | --- | --- |
-| `--version VERSION` | Version written to the manifest. Default: `git describe --tags --always --dirty`, or `GITHUB_REF_NAME` when set to a `v*` tag. |
+| `--version VERSION` | Version written to the manifest, `build-info.json` and the firmware (FF16/console `v`). Default: `git describe --tags --always --dirty`, or `GITHUB_REF_NAME` when set to a `v*` tag. |
 | `--out DIR` | Artifact directory. Default `dist/`. |
 | `--work DIR` | Managed BTstack/build directory. Default `.fw-build/`. |
 | `--flash PORT` | Flash `COM5`, `/dev/ttyUSB0`, ... after a successful build. |
@@ -177,14 +177,18 @@ git push origin v0.1.0
 
 The release job writes `manifest.json` with `"version": "0.1.0"` (the leading
 `v` is stripped) and `build-info.json` with the source and toolchain commits.
+The same value is passed to ESP-IDF as `PROJECT_VER`, so the running firmware
+reports it on the console (`v`) and over the read-only FF16 characteristic; a
+client can compare it with `manifest.json` without a serial log.
 
 ## Tests
 
 `tests/test_firmware_package.py` covers the packaging logic without a
 toolchain: parsing `flasher_args.json`, ordering flash offsets, the
 `idf.py merge-bin` invocation, the manifest shape, version normalisation, the
-repo-to-BTstack copy layout and JSON round trips. The host-tests workflow runs
-it on every push and pull request.
+`PROJECT_VER` build argument, the repo-to-BTstack copy layout, the flasher page
+contract and JSON round trips. The host-tests workflow runs it on every push
+and pull request.
 
 It does **not** prove that the firmware builds or that a board boots. Those
 still need the firmware CI job and a hardware report.
@@ -205,8 +209,7 @@ still need the firmware CI job and a hardware report.
 
 The framework is deliberately the foundation, not the finished product:
 
-- a firmware version string and a console command to print it, so the app and
-  `build-info.json` can be compared without a serial log;
+- the app reading FF16 and warning when it differs from the release it expects;
 - optional signing/verification of release images before wider distribution;
 - a small CLI (`esptool`) downloader for users who cannot use Web Serial;
 - deciding whether to support an ESP32-S3 plus external Classic dongle

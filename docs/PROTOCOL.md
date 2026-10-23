@@ -11,6 +11,7 @@ test (`tests/test_protocol.c`, "golden packet") pins the byte layout.
 | Device name (GAP 0x2A00) | - | read, value `WMR Bridge` |
 | Service | `0000FF10-0000-1000-8000-00805F9B34FB` | primary |
 | Characteristic | `0000FF11-0000-1000-8000-00805F9B34FB` | read, notify |
+| Characteristic | `0000FF16-0000-1000-8000-00805F9B34FB` | read (firmware version) |
 | Client Characteristic Configuration (0x2902) | - | read/write |
 
 Advertising: flags `0x02` (LE general discoverable), complete local name
@@ -35,6 +36,17 @@ The FF10/FF11 UUIDs are experimental and not assigned for production use
 | 4 | u32 LE | Seconds since boot (tick counter, **not** a frame sequence) |
 | 8 | u32 LE | LEFT reports received on the current connection |
 | 12 | u32 LE | RIGHT reports received on the current connection |
+
+## Firmware version, FF16
+
+A read returns a UTF-8 string with no terminator: the ESP-IDF `PROJECT_VER` value embedded in
+the application descriptor. `tools/firmware/build.py` sets it to the same version that it
+writes to `manifest.json` and `build-info.json`, so a client can compare the running firmware
+with a release without a serial console. A build made directly with `idf.py` reports that
+project's `PROJECT_VER` (ESP-IDF's default is `1`).
+
+The value is at most 31 bytes (the descriptor field is 32 bytes including the terminator).
+This characteristic is independent of the FF11/FF12/FF14 stream exclusion and of FF13/FF15.
 
 ## Notification format
 

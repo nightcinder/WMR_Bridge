@@ -41,6 +41,7 @@
 #include <stdbool.h>
 #include "btstack_config.h"
 #include "btstack.h"
+#include "esp_app_desc.h"
 #include "esp_timer.h"
 #include "wmr_cfgmgr.h"
 #include "wmr_console.h"
@@ -60,6 +61,7 @@ void wmr_console_show_usage(void){
     printf("l (or c): connect LEFT        r: connect RIGHT\n");
     printf("L: disconnect LEFT            R: disconnect RIGHT\n");
     printf("s: status and statistics      ?: help\n");
+    printf("v: firmware version\n");
     printf("d: discovery - find controllers without an address by name (pairing mode)\n");
     printf("F: FORGET stored controller addresses (not link keys), then run discovery\n");
     printf("k: BOND RESET LEFT  - delete the ESP32's stored link key for LEFT only\n");
@@ -74,6 +76,14 @@ void wmr_console_on_hci_event(uint8_t *packet, uint16_t size){
         btstack_event_state_get_state(packet) == HCI_STATE_WORKING){
         wmr_console_show_usage();
     }
+}
+
+/* PROJECT_VER, set by tools/firmware/build.py to the packaged version, is embedded by
+ * ESP-IDF in the application descriptor. FF16 serves the same string. */
+static void print_firmware_version(void){
+    const esp_app_desc_t *app = esp_app_get_description();
+    printf("WMR Bridge firmware %s (ESP-IDF %s, built %s %s)\n",
+           app->version, app->idf_ver, app->date, app->time);
 }
 
 static void print_controllers(void){
@@ -234,6 +244,7 @@ static void stdin_process(char cmd){
         case 'L': wmr_controller_disconnect(WMR_HAND_LEFT); break;
         case 'R': wmr_controller_disconnect(WMR_HAND_RIGHT); break;
         case 's': print_controllers(); print_stats(false); break;
+        case 'v': print_firmware_version(); break;
         case 'd': wmr_controller_discover(); break;
         case 'F': forget_addresses(); break;
         case 'k': bond_reset(WMR_HAND_LEFT); break;
@@ -248,6 +259,7 @@ void wmr_console_init(void){
 #ifdef HAVE_BTSTACK_STDIN
     btstack_stdin_setup(stdin_process);
 #endif
+    print_firmware_version();
     stats_timer.process = stats_tick;
     btstack_run_loop_set_timer(&stats_timer, WMR_CFG_STATS_INTERVAL_MS);
     btstack_run_loop_add_timer(&stats_timer);
