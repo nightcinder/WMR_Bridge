@@ -199,6 +199,21 @@ def test_sync_source_into_btstack_layout():
               "port/esp32/main/CMakeLists.txt is replaced with the integration file")
 
 
+def test_flasher_page_contract():
+    path = os.path.join(HERE, "..", "docs", "flasher", "index.html")
+    with open(path, encoding="utf-8") as fh:
+        page = fh.read()
+    check('slot="activate"' in page,
+          "install button uses the ESP Web Tools 10 activate slot")
+    check('slot="install-button"' not in page,
+          "the non-existent install-button slot is not used")
+    check('manifest="./manifest.json"' in page,
+          "flasher loads the manifest next to it")
+    check("esp-web-tools@10.4.0" in page, "ESP Web Tools is version-pinned")
+    check('integrity="sha384-' in page, "the CDN module has an SRI hash")
+    check('crossorigin="anonymous"' in page, "SRI fetch is CORS-enabled")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

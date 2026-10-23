@@ -104,9 +104,10 @@ by the build script. It needs three files served next to it:
 ### Hosting
 
 `.github/workflows/firmware.yml` deploys `dist/` to GitHub Pages on a `v*`
-tag (and on manual dispatch). This keeps the manifest and the images
-same-origin, which the browser requires. GitHub release assets do not send
-CORS headers, so the flasher cannot load images straight from a release.
+tag. This keeps the manifest and the images same-origin, which the browser
+requires. GitHub release assets do not send CORS headers, so the flasher
+cannot load images straight from a release. A manual dispatch only builds and
+uploads the workflow artifact; it never overwrites the live installer.
 
 Enable Pages once in the repository: **Settings -> Pages -> Build and
 deployment -> Source: GitHub Actions**. Until that is done, the Pages job
@@ -160,8 +161,8 @@ developer can build uncommitted changes. The `commit` and `dirty` fields in
 - **Tags `v*`** additionally attach every file in `dist/` to the GitHub
   release and deploy `dist/` to GitHub Pages, which updates the browser
   flasher.
-- **Manual dispatch** builds and deploys the Pages preview from the selected
-  ref. Use it to test the installer before tagging.
+- **Manual dispatch** builds and uploads the workflow artifact but does not
+  deploy to Pages. Serve `dist/` locally to test the installer before tagging.
 
 The build runs in the official `espressif/idf:v6.1` container; no self-hosted
 runner or secrets are needed. `actions/checkout` uses full history so
