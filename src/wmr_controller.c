@@ -524,6 +524,29 @@ static void on_remote_name(const uint8_t *packet){
     if (disc_phase == DISC_NAMES) disc_next_name();
 }
 
+/* ---- Classic link role logging ------------------------------------------ */
+
+/* One parseable line per link, for the contention-2 REF runs (ONY-14). The
+ * role is whatever BTstack currently has cached for the handle: at connection
+ * complete that can still be unknown, and the role-change event fills it in.
+ * Logging only: no policy, role request or link state is changed here. */
+static const char *role_name(hci_role_t role){
+    switch (role){
+        case HCI_ROLE_MASTER: return "master";
+        case HCI_ROLE_SLAVE:  return "slave";
+        default:              return "unknown";
+    }
+}
+
+static void log_link_role(const bd_addr_t address, uint8_t status, hci_role_t role,
+                          const char *event){
+    int hand = wmr_controller_hand_for_address(address);
+    printf("%s role: address=%s role=%s status=0x%02x event=%s t_ms=%lu\n",
+           hand >= 0 ? wmr_controller_name((unsigned) hand) : "?",
+           bd_addr_to_str(address), role_name(role), status, event,
+           (unsigned long) btstack_run_loop_get_time_ms());
+}
+
 /* ---- HCI events --------------------------------------------------------- */
 
 void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
@@ -554,6 +577,26 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
         case HCI_EVENT_REMOTE_NAME_REQUEST_COMPLETE:
             on_remote_name(packet);
             break;
+        case HCI_EVENT_CONNECTION_COMPLETE: {
+            uint8_t status = hci_event_connection_complete_get_status(packet);
+            hci_event_connection_complete_get_bd_addr(packet, address);
+            hci_role_t role = HCI_ROLE_INVALID;
+            if (status == ERROR_CODE_SUCCESS){
+                role = gap_get_role(hci_event_connection_complete_get_connection_handle(packet));
+            }
+            log_link_role(address, status, role, "conn_complete");
+            break;
+        }
+        case HCI_EVENT_ROLE_CHANGE: {
+            uint8_t status = hci_event_role_change_get_status(packet);
+            hci_event_role_change_get_bd_addr(packet, address);
+            hci_role_t role = HCI_ROLE_INVALID;
+            if (status == ERROR_CODE_SUCCESS){
+                role = (hci_role_t) hci_event_role_change_get_role(packet);
+            }
+            log_link_role(address, status, role, "role_change");
+            break;
+        }
         case HCI_EVENT_PIN_CODE_REQUEST:
             hci_event_pin_code_request_get_bd_addr(packet, address);
             printf("Legacy PIN request rejected\n");
