@@ -12,6 +12,7 @@ Raw logs and run sheets from the 2026-10-22 bench sessions (everything here is u
 | `single-controller.md` | LEFT alone, RIGHT alone, both | run |
 | `contention-2.md` | Staggered connect and Classic link policy variants for issue #18 | run sheet (variants V2, V3 tested) |
 | `contention-2-results.md` | Results of contention-2 runs (role check, V2 no-sniff, RTT separation) for issue #18 | **run** (user-reported): V3 no-op (master confirmed), V2 sniff=clear 17.5%/23.2% (no effect shown), ~40 ms RTT is BLE stack bound |
+| `multi-bridge.md` | Two bridges, one hand each, against one bridge; S1/S2/X for RIGHT's own loss (M6.2) | **not run** |
 | `closeout.md` | Checks still not run (MTU on the Connect screen, gamepad checks, settings persistence, HID, C7, round-trip rerun) | **not run** |
 
 ## Logs (`logs/`)
