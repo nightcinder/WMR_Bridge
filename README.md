@@ -146,7 +146,7 @@ Service `0000FF10-0000-1000-8000-00805F9B34FB`; raw characteristic
 decoded `FF14` (notify only, up to 9 records per notification at MTU 517); controller
 config block `FF13` (read in 496-byte windows, CRC-32); echo `FF15` (4-byte request, 20-byte
 answer, independent of the stream exclusion); firmware version `FF16` (read-only UTF-8
-string). All layouts: [docs/PROTOCOL.md](docs/PROTOCOL.md). Each notification is a
+string). Compatibility matrix across firmware versions and Dart library packages: [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md). All layouts: [docs/PROTOCOL.md](docs/PROTOCOL.md). Each notification is a
 12-byte little-endian header (`'R'`, hand, u32 sequence, u16 total length,
 u16 offset, u16 chunk length) followed by a chunk of the frame. A read of FF11
 returns a 16-byte status record. Exact layout, fragmentation and reassembly rules:
