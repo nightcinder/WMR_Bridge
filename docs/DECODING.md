@@ -6,8 +6,10 @@ device tick counter. It is pure C and is **not** part of the ESP32 firmware, whi
 remains a raw pipe; it is meant for the phone/host receiver after reassembly.
 
 The layout and scale factors follow Monado's OG WMR controller driver
-(`src/xrt/drivers/wmr/wmr_controller_og.c` and `wmr_protocol.h`, BSL-1.0, read at commit
-`f50c796c32c811f5fd371f77fd8a749d2ad7df08`, abbreviated `f50c796c32c8`). See [Attribution](#attribution).
+(`src/xrt/drivers/wmr/wmr_controller_og.c` and `wmr_protocol.h`, BSL-1.0, verified at commits
+`f50c796c32c811f5fd371f77fd8a749d2ad7df08` [abbreviated `f50c796c`] and
+`aa635fa755a779f8aee717647c44aa7282e6ca45` [abbreviated `aa635fa7`]). See [Attribution](#attribution)
+and [Monado reference deep-dive](#monado-reference-deep-dive-investigation-of-unknowns).
 
 ## Payload layout (offsets from the byte after the report ID)
 
@@ -233,13 +235,25 @@ Where it happens is **not established**; see [Investigation notes](#investigatio
 - A **numerical** sign check of the axis mapping: it has been checked only visually, in the
   app's 3D view, and not separately for each hand. A clean clockwise `twist_cw` repeat would
   give one.
-- Whether the accel scale is 9.81 or 10 (readings 9.92 and 9.95).
-- The meaning and scale of `temperature_raw` and the battery byte, the buttons, and the
-  trackpad and trigger ranges.
-- Per-device mix matrix, bias and pose (needs the config block; not captured).
+- **Accelerometer true scale on hardware (9.81 vs 10):** Monado divides raw counts by 49,000
+  (`(98000 / 2)`), based on an empirical observation on HP Reverb G1 that 1g is ~490,000 raw counts
+  (`wmr_controller_og.c:229`). That produces ~10 m/s^2 at 1g, not 9.80665 m/s^2 (which would divide
+  by ~49,966), and Monado flags this with `@todo: Confirm the scale is correct` (`wmr_controller_hp.c:175`).
+  Whether the hardware accelerometer internal gain targets 1g = 9.81 m/s^2 or 10 m/s^2 remains unmeasured.
+- **Battery byte and temperature word scales:** Monado does **not** implement battery calculation or
+  temperature conversion (see [Monado reference deep-dive](#monado-reference-deep-dive-investigation-of-unknowns));
+  both are kept as raw integers and exported only as debug variables. A true battery discharge/percentage
+  curve and a temperature conversion formula (e.g. thermistor curve or linear conversion) are **not defined
+  in Monado** and require hardware bench measurement.
+- **Input control ranges in code:** Trigger is 0..255 normalized by `/ 255.0f` to [0, 1]; trackpad is 0..100
+  centered at 50 (`0x32`) mapped by `(raw - 50) / 50.0f` to [-1, 1], with `0xFF` indicating untouched
+  (mapped to 0); thumbstick is 12-bit unsigned (0..4095) centered at 2047 (`0x07FF`) mapped by
+  `(raw - 0x7FF) / 0x7FF` clamped to 1.0. These follow Monado's reference equations (`wmr_controller_og.c:269-294`),
+  but physical travel limits and user deadzones on actual hardware remain to be characterized.
+- Per-device mix matrix, bias and pose (needs the config block; partly decoded on the phone).
 - Whether the tick timer restarts when a controller reconnects, and the 2^32 wrap (about
-  7 minutes of controller time) has not been observed.
-- Battery and temperature scales, and bytes 32-43 of the payload.
+  7 minutes of controller time) has not been observed on hardware.
+- Bytes 32-43 of the payload (neither Monado nor this driver decodes them; labeled device state / unknown).
 - Whether the init/quiesce/enable commands are needed to read the config block, and
   whether sending them disturbs the input stream.
 - The controller's HID report descriptor (needed to choose the right report type for the
@@ -290,6 +304,196 @@ phone. How far the stick travels on each side (the real min and max) has not bee
   synthetic tests cover them. Capture frames while moving the stick and pressing buttons,
   labelled by hand.
 - No pose/orientation fusion (Monado uses `m_imu_3dof`); fusion runs on the phone.
+
+## Monado reference deep-dive: investigation of unknowns
+
+The WMR controller driver in Monado (<https://gitlab.freedesktop.org/monado/monado>) was investigated
+across two reference commits:
+- Commit `f50c796c32c811f5fd371f77fd8a749d2ad7df08` (`f50c796c32c8`, Nov 2023)
+- Commit `aa635fa755a779f8aee717647c44aa7282e6ca45` (`aa635fa755a7`, Oct 2026)
+
+**Comparison between commits:** A complete diff across `src/xrt/drivers/wmr/` between `f50c796c` and
+`aa635fa7` shows that all motion controller driver logic (`wmr_controller_og.c`, `wmr_controller_hp.c`,
+`wmr_protocol.h`, `wmr_protocol.c`, `wmr_config.h`, `wmr_config.c`) is **100 % identical**. The only commit
+in `src/xrt/drivers/wmr` between them was in `wmr_hmd.c` (buffer zero-initialization and size check on config
+reads). Consequently, all line citations below apply equally to both commits.
+
+### 1. Battery calculation
+
+In Monado's OG WMR controller driver (`src/xrt/drivers/wmr/wmr_controller_og.c`):
+- Line 199: `uint8_t battery;` in `struct wmr_controller_og_input`
+- Line 295: `last_input->battery = read8(&p);` in `wmr_controller_og_packet_parse()`
+- Line 476: `u_var_add_u8(wcb, &ctrl->last_inputs.battery, "input.battery");` in `wmr_controller_og_create()`
+
+In Monado's HP Reverb G2 driver (`src/xrt/drivers/wmr/wmr_controller_hp.c`):
+- Line 144: `uint8_t battery;` in `struct wmr_controller_hp_input`
+- Line 241: `last_input->battery = read8(&p);` in `wmr_controller_hp_packet_parse()`
+- Line 411: `u_var_add_u8(wcb, &ctrl->last_inputs.battery, "input.battery");` in `wmr_controller_hp_create()`
+
+**Findings:**
+1. Monado implements **no battery calculation, scaling, or percentage conversion** for WMR controllers.
+2. The byte at payload offset 7 is stored directly as an unscaled `uint8_t`.
+3. Neither driver implements the `xrt_device::get_battery_status` interface function, nor sets
+   `wcb->base.supported.battery_status = true` (which drivers like Vive, PS Move, and Contact Glove do).
+4. The raw byte is only exposed as an inspectable debug variable via Monado's `u_var` debugging system.
+5. Any conversion from raw byte (e.g. observed values 131–133 at normal charge, 156 on first frame) to
+   millivolts, discharge percentage, or battery level cannot be derived from Monado source code and must
+   be characterized by empirical bench measurements against known battery states.
+
+### 2. Temperature word
+
+In Monado's OG WMR controller driver (`src/xrt/drivers/wmr/wmr_controller_og.c`):
+- Line 206: `int32_t temperature;` in `struct wmr_controller_og_input.imu`
+- Line 314: `last_input->imu.temperature = read16(&p);` in `wmr_controller_og_packet_parse()`
+- Line 486: `u_var_add_i32(wcb, &ctrl->last_inputs.imu.temperature, "imu.temperature");` in `wmr_controller_og_create()`
+
+In `src/xrt/drivers/wmr/wmr_protocol.h`:
+- Lines 130-137:
+  ```c
+  static inline int16_t
+  read16(const unsigned char **buffer)
+  {
+      int16_t ret = (*(*buffer + 0) << 0) | //
+                    (*(*buffer + 1) << 8);
+      *buffer += 2;
+      return ret;
+  }
+  ```
+
+In Monado's HP Reverb G2 driver (`src/xrt/drivers/wmr/wmr_controller_hp.c`):
+- Line 151: `int32_t temperature;`
+- Line 260: `last_input->imu.temperature = read16(&p);`
+- Line 425: `u_var_add_i32(wcb, &ctrl->last_inputs.imu.temperature, "imu.temperature");`
+
+In Monado's configuration parser (`src/xrt/drivers/wmr/wmr_config.h` and `wmr_config.c`):
+- `wmr_config.h` lines 114-117:
+  ```c
+  /* Current bias and mix matrix extracted from
+   * the configuration, which provides coefficients
+   * for temperature adjustments - but they're always 0,
+   * so we just take the constant coefficient */
+  struct xrt_vec3 bias_offsets;
+  struct xrt_matrix_3x3 mix_matrix;
+  ```
+- `wmr_config.c` lines 211-243: When parsing `CalibrationInformation.InertialSensors[]`, Monado reads
+  `MixingMatrixTemperatureModel` (36 floats) and `BiasTemperatureModel` (12 floats). However, it ignores
+  all higher-order polynomial coefficients, indexing `mix_model_values[i * 4]` and
+  `bias_model_values[axis * 4]` to retain only the constant offsets.
+
+**Findings:**
+1. Monado decodes payload offset 17–18 as a **little-endian signed 16-bit integer** (`int16_t`), sign-extended to `int32_t`.
+2. Monado performs **no temperature conversion** to Celsius, Kelvin, or Fahrenheit.
+3. The temperature word is **not fed into IMU sensor fusion, bias estimation, or calibration**.
+4. The config block's temperature polynomial terms are ignored by Monado because vendor calibration models
+   report zero for non-constant coefficients.
+5. In sample data, stationary controllers report settled values around 3007–3040 raw counts. Whether this
+   represents an internal IMU die temperature (e.g. from an InvenSense or Bosch sensor at ~0.5 °C or 1 °C
+   per LSB with an offset) or another thermistor circuit is not established by Monado.
+
+### 3. Accelerometer scale factor
+
+In Monado's OG WMR controller driver (`src/xrt/drivers/wmr/wmr_controller_og.c`):
+- Lines 226-234:
+  ```c
+  static inline void
+  vec3_from_wmr_controller_accel(const int32_t sample[3], struct xrt_vec3 *out_vec)
+  {
+      // Reverb G1 observation: 1g is approximately 490,000.
+
+      out_vec->x = (float)sample[0] / (98000 / 2);
+      out_vec->y = (float)sample[1] / (98000 / 2);
+      out_vec->z = (float)sample[2] / (98000 / 2);
+  }
+  ```
+- Lines 297-306:
+  ```c
+  int32_t acc[3];
+  acc[0] = read24(&p); // x
+  acc[1] = read24(&p); // y
+  acc[2] = read24(&p); // z
+  vec3_from_wmr_controller_accel(acc, &last_input->imu.acc);
+  ```
+- Lines 308-311:
+  ```c
+  U_LOG_IFL_T(wcb->log_level, "Accel [m/s^2] : %f",
+              sqrtf(last_input->imu.acc.x * last_input->imu.acc.x +
+                    last_input->imu.acc.y * last_input->imu.acc.y +
+                    last_input->imu.acc.z * last_input->imu.acc.z));
+  ```
+
+In Monado's HP Reverb G2 driver (`src/xrt/drivers/wmr/wmr_controller_hp.c`):
+- Lines 171-180:
+  ```c
+  static inline void
+  vec3_from_wmr_controller_accel(const int32_t sample[3], struct xrt_vec3 *out_vec)
+  {
+      // Reverb G1 observation: 1g is approximately 490,000.
+      // @todo: Confirm the scale is correct
+
+      out_vec->x = (float)sample[0] / (98000 / 2);
+      out_vec->y = (float)sample[1] / (98000 / 2);
+      out_vec->z = (float)sample[2] / (98000 / 2);
+  }
+  ```
+
+**Findings:**
+1. The scale divisor `49000.0f` (`98000 / 2`) is an empirical heuristic originating from bench observations
+   on an HP Reverb G1 controller where stationary 1g measured ~490,000 raw counts.
+2. Dividing 490,000 raw counts by 49,000 yields an acceleration magnitude of **$10.0\,\text{m/s}^2$**, not standard
+   earth gravity $g = 9.80665\,\text{m/s}^2$.
+3. If the controller's factory calibration calibrated raw counts against standard gravity $g \approx 9.80665\,\text{m/s}^2$,
+   the true divisor would be $490{,}000 / 9.80665 \approx 49{,}966$ (or $50{,}000$ for a rounded $1\,\text{g} = 9.8\,\text{m/s}^2$).
+4. Monado developers explicitly noted this uncertainty with `// @todo: Confirm the scale is correct` in
+   `wmr_controller_hp.c:175`.
+5. This explains why stationary captures in `samples/controller_frames.txt` and bench captures show $|a| \approx 9.92$
+   to $10.08\,\text{m/s}^2$: Monado's divisor intentionally produces ~10 m/s^2.
+
+### 4. Trigger, trackpad, and input handling
+
+In Monado's OG WMR controller driver (`src/xrt/drivers/wmr/wmr_controller_og.c`):
+- **Trigger (byte 4):**
+  - Line 185: `float trigger;`
+  - Line 287: `last_input->trigger = (float)read8(&p) / 0xFF;`
+  - Line 379: `xrt_inputs[WMR_CONTROLLER_INDEX_TRIGGER_VALUE].value.vec1.x = cur_inputs->trigger;`
+  - Line 475: `u_var_add_f32(wcb, &ctrl->last_inputs.trigger, "input.trigger");`
+  - Range: `0x00 .. 0xFF` (0 .. 255 unsigned) normalized to `[0.0, 1.0]`. $0x00 \to 0.0$ (released), $0xFF \to 1.0$ (fully pulled).
+- **Trackpad (bytes 5, 6):**
+  - Lines 192-197: `struct { bool click; bool touch; struct xrt_vec2 values; } trackpad;`
+  - Lines 289-294:
+    ```c
+    // Read trackpad coordinates (0x00 - 0x64. Both are 0xFF when untouched)
+    uint8_t trackpad_x = read8(&p);
+    uint8_t trackpad_y = read8(&p);
+    last_input->trackpad.values.x = (trackpad_x == 0xFF) ? 0.0f : (float)(trackpad_x - 0x32) / 0x32;
+    last_input->trackpad.values.y = (trackpad_y == 0xFF) ? 0.0f : (float)(trackpad_y - 0x32) / 0x32;
+    ```
+  - Lines 382-384: mapped to `WMR_CONTROLLER_INDEX_TRACKPAD_CLICK`, `TRACKPAD_TOUCH`, and `TRACKPAD` (vec2).
+  - Lines 480-483: exposed via `u_var_add_bool` and `u_var_add_f32`.
+  - Range: `0x00 .. 0x64` (0 .. 100 decimal) per axis when touched; both bytes are `0xFF` when untouched.
+  - Normalization: Center is `0x32` (50 decimal).
+    - Untouched (`0xFF`): returns `0.0f`.
+    - Min (`0x00` = 0): $(0 - 50) / 50 = -1.0f$.
+    - Center (`0x32` = 50): $(50 - 50) / 50 = 0.0f$.
+    - Max (`0x64` = 100): $(100 - 50) / 50 = +1.0f$.
+- **Trackpad touch and click (byte 0):**
+  - Line 264: `last_input->trackpad.click = buttons & 0x10;` (bit 4)
+  - Line 266: `last_input->trackpad.touch = buttons & 0x40;` (bit 6)
+- **Thumbstick (bytes 1-3):**
+  - Lines 270-284: two 12-bit unsigned coordinates (0 .. 4095) packed across 3 bytes. Center is `0x07FF` (2047).
+  - Normalized via `(float)(stick - 0x07FF) / 0x07FF` and clamped to `1.0f`.
+- **Buttons (byte 0):**
+  - Lines 259-266: bitmask:
+    - `0x01`: thumbstick click
+    - `0x02`: home
+    - `0x04`: menu
+    - `0x08`: squeeze click
+    - `0x10`: trackpad click
+    - `0x20`: Bluetooth pairing
+    - `0x40`: trackpad touch
+- **Differences on HP Reverb G2 (`src/xrt/drivers/wmr/wmr_controller_hp.c`):**
+  - Lines 230-240: HP controllers removed the trackpad. Byte 4 remains analog trigger (`(float)read8(&p) / 0xFF`).
+    Byte 5 is repurposed as analog squeeze (`(float)read8(&p) / 0xFF`), and byte 6 holds digital button bits
+    for X/A (bit `0x02`) and Y/B (bit `0x01`).
 
 ## Attribution
 
