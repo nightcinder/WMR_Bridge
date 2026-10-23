@@ -210,6 +210,176 @@ def test_build_argv_sets_project_version():
           "32 bytes are rejected before the descriptor truncates them")
 
 
+def test_variant_names():
+    check(fp.artifact_names("both") == {
+        "factory": fp.FACTORY_NAME,
+        "app": fp.APP_NAME,
+        "bootloader": fp.BOOTLOADER_NAME,
+        "partition_table": fp.PARTITION_TABLE_NAME,
+        "manifest": fp.MANIFEST_NAME,
+        "build_info": fp.BUILD_INFO_NAME,
+    }, "both keeps every original artifact and manifest name")
+    for variant in ("left", "right"):
+        names = fp.artifact_names(variant)
+        for key in ("factory", "app", "bootloader", "partition_table",
+                    "manifest", "build_info"):
+            check(variant in names[key],
+                  "%s %s name carries the variant (got %r)"
+                  % (variant, key, names[key]))
+        check(names["factory"] == "wmr-bridge-%s-factory.bin" % variant,
+              "%s factory name follows the variant convention" % variant)
+        check(names["manifest"] == "manifest-%s.json" % variant,
+              "%s manifest name follows the variant convention" % variant)
+    check(fp.variant_suffix("both") == "", "both has no suffix")
+    check(fp.variant_suffix("left") == "-left", "left suffix")
+    try:
+        fp.variant_suffix("sideways")
+    except fp.PackagingError:
+        check(True, "unknown variant is rejected")
+    else:
+        check(False, "unknown variant must be rejected")
+
+
+def test_package_outputs_names_and_manifests():
+    """Exercise the real packaging path with a fake idf.py merge-bin."""
+    real_run = build.run
+
+    def fake_run(argv, cwd=None, env=None, capture=False):
+        output = Path(argv[argv.index("-o") + 1])
+        output.write_bytes(b"merged")
+        return ""
+
+    try:
+        build.run = fake_run
+        for variant in fp.VARIANTS:
+            with tempfile.TemporaryDirectory() as root:
+                make_build(root)
+                art = fp.collect_artifacts(root)
+                out = Path(root) / "dist"
+                build.package_outputs(
+                    art, out, "1.2.3", "abc1234", False,
+                    "e38553977a25fb0b55b383c72c289be0975f422c",
+                    "ESP-IDF v6.1", root, Path(root) / "build",
+                    {}, variant=variant,
+                )
+                names = fp.artifact_names(variant)
+                for name in names.values():
+                    check((out / name).is_file(),
+                          "%s packaging writes %s" % (variant, name))
+                manifest = json.loads((out / names["manifest"]).read_text())
+                check(manifest["builds"][0]["parts"] == [
+                    {"path": names["factory"], "offset": 0}
+                ], "%s manifest points at its own factory image" % variant)
+                info = json.loads((out / names["build_info"]).read_text())
+                check(info["variant"] == variant,
+                      "%s packaged build-info records the variant" % variant)
+                check(info["flags"]["WMR_CFG_BRIDGE_HANDS"]
+                      == fp.BRIDGE_HANDS[variant],
+                      "%s packaged build-info records the hand flag" % variant)
+                if variant == "both":
+                    check(manifest == {
+                        "name": "WMR Bridge",
+                        "version": "1.2.3",
+                        "new_install_prompt_erase": True,
+                        "builds": [{
+                            "chipFamily": "ESP32",
+                            "parts": [{"path": fp.FACTORY_NAME, "offset": 0}],
+                        }],
+                    }, "packaged both manifest is unchanged")
+    finally:
+        build.run = real_run
+
+
+def test_variant_manifest():
+    both = fp.make_manifest("1.2.3")
+    check(both == {
+        "name": "WMR Bridge",
+        "version": "1.2.3",
+        "new_install_prompt_erase": True,
+        "builds": [{
+            "chipFamily": "ESP32",
+            "parts": [{"path": fp.FACTORY_NAME, "offset": 0}],
+        }],
+    }, "the both-hands manifest is byte-for-byte the old shape")
+
+    left = fp.make_manifest("1.2.3", variant="left")
+    check(left["name"] == "WMR Bridge (LEFT hand)",
+          "LEFT manifest label says which hand")
+    check(left["builds"][0]["parts"] == [
+        {"path": "wmr-bridge-left-factory.bin", "offset": 0}
+    ], "LEFT manifest points at the LEFT factory image")
+    check(left["version"] == "1.2.3", "LEFT manifest keeps the version")
+
+    right = fp.make_manifest("1.2.3", variant="right")
+    check(right["name"] == "WMR Bridge (RIGHT hand)",
+          "RIGHT manifest label says which hand")
+    check(right["builds"][0]["parts"][0]["path"]
+          == "wmr-bridge-right-factory.bin",
+          "RIGHT manifest points at the RIGHT factory image")
+
+
+def test_variant_build_info():
+    with tempfile.TemporaryDirectory() as root:
+        make_build(root)
+        art = fp.collect_artifacts(root)
+        for variant in fp.VARIANTS:
+            info = fp.make_build_info(
+                "1.2.3", art, "abc1234", False,
+                "e38553977a25fb0b55b383c72c289be0975f422c",
+                "ESP-IDF v6.1", "2026-10-23T00:00:00Z", variant=variant,
+            )
+            check(info["variant"] == variant,
+                  "%s build-info records the variant" % variant)
+            check(info["flags"] == {
+                "WMR_CFG_BRIDGE_HANDS": fp.BRIDGE_HANDS[variant],
+                "WMR_CFG_BLE_NAME": fp.BLE_NAME_TOKENS[variant],
+            }, "%s build-info records the flag values" % variant)
+        check(fp.BRIDGE_HANDS == {"both": 0, "left": 1, "right": 2},
+              "hand numbers match src/wmr_config.h")
+        check(fp.BLE_NAMES == {
+            "both": "WMR Bridge",
+            "left": "WMR Bridge L",
+            "right": "WMR Bridge R",
+        }, "advertised names keep the WMR Bridge prefix")
+
+
+def test_variant_build_environment():
+    check(fp.variant_defines("both") == [],
+          "the both-hands build passes no variant defines")
+    check(fp.variant_defines("left") == [
+        "-DWMR_CFG_BRIDGE_HANDS=1",
+        "-DWMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_LEFT",
+    ], "LEFT defines the hand and the token, never a quoted string")
+    check(fp.variant_defines("right") == [
+        "-DWMR_CFG_BRIDGE_HANDS=2",
+        "-DWMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_RIGHT",
+    ], "RIGHT defines the hand and the token")
+
+    base = {"PATH": "/bin", "EXTRA_CFLAGS": "-DOTHER=1"}
+    both_env = build.build_env("both", base)
+    check(both_env["EXTRA_CFLAGS"] == "-DOTHER=1",
+          "the both-hands build leaves EXTRA_CFLAGS alone")
+    left_env = build.build_env("left", base)
+    check(left_env["EXTRA_CFLAGS"] ==
+          "-DOTHER=1 -DWMR_CFG_BRIDGE_HANDS=1 "
+          "-DWMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_LEFT",
+          "the variant defines are appended to existing EXTRA_CFLAGS")
+    check(base["EXTRA_CFLAGS"] == "-DOTHER=1",
+          "build_env does not mutate the caller's environment")
+    check(build.build_env("right", {})["EXTRA_CFLAGS"] ==
+          "-DWMR_CFG_BRIDGE_HANDS=2 -DWMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_RIGHT",
+          "a variant works without a pre-existing EXTRA_CFLAGS")
+
+    check(build.build_dir_name("both") == build.BUILD_DIR,
+          "both keeps the original build directory and its cache")
+    check(build.build_dir_name("left") == build.BUILD_DIR + "-left",
+          "LEFT gets its own build directory")
+    check(build.build_dir_name("right") == build.BUILD_DIR + "-right",
+          "RIGHT gets its own build directory")
+    check(len({build.build_dir_name(v) for v in fp.VARIANTS}) == 3,
+          "no two variants share a build directory")
+
+
 def test_flasher_page_contract():
     path = os.path.join(HERE, "..", "docs", "flasher", "index.html")
     with open(path, encoding="utf-8") as fh:
@@ -219,7 +389,15 @@ def test_flasher_page_contract():
     check('slot="install-button"' not in page,
           "the non-existent install-button slot is not used")
     check('manifest="./manifest.json"' in page,
-          "flasher loads the manifest next to it")
+          "flasher loads the both-hands manifest next to it")
+    check('manifest="./manifest-left.json"' in page,
+          "flasher offers the LEFT image")
+    check('manifest="./manifest-right.json"' in page,
+          "flasher offers the RIGHT image")
+    check("fetch(manifestUrl" in page,
+          "availability is checked against the manifest, not the optional build-info")
+    check("two bridges" in page.lower(),
+          "flasher explains when to use LEFT/RIGHT instead of both")
     check("esp-web-tools@10.4.0" in page, "ESP Web Tools is version-pinned")
     check('integrity="sha384-' in page, "the CDN module has an SRI hash")
     check('crossorigin="anonymous"' in page, "SRI fetch is CORS-enabled")

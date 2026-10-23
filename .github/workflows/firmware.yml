@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: espressif/idf:v6.1
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,12 +37,14 @@ jobs:
       - name: Mark the checkout safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Build and package
+      - name: Build and package all three variants
         env:
           IDF_PATH: /opt/esp/idf
         run: |
           . "$IDF_PATH/export.sh"
-          python3 tools/firmware/build.py --out dist
+          for variant in both left right; do
+            python3 tools/firmware/build.py --variant "$variant" --out dist
+          done
 
       - name: List artifacts
         run: ls -lh dist

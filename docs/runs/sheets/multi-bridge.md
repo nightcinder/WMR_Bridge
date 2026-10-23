@@ -170,80 +170,97 @@ Rules that keep this from going wrong:
 Do not start timing until every row passes. If the app does not show two bridge rows in a B
 run, it is not the ONY-18 build; stop.
 
-## 2. Build the three images (Anya, ESP-IDF PowerShell)
+## 2. Build the three images (one command per image)
 
-All three images come from **one commit**. The flag route is the same `EXTRA_CFLAGS` route as
-`contention-2.md` §2: no source or CMake change per image. Use a fresh build folder for each
-image so a cached define cannot hide.
+All three images come from **one commit**. Use `tools/firmware/build.py --variant`; it sets
+the compile-time flags through `EXTRA_CFLAGS` and never edits `src/wmr_config.h`. The same
+framework is described in [docs/FLASHING.md](../../FLASHING.md).
 
-The issue fixes the names `WMR Bridge L` and `WMR Bridge R`. ESP-IDF splits `EXTRA_CFLAGS`
-on every space (`tools/cmake/project.cmake`, `spaces2list`), so a literal
-`-DWMR_CFG_BLE_NAME="WMR Bridge L"` cannot be passed as one macro value. `src/wmr_config.h`
-defines the tokens `WMR_CFG_BLE_NAME_LEFT` (`"WMR Bridge L"`) and
-`WMR_CFG_BLE_NAME_RIGHT` (`"WMR Bridge R"`); the token is what goes on the command line and
-the advertised string is exactly the fixed name. Do not try to pass a quoted string with a
-space through `EXTRA_CFLAGS`.
+`--variant both` keeps today's build and names unchanged. `--variant left` /
+`--variant right` set `WMR_CFG_BRIDGE_HANDS` and `WMR_CFG_BLE_NAME` and use their own build
+directory, so a cached define from another variant cannot hide. The three advertised names
+are fixed: `WMR Bridge`, `WMR Bridge L`, `WMR Bridge R`. ESP-IDF splits `EXTRA_CFLAGS` on
+every space, so the script passes the token `WMR_CFG_BLE_NAME_LEFT` / `_RIGHT`, which
+`src/wmr_config.h` expands to the quoted name; do not pass a quoted string with a space.
 
 ```powershell
 # Load ESP-IDF. This profile appends the tool paths; never replace $env:Path with a new value.
 . C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
 
-cd C:\Users\Nick\btstack-wmr\port\esp32
-$env:EXAMPLE = "wmr_bridge"
+# One commit for all three images; use the merged commit that contains PR #33 (ONY-20).
+cd <repo>
+$h = "<implementation sha>"
+git checkout $h
+git log --oneline -1
+
+$dist = "dist-multi"     # one folder holds all three variants
 $portA = "COM5"          # board A, the L/REF board
 $portB = "COM6"          # board B, the R board
 
-# One commit for all three images. Use the merged commit that contains PR #33 (ONY-20).
-$h = "<implementation sha>"
-$clone = "$env:TEMP\WMR_Bridge-multi-$h"
-if (Test-Path $clone) { Remove-Item $clone -Recurse -Force }
-git clone https://github.com/nightcinder/WMR_Bridge $clone
-git -C $clone checkout $h
-git -C $clone log --oneline -1
-robocopy $clone C:\Users\Nick\btstack-wmr\wmr_bridge /E /XD .git captures __pycache__ .github venv
-Copy-Item $clone\integration\main-CMakeLists.txt C:\Users\Nick\btstack-wmr\port\esp32\main\CMakeLists.txt -Force
-Select-String C:\Users\Nick\btstack-wmr\port\esp32\main\CMakeLists.txt -Pattern "wmr_controller|wmr_linkdiag"   # must print lines
-
-# REF: both hands, name unchanged. Fresh folder; no EXTRA_CFLAGS.
-if (Test-Path build-wmr-multi-ref) { Remove-Item build-wmr-multi-ref -Recurse -Force }
-Remove-Item Env:EXTRA_CFLAGS -ErrorAction SilentlyContinue
-idf.py -B build-wmr-multi-ref build
-Select-String build-wmr-multi-ref\compile_commands.json -Pattern "WMR_CFG_BRIDGE_HANDS|WMR_CFG_BLE_NAME"   # expect no match
-
+# REF: both hands, name unchanged. No EXTRA_CFLAGS; today's names.
+python tools\firmware\build.py --variant both  --out $dist
 # L: LEFT only, advertised "WMR Bridge L".
-if (Test-Path build-wmr-multi-left) { Remove-Item build-wmr-multi-left -Recurse -Force }
-$env:EXTRA_CFLAGS = "-DWMR_CFG_BRIDGE_HANDS=1 -DWMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_LEFT"
-idf.py -B build-wmr-multi-left build
-Select-String build-wmr-multi-left\compile_commands.json -Pattern "WMR_CFG_BRIDGE_HANDS=1|WMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_LEFT"   # must show both
-
+python tools\firmware\build.py --variant left  --out $dist
 # R: RIGHT only, advertised "WMR Bridge R".
-if (Test-Path build-wmr-multi-right) { Remove-Item build-wmr-multi-right -Recurse -Force }
-$env:EXTRA_CFLAGS = "-DWMR_CFG_BRIDGE_HANDS=2 -DWMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_RIGHT"
-idf.py -B build-wmr-multi-right build
-Select-String build-wmr-multi-right\compile_commands.json -Pattern "WMR_CFG_BRIDGE_HANDS=2|WMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_RIGHT"   # must show both
-
-Remove-Item Env:EXTRA_CFLAGS
+python tools\firmware\build.py --variant right --out $dist
 ```
 
-If a `compile_commands.json` check does not show the expected define, stop; that folder is
-not the image. `EXTRA_CFLAGS` is read at configure time, hence the fresh folder.
-
-Flash a finished folder without rebuilding (the same route as `contention-2.md` §2):
+Each command prints the variant flags and writes its own artifacts:
+`wmr-bridge-factory.bin` / `manifest.json` / `build-info.json` for REF, and
+`wmr-bridge-left-factory.bin` / `manifest-left.json` / `build-info-left.json` (then `-right`)
+for the single-hand images. Check `build-info*.json` for what the build was asked for, then
+check `compile_commands.json` for the define the compiler actually received:
 
 ```powershell
-# $portA and $portB are the variables from the build block above; redefine them if this is a new shell.
-cd C:\Users\Nick\btstack-wmr\port\esp32\build-wmr-multi-ref
-Test-Path flash_args                      # must be True
-python -m esptool --chip esp32 -p $portA -b 115200 write_flash "@flash_args"
+foreach ($v in @("", "-left", "-right")) {
+  Get-Content "$dist\build-info$v.json" | Select-String '"variant"|WMR_CFG_BRIDGE_HANDS|WMR_CFG_BLE_NAME'
+}
+# REF: "variant": "both",  hands 0, WMR_CFG_BLE_NAME_BOTH
+# L:   "variant": "left",  hands 1, WMR_CFG_BLE_NAME_LEFT
+# R:   "variant": "right", hands 2, WMR_CFG_BLE_NAME_RIGHT
 
-# L: same command from build-wmr-multi-left, with $portA during B runs and $portB after S1.
-# R: same command from build-wmr-multi-right, with $portB during B runs and $portA after S1.
+Select-String .fw-build\build-wmr-bridge\compile_commands.json -Pattern "WMR_CFG_BRIDGE_HANDS|WMR_CFG_BLE_NAME"   # expect no match (defaults)
+Select-String .fw-build\build-wmr-bridge-left\compile_commands.json -Pattern "WMR_CFG_BRIDGE_HANDS=1|WMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_LEFT"   # must show both
+Select-String .fw-build\build-wmr-bridge-right\compile_commands.json -Pattern "WMR_CFG_BRIDGE_HANDS=2|WMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_RIGHT" # must show both
 ```
 
-`write_flash @flash_args` writes the images the build lists; it does not erase NVS, so the
-stored addresses and link keys survive a reflash. **Do not run `idf.py erase-flash` between
-runs**; that erases the pairing state and §1 must be repeated. If `flash_args` lists an NVS
-image, stop and do not use this route; it would erase the pairing.
+If a `build-info*.json` or `compile_commands.json` check does not show the expected value,
+stop; that image is not the variant. The flags are recorded by the build, not typed from
+memory.
+
+Flash a finished image with `--flash`; the script reuses that variant's build directory and
+does not erase NVS, so the stored addresses and link keys survive a reflash:
+
+```powershell
+# $dist, $portA and $portB are the variables from the block above.
+python tools\firmware\build.py --variant both  --out $dist --flash $portA   # REF -> board A
+python tools\firmware\build.py --variant left  --out $dist --flash $portA   # L -> board A
+python tools\firmware\build.py --variant right --out $dist --flash $portB   # R -> board B
+# After S1, swap: --variant left --flash $portB, --variant right --flash $portA.
+```
+
+To flash again later without rebuilding, use that build's own `flash_args` (the same images
+`idf.py flash` writes; NVS is not touched):
+
+```powershell
+cd .fw-build\build-wmr-bridge-left
+Test-Path flash_args                      # must be True
+python -m esptool --chip esp32 -p $portA -b 115200 write_flash "@flash_args"
+```
+
+Do **not** write the merged factory image at `0x0` to keep the pairing: the merge fills the
+`0x9000`–`0x10000` NVS/PHY gap with `0xFF` and would erase NVS. **Do not run
+`idf.py erase-flash` between runs**; that also erases the pairing state and §1 must be
+repeated.
+
+### 2.1 One board instead of two (plan M12.3')
+
+The owner currently has no second Classic ESP32, so the two-bridge sitting is parked. The
+single-hand build is still useful on its own: flash one board with `--variant left` and use
+only the LEFT rows for a one-board validation of single-hand mode. This is the cheap route
+for plan M12.3' — one command, no hand-edited rebuild. It is a smoke/validation sitting, not
+a substitute for the two-bridge A/B comparison or its pass criteria below; use
+`--variant right` only if the RIGHT path is what is being checked.
 
 After each flash, open the monitor and check the boot banner and the one-line marker:
 
@@ -253,15 +270,15 @@ After each flash, open the monitor and check the boot banner and the one-line ma
 | L | `BLE advertising: WMR Bridge L (...)`; `STREAM ... bridge_hands=1` |
 | R | `BLE advertising: WMR Bridge R (...)`; `STREAM ... bridge_hands=2` |
 
-If the banner or `bridge_hands` is wrong, the folder flashed is wrong; stop and reflash.
+If the banner or `bridge_hands` is wrong, the wrong image was flashed; stop and reflash.
 
 Build record (fill this in and paste it back):
 
-| Tag | Image | Commit | Flags | Build folder | `compile_commands.json` check | Flashed to | Port |
+| Tag | Image | Commit | Variant / flags (from `build-info*.json`) | `compile_commands.json` check | Artifacts | Flashed to | Port |
 |---|---|---|---|---|---|---|---|
-| REF | both hands | | none (effective `WMR_CFG_BRIDGE_HANDS=0`, default name) | `build-wmr-multi-ref` | no `WMR_CFG_` match | board A | |
-| L | LEFT only | | `WMR_CFG_BRIDGE_HANDS=1`, `WMR_CFG_BLE_NAME_LEFT` | `build-wmr-multi-left` | both defines present | board A (board B after S1) | |
-| R | RIGHT only | | `WMR_CFG_BRIDGE_HANDS=2`, `WMR_CFG_BLE_NAME_RIGHT` | `build-wmr-multi-right` | both defines present | board B (board A after S1) | |
+| REF | both hands | | `both`; hands 0, name `WMR_CFG_BLE_NAME_BOTH` | no `WMR_CFG_` match | `wmr-bridge-factory.bin`, `manifest.json` | board A | |
+| L | LEFT only | | `left`; hands 1, name `WMR_CFG_BLE_NAME_LEFT` | both defines present | `wmr-bridge-left-factory.bin`, `manifest-left.json` | board A (board B after S1) | |
+| R | RIGHT only | | `right`; hands 2, name `WMR_CFG_BLE_NAME_RIGHT` | both defines present | `wmr-bridge-right-factory.bin`, `manifest-right.json` | board B (board A after S1) | |
 
 ## 3. Run protocol
 
@@ -332,9 +349,12 @@ For every row in the table:
 
 1. Power/reset the board(s) for the run. For A runs, board B is off.
 2. Re-pair only if step 1 did not put each hand on its intended bridge (see §1.3).
-3. Open a monitor on each active port and save it, e.g.
-   `idf.py -B build-wmr-multi-left -p $portA monitor | Tee-Object -FilePath multi-B1-A.txt`.
-   Use the folder that matches the image on that board.
+3. Open a monitor on each active port and save it, e.g. from
+   `<repo>\.fw-build\btstack\port\esp32`:
+   `idf.py -B <repo>\.fw-build\build-wmr-bridge-left -p $portA monitor | Tee-Object -FilePath multi-B1-A.txt`.
+   Use the build directory that matches the variant on that board
+   (`build-wmr-bridge` for REF, `build-wmr-bridge-left` for L, `build-wmr-bridge-right`
+   for R).
 4. Phone: connect to the bridge(s) in the table; select FF14; confirm the `STREAM` lines.
 5. Wait 30 s after the last connection, then start the 2-minute window. Note the wall-clock
    start and the `t_ms` of the first and last `LINKLOG` row.
@@ -472,8 +492,9 @@ paste is too long, attach the saved file and still include the named lines in th
 
 **Once per session**
 
-- The build record table from §2, with the commit hash, the three folders and the
-  `compile_commands.json` result for each.
+- The build record table from §2, with the commit hash, the three
+  `build-info*.json` files (variant and flag values), the `compile_commands.json` result for
+  each, and the artifact name each board ran.
 - The boot banner `BLE advertising: ...` and the `STREAM ... bridge_hands=...` line for each
   image as first flashed.
 - The pairing record: for each board, the `Discovery:`, `Addresses saved`, `Connecting`,

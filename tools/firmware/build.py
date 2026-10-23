@@ -9,10 +9,16 @@ reason flashing is awkward. This script does the same steps reproducibly:
      (default: <repo>/.fw-build/btstack),
   2. copy this repository to <btstack>/wmr_bridge,
   3. copy integration/main-CMakeLists.txt over port/esp32/main/CMakeLists.txt,
-  4. run `idf.py build` with EXAMPLE=wmr_bridge,
+  4. run `idf.py build` with EXAMPLE=wmr_bridge (and the variant's
+     EXTRA_CFLAGS for --variant left|right),
   5. copy the images and a merged factory image to <repo>/dist, together with
      the ESP Web Tools manifest and the browser flasher page,
   6. optionally run `idf.py flash` against a serial port.
+
+`--variant both|left|right` builds the default both-hands image or a
+single-hand image for two bridges (or single-hand testing on one board). The
+flags are compile-time EXTRA_CFLAGS; src/wmr_config.h is never edited. `both`
+keeps today's names and build directory.
 
 ESP-IDF must be on PATH. Load it first, or pass `--idf-export` on Linux/macOS:
 
@@ -49,6 +55,15 @@ APP_DIR = "wmr_bridge"
 BUILD_DIR = "build-wmr-bridge"
 DEFAULT_WORK = REPO_ROOT / ".fw-build"
 DEFAULT_OUT = REPO_ROOT / "dist"
+
+# One build directory per variant. EXTRA_CFLAGS is read at configure time, so
+# sharing a directory between variants could silently reuse the previous
+# defines. `both` keeps the original directory name.
+VARIANT_BUILD_DIRS = {
+    "both": BUILD_DIR,
+    "left": BUILD_DIR + "-left",
+    "right": BUILD_DIR + "-right",
+}
 
 COPY_IGNORE_NAMES = {
     ".git",
@@ -227,27 +242,60 @@ def build_argv(build_dir, version):
     ]
 
 
+def build_dir_name(variant="both"):
+    """Build-directory name for *variant*; `both` keeps the original name."""
+    if variant not in fwpackage.VARIANTS:
+        raise SystemExit("unknown variant %r; expected one of: %s"
+                         % (variant, ", ".join(fwpackage.VARIANTS)))
+    return VARIANT_BUILD_DIRS[variant]
+
+
+def build_dir_for(work, variant="both"):
+    return Path(work) / build_dir_name(variant)
+
+
+def build_env(variant="both", base_env=None):
+    """Environment for the build, with the variant's compile-time defines.
+
+    The defines go through EXTRA_CFLAGS, the ESP-IDF mechanism the run sheets
+    already use; src/wmr_config.h is never edited. `both` adds nothing and
+    leaves any existing EXTRA_CFLAGS alone, so the default build is unchanged.
+    The value is appended so it wins over a conflicting define already in the
+    environment.
+    """
+    env = dict(os.environ if base_env is None else base_env)
+    defines = fwpackage.variant_defines(variant)
+    if defines:
+        existing = env.get("EXTRA_CFLAGS", "").strip()
+        env["EXTRA_CFLAGS"] = " ".join([existing] + defines).strip()
+    return env
+
+
 def package_outputs(artifacts, out, version, repo_commit, repo_dirty,
-                    btstack_commit, idf_ver, port_dir, build_dir, env):
+                    btstack_commit, idf_ver, port_dir, build_dir, env,
+                    variant="both"):
+    names = fwpackage.artifact_names(variant)
     out.mkdir(parents=True, exist_ok=True)
     copies = (
-        (artifacts["app_bin"], fwpackage.APP_NAME),
-        (artifacts["bootloader_bin"], fwpackage.BOOTLOADER_NAME),
-        (artifacts["partition_bin"], fwpackage.PARTITION_TABLE_NAME),
+        (artifacts["app_bin"], names["app"]),
+        (artifacts["bootloader_bin"], names["bootloader"]),
+        (artifacts["partition_bin"], names["partition_table"]),
     )
     for source, name in copies:
         shutil.copyfile(source, out / name)
         log("packaged %s" % (out / name))
 
-    factory = out / fwpackage.FACTORY_NAME
+    factory = out / names["factory"]
     argv = fwpackage.merge_bin_argv("idf.py", build_dir, factory)
     run(argv, cwd=port_dir, env=env)
     if not factory.is_file():
         fail("idf.py merge-bin did not produce %s" % factory)
 
-    manifest = fwpackage.make_manifest(version, chip=artifacts["chip"])
-    fwpackage.write_json(out / fwpackage.MANIFEST_NAME, manifest)
-    log("wrote %s (version %s)" % (out / fwpackage.MANIFEST_NAME, version))
+    manifest = fwpackage.make_manifest(version, chip=artifacts["chip"],
+                                       variant=variant)
+    fwpackage.write_json(out / names["manifest"], manifest)
+    log("wrote %s (version %s, variant %s)"
+        % (out / names["manifest"], version, variant))
 
     info = fwpackage.make_build_info(
         version=version,
@@ -257,8 +305,9 @@ def package_outputs(artifacts, out, version, repo_commit, repo_dirty,
         btstack_commit=btstack_commit,
         idf_version=idf_ver,
         built_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        variant=variant,
     )
-    fwpackage.write_json(out / fwpackage.BUILD_INFO_NAME, info)
+    fwpackage.write_json(out / names["build_info"], info)
 
     flasher = REPO_ROOT / "docs" / "flasher" / "index.html"
     if flasher.is_file():
@@ -315,6 +364,10 @@ def main():
     )
     parser.add_argument("--version", help="version string for the manifest "
                         "(default: git describe, or GITHUB_REF_NAME on a tag)")
+    parser.add_argument("--variant", choices=fwpackage.VARIANTS, default="both",
+                        help="firmware variant: both hands (default), or a "
+                             "single-hand image for two bridges / one-board "
+                             "single-hand testing")
     parser.add_argument("--out", default=str(DEFAULT_OUT),
                         help="artifact directory (default: %(default)s)")
     parser.add_argument("--work", default=str(DEFAULT_WORK),
@@ -351,16 +404,22 @@ def main():
              "(and FF16) holds at most that many bytes" %
              (version, MAX_PROJECT_VERSION_BYTES))
     repo_commit, repo_dirty = repo_state(REPO_ROOT)
-    log("building WMR_Bridge %s (source %s%s)" % (
-        version, repo_commit, "+dirty" if repo_dirty else ""))
+    log("building WMR_Bridge %s (%s variant; source %s%s)" % (
+        version, args.variant, repo_commit, "+dirty" if repo_dirty else ""))
 
     btstack = ensure_btstack(work)
     sync_source(btstack, work, out)
 
     port_dir = btstack / "port" / "esp32"
-    build_dir = work / BUILD_DIR
-    env = dict(os.environ)
+    build_dir = build_dir_for(work, args.variant)
+    env = build_env(args.variant, os.environ)
     env["EXAMPLE"] = "wmr_bridge"
+    defines = fwpackage.variant_defines(args.variant)
+    if defines:
+        log("variant flags: %s" % " ".join(defines))
+    else:
+        log("variant flags: none (source defaults: hands=0, name=%s)"
+            % fwpackage.BLE_NAMES["both"])
     idf_ver = idf_version(port_dir, env)
     log("using %s" % idf_ver)
     run(build_argv(build_dir, version), cwd=port_dir, env=env)
@@ -377,19 +436,21 @@ def main():
         port_dir=port_dir,
         build_dir=build_dir,
         env=env,
+        variant=args.variant,
     )
 
     if args.flash:
-        log("flashing %s" % args.flash)
+        log("flashing %s (%s variant)" % (args.flash, args.variant))
         run(["idf.py", "-B", str(build_dir), "-p", args.flash, "flash"],
             cwd=port_dir, env=env)
 
+    names = fwpackage.artifact_names(args.variant)
     log("done. Artifacts in %s" % out)
-    for name in (fwpackage.FACTORY_NAME, fwpackage.MANIFEST_NAME,
-                 fwpackage.BUILD_INFO_NAME, "index.html"):
+    for name in (names["factory"], names["manifest"], names["build_info"],
+                 "index.html"):
         path = out / name
         if path.is_file():
-            log("  %-28s %8.1f KiB" % (name, path.stat().st_size / 1024.0))
+            log("  %-36s %8.1f KiB" % (name, path.stat().st_size / 1024.0))
     log("browser flasher: serve %s over HTTP (python3 -m http.server -d %s)" % (out, out))
 
 

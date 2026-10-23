@@ -21,6 +21,37 @@ import os
 import re
 from pathlib import Path
 
+# Firmware variants. `both` is the default, unchanged build. `left` and `right`
+# serve one controller each; they select WMR_CFG_BRIDGE_HANDS and
+# WMR_CFG_BLE_NAME at compile time (see src/wmr_config.h).
+VARIANTS = ("both", "left", "right")
+
+# WMR_CFG_BRIDGE_HANDS: 0 = both, 1 = LEFT only, 2 = RIGHT only.
+BRIDGE_HANDS = {"both": 0, "left": 1, "right": 2}
+
+# The macro token passed to the compiler. The token, not a quoted string, keeps
+# ESP-IDF's EXTRA_CFLAGS space splitting from breaking the advertised name.
+BLE_NAME_TOKENS = {
+    "both": "WMR_CFG_BLE_NAME_BOTH",
+    "left": "WMR_CFG_BLE_NAME_LEFT",
+    "right": "WMR_CFG_BLE_NAME_RIGHT",
+}
+
+# The advertised BLE names the tokens expand to. The "WMR Bridge" prefix is
+# load-bearing: clients find the bridge by prefix.
+BLE_NAMES = {
+    "both": "WMR Bridge",
+    "left": "WMR Bridge L",
+    "right": "WMR Bridge R",
+}
+
+# The ESP Web Tools manifest name, shown in the installer UI.
+MANIFEST_NAMES = {
+    "both": "WMR Bridge",
+    "left": "WMR Bridge (LEFT hand)",
+    "right": "WMR Bridge (RIGHT hand)",
+}
+
 MANIFEST_NAME = "manifest.json"
 BUILD_INFO_NAME = "build-info.json"
 FACTORY_NAME = "wmr-bridge-factory.bin"
@@ -42,6 +73,55 @@ CHIP_FAMILIES = {
 
 class PackagingError(RuntimeError):
     """The build directory does not contain a usable set of images."""
+
+
+def _check_variant(variant):
+    if variant not in VARIANTS:
+        raise PackagingError(
+            "unknown variant %r; expected one of: %s"
+            % (variant, ", ".join(VARIANTS))
+        )
+    return variant
+
+
+def variant_suffix(variant):
+    """File-name suffix for *variant*; empty for the unchanged `both` build."""
+    _check_variant(variant)
+    return "" if variant == "both" else "-" + variant
+
+
+def artifact_names(variant="both"):
+    """Names of the packaged files for *variant*.
+
+    `both` keeps the original names exactly. A single-hand build inserts its
+    variant before the role, e.g. `wmr-bridge-left-factory.bin`, so builds of
+    all three variants can share one output directory.
+    """
+    suffix = variant_suffix(variant)
+    return {
+        "factory": "wmr-bridge%s-factory.bin" % suffix,
+        "app": "wmr-bridge%s-app.bin" % suffix,
+        "bootloader": "wmr-bridge%s-bootloader.bin" % suffix,
+        "partition_table": "wmr-bridge%s-partition-table.bin" % suffix,
+        "manifest": "manifest%s.json" % suffix,
+        "build_info": "build-info%s.json" % suffix,
+    }
+
+
+def variant_defines(variant):
+    """Compiler defines that select *variant*.
+
+    `both` returns no defines: it must keep the source defaults and today's
+    behaviour. The other variants' values are the ones the build records in
+    build-info.json.
+    """
+    _check_variant(variant)
+    if variant == "both":
+        return []
+    return [
+        "-DWMR_CFG_BRIDGE_HANDS=%d" % BRIDGE_HANDS[variant],
+        "-DWMR_CFG_BLE_NAME=%s" % BLE_NAME_TOKENS[variant],
+    ]
 
 
 def _read_json(path):
@@ -174,10 +254,18 @@ def chip_family(chip):
     return CHIP_FAMILIES.get(chip.lower(), chip.upper())
 
 
-def make_manifest(version, chip=DEFAULT_CHIP, factory_name=FACTORY_NAME):
-    """ESP Web Tools manifest for a single merged image at offset 0."""
+def make_manifest(version, chip=DEFAULT_CHIP, factory_name=None, variant="both"):
+    """ESP Web Tools manifest for a single merged image at offset 0.
+
+    The name says which hand the image serves, and the part path points at
+    that variant's factory image. `both` is unchanged from the original
+    manifest.
+    """
+    _check_variant(variant)
+    if factory_name is None:
+        factory_name = artifact_names(variant)["factory"]
     return {
-        "name": "WMR Bridge",
+        "name": MANIFEST_NAMES[variant],
         "version": str(version),
         "new_install_prompt_erase": True,
         "builds": [
@@ -197,10 +285,17 @@ def make_build_info(
     btstack_commit,
     idf_version,
     built_at,
+    variant="both",
 ):
+    _check_variant(variant)
     return {
-        "name": "WMR Bridge",
+        "name": MANIFEST_NAMES[variant],
         "version": str(version),
+        "variant": variant,
+        "flags": {
+            "WMR_CFG_BRIDGE_HANDS": BRIDGE_HANDS[variant],
+            "WMR_CFG_BLE_NAME": BLE_NAME_TOKENS[variant],
+        },
         "chip": artifacts["chip"],
         "commit": repo_commit,
         "dirty": bool(repo_dirty),
