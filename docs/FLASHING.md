@@ -139,10 +139,11 @@ The framework pins the two moving pieces that caused most setup failures:
 | ESP-IDF | `espressif/idf:v6.1` in CI; v6.1 locally, as in [BUILD_WINDOWS.md](BUILD_WINDOWS.md) |
 | Partition table | stock BTstack `port/esp32/sdkconfig.defaults`: `CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y` |
 
-The build is reproducible given the same Docker image and a clean checkout.
-A local Windows build can differ byte-for-byte from the Linux CI image; the
-release artifact is the CI one, and `build-info.json` records exactly what
-went into it.
+The same source, BTstack commit and ESP-IDF image are used for every release.
+The build is not claimed to be bit-for-bit reproducible: ESP-IDF embeds
+build-time metadata in the application image. A local Windows build can also
+differ byte-for-byte from the Linux CI image; the release artifact is the CI
+one, and `build-info.json` records exactly what went into it.
 
 The source copied into BTstack is the working tree, not a git archive, so a
 developer can build uncommitted changes. The `commit` and `dirty` fields in
