@@ -274,11 +274,11 @@ If the banner or `bridge_hands` is wrong, the wrong image was flashed; stop and 
 
 Build record (fill this in and paste it back):
 
-| Tag | Image | Commit | Variant / flags (from `build-info*.json`) | Artifacts | Flashed to | Port |
-|---|---|---|---|---|---|---|
-| REF | both hands | | `both`; hands 0, name `WMR_CFG_BLE_NAME_BOTH` | `wmr-bridge-factory.bin`, `manifest.json` | board A | |
-| L | LEFT only | | `left`; hands 1, name `WMR_CFG_BLE_NAME_LEFT` | `wmr-bridge-left-factory.bin`, `manifest-left.json` | board A (board B after S1) | |
-| R | RIGHT only | | `right`; hands 2, name `WMR_CFG_BLE_NAME_RIGHT` | `wmr-bridge-right-factory.bin`, `manifest-right.json` | board B (board A after S1) | |
+| Tag | Image | Commit | Variant / flags (from `build-info*.json`) | `compile_commands.json` check | Artifacts | Flashed to | Port |
+|---|---|---|---|---|---|---|---|
+| REF | both hands | | `both`; hands 0, name `WMR_CFG_BLE_NAME_BOTH` | no `WMR_CFG_` match | `wmr-bridge-factory.bin`, `manifest.json` | board A | |
+| L | LEFT only | | `left`; hands 1, name `WMR_CFG_BLE_NAME_LEFT` | both defines present | `wmr-bridge-left-factory.bin`, `manifest-left.json` | board A (board B after S1) | |
+| R | RIGHT only | | `right`; hands 2, name `WMR_CFG_BLE_NAME_RIGHT` | both defines present | `wmr-bridge-right-factory.bin`, `manifest-right.json` | board B (board A after S1) | |
 
 ## 3. Run protocol
 
@@ -493,7 +493,8 @@ paste is too long, attach the saved file and still include the named lines in th
 **Once per session**
 
 - The build record table from §2, with the commit hash, the three
-  `build-info*.json` files (variant and flag values) and the artifact name each board ran.
+  `build-info*.json` files (variant and flag values), the `compile_commands.json` result for
+  each, and the artifact name each board ran.
 - The boot banner `BLE advertising: ...` and the `STREAM ... bridge_hands=...` line for each
   image as first flashed.
 - The pairing record: for each board, the `Discovery:`, `Addresses saved`, `Connecting`,
