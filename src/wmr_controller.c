@@ -85,6 +85,60 @@ static bool stack_ready;
  * is allowed at a time so the controllers do not race each other. */
 static bool connect_pending;
 
+/* ---- Contention-2 V1: staggered start (docs/runs/sheets/contention-2.md) - */
+
+#if WMR_CFG_STAGGER_FIRST_HAND
+#define STAGGER_FIRST_HAND   ((unsigned) (WMR_CFG_STAGGER_FIRST_HAND - 1))
+#define STAGGER_SECOND_HAND  (1u - STAGGER_FIRST_HAND)
+#define STAGGER_GATE_MS      30000u
+#define STAGGER_RETRY_MS     500u
+
+/* The gate opens 30 s after the first input report of the first hand. It is latched:
+ * once open, a later disconnect does not close it again. */
+static bool     stagger_released;
+static bool     stagger_first_reported;
+static uint32_t stagger_first_report_ms;
+
+/* A request that arrived while the gate was closed. Outgoing connects and discovery
+ * connects are retried through connect_hand(); an incoming HID channel is kept queued
+ * and accepted only after the gate opens. */
+static bool     stagger_pending_connect;
+static uint16_t stagger_pending_incoming_cid;
+static bool     stagger_hold_logged[WMR_NUM_CONTROLLERS];
+
+static btstack_timer_source_t stagger_timer;
+static bool stagger_timer_armed;
+
+static void stagger_timer_fire(btstack_timer_source_t *timer);
+static void stagger_retry_pending(void);
+#endif
+
+/* ---- Contention-2 V2/V3: per-link Classic policy ------------------------- */
+
+#if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
+typedef enum {
+    POLICY_IDLE = 0,
+    POLICY_EXIT_SNIFF,      /* V2: leave sniff before writing the policy */
+    POLICY_WRITE,
+    POLICY_READ
+} policy_state_t;
+
+typedef struct {
+    policy_state_t    state;
+    hci_con_handle_t  handle;
+    bool              awaiting;      /* one HCI command outstanding */
+    uint32_t          sent_ms;
+} link_policy_t;
+
+static link_policy_t policies[WMR_NUM_CONTROLLERS];
+static btstack_timer_source_t policy_timer;
+static bool policy_timer_armed;
+
+static void policy_timer_fire(btstack_timer_source_t *timer);
+static void policy_pump(void);
+static void policy_link_opened(unsigned hand, hci_con_handle_t handle, const bd_addr_t address);
+#endif
+
 /* ---- Discovery state (docs/DISCOVERY.md) -------------------------------- */
 
 typedef enum {
@@ -127,6 +181,184 @@ static controller_t *controller_for_address(const bd_addr_t address){
 static void known_hands(bool known[WMR_NUM_CONTROLLERS]){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++) known[i] = controllers[i].source != WMR_ADDR_NONE;
 }
+
+#if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
+
+#define POLICY_RETRY_MS  100u
+#define POLICY_REPLY_TIMEOUT_MS 1000u
+
+static uint16_t classic_policy_settings(void){
+#if WMR_CFG_CLASSIC_FORCE_MASTER
+    return LM_LINK_POLICY_DISABLE_ALL_LM_MODES;
+#else
+    return LM_LINK_POLICY_ENABLE_ROLE_SWITCH;
+#endif
+}
+
+#if WMR_CFG_CLASSIC_FORCE_MASTER
+static const char *role_name(hci_role_t role){
+    switch (role){
+        case HCI_ROLE_MASTER: return "master";
+        case HCI_ROLE_SLAVE:  return "slave";
+        default:              return "invalid";
+    }
+}
+#endif
+
+static const char *policy_state_name(policy_state_t state){
+    switch (state){
+        case POLICY_EXIT_SNIFF: return "exit sniff";
+        case POLICY_WRITE:      return "write";
+        case POLICY_READ:       return "read";
+        default:                return "idle";
+    }
+}
+
+static bool policy_any_active(void){
+    for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
+        if (policies[i].state != POLICY_IDLE) return true;
+    }
+    return false;
+}
+
+static void policy_arm(void){
+    if (!policy_any_active() || policy_timer_armed) return;
+    policy_timer_armed = true;
+    btstack_run_loop_remove_timer(&policy_timer);
+    btstack_run_loop_set_timer(&policy_timer, POLICY_RETRY_MS);
+    btstack_run_loop_add_timer(&policy_timer);
+}
+
+/* Send one pending policy command if the HCI command buffer allows it. The next step runs
+ * from HCI_EVENT_COMMAND_COMPLETE, so write/read cannot overtake each other. */
+static void policy_pump(void){
+    if (!policy_any_active()) return;
+    uint32_t now = btstack_run_loop_get_time_ms();
+    for (unsigned hand = 0; hand < WMR_NUM_CONTROLLERS; hand++){
+        link_policy_t *p = &policies[hand];
+        if (p->state == POLICY_IDLE) continue;
+        if (p->awaiting){
+            if ((uint32_t) (now - p->sent_ms) < POLICY_REPLY_TIMEOUT_MS){
+                policy_arm();
+                return;
+            }
+            printf("POLICY: %s %s command timed out; retrying\n",
+                   controllers[hand].name, policy_state_name(p->state));
+            p->awaiting = false;
+        }
+        if (!hci_can_send_command_packet_now()){
+            policy_arm();
+            return;
+        }
+        uint8_t status;
+        switch (p->state){
+            case POLICY_EXIT_SNIFF:
+                status = gap_sniff_mode_exit(p->handle);
+                break;
+            case POLICY_WRITE:
+                status = hci_send_cmd(&hci_write_link_policy_settings, p->handle,
+                                      classic_policy_settings());
+                break;
+            default:
+                status = hci_send_cmd(&hci_read_link_policy_settings, p->handle);
+                break;
+        }
+        if (status == ERROR_CODE_SUCCESS){
+            p->awaiting = true;
+            p->sent_ms = now;
+        } else {
+            printf("POLICY: %s %s command not sent: 0x%02x\n",
+                   controllers[hand].name, policy_state_name(p->state), status);
+        }
+        policy_arm();
+        return;
+    }
+}
+
+static void policy_timer_fire(btstack_timer_source_t *timer){
+    (void) timer;
+    policy_timer_armed = false;
+    policy_pump();
+    policy_arm();
+}
+
+/* Log the read-back in the same terms as the run sheet: sniff and role-switch bits. */
+static void policy_log_read(const char *name, uint8_t status, uint16_t handle, uint16_t settings){
+    printf("POLICY: %s read handle=0x%04x settings=0x%04x status=0x%02x "
+           "sniff=%s role_switch=%s\n",
+           name, handle, settings, status,
+           (settings & LM_LINK_POLICY_ENABLE_SNIFF_MODE) ? "on" : "clear",
+           (settings & LM_LINK_POLICY_ENABLE_ROLE_SWITCH) ? "on" : "off");
+}
+
+static void policy_on_command_complete(const uint8_t *packet){
+    uint16_t opcode = hci_event_command_complete_get_command_opcode(packet);
+    if (opcode != HCI_OPCODE_HCI_EXIT_SNIFF_MODE &&
+        opcode != HCI_OPCODE_HCI_WRITE_LINK_POLICY_SETTINGS &&
+        opcode != HCI_OPCODE_HCI_READ_LINK_POLICY_SETTINGS) return;
+    const uint8_t *ret = hci_event_command_complete_get_return_parameters(packet);
+    uint8_t status = ret[0];
+    uint16_t handle = little_endian_read_16(ret, 1);
+    for (unsigned hand = 0; hand < WMR_NUM_CONTROLLERS; hand++){
+        link_policy_t *p = &policies[hand];
+        if (!p->awaiting || p->handle != handle) continue;
+        if (opcode == HCI_OPCODE_HCI_EXIT_SNIFF_MODE && p->state == POLICY_EXIT_SNIFF){
+            printf("POLICY: %s exit sniff handle=0x%04x status=0x%02x\n",
+                   controllers[hand].name, handle, status);
+            p->state = POLICY_WRITE;
+        } else if (opcode == HCI_OPCODE_HCI_WRITE_LINK_POLICY_SETTINGS && p->state == POLICY_WRITE){
+            printf("POLICY: %s write handle=0x%04x settings=0x%04x status=0x%02x\n",
+                   controllers[hand].name, handle, classic_policy_settings(), status);
+            p->state = POLICY_READ;
+        } else if (opcode == HCI_OPCODE_HCI_READ_LINK_POLICY_SETTINGS && p->state == POLICY_READ){
+            uint16_t settings = little_endian_read_16(ret, 3);
+            policy_log_read(controllers[hand].name, status, handle, settings);
+            p->state = POLICY_IDLE;
+        } else {
+            continue;
+        }
+        p->awaiting = false;
+        policy_pump();
+        policy_arm();
+        return;
+    }
+}
+
+static void policy_link_down(hci_con_handle_t handle){
+    for (unsigned hand = 0; hand < WMR_NUM_CONTROLLERS; hand++){
+        if (policies[hand].handle != handle) continue;
+        policies[hand].state = POLICY_IDLE;
+        policies[hand].awaiting = false;
+    }
+}
+
+/* Called for every successful ACL connection, outgoing or incoming. */
+static void policy_link_opened(unsigned hand, hci_con_handle_t handle, const bd_addr_t address){
+    if (hand >= WMR_NUM_CONTROLLERS) return;
+    link_policy_t *p = &policies[hand];
+    p->handle = handle;
+    p->awaiting = false;
+#if WMR_CFG_CLASSIC_NO_SNIFF
+    p->state = POLICY_EXIT_SNIFF;
+#else
+    p->state = POLICY_WRITE;
+#endif
+#if WMR_CFG_CLASSIC_FORCE_MASTER
+    hci_role_t role = gap_get_role(handle);
+    printf("ROLE: %s handle=0x%04x role=%s\n", controllers[hand].name, handle, role_name(role));
+    if (role == HCI_ROLE_SLAVE){
+        uint8_t status = gap_request_role(address, HCI_ROLE_MASTER);
+        printf("ROLE: %s switch to master requested: status=0x%02x\n",
+               controllers[hand].name, status);
+    }
+#else
+    (void) address;
+#endif
+    policy_pump();
+    policy_arm();
+}
+
+#endif /* WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER */
 
 /* ---- Stored addresses (BTstack TLV, which is NVS on the ESP32) ----------- */
 
@@ -181,6 +413,88 @@ static void print_addresses(void){
 static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
                                uint8_t *packet, uint16_t size);
 static void disc_timer_fire(btstack_timer_source_t *timer);
+static bool connect_hand(unsigned hand);
+static void disc_connect_next(void);
+static void accept_incoming(controller_t *c, uint16_t cid);
+
+#if WMR_CFG_STAGGER_FIRST_HAND
+/* True once the first hand has been streaming long enough, or forever after release. */
+static bool stagger_gate_open(void){
+    if (stagger_released) return true;
+    if (!stagger_first_reported) return false;
+    if ((uint32_t) (btstack_run_loop_get_time_ms() - stagger_first_report_ms) < STAGGER_GATE_MS)
+        return false;
+    stagger_released = true;
+    printf("STAGGER: %s released at t=%lu\n", controllers[STAGGER_SECOND_HAND].name,
+           (unsigned long) (btstack_run_loop_get_time_ms() / 1000u));
+    return true;
+}
+
+static bool stagger_blocks(unsigned hand){
+    return hand == STAGGER_SECOND_HAND && !stagger_gate_open();
+}
+
+static void stagger_arm(void){
+    if (stagger_released || stagger_timer_armed) return;
+    stagger_timer_armed = true;
+    btstack_run_loop_remove_timer(&stagger_timer);
+    btstack_run_loop_set_timer(&stagger_timer, STAGGER_RETRY_MS);
+    btstack_run_loop_add_timer(&stagger_timer);
+}
+
+/* Log the hold once per hand and make sure a retry timer is running. */
+static void stagger_hold(unsigned hand){
+    if (!stagger_hold_logged[hand]){
+        stagger_hold_logged[hand] = true;
+        printf("STAGGER: %s held, first=%s reports=%lu\n",
+               controllers[hand].name, controllers[STAGGER_FIRST_HAND].name,
+               controllers[STAGGER_FIRST_HAND].reports);
+    }
+    stagger_arm();
+}
+
+static bool stagger_pending(void){
+    if (stagger_pending_connect || stagger_pending_incoming_cid) return true;
+    return disc_phase == DISC_CONNECT &&
+           (disc_connect_mask & (1u << STAGGER_SECOND_HAND)) != 0;
+}
+
+/* Called after the gate opens (or on every retry tick): resume the request that was
+ * held. Incoming is preferred because the controller is already waiting. */
+static void stagger_retry_pending(void){
+    if (!stagger_gate_open()) return;
+    if (stagger_pending_incoming_cid){
+        if (connect_pending) return;
+        uint16_t cid = stagger_pending_incoming_cid;
+        stagger_pending_incoming_cid = 0;
+        controller_t *c = &controllers[STAGGER_SECOND_HAND];
+        if (c->cid == 0) accept_incoming(c, cid);
+        else hid_host_decline_connection(cid);
+        return;
+    }
+    if (disc_phase == DISC_CONNECT &&
+        (disc_connect_mask & (1u << STAGGER_SECOND_HAND)) != 0){
+        disc_connect_next();
+        return;
+    }
+    if (stagger_pending_connect){
+        if (connect_pending) return;
+        stagger_pending_connect = false;
+        connect_hand(STAGGER_SECOND_HAND);
+    }
+}
+
+static void stagger_timer_fire(btstack_timer_source_t *timer){
+    (void) timer;
+    stagger_timer_armed = false;
+    if (!stagger_gate_open()){
+        stagger_arm();
+        return;
+    }
+    stagger_retry_pending();
+    if (stagger_pending()) stagger_arm();
+}
+#endif
 
 void wmr_controller_init(wmr_report_sink_t sink){
     report_sink = sink;
@@ -191,6 +505,12 @@ void wmr_controller_init(wmr_report_sink_t sink){
         else printf("%s: compile-time address \"%s\" is not valid; ignored\n", c->name, c->override);
     }
     disc_timer.process = disc_timer_fire;
+#if WMR_CFG_STAGGER_FIRST_HAND
+    stagger_timer.process = stagger_timer_fire;
+#endif
+#if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
+    policy_timer.process = policy_timer_fire;
+#endif
     hid_host_init(descriptor_storage, sizeof(descriptor_storage));
     hid_host_register_packet_handler(hid_packet_handler);
 }
@@ -239,6 +559,14 @@ static bool connect_hand(unsigned hand){
     }
     if (connect_pending){ printf("Another connection/discovery is pending\n"); return false; }
     if (c->cid){ printf("%s already open or opening, cid=%u\n", c->name, c->cid); return false; }
+#if WMR_CFG_STAGGER_FIRST_HAND
+    if (stagger_blocks(hand)){
+        stagger_hold(hand);
+        stagger_pending_connect = true;
+        return false;
+    }
+    if (hand == STAGGER_SECOND_HAND) stagger_pending_connect = false;
+#endif
     c->reports = 0;
     c->other_reports = 0;
     c->descriptor_available = false;
@@ -322,7 +650,26 @@ static void disc_after_connects(void){
 static void disc_connect_next(void){
     if (disc_phase != DISC_CONNECT || connect_pending) return;
     while (disc_connect_mask){
-        unsigned hand = disc_connect_mask & 1u ? 0u : 1u;
+        unsigned hand;
+#if WMR_CFG_STAGGER_FIRST_HAND
+        /* With the gate closed, connect the first hand even when it is RIGHT and the
+         * normal round order would have picked LEFT (the held hand) first. */
+        if (!stagger_released && (disc_connect_mask & (1u << STAGGER_FIRST_HAND)) != 0){
+            hand = STAGGER_FIRST_HAND;
+        } else {
+            hand = disc_connect_mask & 1u ? 0u : 1u;
+        }
+#else
+        hand = disc_connect_mask & 1u ? 0u : 1u;
+#endif
+#if WMR_CFG_STAGGER_FIRST_HAND
+        if (stagger_blocks(hand)){
+            /* Leave the bit in the mask; the stagger timer resumes this round. */
+            stagger_hold(hand);
+            stagger_pending_connect = true;
+            return;
+        }
+#endif
         disc_connect_mask &= ~(1u << hand);
         if (controllers[hand].cid || controllers[hand].connected) continue;
         if (connect_hand(hand)) return;
@@ -468,6 +815,20 @@ void wmr_controller_print_addresses(void){
 /* ---- Unknown incoming connections ---------------------------------------- */
 
 static void accept_incoming(controller_t *c, uint16_t cid){
+#if WMR_CFG_STAGGER_FIRST_HAND
+    unsigned hand = (unsigned) (c - controllers);
+    if (stagger_blocks(hand)){
+        /* Keep the HID channel queued, but do not call hid_host_accept_connection():
+         * the controller must not start its report/reconnect sequence before the gate. */
+        stagger_hold(hand);
+        stagger_pending_incoming_cid = cid;
+        return;
+    }
+    if (hand == STAGGER_SECOND_HAND){
+        stagger_pending_incoming_cid = 0;
+        stagger_pending_connect = false;
+    }
+#endif
     c->cid = cid;
     c->connected = false;
     c->descriptor_available = false;
@@ -500,6 +861,10 @@ static void incoming_resolved(const uint8_t *name, size_t len){
     addresses_save();
     /* The ACL link came up before the address was known, so link diagnostics missed it. */
     wmr_linkdiag_link_identified((unsigned) hand, incoming_con_handle);
+#if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
+    /* The HCI connection-complete event could not name this hand yet. */
+    policy_link_opened((unsigned) hand, incoming_con_handle, c->address);
+#endif
     accept_incoming(c, cid);
 }
 
@@ -607,6 +972,36 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
             printf("Accepting SSP confirmation from %s (test setup)\n", bd_addr_to_str(address));
             gap_ssp_confirmation_response(address);
             break;
+#if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
+        case HCI_EVENT_CONNECTION_COMPLETE: {
+            if (hci_event_connection_complete_get_status(packet) != ERROR_CODE_SUCCESS) break;
+            hci_event_connection_complete_get_bd_addr(packet, address);
+            int hand = wmr_controller_hand_for_address(address);
+            if (hand >= 0){
+                policy_link_opened((unsigned) hand,
+                                   hci_event_connection_complete_get_connection_handle(packet),
+                                   address);
+            }
+            break;
+        }
+        case HCI_EVENT_DISCONNECTION_COMPLETE:
+            policy_link_down(hci_event_disconnection_complete_get_connection_handle(packet));
+            break;
+        case HCI_EVENT_COMMAND_COMPLETE:
+            policy_on_command_complete(packet);
+            break;
+#endif
+#if WMR_CFG_CLASSIC_FORCE_MASTER
+        case HCI_EVENT_ROLE_CHANGE: {
+            hci_event_role_change_get_bd_addr(packet, address);
+            int hand = wmr_controller_hand_for_address(address);
+            printf("ROLE: %s change status=0x%02x role=%s\n",
+                   hand >= 0 ? controllers[hand].name : bd_addr_to_str(address),
+                   hci_event_role_change_get_status(packet),
+                   role_name((hci_role_t) hci_event_role_change_get_role(packet)));
+            break;
+        }
+#endif
         default:
             break;
     }
@@ -687,6 +1082,13 @@ static void handle_report(const uint8_t *packet){
      * valid during this callback; the sink copies what it keeps. */
     if (report_sink) report_sink((unsigned) (c - controllers), report, length);
     if (c->reports == 1){
+#if WMR_CFG_STAGGER_FIRST_HAND
+        if ((unsigned) (c - controllers) == STAGGER_FIRST_HAND){
+            /* The gate is timed from report flow, not from ACL setup. */
+            stagger_first_reported = true;
+            stagger_first_report_ms = btstack_run_loop_get_time_ms();
+        }
+#endif
         printf("%s first report: cid=%u frame_len=%u descriptor=%s\n",
                c->name, cid, length, c->descriptor_available ? "available" : "not available");
 #if WMR_CFG_REPORT_HEXDUMP
@@ -750,6 +1152,14 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             break;
         case HID_SUBEVENT_CONNECTION_CLOSED:
             cid = hid_subevent_connection_closed_get_hid_cid(packet);
+#if WMR_CFG_STAGGER_FIRST_HAND
+            if (cid && cid == stagger_pending_incoming_cid){
+                /* The held incoming HID channel went away before the gate opened. */
+                stagger_pending_incoming_cid = 0;
+                stagger_hold_logged[STAGGER_SECOND_HAND] = false;
+                break;
+            }
+#endif
             if (cid && cid == incoming_cid){
                 /* Gave up while its name was being requested; the name answer is then ignored. */
                 incoming_cid = 0;
@@ -757,6 +1167,15 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             }
             c = controller_for_cid(cid);
             if (!c) break;
+#if WMR_CFG_STAGGER_FIRST_HAND
+            if ((unsigned) (c - controllers) == STAGGER_FIRST_HAND && !stagger_released){
+                /* Start the 30 s again after the first hand reconnects. */
+                stagger_first_reported = false;
+                stagger_first_report_ms = 0;
+            }
+            if ((unsigned) (c - controllers) == STAGGER_SECOND_HAND)
+                stagger_hold_logged[STAGGER_SECOND_HAND] = false;
+#endif
             printf("%s disconnected, total reports=%lu other_reports=%lu\n", c->name, c->reports,
                    c->other_reports);
             wmr_cfgmgr_on_closed((unsigned) (c - controllers));

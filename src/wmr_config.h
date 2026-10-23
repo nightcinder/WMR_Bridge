@@ -174,6 +174,45 @@
 #define WMR_CFG_STATS_INTERVAL_MS  5000
 #endif
 
+/* ---- Classic contention variants (docs/runs/sheets/contention-2.md) ------ */
+
+/* The three variants below are pre-implemented so one can be selected at build time
+ * without touching source. Each defaults to 0, which leaves the current `main` behaviour
+ * exactly as it was. Build at most one Classic policy variant (V2 or V3) at a time; V1 may
+ * be combined with either. Selection is normally made with the ESP-IDF build variable:
+ *   $env:EXTRA_CFLAGS = "-DWMR_CFG_STAGGER_FIRST_HAND=1"
+ * The run sheet documents the experiment and the BTstack calls. */
+
+/* V1: hold the second hand's HID connection until the first hand has delivered input
+ * reports for 30 s. 0 = off, 1 = LEFT first (RIGHT held), 2 = RIGHT first (LEFT held).
+ * The gate is on report flow, not on the ACL; see docs/runs/sheets/contention-2.md. */
+#ifndef WMR_CFG_STAGGER_FIRST_HAND
+#define WMR_CFG_STAGGER_FIRST_HAND        0
+#endif
+#if WMR_CFG_STAGGER_FIRST_HAND < 0 || WMR_CFG_STAGGER_FIRST_HAND > 2
+#error "WMR_CFG_STAGGER_FIRST_HAND must be 0 (off), 1 (LEFT first) or 2 (RIGHT first)"
+#endif
+
+/* V2: keep sniff out of the Classic link policy. At init the default policy becomes role
+ * switch only, and every ACL connection gets an explicit per-handle write (plus an exit
+ * from sniff) so a reconnect cannot race the init. The write status and read-back are
+ * logged as `POLICY:`. 0 = off, 1 = no sniff. */
+#ifndef WMR_CFG_CLASSIC_NO_SNIFF
+#define WMR_CFG_CLASSIC_NO_SNIFF           0
+#endif
+
+/* V3: request master on both Classic links and disable role switch/sniff per handle.
+ * `gap_set_allow_role_switch(false)` keeps outgoing connections from asking for a switch;
+ * after each ACL connection the current role is logged, a slave link gets a role request,
+ * and the link policy is written as 0. 0 = off, 1 = force master. */
+#ifndef WMR_CFG_CLASSIC_FORCE_MASTER
+#define WMR_CFG_CLASSIC_FORCE_MASTER      0
+#endif
+
+#if WMR_CFG_CLASSIC_NO_SNIFF && WMR_CFG_CLASSIC_FORCE_MASTER
+#error "WMR_CFG_CLASSIC_NO_SNIFF and WMR_CFG_CLASSIC_FORCE_MASTER are alternative variants; enable at most one"
+#endif
+
 /* ---- Diagnostic build option: FF12 decimation ---------------------------- */
 
 /* Default 1 = off (every decoded record is sent). With N > 1 only every Nth report of
