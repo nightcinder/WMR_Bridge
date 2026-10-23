@@ -99,11 +99,11 @@ static void print_stats(bool periodic){
     const wmr_stats_t *st = wmr_transport_stats();
     char conn[48] = "n/a";
     if (info.conn_known) wmr_conn_format(&info.conn, conn, sizeof(conn));
-    printf("STREAM phone=%u sub=%u stream=%s mtu=%u conn=[%s]%s q=%u/%u high=%u notify=%lu errors=%lu\n",
+    printf("STREAM phone=%u sub=%u stream=%s mtu=%u conn=[%s]%s q=%u/%u high=%u notify=%lu errors=%lu bridge_hands=%d\n",
            info.phone_connected, info.subscribed, wmr_stream_mode_name(info.stream), info.mtu,
            conn, info.conn_update_pending ? " (update requested, not granted yet)" : "",
            info.queue_count, info.queue_capacity, info.queue_high_water,
-           (unsigned long) st->notifications, (unsigned long) st->errors);
+           (unsigned long) st->notifications, (unsigned long) st->errors, WMR_CFG_BRIDGE_HANDS);
     char batch_mean[16];
     wmr_diag_batch_mean_format(st->records_in_batches, st->batches_tx, batch_mean, sizeof(batch_mean));
     printf("  FF14 batches_tx=%lu records_in_batches=%lu mean=%s max=%lu batch_full_flushes=%lu\n",

@@ -11,6 +11,7 @@ Raw logs and run sheets from the 2026-10-22 bench sessions (everything here is u
 | `left-baseline-repeat.md` | How far LEFT drifts with nothing changed | long baseline run |
 | `single-controller.md` | LEFT alone, RIGHT alone, both | run |
 | `contention-2.md` | Staggered connect and Classic link policy variants for issue #18 | **not run** |
+| `two-bridge-hands.md` | Build a LEFT-only, RIGHT-only and REF image from one commit (`WMR_CFG_BRIDGE_HANDS`, `WMR_CFG_BLE_NAME`), ONY-20 | **not run** |
 | `closeout.md` | Checks still not run (MTU on the Connect screen, gamepad checks, settings persistence, HID, C7, round-trip rerun) | **not run** |
 
 ## Logs (`logs/`)

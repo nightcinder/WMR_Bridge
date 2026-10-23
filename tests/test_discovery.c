@@ -112,7 +112,7 @@ static void test_run_names_in_inquiry(void){
     printf("Discovery run: names in the inquiry response\n");
     const bool known[2] = {false, false};
     wmr_discovery_t d;
-    wmr_discovery_start(&d, known);
+    wmr_discovery_start_config(&d, known, 0);   /* both hands, whatever this build selects */
     CHECK(wmr_discovery_incomplete(&d));
     wmr_discovery_device_t l = dev(1), r = dev(2), other = dev(3), l2 = dev(4);
     CHECK(wmr_discovery_on_inquiry_result(&d, &other, NAME("Some Phone")) == WMR_DISC_IGNORED);
@@ -134,7 +134,7 @@ static void test_run_name_requests(void){
     printf("Discovery run: names by remote name request, one hand already known\n");
     const bool known[2] = {true, false};                                /* LEFT stored */
     wmr_discovery_t d;
-    wmr_discovery_start(&d, known);
+    wmr_discovery_start_config(&d, known, 0);   /* both hands, whatever this build selects */
     wmr_discovery_device_t a = dev(10), b = dev(11), c = dev(12);
     CHECK(wmr_discovery_on_inquiry_result(&d, &a, NULL, 0) == WMR_DISC_NAME_QUEUED);
     CHECK(wmr_discovery_on_inquiry_result(&d, &a, NULL, 0) == WMR_DISC_IGNORED);    /* repeat */
@@ -160,7 +160,7 @@ static void test_run_limits(void){
     printf("Discovery run: pending list full, stop asking once complete\n");
     const bool known[2] = {false, false};
     wmr_discovery_t d;
-    wmr_discovery_start(&d, known);
+    wmr_discovery_start_config(&d, known, 0);   /* both hands, whatever this build selects */
     for (unsigned i = 0; i < WMR_DISCOVERY_MAX_PENDING; i++){
         wmr_discovery_device_t x = dev((uint8_t) (0x40 + i));
         CHECK(wmr_discovery_on_inquiry_result(&d, &x, NULL, 0) == WMR_DISC_NAME_QUEUED);
@@ -177,7 +177,7 @@ static void test_run_limits(void){
 
     /* Nothing wanted: complete from the start. */
     const bool both[2] = {true, true};
-    wmr_discovery_start(&d, both);
+    wmr_discovery_start_config(&d, both, 0);
     CHECK(!wmr_discovery_incomplete(&d));
     wmr_discovery_device_t y = dev(0x70);
     CHECK(wmr_discovery_on_inquiry_result(&d, &y, NAME("Motion controller - Left")) == WMR_DISC_ALREADY_KNOWN);
@@ -186,12 +186,82 @@ static void test_run_limits(void){
 static void test_incoming(void){
     printf("Incoming connection from an unknown address\n");
     const bool none[2] = {false, false}, left[2] = {true, false}, both[2] = {true, true};
-    CHECK(wmr_discovery_incoming_hand(none, NAME("Motion controller - Left")) == WMR_HAND_LEFT);
-    CHECK(wmr_discovery_incoming_hand(left, NAME("Motion controller - Left")) == -1);   /* never replaces */
-    CHECK(wmr_discovery_incoming_hand(left, NAME("Motion controller - Right")) == WMR_HAND_RIGHT);
-    CHECK(wmr_discovery_incoming_hand(both, NAME("Motion controller - Right")) == -1);
-    CHECK(wmr_discovery_incoming_hand(none, NAME("Keyboard")) == -1);
-    CHECK(wmr_discovery_incoming_hand(none, NULL, 0) == -1);                            /* name request failed */
+    /* Both-hands behaviour, independent of this build's WMR_CFG_BRIDGE_HANDS. */
+    CHECK(wmr_discovery_incoming_hand_config(none, 0, NAME("Motion controller - Left")) == WMR_HAND_LEFT);
+    CHECK(wmr_discovery_incoming_hand_config(left, 0, NAME("Motion controller - Left")) == -1);   /* never replaces */
+    CHECK(wmr_discovery_incoming_hand_config(left, 0, NAME("Motion controller - Right")) == WMR_HAND_RIGHT);
+    CHECK(wmr_discovery_incoming_hand_config(both, 0, NAME("Motion controller - Right")) == -1);
+    CHECK(wmr_discovery_incoming_hand_config(none, 0, NAME("Keyboard")) == -1);
+    CHECK(wmr_discovery_incoming_hand_config(none, 0, NULL, 0) == -1);                            /* name request failed */
+}
+
+static void test_bridge_hands(void){
+    printf("Bridge hand selection (WMR_CFG_BRIDGE_HANDS)\n");
+    /* 0 = both, 1 = LEFT only, 2 = RIGHT only. The default build is 0; the test is also
+     * compiled with 1 and 2 manually to check the compile-time path. */
+    CHECK(WMR_BRIDGE_HAND_ENABLED(WMR_HAND_LEFT) == (WMR_CFG_BRIDGE_HANDS != 2));
+    CHECK(WMR_BRIDGE_HAND_ENABLED(WMR_HAND_RIGHT) == (WMR_CFG_BRIDGE_HANDS != 1));
+    for (int cfg = 0; cfg <= 2; cfg++){
+        for (int h = 0; h < WMR_NUM_CONTROLLERS; h++){
+            const bool want = cfg == 0 || h + 1 == cfg;
+            CHECK(wmr_bridge_hand_enabled(cfg, h) == want);
+        }
+        CHECK(!wmr_bridge_hand_enabled(cfg, -1));
+        CHECK(!wmr_bridge_hand_enabled(cfg, WMR_NUM_CONTROLLERS));
+    }
+    CHECK(!wmr_bridge_hand_enabled(3, WMR_HAND_LEFT));   /* invalid selection serves nothing */
+
+    const bool none[2] = {false, false};
+    wmr_discovery_device_t l = dev(0x21), r = dev(0x22);
+
+    /* Discovery: an excluded hand's name is ignored in the inquiry response. */
+    for (int cfg = 0; cfg <= 2; cfg++){
+        wmr_discovery_t d;
+        wmr_discovery_start_config(&d, none, cfg);
+        CHECK(d.bridge_hands == cfg);
+        CHECK(d.wanted[WMR_HAND_LEFT] == (cfg == 0 || cfg == 1));
+        CHECK(d.wanted[WMR_HAND_RIGHT] == (cfg == 0 || cfg == 2));
+        CHECK(wmr_discovery_incomplete(&d));
+        CHECK(wmr_discovery_on_inquiry_result(&d, &l, NAME("Motion controller - Left"))
+              == (cfg == 2 ? WMR_DISC_IGNORED : WMR_DISC_MATCHED));
+        CHECK(wmr_discovery_on_inquiry_result(&d, &r, NAME("Motion controller - Right"))
+              == (cfg == 1 ? WMR_DISC_IGNORED : WMR_DISC_MATCHED));
+        CHECK(!wmr_discovery_incomplete(&d));
+        CHECK(wmr_discovery_next_name_request(&d) == NULL);
+        /* The excluded hand is never recorded as a candidate. */
+        CHECK(d.found[WMR_HAND_LEFT] == (cfg != 2));
+        CHECK(d.found[WMR_HAND_RIGHT] == (cfg != 1));
+    }
+
+    /* Remote-name path: asking for an excluded hand's name does not make it a candidate. */
+    {
+        wmr_discovery_t d;
+        wmr_discovery_start_config(&d, none, 1);
+        CHECK(wmr_discovery_on_inquiry_result(&d, &r, NULL, 0) == WMR_DISC_NAME_QUEUED);
+        const wmr_discovery_device_t *q = wmr_discovery_next_name_request(&d);
+        CHECK(q && memcmp(q->address, r.address, 6) == 0);
+        CHECK(wmr_discovery_on_name(&d, r.address, NAME("Motion controller - Right")) == WMR_DISC_IGNORED);
+        CHECK(!d.found[WMR_HAND_RIGHT] && wmr_discovery_incomplete(&d));
+    }
+
+    /* Incoming connection: the excluded hand is declined exactly like a non-controller. */
+    for (int cfg = 0; cfg <= 2; cfg++){
+        CHECK(wmr_discovery_incoming_hand_config(none, cfg, NAME("Motion controller - Left"))
+              == (cfg == 0 || cfg == 1 ? WMR_HAND_LEFT : -1));
+        CHECK(wmr_discovery_incoming_hand_config(none, cfg, NAME("Motion controller - Right"))
+              == (cfg == 0 || cfg == 2 ? WMR_HAND_RIGHT : -1));
+        CHECK(wmr_discovery_incoming_hand_config(none, cfg, NAME("Keyboard")) == -1);
+        CHECK(wmr_discovery_incoming_hand_config(none, cfg, NULL, 0) == -1);
+    }
+    /* The default wrapper follows the compile-time selection. */
+    CHECK(wmr_discovery_incoming_hand(none, NAME("Motion controller - Left"))
+          == (WMR_CFG_BRIDGE_HANDS == 2 ? -1 : WMR_HAND_LEFT));
+    CHECK(wmr_discovery_incoming_hand(none, NAME("Motion controller - Right"))
+          == (WMR_CFG_BRIDGE_HANDS == 1 ? -1 : WMR_HAND_RIGHT));
+    /* A hand that already has an address is declined whether or not it is selected. */
+    const bool both[2] = {true, true};
+    CHECK(wmr_discovery_incoming_hand_config(both, 1, NAME("Motion controller - Left")) == -1);
+    CHECK(wmr_discovery_incoming_hand_config(both, 2, NAME("Motion controller - Right")) == -1);
 }
 
 int main(void){
@@ -201,6 +271,7 @@ int main(void){
     test_run_name_requests();
     test_run_limits();
     test_incoming();
+    test_bridge_hands();
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

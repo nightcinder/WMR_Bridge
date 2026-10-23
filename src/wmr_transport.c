@@ -78,6 +78,16 @@
 
 #define STATUS_SIZE 16
 
+/* Legacy advertising data: flags (3 bytes), complete local name (2-byte AD header + the
+ * characters) and 16-bit service UUID (4 bytes). The name is compile-time
+ * (WMR_CFG_BLE_NAME); the whole packet must fit in 31 bytes, which is why the name is
+ * limited to 22 characters. Default `"WMR Bridge"` produces exactly the bytes the fixed
+ * array used before. */
+#define ADVERTISING_SIZE  (8u + sizeof(WMR_CFG_BLE_NAME))
+static uint8_t advertising[ADVERTISING_SIZE];
+typedef char wmr_ble_name_fits_legacy_advertising[
+    (sizeof(WMR_CFG_BLE_NAME) >= 2 && sizeof(WMR_CFG_BLE_NAME) <= 23) ? 1 : -1];
+
 static hci_con_handle_t phone_handle = HCI_CON_HANDLE_INVALID;
 /* Active stream for the current phone connection; NONE until a CCC is enabled. */
 static wmr_stream_t stream_mode = WMR_STREAM_NONE;
@@ -642,7 +652,8 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
         case BTSTACK_EVENT_STATE:
             if (btstack_event_state_get_state(packet) == HCI_STATE_WORKING){
                 gap_advertisements_enable(1);
-                printf("BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream, FF15 echo, FF13 config block)\n");
+                printf("BLE advertising: %s (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream, FF15 echo, FF13 config block)\n",
+                       WMR_CFG_BLE_NAME);
             }
             break;
         case HCI_EVENT_LE_META:
@@ -736,18 +747,24 @@ void wmr_transport_init(void){
     wmr_echo_init(&echo);
     wmr_cfgmgr_init(cfg_state_changed);
     att_server_init(profile_data, att_read, att_write);
-    /* General discoverable; do not claim BR/EDR is unsupported. */
-    static const uint8_t advertising[] = {
-        2, BLUETOOTH_DATA_TYPE_FLAGS, 0x02,
-        11, BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME,
-        'W','M','R',' ','B','r','i','d','g','e',
-        3, BLUETOOTH_DATA_TYPE_INCOMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS,
-        0x10, 0xff
-    };
+    /* General discoverable; do not claim BR/EDR is unsupported. Built from
+     * WMR_CFG_BLE_NAME so the three images need no source change. */
+    uint8_t *p = advertising;
+    *p++ = 2;
+    *p++ = BLUETOOTH_DATA_TYPE_FLAGS;
+    *p++ = 0x02;
+    *p++ = (uint8_t) sizeof(WMR_CFG_BLE_NAME);   /* AD length: type + name, NUL excluded */
+    *p++ = BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME;
+    memcpy(p, WMR_CFG_BLE_NAME, sizeof(WMR_CFG_BLE_NAME) - 1);
+    p += sizeof(WMR_CFG_BLE_NAME) - 1;
+    *p++ = 3;
+    *p++ = BLUETOOTH_DATA_TYPE_INCOMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS;
+    *p++ = 0x10;
+    *p++ = 0xff;
     bd_addr_t zero_address = {0};
     gap_advertisements_set_params(WMR_CFG_ADV_INTERVAL_MIN, WMR_CFG_ADV_INTERVAL_MAX,
                                   0, 0, zero_address, WMR_CFG_ADV_CHANNEL_MAP, 0);
-    gap_advertisements_set_data(sizeof(advertising), (uint8_t *) advertising);
+    gap_advertisements_set_data((uint8_t) (p - advertising), advertising);
 
     pump_timer.process = pump_retry_tick;
     btstack_run_loop_set_timer(&pump_timer, WMR_CFG_PUMP_RETRY_MS);

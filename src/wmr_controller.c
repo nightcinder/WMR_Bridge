@@ -353,6 +353,7 @@ static void addresses_save(void){
     wmr_addr_record_t r;
     memset(&r, 0, sizeof(r));
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
+        if (!WMR_BRIDGE_HAND_ENABLED(i)) continue;
         if (controllers[i].source != WMR_ADDR_STORED) continue;
         r.valid[i] = true;
         memcpy(r.address[i], controllers[i].address, 6);
@@ -535,6 +536,11 @@ void wmr_controller_get_status(unsigned hand, wmr_controller_status_t *out){
 /* Returns true if a connection attempt was started. */
 static bool connect_hand(unsigned hand){
     controller_t *c = &controllers[hand];
+    if (!WMR_BRIDGE_HAND_ENABLED(hand)){
+        printf("%s is not served by this build (WMR_CFG_BRIDGE_HANDS=%d)\n",
+               c->name, WMR_CFG_BRIDGE_HANDS);
+        return false;
+    }
     if (!stack_ready){ printf("Stack not ready\n"); return false; }
     if (c->source == WMR_ADDR_NONE){
         printf("%s address unknown: put it in pairing mode and press d (discovery)\n", c->name);
@@ -645,6 +651,12 @@ static void disc_connect_next(void){
 #else
         hand = disc_connect_mask & 1u ? 0u : 1u;
 #endif
+        if (!WMR_BRIDGE_HAND_ENABLED(hand)){
+            /* The excluded hand is never a discovery candidate, but keep the mask clean if
+             * a mask bit ever arrives from another path. */
+            disc_connect_mask &= ~(1u << hand);
+            continue;
+        }
 #if WMR_CFG_STAGGER_FIRST_HAND
         if (stagger_blocks(hand)){
             /* Leave the bit in the mask; the stagger timer resumes this round. */
@@ -666,10 +678,14 @@ static void disc_timer_fire(btstack_timer_source_t *timer){
         disc_connect_next();
         return;
     }
-    /* Automatic start after boot. */
+    /* Automatic start after boot, for a served hand that has no address. */
     bool known[WMR_NUM_CONTROLLERS];
     known_hands(known);
-    if (disc_phase == DISC_IDLE && (!known[0] || !known[1])) wmr_controller_discover();
+    bool need_discovery = false;
+    for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
+        if (WMR_BRIDGE_HAND_ENABLED(h) && !known[h]) need_discovery = true;
+    }
+    if (disc_phase == DISC_IDLE && need_discovery) wmr_controller_discover();
 }
 
 /* Called whenever a connection attempt ends (descriptor, failure, close). */
@@ -685,6 +701,7 @@ static void disc_round_done(void){
     disc_connect_mask = 0;
     bool changed = false;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
+        if (!WMR_BRIDGE_HAND_ENABLED(i)) continue;
         if (!disc.found[i] || controllers[i].source != WMR_ADDR_NONE) continue;
         memcpy(controllers[i].address, disc.found_address[i], 6);
         controllers[i].source = WMR_ADDR_STORED;
@@ -765,7 +782,11 @@ wmr_discovery_start_result_t wmr_controller_discover(void){
     known_hands(known);
     wmr_discovery_start(&disc, known);
     if (!wmr_discovery_incomplete(&disc)){
-        printf("Both controller addresses are known; nothing to discover (F forgets the stored ones)\n");
+        if (WMR_CFG_BRIDGE_HANDS == 0){
+            printf("Both controller addresses are known; nothing to discover (F forgets the stored ones)\n");
+        } else {
+            printf("The selected controller address is known; nothing to discover (F forgets the stored one)\n");
+        }
         return WMR_DISCOVERY_NOTHING_TO_DO;
     }
     disc_round = 0;
@@ -798,8 +819,14 @@ void wmr_controller_print_addresses(void){
 /* ---- Unknown incoming connections ---------------------------------------- */
 
 static void accept_incoming(controller_t *c, uint16_t cid){
-#if WMR_CFG_STAGGER_FIRST_HAND
     unsigned hand = (unsigned) (c - controllers);
+    if (!WMR_BRIDGE_HAND_ENABLED(hand)){
+        printf("%s is excluded by this build (WMR_CFG_BRIDGE_HANDS=%d); declining\n",
+               c->name, WMR_CFG_BRIDGE_HANDS);
+        hid_host_decline_connection(cid);
+        return;
+    }
+#if WMR_CFG_STAGGER_FIRST_HAND
     if (stagger_blocks(hand)){
         /* Keep the HID channel queued, but do not call hid_host_accept_connection():
          * the controller must not start its report/reconnect sequence before the gate. */
@@ -1002,6 +1029,14 @@ static void handle_incoming_connection(const uint8_t *packet){
     if (status != ERROR_CODE_SUCCESS) return;
 
     controller_t *c = controller_for_address(address);
+    if (c && !WMR_BRIDGE_HAND_ENABLED((unsigned) (c - controllers))){
+        /* A known address of the excluded hand (for example stored by an earlier
+         * both-hands build) is treated exactly like a device that is not a controller. */
+        printf("Incoming %s is excluded by this build (WMR_CFG_BRIDGE_HANDS=%d); declining\n",
+               c->name, WMR_CFG_BRIDGE_HANDS);
+        hid_host_decline_connection(cid);
+        return;
+    }
     if (!c){
         bool known[WMR_NUM_CONTROLLERS];
         known_hands(known);
