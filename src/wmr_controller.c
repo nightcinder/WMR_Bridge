@@ -58,6 +58,7 @@ typedef struct {
     uint16_t    cid;                  /* 0 = no connection tracked */
     bool        connected;
     bool        descriptor_available;
+    bool        psvr2_wake_pending;   /* wake timer armed for this hand */
     unsigned long reports;
     unsigned long other_reports;   /* neither input nor config reports: not forwarded */
 } controller_t;
@@ -403,11 +404,17 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
                                uint8_t *packet, uint16_t size);
 
 #if WMR_CFG_PSVR2_SUPPORT && WMR_CFG_PSVR2_WAKE
+static btstack_timer_source_t psvr2_wake_timer;
+static bool psvr2_wake_timer_armed;
+static void psvr2_wake_timer_fire(btstack_timer_source_t *timer);
+
 /* PSVR2 Sense controllers stay silent until the host reads HID Feature Report 0x05 over
- * the control channel. The descriptor-available event is the safe point: in REPORT mode
- * the HID channels are up and no protocol-mode request is pending (wmr_psvr2.h,
- * docs/PSVR2.md). One attempt per connection; the response is logged by
- * HID_SUBEVENT_GET_REPORT_RESPONSE. Unverified on hardware. */
+ * the control channel. Do not send it from inside DESCRIPTOR_AVAILABLE: on an incoming
+ * or reconnect link BTstack still has SET_PROTOCOL(report) queued, and starting a
+ * control-channel transaction there skips it. A short delay lets SET_PROTOCOL finish
+ * first, and works the same for outgoing links (which do not send it). One attempt per
+ * connection; the response is logged by HID_SUBEVENT_GET_REPORT_RESPONSE. Unverified on
+ * hardware (wmr_psvr2.h, docs/PSVR2.md). */
 static void psvr2_wake(controller_t *c){
     uint8_t status = hid_host_send_get_report(c->cid, HID_REPORT_TYPE_FEATURE,
                                              WMR_PSVR2_WAKE_FEATURE_ID);
@@ -415,6 +422,29 @@ static void psvr2_wake(controller_t *c){
            c->name, WMR_PSVR2_WAKE_FEATURE_ID, status);
     if (status != ERROR_CODE_SUCCESS)
         printf("PSVR2: %s wake request refused; reconnect (l/r) to try again\n", c->name);
+}
+
+static void psvr2_wake_arm(controller_t *c){
+    c->psvr2_wake_pending = true;
+    if (psvr2_wake_timer_armed) return;
+    psvr2_wake_timer_armed = true;
+    btstack_run_loop_remove_timer(&psvr2_wake_timer);
+    btstack_run_loop_set_timer(&psvr2_wake_timer, WMR_CFG_PSVR2_WAKE_DELAY_MS);
+    btstack_run_loop_add_timer(&psvr2_wake_timer);
+    printf("PSVR2: %s wake scheduled in %u ms\n", c->name,
+           (unsigned) WMR_CFG_PSVR2_WAKE_DELAY_MS);
+}
+
+static void psvr2_wake_timer_fire(btstack_timer_source_t *timer){
+    (void) timer;
+    psvr2_wake_timer_armed = false;
+    for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
+        controller_t *c = &controllers[i];
+        if (!c->psvr2_wake_pending) continue;
+        c->psvr2_wake_pending = false;
+        if (!c->cid || !c->descriptor_available || c->model != WMR_MODEL_PSVR2) continue;
+        psvr2_wake(c);
+    }
 }
 #endif
 static void disc_timer_fire(btstack_timer_source_t *timer);
@@ -510,6 +540,9 @@ void wmr_controller_init(wmr_report_sink_t sink){
         else printf("%s: compile-time address \"%s\" is not valid; ignored\n", c->name, c->override);
     }
     disc_timer.process = disc_timer_fire;
+#if WMR_CFG_PSVR2_SUPPORT && WMR_CFG_PSVR2_WAKE
+    psvr2_wake_timer.process = psvr2_wake_timer_fire;
+#endif
 #if WMR_CFG_STAGGER_FIRST_HAND
     stagger_timer.process = stagger_timer_fire;
 #endif
@@ -1109,12 +1142,15 @@ static void handle_report(const uint8_t *packet){
      * config command responses go to the config reader only and never take a sequence
      * number or enter the sample stream. PSVR2 controllers have their own report ID and do
      * not speak the Microsoft config protocol, so only 0x31 input frames are forwarded. */
+#if WMR_CFG_PSVR2_SUPPORT
     if (c->model == WMR_MODEL_PSVR2){
         if (!wmr_psvr2_is_input_report(report, length)){
             c->other_reports++;
             return;
         }
-    } else {
+    } else
+#endif
+    {
         switch (wmr_cfg_classify(report, length)){
             case WMR_CFG_REPORT_CONFIG:
                 wmr_cfgmgr_on_report((unsigned) (c - controllers), report, length);
@@ -1170,6 +1206,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
                 connect_pending = false;
                 break;
             }
+            c->psvr2_wake_pending = false;
             if (status != ERROR_CODE_SUCCESS){
                 printf("%s connection failed: 0x%02x\n", c->name, status);
                 c->cid = 0;
@@ -1191,13 +1228,16 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             printf("%s descriptor status=0x%02x (model %s)\n", c->name, status,
                    wmr_model_name(c->model));
             if (c->descriptor_available){
+#if WMR_CFG_PSVR2_SUPPORT
                 if (c->model == WMR_MODEL_PSVR2){
-#if WMR_CFG_PSVR2_SUPPORT && WMR_CFG_PSVR2_WAKE
-                    psvr2_wake(c);
+#if WMR_CFG_PSVR2_WAKE
+                    psvr2_wake_arm(c);
 #else
                     printf("PSVR2: %s connected; wake request disabled in this build\n", c->name);
 #endif
-                } else {
+                } else
+#endif
+                {
                     wmr_cfgmgr_on_descriptor((unsigned) (c - controllers));
                 }
             }
@@ -1241,6 +1281,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             }
             c = controller_for_cid(cid);
             if (!c) break;
+            c->psvr2_wake_pending = false;
 #if WMR_CFG_STAGGER_FIRST_HAND
             if ((unsigned) (c - controllers) == STAGGER_FIRST_HAND && !stagger_released){
                 /* Start the 30 s again after the first hand reconnects. */

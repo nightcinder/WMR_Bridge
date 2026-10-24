@@ -39,12 +39,16 @@ Per hand, in this order:
 
 1. **Compile-time override** (`-DWMR_CFG_LEFT_ADDRESS=\"AA:BB:CC:DD:EE:FF\"`, same for RIGHT;
    undefined by default). Never written to NVS, never forgotten by `F`. An unparsable value is
-   reported at boot and ignored.
+   reported at boot and ignored. An override is always treated as a **WMR** controller:
+   there is no model on the command line, so a PSVR2 Sense controller must be found by
+   name instead of being pinned this way.
 2. **Stored**: found by discovery (or by name on an incoming connection) and saved in NVS
    through BTstack's TLV store (the same store as the link keys), tag `WMRA`, a 16-byte record
    (`wmr_addr_record_pack`, golden bytes in the test). Byte 14 carries two model bits per
-   hand (00 = WMR, 01 = PSVR2); bytes 15 stay reserved. The version stays 1, so firmware
-   from before PSVR2 support still reads the record and treats both hands as WMR.
+   hand (00 = WMR, 01 = PSVR2); bytes 15 stay reserved. Model bits are written only for a
+   valid hand. The version stays 1, so firmware from before PSVR2 support still reads the
+   record and treats both hands as WMR; a WMR-only build reads a stored PSVR2 model as WMR
+   so the address stays usable.
 3. **None**: the hand is unknown until discovery finds it.
 
 The `s` command prints each hand's address, its source and its model.

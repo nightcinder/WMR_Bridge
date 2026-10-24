@@ -104,11 +104,24 @@ static void test_record(void){
     CHECK(wmr_addr_record_unpack(golden_right, sizeof(golden_right), &back));
     CHECK(!back.valid[0] && back.valid[1]);
 
-    /* Models share the first reserved byte, two bits per hand. */
+    /* Models share the first reserved byte, two bits per hand. An invalid slot never
+     * carries model bits, so a zeroed slot stays zeroed. */
+    r.valid[0] = false;
+    r.valid[1] = true;
+    r.model[0] = WMR_MODEL_PSVR2;
+    r.model[1] = WMR_MODEL_PSVR2;
+    wmr_addr_record_pack(&r, out);
+#if WMR_CFG_PSVR2_SUPPORT
+    CHECK(out[14] == 0x04);
+#else
+    CHECK(out[14] == 0x00);                 /* model storage compiled out */
+#endif
+
     r.valid[0] = r.valid[1] = true;
     r.model[0] = WMR_MODEL_WMR;
     r.model[1] = WMR_MODEL_PSVR2;
     wmr_addr_record_pack(&r, out);
+#if WMR_CFG_PSVR2_SUPPORT
     CHECK(out[14] == 0x04 && out[15] == 0x00);
     CHECK(wmr_addr_record_unpack(out, sizeof(out), &back));
     CHECK(back.model[0] == WMR_MODEL_WMR && back.model[1] == WMR_MODEL_PSVR2);
@@ -117,10 +130,20 @@ static void test_record(void){
     CHECK(out[14] == 0x05);
     CHECK(wmr_addr_record_unpack(out, sizeof(out), &back));
     CHECK(back.model[0] == WMR_MODEL_PSVR2 && back.model[1] == WMR_MODEL_PSVR2);
+#else
+    CHECK(out[14] == 0x00);
+    CHECK(wmr_addr_record_unpack(out, sizeof(out), &back));
+    CHECK(back.model[0] == WMR_MODEL_WMR && back.model[1] == WMR_MODEL_WMR);
+    /* A record written by an opt-in build must not disable the hand here. */
+    memcpy(bad, golden_both, sizeof(bad)); bad[14] = 0x04;
+    CHECK(wmr_addr_record_unpack(bad, sizeof(bad), &back));
+    CHECK(back.valid[0] && back.valid[1]);
+    CHECK(back.model[0] == WMR_MODEL_WMR && back.model[1] == WMR_MODEL_WMR);
+#endif
     /* Unknown model values make the record invalid rather than guessing WMR. */
-    memcpy(bad, out, sizeof(bad)); bad[14] = 0x02;
+    memcpy(bad, golden_both, sizeof(bad)); bad[14] = 0x02;
     CHECK(!wmr_addr_record_unpack(bad, sizeof(bad), &back));
-    memcpy(bad, out, sizeof(bad)); bad[14] = 0x08;
+    memcpy(bad, golden_both, sizeof(bad)); bad[14] = 0x08;
     CHECK(!wmr_addr_record_unpack(bad, sizeof(bad), &back));
 
     CHECK(!wmr_addr_record_unpack(golden_both, 15, &back) && !back.valid[0] && !back.valid[1]);

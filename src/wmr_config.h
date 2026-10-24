@@ -99,7 +99,9 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
  * addresses. Optional fixed override for one or both hands, which skips discovery for that
  * hand and is never written to NVS, e.g.
  *   -DWMR_CFG_LEFT_ADDRESS=\"AA:BB:CC:DD:EE:FF\"
- * Leave undefined to use discovery. */
+ * Leave undefined to use discovery. An override assumes a WMR controller: there is no
+ * model field on the command line, so a PSVR2 controller must be discovered by name
+ * (which also stores its model). */
 /* #define WMR_CFG_LEFT_ADDRESS   "AA:BB:CC:DD:EE:FF" */
 /* #define WMR_CFG_RIGHT_ADDRESS  "AA:BB:CC:DD:EE:FF" */
 
@@ -160,6 +162,13 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_PSVR2_INPUT_FRAME_MAX  79
 /* HID Feature Report read that wakes a PSVR2 Sense controller (unverified on hardware). */
 #define WMR_PSVR2_WAKE_FEATURE_ID  0x05
+/* Delay between DESCRIPTOR_AVAILABLE and that read. On incoming/reconnect links BTstack
+ * has SET_PROTOCOL(report) queued at descriptor time; starting GET_REPORT immediately
+ * makes it skip the SET_PROTOCOL. This delay also covers outgoing links, which do not
+ * send SET_PROTOCOL at all. */
+#ifndef WMR_CFG_PSVR2_WAKE_DELAY_MS
+#define WMR_CFG_PSVR2_WAKE_DELAY_MS 250
+#endif
 
 /* ---- Frames, queue and wire format ------------------------------------- */
 

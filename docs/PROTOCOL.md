@@ -619,7 +619,8 @@ Today the HID report handler (`handle_report` in `wmr_controller.c`) classifies 
 report ID, applies the per-model rule below, and passes input reports to
 `wmr_transport_submit_report`, which increments the per-hand sequence, counts it as
 received, and (when subscribed) copies it into a frame of at most `WMR_CFG_MAX_FRAME`
-(80) bytes. A config response is 78 bytes including its report ID, plus the 1-byte HID
+(64 by default, 80 when PSVR2 support is enabled). A config response is 78 bytes
+including its report ID, plus the 1-byte HID
 transaction header, 79 bytes in all, so without the rule below it would consume a
 sequence number and be forwarded as an input frame.
 
@@ -640,9 +641,9 @@ streaming `0x01` input reports interleaved with the responses; the reader ignore
 non-matching IDs exactly as Monado's loop does, and input handling is unaffected. A
 PSVR2 hand never gets the FF13 read at all (the commands are Microsoft-specific), so
 its `0x02`/`0x06` reports, if any, are counted as "other".
-`WMR_CFG_MAX_FRAME` is 80 so a PSVR2 frame fits; config responses still never reach that
-queue. The sequence counter is not advanced by config traffic, so FF11/FF12 sequence
-numbers stay contiguous.
+`WMR_CFG_MAX_FRAME` is 80 when PSVR2 support is on (64 by default) so a PSVR2 frame
+fits; config responses still never reach that queue. The sequence counter is not advanced
+by config traffic, so FF11/FF12 sequence numbers stay contiguous.
 
 ## Cache
 

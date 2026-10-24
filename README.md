@@ -2,7 +2,8 @@
 
 ESP32 firmware, built on [BTstack](https://github.com/bluekitchen/btstack), that
 connects to **two Windows Mixed Reality motion controllers** (or, optionally,
-**PlayStation VR2 Sense controllers**) over Classic Bluetooth and forwards their
+**PlayStation VR2 Sense controllers**, enabled at build time with
+`-DWMR_CFG_PSVR2_SUPPORT=1`) over Classic Bluetooth and forwards their
 input to an **Android phone** over a custom BLE GATT
 service, either as raw frames (FF11), as decoded IMU and input records (FF12), or as batches of those records (FF14). The
 phone side is the companion app [wmr-companion](https://github.com/nightcinder/wmr-companion);
@@ -40,15 +41,17 @@ implemented; see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 - **Controllers.** Acts as the Bluetooth HID host for two controllers (LEFT and
   RIGHT), found by their Bluetooth names (`Motion controller - Left` / `- Right`,
-  or `PlayStation VR2 Sense Controller (L)` / `(R)`) and remembered by address and
+  or, in an opt-in PSVR2 build, `PlayStation VR2 Sense Controller (L)` / `(R)`)
+  and remembered by address and
   model in NVS ([docs/DISCOVERY.md](docs/DISCOVERY.md); not yet
   run on hardware). Controllers reconnect to the
   ESP32 on their own (incoming connection); the console can also connect
   outwards. Each hand has its own connection state.
 - **Frames.** A WMR controller sends 46-byte input reports (`A1`, report ID `01`,
   44 payload bytes) at roughly 150-180 reports per second per hand in the one
-  run that was measured. A PSVR2 Sense controller sends `A1 31` reports of up to
-  79 bytes; these are forwarded raw only for now ([docs/PSVR2.md](docs/PSVR2.md)).
+  run that was measured. In an opt-in PSVR2 build, a PSVR2 Sense controller
+  sends `A1 31` reports of up to 79 bytes; these are forwarded raw only for now
+  ([docs/PSVR2.md](docs/PSVR2.md)).
 - **Queue.** Frames from both hands go into one bounded FIFO (256 frames). If it
   fills, the newest frame is dropped and counted.
 - **BLE.** The ESP32 advertises as `WMR Bridge`. When the phone subscribes to FF11,
@@ -185,8 +188,8 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
   bring-up sessions where LEFT/RIGHT was not recorded.
 - **Regression comparison** against the original single-file version under identical conditions.
 - **PSVR2 Sense controllers.** The recognition, model storage, raw forwarding and HID wake
-  path are host-tested and build-tested but have never run on a PSVR2 controller
-  ([docs/PSVR2.md](docs/PSVR2.md)).
+  path are host-tested and build-tested but have never run on a PSVR2 controller. The
+  feature is opt-in at build time ([docs/PSVR2.md](docs/PSVR2.md)).
 - Known oddity, not investigated: each controller logs `SET_PROTOCOL handshake status=0x03`.
 
 Full list and details: [docs/TESTING.md](docs/TESTING.md).
@@ -202,7 +205,8 @@ Full list and details: [docs/TESTING.md](docs/TESTING.md).
 - Single phone, exactly two controllers. Controllers are recognised by name until their
   addresses are stored; a name can be spoofed (see [docs/DISCOVERY.md](docs/DISCOVERY.md)).
 - PSVR2 Sense controllers are **raw-only** today: FF12/FF14 have no PSVR2 decoder, FF13 is
-  not read, and the wake request is unverified (see [docs/PSVR2.md](docs/PSVR2.md)). Each
+  not read, and the wake request is unverified (see [docs/PSVR2.md](docs/PSVR2.md)). PSVR2
+  support is **off by default** (`-DWMR_CFG_PSVR2_SUPPORT=1` enables it). Each
   hand's model is independent, but the decoded stream remains WMR-only.
 - `tx` means "accepted by the Bluetooth stack", not "received by the phone".
 
@@ -229,7 +233,8 @@ Every tunable is a named constant in [src/wmr_config.h](src/wmr_config.h) (contr
 discovery and optional address overrides, queue size, frame and notification limits, timers, advertising). Raw hex dumps and
 detailed HCI tracing are off by default (`WMR_CFG_REPORT_HEXDUMP`, `WMR_CFG_HCI_TRACE`).
 It ships with no controller addresses; `WMR_CFG_LEFT_ADDRESS` / `WMR_CFG_RIGHT_ADDRESS` are
-optional overrides that skip discovery for that hand. Discovery settings:
+optional overrides that skip discovery for that hand (WMR only; a PSVR2 controller has to
+be discovered by name). Discovery settings:
 `WMR_CFG_DISCOVERY_*`.
 
 ## Running the host tests
