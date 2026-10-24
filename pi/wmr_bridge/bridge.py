@@ -133,6 +133,8 @@ class Subscriber:
     # ---- stream delivery -------------------------------------------------
 
     def deliver(self, frame: Frame, record: DecodedRecord | None = None) -> None:
+        if self.closed:
+            return
         if self.stream == "raw":
             for message in encode_raw_messages(frame, self.bridge.fragment_capacity):
                 if self._enqueue(message):
@@ -165,6 +167,8 @@ class Subscriber:
             return
         records = self._batch
         self._batch = []
+        if self.closed:
+            return
         try:
             payload = encode_batch([packed for _hand, packed in records])
         except ProtocolError:

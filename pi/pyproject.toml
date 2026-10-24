@@ -7,7 +7,7 @@ name = "wmr-bridge-pi"
 description = "Linux/Raspberry Pi Wi-Fi host bridge for WMR motion controllers"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "BlueKitchen-derived terms: personal, non-commercial use only. See LICENSE and license_header.txt." }
+license = { file = "license_header.txt" }
 dynamic = ["version"]
 dependencies = []
 

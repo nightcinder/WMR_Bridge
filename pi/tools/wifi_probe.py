@@ -3,8 +3,10 @@
 
 Connects to ``ws://host:8765/wmr``, subscribes, parses the binary payloads with
 the same reference parsers as the bridge, and prints throughput, per-hand
-sequence gaps and echo RTT. Useful before the companion app grows a Wi-Fi
-transport, and for measuring a Pi's Wi-Fi link.
+sequence gaps, tick-based missing reports (matching ``src/wmr_devloss.c``) and
+echo RTT (``min``, ``p50``, ``p95``, ``max``). Useful before the companion app
+grows a Wi-Fi transport, and for completing the P5/P6 checks in
+``docs/runs/sheets/pi-bridge.md``.
 
 Examples::
 
@@ -24,41 +26,207 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from wmr_bridge import __version__, ws as wsmod  # noqa: E402
+from wmr_bridge.bridge import HAND_NAMES  # noqa: E402
+from wmr_bridge.decode import decode_frame  # noqa: E402
 from wmr_bridge.protocol import (  # noqa: E402
     Reassembler,
     parse_batch,
     unpack_record,
 )
 
+DEVLOSS_WINDOW = 256
+DEVLOSS_WARMUP = 16
+DEVLOSS_REFRESH = 32
+DEVLOSS_DISCONTINUITY_TICKS = 50_000_000  # 5 s at 100 ns per tick
+TICK_MS = 1e-4  # 100 ns in ms
+
+
+class DevLossEstimator:
+    """Port of ``src/wmr_devloss.c`` (and Dart ``TickTimer`` missing-report rule).
+
+    Estimates controller reports lost before reaching the bridge from the
+    controller's own 32-bit 100 ns ``device_ticks`` clock. Each delta between
+    consecutive reports implies ``round(delta / period) - 1`` missing reports,
+    where ``period`` is the median of the deltas at most 1.5x the 10th-percentile
+    delta over a sliding window of the last 256 deltas, refreshed every 32
+    deltas after a 16-delta warm-up (counted retroactively).
+    """
+
+    def __init__(
+        self,
+        *,
+        window: int = DEVLOSS_WINDOW,
+        warmup: int = DEVLOSS_WARMUP,
+        refresh: int = DEVLOSS_REFRESH,
+        discontinuity_ticks: int = DEVLOSS_DISCONTINUITY_TICKS,
+    ) -> None:
+        self.window_size = window
+        self.warmup = warmup
+        self.refresh = refresh
+        self.discontinuity_ticks = discontinuity_ticks
+        self._window: list[int] = [0] * window
+        self.count = 0
+        self._head = 0
+        self._since_refresh = 0
+        self.prev_ticks: int | None = None
+        self.period_ticks = 0
+        self.reports = 0
+        self.missing = 0
+        self.discontinuities = 0
+
+    def _estimate_period(self) -> int:
+        if self.count == 0:
+            return 0
+        sorted_deltas = sorted(self._window[: self.count])
+        ref = sorted_deltas[self.count // 10]
+        if ref == 0:
+            return 0
+        limit = ref + ref // 2
+        m = 0
+        while m < self.count and sorted_deltas[m] <= limit:
+            m += 1
+        if m == 0:
+            return 0
+        if m & 1:
+            return sorted_deltas[m // 2]
+        return (sorted_deltas[m // 2 - 1] + sorted_deltas[m // 2]) // 2
+
+    @staticmethod
+    def _implied_missing(delta: int, period: int) -> int:
+        k = (delta + period // 2) // period
+        return k - 1 if k > 1 else 0
+
+    def add(self, ticks: int) -> None:
+        ticks &= 0xFFFFFFFF
+        self.reports += 1
+        if self.prev_ticks is None:
+            self.prev_ticks = ticks
+            return
+        delta = (ticks - self.prev_ticks) & 0xFFFFFFFF
+        self.prev_ticks = ticks
+        if delta == 0:
+            return
+        if delta > self.discontinuity_ticks:
+            self.discontinuities += 1
+            return
+        self._window[self._head] = delta
+        self._head = (self._head + 1) % self.window_size
+        if self.count < self.window_size:
+            self.count += 1
+        self._since_refresh += 1
+
+        if self.period_ticks == 0:
+            if self.count >= self.warmup:
+                self.period_ticks = self._estimate_period()
+                self._since_refresh = 0
+                if self.period_ticks:
+                    for i in range(self.count):
+                        self.missing += self._implied_missing(self._window[i], self.period_ticks)
+            return
+        self.missing += self._implied_missing(delta, self.period_ticks)
+        if self._since_refresh >= self.refresh:
+            period = self._estimate_period()
+            if period:
+                self.period_ticks = period
+            self._since_refresh = 0
+
+    @property
+    def loss_pct(self) -> float:
+        total = self.reports + self.missing
+        if not total:
+            return 0.0
+        return round(self.missing * 100.0 / total, 2)
+
+    @property
+    def period_ms(self) -> float | None:
+        if not self.period_ticks:
+            return None
+        return round(self.period_ticks * TICK_MS, 2)
+
+
+def summarize_rtt(samples_ms: list[float]) -> dict[str, int | float]:
+    """Compute RTT summary stats (``samples``, ``min``, ``p50``, ``p95``, ``max``)."""
+
+    ordered = sorted(samples_ms)
+    n = len(ordered)
+
+    def _at(q: float) -> float:
+        index = min(n - 1, max(0, int(round(q * (n - 1)))))
+        return round(ordered[index], 2)
+
+    return {
+        "samples": n,
+        "min": round(ordered[0], 2),
+        "p50": round(ordered[n // 2], 2),
+        "p95": _at(0.95),
+        "max": round(ordered[-1], 2),
+    }
+
 
 class Counters:
     def __init__(self) -> None:
         self.records = 0
+        self.hand_records = [0, 0]
         self.messages = 0
         self.batches = 0
         self.gaps = [0, 0]
         self.last_sequence: list[int | None] = [None, None]
+        self.devloss = [DevLossEstimator(), DevLossEstimator()]
         self.raw_frames = 0
         self.raw_incomplete = 0
 
-    def sequence(self, hand: int, sequence: int) -> None:
+    def sequence(self, hand: int, sequence: int, device_ticks: int | None = None) -> None:
         previous = self.last_sequence[hand]
         if previous is not None:
             expected = (previous + 1) & 0xFFFFFFFF
             if sequence != expected:
-                self.gaps[hand] += 1
+                self.gaps[hand] += (sequence - expected) & 0xFFFFFFFF
         self.last_sequence[hand] = sequence
         self.records += 1
+        self.hand_records[hand] += 1
+        if device_ticks is not None:
+            self.devloss[hand].add(device_ticks)
 
-    def snapshot(self) -> dict:
+    def snapshot(self, elapsed_s: float | None = None) -> dict:
+        hands = []
+        for index, name in enumerate(HAND_NAMES):
+            rec = self.hand_records[index]
+            dl = self.devloss[index]
+            missing = dl.missing
+            total = rec + missing
+            loss_pct = round(missing * 100.0 / total, 2) if total else 0.0
+            hands.append(
+                {
+                    "hand": name,
+                    "records": rec,
+                    "recordsPerSecond": round(rec / elapsed_s, 1) if elapsed_s else 0.0,
+                    "sequenceGaps": self.gaps[index],
+                    "lastSequence": self.last_sequence[index],
+                    "missingFromTicks": missing,
+                    "lossPct": loss_pct,
+                    "periodTicks": dl.period_ticks or None,
+                    "periodMs": dl.period_ms,
+                    "tickDiscontinuities": dl.discontinuities,
+                }
+            )
         return {
             "records": self.records,
             "messages": self.messages,
             "batches": self.batches,
             "gaps": list(self.gaps),
+            "missingFromTicks": [dl.missing for dl in self.devloss],
+            "lossPct": [h["lossPct"] for h in hands],
             "rawFrames": self.raw_frames,
             "rawIncomplete": self.raw_incomplete,
             "lastSequence": list(self.last_sequence),
+            "hands": hands,
+            "bleFields": {
+                "rssi": "n/a",
+                "phy": "n/a",
+                "mtu": "n/a",
+                "interval": "n/a",
+                "esp_timer": "n/a",
+            },
         }
 
 
@@ -124,19 +292,24 @@ async def run(args: argparse.Namespace) -> int:
                 counters.messages += 1
                 if args.stream == "raw":
                     frame = reassembler.push(payload)
+                    counters.raw_incomplete = sum(reassembler.frames_incomplete)
                     if frame is not None:
                         counters.raw_frames += 1
-                        counters.records += 1
-                        counters.sequence(frame.hand, frame.sequence)
+                        state = decode_frame(frame.data)
+                        counters.sequence(
+                            frame.hand,
+                            frame.sequence,
+                            state.ticks if state is not None else None,
+                        )
                 elif args.stream == "decoded":
                     record = unpack_record(payload)
-                    counters.sequence(record.hand, record.sequence)
+                    counters.sequence(record.hand, record.sequence, record.device_ticks)
                 else:
                     records = parse_batch(payload)
                     counters.batches += 1
                     for packed in records:
                         record = unpack_record(packed)
-                        counters.sequence(record.hand, record.sequence)
+                        counters.sequence(record.hand, record.sequence, record.device_ticks)
             elif opcode == wsmod.OP_TEXT:
                 message = json.loads(payload)
                 if message.get("type") == "pong":
@@ -149,10 +322,15 @@ async def run(args: argparse.Namespace) -> int:
                 elapsed = now - started
                 rate = counters.records / elapsed if elapsed else 0
                 rtt = f"{ping_times[-1]:.1f}ms" if ping_times else "-"
+                loss_l = counters.devloss[0].loss_pct
+                loss_r = counters.devloss[1].loss_pct
+                miss_l = counters.devloss[0].missing
+                miss_r = counters.devloss[1].missing
                 print(
                     f"{elapsed:6.1f}s  {rate:7.1f} rec/s  "
                     f"left={counters.last_sequence[0]} right={counters.last_sequence[1]}  "
                     f"gaps=({counters.gaps[0]},{counters.gaps[1]})  "
+                    f"missing=({miss_l},{miss_r}) loss=({loss_l:.1f}%,{loss_r:.1f}%)  "
                     f"batches={counters.batches}  rtt={rtt}"
                 )
                 next_report = now + args.report_interval
@@ -171,16 +349,12 @@ async def run(args: argparse.Namespace) -> int:
         await client.close()
 
     elapsed = time.monotonic() - started
-    summary = counters.snapshot()
+    summary = counters.snapshot(elapsed)
     summary["elapsedS"] = round(elapsed, 2)
     summary["recordsPerSecond"] = round(counters.records / elapsed, 1) if elapsed else 0
     if ping_times:
-        ordered = sorted(ping_times)
-        summary["rttMs"] = {
-            "samples": len(ordered),
-            "p50": round(ordered[len(ordered) // 2], 2),
-            "max": round(ordered[-1], 2),
-        }
+        summary["rttMs"] = summarize_rtt(ping_times)
+    summary["dropped"] = status.get("dropped") if isinstance(status, dict) else None
     summary["serverStatus"] = status
     print(json.dumps(summary, indent=2))
     return 0

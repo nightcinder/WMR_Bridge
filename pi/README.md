@@ -21,7 +21,7 @@ plan are in [`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md).
 
 ```bash
 cd pi
-python3 -m unittest discover -s tests -v          # 84 host tests
+python3 -m unittest discover -s tests -v          # 94 host tests
 python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 
 # in a second terminal
@@ -72,9 +72,9 @@ the probe do not send one.
 | `wmr_bridge/inputs.py` | live hidraw manager and capture replay |
 | `wmr_bridge/server.py` | asyncio server wrapper |
 | `wmr_bridge/__main__.py` | `python3 -m wmr_bridge` CLI |
-| `tools/wifi_probe.py` | bench client: throughput, gaps, RTT, status |
+| `tools/wifi_probe.py` | bench client: throughput, gaps, tick-based missing reports, RTT, status |
 | `systemd/wmr-bridge.service` | unit file for an unattended bridge |
-| `tests/` | 84 host tests; no hardware required |
+| `tests/` | 94 host tests; no hardware required |
 
 ## Status
 

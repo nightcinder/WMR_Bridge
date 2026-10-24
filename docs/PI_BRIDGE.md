@@ -381,11 +381,13 @@ Records of both hands may share a batch; each carries its own hand.
 
 `reports` counts reports received from the controller; `decoded` counts reports
 successfully decoded while a decoded/batched client was subscribed; `delivered`
-counts records enqueued for a client (a batch contributes one per record);
+counts messages enqueued for a client (one per fragment on `raw`, one per
+record on `decoded`, and one per record inside an enqueued `batched` message);
 `errors` counts malformed frames or non-input report IDs; `dropped` counts
 messages dropped because a client queue was full. The per-hand `dropped` counts
-the same drops attributed to that hand (a dropped batch contributes one per
-record it contained).
+the same drops attributed to that hand (one per dropped fragment on `raw`, one
+per dropped record on `decoded`, and one per record inside a dropped `batched`
+message).
 
 ### Sequence and timing semantics
 
@@ -557,6 +559,6 @@ treat the Pi path as unverified.
 | Path | Contents |
 | --- | --- |
 | `pi/wmr_bridge/` | host bridge package: protocol, decoder, BlueZ, WebSocket, server, CLI |
-| `pi/tools/wifi_probe.py` | bench client: throughput, sequence gaps, RTT, status |
+| `pi/tools/wifi_probe.py` | bench client: throughput, sequence gaps, tick-based missing reports, RTT (min/p50/p95/max), status |
 | `pi/systemd/` | service unit and environment example |
-| `pi/tests/` | 84 host tests (no hardware) |
+| `pi/tests/` | 94 host tests (no hardware) |
