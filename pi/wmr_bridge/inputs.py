@@ -107,6 +107,11 @@ class ReplaySource:
     def start(self, bridge: Bridge) -> None:
         self._task = asyncio.create_task(self.run(bridge), name="replay")
 
+    async def wait(self) -> None:
+        """Wait for the replay task to finish (only with ``loop=False``)."""
+        if self._task is not None:
+            await self._task
+
     async def close(self) -> None:
         if self._task is not None:
             self._task.cancel()

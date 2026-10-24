@@ -99,7 +99,12 @@ wmr_proto_result_t wmr_reassembler_push(wmr_reassembler_t *r,
                                         const uint8_t *packet, uint16_t size,
                                         wmr_frame_t *out){
     if (size < WMR_PROTO_HEADER_SIZE){ r->errors++; return WMR_PROTO_ERR_SHORT; }
-    if (packet[0] != WMR_PROTO_MAGIC){ r->errors++; return WMR_PROTO_ERR_MAGIC; }
+    if (packet[0] != WMR_PROTO_MAGIC){
+        r->errors++;
+        unsigned hand = packet[1];
+        if (hand < WMR_NUM_CONTROLLERS) abandon(r, hand);
+        return WMR_PROTO_ERR_MAGIC;
+    }
     unsigned hand = packet[1];
     if (hand >= WMR_NUM_CONTROLLERS){ r->errors++; return WMR_PROTO_ERR_HAND; }
 

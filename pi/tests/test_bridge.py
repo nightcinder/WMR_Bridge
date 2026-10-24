@@ -115,6 +115,35 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await asyncio.wait_for(client.recv_json(), 2))["type"], "unsubscribed")
         self.assertEqual((await self.subscribe(client, "decoded"))["type"], "subscribed")
 
+    async def test_unsubscribe_drops_payloads_queued_for_the_old_stream(self) -> None:
+        class BlockingSocket:
+            closed = False
+
+            def __init__(self) -> None:
+                self.gate = asyncio.Event()
+
+            async def send_json(self, _value: dict) -> None:
+                pass
+
+            async def send_binary(self, _payload: bytes) -> None:
+                await self.gate.wait()
+
+        bridge = Bridge()
+        socket = BlockingSocket()
+        subscriber = Subscriber(bridge, socket)  # type: ignore[arg-type]
+        subscriber.stream = "decoded"
+        try:
+            for _ in range(3):
+                subscriber._enqueue(b"old-stream payload")
+            await asyncio.sleep(0)  # the sender takes one and blocks in send_binary
+            self.assertEqual(subscriber._queue.qsize(), 2)
+            subscriber.reset_stream()
+            self.assertEqual(subscriber._queue.qsize(), 0)
+        finally:
+            socket.gate.set()
+            subscriber.close()
+            await asyncio.sleep(0)
+
     async def test_status_and_ping(self) -> None:
         client, _ = await self.connect()
         self.bridge.ingest(0, SAMPLE_DATA)
@@ -179,6 +208,9 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         class FullQueue:
             def put_nowait(self, _payload: bytes) -> None:
                 raise asyncio.QueueFull
+
+            def get_nowait(self) -> bytes:
+                raise asyncio.QueueEmpty
 
             async def get(self) -> bytes:
                 await asyncio.Event().wait()

@@ -72,7 +72,8 @@ uint16_t wmr_batch_size(const wmr_batch_t *b){
 
 bool wmr_batch_parse(const uint8_t *packet, uint16_t size, unsigned *count, const uint8_t **records){
     if (size < WMR_BATCH_HEADER_SIZE + WMR_DECODED_SIZE) return false;
-    if (packet[0] != WMR_BATCH_VERSION || packet[1] < 1) return false;
+    if (packet[0] != WMR_BATCH_VERSION || packet[1] < 1 ||
+        packet[1] > WMR_BATCH_MAX_COUNT) return false;
     if (size != WMR_BATCH_HEADER_SIZE + packet[1] * WMR_DECODED_SIZE) return false;
     *count = packet[1];
     *records = packet + WMR_BATCH_HEADER_SIZE;
@@ -93,6 +94,6 @@ wmr_batch_flush_t wmr_batch_flush_reason(unsigned queued, unsigned max_count,
 
 uint32_t wmr_batch_timer_ms(uint32_t oldest_age_us, uint32_t hold_us){
     if (oldest_age_us >= hold_us) return 1;
-    uint32_t ms = (hold_us - oldest_age_us + 999u) / 1000u;
+    uint32_t ms = (uint32_t) (((uint64_t) (hold_us - oldest_age_us) + 999u) / 1000u);
     return ms ? ms : 1;
 }

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from wmr_bridge.__main__ import (
@@ -11,7 +13,10 @@ from wmr_bridge.__main__ import (
     _is_loopback_bind,
     _read_token,
     _require_auth_for_bind,
+    _run,
 )
+
+SAMPLES = Path(__file__).resolve().parents[2] / "samples" / "controller_frames.txt"
 
 
 def _args(bind: str = "127.0.0.1", insecure: bool = False):
@@ -62,6 +67,22 @@ class TokenFileTests(unittest.TestCase):
         self.assertIn(f"uid {os.getuid()}", message)
         self.assertIn("root-owned", message)
         self.assertIn("chown wmr:wmr", message)
+
+
+class ReplayOnceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_replay_once_stops_the_daemon(self) -> None:
+        args = _build_parser().parse_args(
+            [
+                "--replay",
+                str(SAMPLES),
+                "--replay-rate",
+                "10000",
+                "--replay-once",
+                "--port",
+                "0",
+            ]
+        )
+        await asyncio.wait_for(_run(args), 5)
 
 
 if __name__ == "__main__":
