@@ -57,7 +57,7 @@ does better than the ESP32's is an open measurement question (see the test plan)
 | `rx_time_us` | ESP32 `esp_timer` since boot | Linux monotonic clock (since boot, not daemon start); diagnostics only |
 | Calibration FF13 | read from controllers | **not implemented** (future work) |
 | Echo FF15 | GATT characteristic | JSON `ping`/`pong` control messages |
-| Firmware version FF16 | GATT characteristic | `version` in `hello` |
+| Firmware version FF16 | GATT characteristic | `version` in `hello`/`status` |
 | BLE MTU | 23..517 | no MTU; one raw fragment by default |
 | Security | no BLE pairing/encryption | token required beyond loopback; still plaintext unless tunnelled |
 
@@ -167,6 +167,7 @@ Useful flags:
 | `--insecure-no-token` | allow a non-loopback bind without a token (**unsafe**) |
 | `--hidraw PATH` | open a specific node instead of auto-discovery |
 | `--hand {both,left,right}` | only open the selected controller hand (default `both`; for one-Pi-per-hand setups) |
+| `--advertise-mdns` | optionally publish `_wmr-bridge._tcp.local.` with avahi or systemd-resolved; never fatal |
 | `--left MATCH`, `--right MATCH` | assign by MAC, path or name part |
 | `--all-hidraw` | consider every HID device (then use `--left/--right`) |
 | `--batch-max`, `--batch-hold-ms` | FF14 batching (default 9 records, 5 ms) |
@@ -233,6 +234,7 @@ case-insensitive on the normalised value; `*` is not a wildcard.
   "transport": "wifi",
   "device": "wmr-pi",
   "version": "0.1.0",
+  "handFilter": ["LEFT", "RIGHT"],
   "hostname": "wmr-pi",
   "authRequired": true,
   "streams": ["raw", "decoded", "batched"],
@@ -245,6 +247,32 @@ case-insensitive on the normalised value; `*` is not a wildcard.
 Text messages are JSON control messages. Binary messages from the server are
 stream payloads. Binary messages from the client are rejected with
 `{"type":"error","code":"binary_not_accepted"}`.
+
+`version` is the bridge's FF16 analogue: the daemon/package version, not the
+controller firmware. `handFilter` is the configured hand selector (`--hand`):
+`["LEFT", "RIGHT"]` for a both-hand daemon, `["LEFT"]` or `["RIGHT"]` for a
+single-hand Pi. A client that expects one hand per bridge can use it to confirm
+the daemon is in the mode the deployment intended. The same two fields are
+present in every `status` reply.
+
+### Service discovery (optional)
+
+`--advertise-mdns` publishes `_wmr-bridge._tcp.local.` on the LAN. It is off by
+default and never affects whether the daemon starts. Two host mechanisms are
+tried, with no third-party Python dependency:
+
+- `avahi-publish-service` publishes the instance while the daemon runs. TXT
+  records carry `version=`, `hands=LEFT,RIGHT` and `path=/wmr`.
+- otherwise `resolvectl` (systemd-resolved) is used: a `wmr-bridge.dnssd`
+  service file is written to `/run/systemd/dnssd/` and removed on shutdown.
+  This needs write access to that directory (normally root), so systemd units
+  running as an unprivileged user will log and skip it.
+- when neither tool exists the daemon logs one informational line and
+  continues. Use `--advertise-mdns` only for convenience; clients can always
+  connect with the explicit host and port.
+
+Advertisement exposes the bridge's hostname and port to the local network. It
+is not authentication and does not change the token requirement.
 
 ### Authentication
 
@@ -348,6 +376,8 @@ Records of both hands may share a batch; each carries its own hand.
 ```json
 {
   "type": "status",
+  "version": "0.1.0",
+  "handFilter": ["LEFT", "RIGHT"],
   "uptimeS": 42.5,
   "hostTimeUs": 123456789,
   "hands": [
@@ -393,6 +423,9 @@ the same drops attributed to that hand (one per dropped fragment on `raw`, one
 per dropped record on `decoded`, and one per record inside a dropped `batched`
 message).
 
+`version` and `handFilter` mirror the `hello` fields. `hands` remains the
+per-hand statistics array; for the configured selector read `handFilter`.
+
 ### Sequence and timing semantics
 
 - Sequence numbers start at **1** for each hand after daemon start and increment
@@ -429,9 +462,9 @@ The intended companion change is small:
    work the same way as multiple ESP32 bridges: connect one WebSocket per Pi,
    each carrying its own LEFT or RIGHT hand.
 
-FF13 (calibration blobs) and FF16 (firmware version) have no WebSocket
-equivalent yet. The `hello.version` identifies the bridge software; calibration
-is a documented follow-up rather than silently pretending to support it.
+FF13 (calibration blobs) has no WebSocket equivalent yet. The FF16 analogue is
+the bridge `version` in `hello` and `status`; calibration is a documented
+follow-up rather than silently pretending to support it.
 
 ## Security
 
@@ -502,7 +535,9 @@ the JSON control protocol, authentication, stream exclusion, batching and
 replay. It also covers the non-loopback-without-token refusal, the loopback
 default, Origin rejection and allow-listing, the handshake timeout, the
 `auth_failed` path for a non-ASCII token, per-hand drop accounting and closing
-active sockets on shutdown. No hardware or third-party packages.
+active sockets on shutdown, the `handFilter` payload in `hello`/`status`, and
+mDNS advertisement via avahi/systemd-resolved plus the absent-tool no-op. No
+hardware or third-party packages.
 
 Replay smoke test:
 
@@ -554,17 +589,17 @@ been run, treat the Pi path as unverified.
 
 - Hardware validation of P1-P10 using the bring-up run sheet [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md).
 - Companion app Wi-Fi transport (`wmr_ws` and connect UI in `wmr-companion`).
-- TLS or a pinned-key handshake for non-LAN use; mDNS advertisement.
-- FF13 calibration-blob forwarding and an FF16-equivalent endpoint.
+- TLS or a pinned-key handshake for non-LAN use.
+- FF13 calibration-blob forwarding.
 - Native packaging (`pip install`, `.deb`) and udev rules shipped as files.
-- Optional single-hand mode (one Pi per hand) with an explicit hand selector.
+- Bench-validate `--hand` single-hand mode and `--advertise-mdns` discovery on real hardware.
 
 ## Files
 
 | Path | Contents |
 | --- | --- |
-| `pi/wmr_bridge/` | host bridge package: protocol, decoder, BlueZ, WebSocket, server, CLI |
+| `pi/wmr_bridge/` | host bridge package: protocol, decoder, BlueZ, WebSocket, server, mDNS, CLI |
 | `pi/tools/wifi_probe.py` | bench client: throughput, sequence gaps, tick-based missing reports, RTT (min/p50/p95/max), status |
 | `pi/systemd/` | service unit and environment example |
 | `pi/udev/` | udev rule (`99-wmr-bridge.rules`) granting `input` group access to `/dev/hidraw*` |
-| `pi/tests/` | 102 host tests (no hardware) |
+| `pi/tests/` | 109 host tests (no hardware) |

@@ -7,6 +7,7 @@ import json
 import unittest
 from pathlib import Path
 
+from wmr_bridge import __version__
 from wmr_bridge.bridge import Bridge, Subscriber
 from wmr_bridge.inputs import read_capture
 from wmr_bridge.protocol import Reassembler, parse_batch, unpack_record
@@ -53,6 +54,7 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(hello["transport"], "wifi")
         self.assertEqual(hello["streams"], ["raw", "decoded", "batched"])
         self.assertEqual(hello["recordSize"], 56)
+        self.assertEqual(hello["handFilter"], ["LEFT", "RIGHT"])
         self.assertFalse(hello["authRequired"])
 
     async def test_raw_stream_reassembles(self) -> None:
@@ -150,6 +152,8 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         await client.send_json({"type": "status"})
         status = await asyncio.wait_for(client.recv_json(), 2)
         self.assertEqual(status["type"], "status")
+        self.assertEqual(status["version"], __version__)
+        self.assertEqual(status["handFilter"], ["LEFT", "RIGHT"])
         self.assertEqual(status["hands"][0]["reports"], 1)
         self.assertEqual(status["hands"][0]["sequence"], 1)
         self.assertEqual(status["hands"][1]["reports"], 0)
@@ -273,6 +277,26 @@ class AuthBridgeTests(BridgeTests):
     test_unknown_message = None  # type: ignore[assignment]
     test_server_close_closes_active_clients = None  # type: ignore[assignment]
     test_per_hand_dropped_counts_queue_rejections = None  # type: ignore[assignment]
+
+
+class HandFilterPayloadTests(unittest.TestCase):
+    def test_both_hands_are_reported_by_default(self) -> None:
+        bridge = Bridge()
+        self.assertEqual(bridge.hello()["handFilter"], ["LEFT", "RIGHT"])
+        status = bridge.status()
+        self.assertEqual(status["handFilter"], ["LEFT", "RIGHT"])
+        self.assertEqual(status["version"], __version__)
+
+    def test_single_hand_filter_reaches_hello_and_status(self) -> None:
+        for hand, expected in ((0, ["LEFT"]), (1, ["RIGHT"])):
+            bridge = Bridge(allowed_hands=(hand,))
+            self.assertEqual(bridge.hello()["handFilter"], expected)
+            self.assertEqual(bridge.status()["handFilter"], expected)
+
+    def test_invalid_hand_filter_is_rejected(self) -> None:
+        for bad in ((), (2,), (-1,), (0, 2)):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                Bridge(allowed_hands=bad)
 
 
 if __name__ == "__main__":
