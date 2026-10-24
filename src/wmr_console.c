@@ -66,6 +66,7 @@ void wmr_console_show_usage(void){
     printf("F: FORGET stored controller addresses (not link keys), then run discovery\n");
     printf("k: BOND RESET LEFT  - delete the ESP32's stored link key for LEFT only\n");
     printf("K: BOND RESET RIGHT - delete the ESP32's stored link key for RIGHT only\n");
+    printf("b: BOND RESET ALL   - delete all stored link keys from the ESP32\n");
     printf("   (manual; controller must be disconnected. Put it in pairing mode afterwards.)\n");
     printf("Connect one controller at a time; wait for descriptor result.\n");
 }
@@ -250,6 +251,10 @@ static void stdin_process(char cmd){
         case 'F': forget_addresses(); break;
         case 'k': bond_reset(WMR_HAND_LEFT); break;
         case 'K': bond_reset(WMR_HAND_RIGHT); break;
+        case 'b':
+            gap_delete_all_link_keys();
+            printf("BOND RESET ALL: deleted all stored link keys from ESP32 link key DB\n");
+            break;
         case '\r': case '\n': break;
         default: wmr_console_show_usage(); break;
     }

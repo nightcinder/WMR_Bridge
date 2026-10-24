@@ -1050,6 +1050,25 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
 #endif
             break;
         }
+        case HCI_EVENT_AUTHENTICATION_COMPLETE: {
+            uint8_t status = hci_event_authentication_complete_get_status(packet);
+            hci_con_handle_t handle = hci_event_authentication_complete_get_connection_handle(packet);
+            printf("HCI AUTH_COMPLETE: handle=0x%04x status=0x%02x\n", handle, status);
+            break;
+        }
+        case HCI_EVENT_ENCRYPTION_CHANGE: {
+            uint8_t status = hci_event_encryption_change_get_status(packet);
+            hci_con_handle_t handle = hci_event_encryption_change_get_connection_handle(packet);
+            uint8_t enabled = hci_event_encryption_change_get_encryption_enabled(packet);
+            printf("HCI ENCRYPTION_CHANGE: handle=0x%04x status=0x%02x enabled=%u\n", handle, status, enabled);
+            break;
+        }
+        case HCI_EVENT_SIMPLE_PAIRING_COMPLETE: {
+            uint8_t status = hci_event_simple_pairing_complete_get_status(packet);
+            hci_event_simple_pairing_complete_get_bd_addr(packet, address);
+            printf("HCI SIMPLE_PAIRING_COMPLETE: address=%s status=0x%02x\n", bd_addr_to_str(address), status);
+            break;
+        }
         case HCI_EVENT_PIN_CODE_REQUEST:
             hci_event_pin_code_request_get_bd_addr(packet, address);
             printf("Legacy PIN request rejected\n");
@@ -1060,10 +1079,17 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
             printf("Accepting SSP confirmation from %s (test setup)\n", bd_addr_to_str(address));
             gap_ssp_confirmation_response(address);
             break;
+        case HCI_EVENT_DISCONNECTION_COMPLETE: {
+            hci_con_handle_t handle = hci_event_disconnection_complete_get_connection_handle(packet);
+            uint8_t status = hci_event_disconnection_complete_get_status(packet);
+            uint8_t reason = hci_event_disconnection_complete_get_reason(packet);
+            printf("HCI DISCONN_COMPLETE: handle=0x%04x status=0x%02x reason=0x%02x\n", handle, status, reason);
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
-        case HCI_EVENT_DISCONNECTION_COMPLETE:
-            policy_link_down(hci_event_disconnection_complete_get_connection_handle(packet));
+            policy_link_down(handle);
+#endif
             break;
+        }
+#if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
         case HCI_EVENT_COMMAND_COMPLETE:
             policy_on_command_complete(packet);
             break;
