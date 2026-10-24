@@ -17,6 +17,7 @@ from . import __version__
 from .bluez import discover_hidraw
 from .bridge import Bridge
 from .inputs import HidrawManager, ReplaySource, read_capture
+from .mdns import MdnsAdvertiser
 from .server import BridgeServer
 
 LOG = logging.getLogger("wmr_bridge")
@@ -66,6 +67,12 @@ def _build_parser() -> argparse.ArgumentParser:
     hid = parser.add_argument_group("controllers (BlueZ)")
     hid.add_argument("--hidraw", action="append", default=[], metavar="PATH", help="open this /dev/hidrawN")
     hid.add_argument("--all-hidraw", action="store_true", help="watch every HID device, not only WMR names")
+    hid.add_argument(
+        "--hand",
+        choices=("both", "left", "right"),
+        default="both",
+        help="only open the selected controller hand (default both; mirrors WMR_CFG_BRIDGE_HANDS)",
+    )
     hid.add_argument("--left", metavar="MATCH", help="assign a device to LEFT by address, path or name part")
     hid.add_argument("--right", metavar="MATCH", help="assign a device to RIGHT by address, path or name part")
     hid.add_argument("--poll-interval", type=float, default=1.0, help="hidraw hotplug poll interval in seconds")
@@ -82,6 +89,14 @@ def _build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--replay-once", action="store_true", help="stop after one pass of the capture")
 
     parser.add_argument("--list", action="store_true", help="list hidraw devices and exit")
+    parser.add_argument(
+        "--advertise-mdns",
+        action="store_true",
+        help=(
+            "publish _wmr-bridge._tcp.local. with avahi-publish-service or "
+            "systemd-resolved when available (optional; never fatal)"
+        ),
+    )
     parser.add_argument("--duration", type=float, help="stop after this many seconds (bench/testing)")
     parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     parser.add_argument("--log-file", help="append logs to this file instead of stderr")
@@ -176,6 +191,9 @@ def _print_devices() -> int:
 async def _run(args: argparse.Namespace) -> int:
     token = _read_token(args)
     _require_auth_for_bind(args, token)
+    allowed_hands = (
+        (0,) if args.hand == "left" else (1,) if args.hand == "right" else (0, 1)
+    )
     bridge = Bridge(
         token=token,
         queue_size=args.queue_size,
@@ -183,6 +201,7 @@ async def _run(args: argparse.Namespace) -> int:
         batch_hold_ms=args.batch_hold_ms,
         fragment_capacity=args.fragment_capacity,
         auth_timeout_s=args.auth_timeout,
+        allowed_hands=allowed_hands,
     )
     server = BridgeServer(
         bridge,
@@ -206,79 +225,97 @@ async def _run(args: argparse.Namespace) -> int:
     if args.allow_origin:
         LOG.info("allowed browser origins: %s", ", ".join(args.allow_origin))
     LOG.info("payloads: FF11 raw, FF12 decoded, FF14 batched; protocol 1")
+    LOG.info("hand filter: %s", ", ".join(bridge.hand_filter))
 
+    advertiser: MdnsAdvertiser | None = None
     replay: ReplaySource | None = None
     manager: HidrawManager | None = None
-    if args.replay:
-        entries = read_capture(args.replay)
-        replay = ReplaySource(
-            entries,
-            rate=args.replay_rate,
-            hand=args.replay_hand,
-            loop=not args.replay_once,
-        )
-        replay.start(bridge)
-        LOG.info(
-            "replaying %d frames at %.0f/s from %s (%s)",
-            len(entries),
-            args.replay_rate,
-            args.replay,
-            args.replay_hand,
-        )
-    else:
-        manager = HidrawManager(
-            bridge,
-            left_spec=args.left,
-            right_spec=args.right,
-            explicit_paths=args.hidraw,
-            include_all=args.all_hidraw,
-            poll_interval=args.poll_interval,
-        )
-        manager.start()
-        LOG.info("watching hidraw for WMR controllers")
-
-    stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for signame in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(signame, stop.set)
-        except (NotImplementedError, RuntimeError):
-            pass
-
-    async def log_status() -> None:
-        while not stop.is_set():
-            await asyncio.sleep(5.0)
-            status = bridge.status()
-            hands = " ".join(
-                f"{item['hand'].lower()}={item['reports']}({item['delivered']})"
-                for item in status["hands"]
-            )
-            LOG.info(
-                "clients=%d subscribed=%d %s dropped=%d",
-                status["clients"],
-                status["subscribed"],
-                hands,
-                status["dropped"],
-            )
-
-    status_task = asyncio.create_task(log_status(), name="status")
+    status_task: asyncio.Task[None] | None = None
     duration_task: asyncio.Task[None] | None = None
-    if args.duration:
-        duration_task = asyncio.create_task(
-            _stop_after(stop, args.duration), name="duration"
-        )
-
+    replay_task: asyncio.Task[None] | None = None
+    stop = asyncio.Event()
     try:
+        if args.advertise_mdns:
+            advertiser = MdnsAdvertiser(port=server.port, hands=bridge.hand_filter)
+            advertiser.start()
+
+        if args.replay:
+            entries = read_capture(args.replay)
+            replay = ReplaySource(
+                entries,
+                rate=args.replay_rate,
+                hand=args.replay_hand,
+                loop=not args.replay_once,
+            )
+            replay.start(bridge)
+            LOG.info(
+                "replaying %d frames at %.0f/s from %s (%s)",
+                len(entries),
+                args.replay_rate,
+                args.replay,
+                args.replay_hand,
+            )
+        else:
+            manager = HidrawManager(
+                bridge,
+                left_spec=args.left,
+                right_spec=args.right,
+                allowed_hands=allowed_hands,
+                explicit_paths=args.hidraw,
+                include_all=args.all_hidraw,
+                poll_interval=args.poll_interval,
+            )
+            manager.start()
+            LOG.info("watching hidraw for WMR controllers (hand=%s)", args.hand)
+
+        loop = asyncio.get_running_loop()
+        for signame in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(signame, stop.set)
+            except (NotImplementedError, RuntimeError):
+                pass
+
+        async def log_status() -> None:
+            while not stop.is_set():
+                await asyncio.sleep(5.0)
+                status = bridge.status()
+                hands = " ".join(
+                    f"{item['hand'].lower()}={item['reports']}({item['delivered']})"
+                    for item in status["hands"]
+                )
+                LOG.info(
+                    "clients=%d subscribed=%d %s dropped=%d",
+                    status["clients"],
+                    status["subscribed"],
+                    hands,
+                    status["dropped"],
+                )
+
+        status_task = asyncio.create_task(log_status(), name="status")
+        if args.duration:
+            duration_task = asyncio.create_task(
+                _stop_after(stop, args.duration), name="duration"
+            )
+        if replay is not None and args.replay_once:
+            replay_task = asyncio.create_task(
+                _stop_after_replay(replay, stop), name="replay-stop"
+            )
+
         await stop.wait()
     finally:
         stop.set()
-        status_task.cancel()
+        if status_task is not None:
+            status_task.cancel()
         if duration_task is not None:
             duration_task.cancel()
+        if replay_task is not None:
+            replay_task.cancel()
         if replay is not None:
             await replay.close()
         if manager is not None:
             await manager.close()
+        if advertiser is not None:
+            advertiser.close()
         await server.close()
         LOG.info("stopped: %s", bridge.status())
     return 0
@@ -289,8 +326,33 @@ async def _stop_after(stop: asyncio.Event, seconds: float) -> None:
     stop.set()
 
 
+async def _stop_after_replay(replay: ReplaySource, stop: asyncio.Event) -> None:
+    try:
+        await replay.wait()
+    finally:
+        # --replay-once promises a clean exit after one pass, even if the
+        # replay failed part-way through.
+        stop.set()
+
+
+def _parse_cli_args(argv: list[str] | None = None, env_args: str | None = None) -> argparse.Namespace:
+    if argv is None:
+        argv = sys.argv[1:]
+    if env_args is None:
+        env_args = os.environ.get("WMR_BRIDGE_ARGS", "")
+    extra = env_args.strip()
+    if extra:
+        import shlex
+
+        # Append WMR_BRIDGE_ARGS unless already present in argv (e.g. via systemd $WMR_BRIDGE_ARGS).
+        extra_tokens = shlex.split(extra)
+        if not (len(argv) >= len(extra_tokens) and argv[-len(extra_tokens) :] == extra_tokens):
+            argv = [*argv, *extra_tokens]
+    return _build_parser().parse_args(argv)
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
+    args = _parse_cli_args(argv, env_args=None if argv is None else "")
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",

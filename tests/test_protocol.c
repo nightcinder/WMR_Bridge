@@ -309,6 +309,19 @@ static void test_malformed_poisons_partial(void){
     p1[10] = 3;                          /* chunk_len now disagrees with the payload */
     CHECK(wmr_reassembler_push(&r, p1, s1, &out) == WMR_PROTO_ERR_LENGTH);
     CHECK(r.frames_incomplete[0] == 1);
+
+    /* A bad magic is also invalid, so it abandons the partial frame too. */
+    wmr_reassembler_init(&r);
+    uint8_t q0[WMR_CFG_MAX_NOTIFICATION], q1[WMR_CFG_MAX_NOTIFICATION];
+    uint16_t t0 = wmr_proto_encode_fragment(&a, 0, 44, q0, &chunk);
+    uint16_t t1 = wmr_proto_encode_fragment(&a, 32, 44, q1, &chunk);
+    CHECK(wmr_reassembler_push(&r, q0, t0, &out) == WMR_PROTO_PARTIAL);
+    q0[0] = (uint8_t) (WMR_PROTO_MAGIC ^ 0xff);
+    CHECK(wmr_reassembler_push(&r, q0, t0, &out) == WMR_PROTO_ERR_MAGIC);
+    CHECK(r.frames_incomplete[0] == 1);
+    /* The old continuation must not resurrect the abandoned frame. */
+    CHECK(wmr_reassembler_push(&r, q1, t1, &out) == WMR_PROTO_ERR_OUT_OF_ORDER);
+    CHECK(r.frames_complete[0] == 0);
 }
 
 #if WMR_CFG_PSVR2_SUPPORT

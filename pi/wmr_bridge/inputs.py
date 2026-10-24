@@ -107,6 +107,11 @@ class ReplaySource:
     def start(self, bridge: Bridge) -> None:
         self._task = asyncio.create_task(self.run(bridge), name="replay")
 
+    async def wait(self) -> None:
+        """Wait for the replay task to finish (only with ``loop=False``)."""
+        if self._task is not None:
+            await self._task
+
     async def close(self) -> None:
         if self._task is not None:
             self._task.cancel()
@@ -126,6 +131,7 @@ class HidrawManager:
         *,
         left_spec: str | None = None,
         right_spec: str | None = None,
+        allowed_hands: Iterable[int] = (0, 1),
         explicit_paths: Iterable[str] = (),
         include_all: bool = False,
         poll_interval: float = 1.0,
@@ -133,6 +139,7 @@ class HidrawManager:
         self.bridge = bridge
         self.left_spec = left_spec
         self.right_spec = right_spec
+        self.allowed_hands = frozenset(allowed_hands)
         self.explicit_paths = list(explicit_paths)
         self.include_all = include_all
         self.poll_interval = max(0.2, poll_interval)
@@ -181,6 +188,8 @@ class HidrawManager:
                 LOG.warning(
                     "%s has no WMR name; pass --left/--right to assign it", path
                 )
+            return False
+        if hand not in self.allowed_hands:
             return False
         other = self._path_of_hand.get(hand)
         if other is not None and other != path:

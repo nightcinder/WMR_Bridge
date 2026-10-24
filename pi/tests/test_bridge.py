@@ -7,6 +7,7 @@ import json
 import unittest
 from pathlib import Path
 
+from wmr_bridge import __version__
 from wmr_bridge.bridge import Bridge, Subscriber
 from wmr_bridge.inputs import read_capture
 from wmr_bridge.protocol import Reassembler, parse_batch, unpack_record
@@ -53,6 +54,7 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(hello["transport"], "wifi")
         self.assertEqual(hello["streams"], ["raw", "decoded", "batched"])
         self.assertEqual(hello["recordSize"], 56)
+        self.assertEqual(hello["handFilter"], ["LEFT", "RIGHT"])
         self.assertFalse(hello["authRequired"])
 
     async def test_raw_stream_reassembles(self) -> None:
@@ -115,12 +117,43 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await asyncio.wait_for(client.recv_json(), 2))["type"], "unsubscribed")
         self.assertEqual((await self.subscribe(client, "decoded"))["type"], "subscribed")
 
+    async def test_unsubscribe_drops_payloads_queued_for_the_old_stream(self) -> None:
+        class BlockingSocket:
+            closed = False
+
+            def __init__(self) -> None:
+                self.gate = asyncio.Event()
+
+            async def send_json(self, _value: dict) -> None:
+                pass
+
+            async def send_binary(self, _payload: bytes) -> None:
+                await self.gate.wait()
+
+        bridge = Bridge()
+        socket = BlockingSocket()
+        subscriber = Subscriber(bridge, socket)  # type: ignore[arg-type]
+        subscriber.stream = "decoded"
+        try:
+            for _ in range(3):
+                subscriber._enqueue(b"old-stream payload")
+            await asyncio.sleep(0)  # the sender takes one and blocks in send_binary
+            self.assertEqual(subscriber._queue.qsize(), 2)
+            subscriber.reset_stream()
+            self.assertEqual(subscriber._queue.qsize(), 0)
+        finally:
+            socket.gate.set()
+            subscriber.close()
+            await asyncio.sleep(0)
+
     async def test_status_and_ping(self) -> None:
         client, _ = await self.connect()
         self.bridge.ingest(0, SAMPLE_DATA)
         await client.send_json({"type": "status"})
         status = await asyncio.wait_for(client.recv_json(), 2)
         self.assertEqual(status["type"], "status")
+        self.assertEqual(status["version"], __version__)
+        self.assertEqual(status["handFilter"], ["LEFT", "RIGHT"])
         self.assertEqual(status["hands"][0]["reports"], 1)
         self.assertEqual(status["hands"][0]["sequence"], 1)
         self.assertEqual(status["hands"][1]["reports"], 0)
@@ -179,6 +212,9 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         class FullQueue:
             def put_nowait(self, _payload: bytes) -> None:
                 raise asyncio.QueueFull
+
+            def get_nowait(self) -> bytes:
+                raise asyncio.QueueEmpty
 
             async def get(self) -> bytes:
                 await asyncio.Event().wait()
@@ -241,6 +277,31 @@ class AuthBridgeTests(BridgeTests):
     test_unknown_message = None  # type: ignore[assignment]
     test_server_close_closes_active_clients = None  # type: ignore[assignment]
     test_per_hand_dropped_counts_queue_rejections = None  # type: ignore[assignment]
+
+
+class HandFilterPayloadTests(unittest.TestCase):
+    def test_both_hands_are_reported_by_default(self) -> None:
+        bridge = Bridge()
+        self.assertEqual(bridge.hello()["handFilter"], ["LEFT", "RIGHT"])
+        status = bridge.status()
+        self.assertEqual(status["handFilter"], ["LEFT", "RIGHT"])
+        self.assertEqual(status["version"], __version__)
+
+    def test_single_hand_filter_reaches_hello_and_status(self) -> None:
+        for hand, expected in ((0, ["LEFT"]), (1, ["RIGHT"])):
+            bridge = Bridge(allowed_hands=(hand,))
+            self.assertEqual(bridge.hello()["handFilter"], expected)
+            self.assertEqual(bridge.status()["handFilter"], expected)
+            other = 1 - hand
+            self.assertIsNone(bridge.ingest(other, SAMPLE_DATA))
+            self.assertEqual(bridge.sequence[other], 0)
+            self.assertIsNotNone(bridge.ingest(hand, SAMPLE_DATA))
+            self.assertEqual(bridge.sequence[hand], 1)
+
+    def test_invalid_hand_filter_is_rejected(self) -> None:
+        for bad in ((), (2,), (-1,), (0, 2)):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                Bridge(allowed_hands=bad)
 
 
 if __name__ == "__main__":

@@ -186,6 +186,14 @@ class Subscriber:
             self._batch_timer.cancel()
             self._batch_timer = None
         self._batch.clear()
+        # Binary payloads already queued belong to the stream being left. The
+        # control reply is sent directly (not through this queue), so leaving
+        # them would deliver old-stream bytes after `unsubscribed`.
+        while True:
+            try:
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
         self.stream = None
 
     def close(self) -> None:
@@ -206,11 +214,16 @@ class Bridge:
         batch_hold_ms: float = 5.0,
         fragment_capacity: int = DEFAULT_FRAGMENT_CAPACITY,
         auth_timeout_s: float = 5.0,
+        allowed_hands: tuple[int, ...] | list[int] = (0, 1),
     ) -> None:
         if not 1 <= batch_max <= BATCH_MAX_COUNT:
             raise ValueError(f"batch_max must be 1..{BATCH_MAX_COUNT}")
         if batch_hold_ms < 0:
             raise ValueError("batch_hold_ms cannot be negative")
+        hands = set(allowed_hands)
+        if not hands or not hands <= {0, 1}:
+            raise ValueError("allowed_hands must be a non-empty subset of (0, 1)")
+        self.allowed_hands = tuple(hand for hand in (0, 1) if hand in hands)
         self.token = token
         self.queue_size = max(1, queue_size)
         self.batch_max = batch_max
@@ -231,7 +244,7 @@ class Bridge:
 
         if not 0 <= hand < 2:
             raise ValueError(f"bad hand {hand}")
-        if not data:
+        if hand not in self.allowed_hands or not data:
             return None
         now_us = time.monotonic_ns() // 1000 if rx_time_us is None else rx_time_us
         self.sequence[hand] = (self.sequence[hand] + 1) & 0xFFFFFFFF
@@ -266,6 +279,12 @@ class Bridge:
 
     # ---- status ----------------------------------------------------------
 
+    @property
+    def hand_filter(self) -> list[str]:
+        """Configured hands, e.g. ``["LEFT"]`` for a single-hand daemon."""
+
+        return [HAND_NAMES[hand] for hand in self.allowed_hands]
+
     def now_us(self) -> int:
         return time.monotonic_ns() // 1000
 
@@ -278,6 +297,8 @@ class Bridge:
             hands.append(item)
         return {
             "type": "status",
+            "version": __version__,
+            "handFilter": self.hand_filter,
             "uptimeS": round((now - self.started_us) / 1_000_000.0, 1),
             "hostTimeUs": now,
             "hands": hands,
@@ -294,6 +315,7 @@ class Bridge:
             "transport": "wifi",
             "device": "wmr-pi",
             "version": __version__,
+            "handFilter": self.hand_filter,
             "hostname": socket.gethostname(),
             "authRequired": self.token is not None,
             "streams": list(STREAMS),
