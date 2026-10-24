@@ -244,7 +244,7 @@ class Bridge:
 
         if not 0 <= hand < 2:
             raise ValueError(f"bad hand {hand}")
-        if not data:
+        if hand not in self.allowed_hands or not data:
             return None
         now_us = time.monotonic_ns() // 1000 if rx_time_us is None else rx_time_us
         self.sequence[hand] = (self.sequence[hand] + 1) & 0xFFFFFFFF

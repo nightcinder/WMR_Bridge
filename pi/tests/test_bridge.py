@@ -292,6 +292,11 @@ class HandFilterPayloadTests(unittest.TestCase):
             bridge = Bridge(allowed_hands=(hand,))
             self.assertEqual(bridge.hello()["handFilter"], expected)
             self.assertEqual(bridge.status()["handFilter"], expected)
+            other = 1 - hand
+            self.assertIsNone(bridge.ingest(other, SAMPLE_DATA))
+            self.assertEqual(bridge.sequence[other], 0)
+            self.assertIsNotNone(bridge.ingest(hand, SAMPLE_DATA))
+            self.assertEqual(bridge.sequence[hand], 1)
 
     def test_invalid_hand_filter_is_rejected(self) -> None:
         for bad in ((), (2,), (-1,), (0, 2)):
