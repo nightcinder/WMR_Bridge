@@ -1,9 +1,8 @@
 # Linux / Raspberry Pi host bridge over Wi-Fi
 
-**Status: implemented and host-tested in this repository; not yet run on a
-Raspberry Pi or with real controllers.** Everything below is the design and the
-bench plan, not a hardware result. The ESP32/BLE path remains the default and is
-unchanged.
+**Status: the second supported target (the ESP32 remains first-class), host-tested
+in this repository but not yet run on a Raspberry Pi or with real controllers.**
+Everything below is the design and the bench plan, not a hardware result.
 
 This document specifies a second bridge implementation for any Linux machine
 with **Bluetooth Classic** and a **5 GHz Wi-Fi** adapter. A Raspberry Pi 4 or 5
@@ -53,12 +52,12 @@ does better than the ESP32's is an open measurement question (see the test plan)
 | Decoded stream | FF12 56-byte records | same records, same fields |
 | Batched stream | FF14 version 2 | same 2-byte header + records |
 | Sequence numbers | per hand, every report | per hand, every report; reset only on daemon restart |
-| `rx_time_us` | ESP32 `esp_timer` since boot | daemon monotonic clock since start; diagnostics only |
+| `rx_time_us` | ESP32 `esp_timer` since boot | Linux monotonic clock (since boot, not daemon start); diagnostics only |
 | Calibration FF13 | read from controllers | **not implemented** (future work) |
 | Echo FF15 | GATT characteristic | JSON `ping`/`pong` control messages |
 | Firmware version FF16 | GATT characteristic | `version` in `hello` |
 | BLE MTU | 23..517 | no MTU; one raw fragment by default |
-| Security | no BLE pairing/encryption | optional shared token; still plaintext unless tunnelled |
+| Security | no BLE pairing/encryption | token required beyond loopback; still plaintext unless tunnelled |
 
 The companion app can reuse its existing FF11 reassembler, FF12 record parser
 and FF14 batch parser. Only the transport changes.
@@ -137,18 +136,32 @@ KERNEL=="hidraw*", SUBSYSTEM=="hidraw", MODE="0660", GROUP="input"
 ```bash
 cd pi
 python3 -m wmr_bridge --list
-python3 -m wmr_bridge --bind 0.0.0.0 --port 8765
+
+# Loopback only (the default): useful for a local client on the same machine.
+python3 -m wmr_bridge
+
+# Pi on the LAN, phone connecting to it: a token is required.
+printf '%s\n' "$(head -c 24 /dev/urandom | base64)" > token
+chmod 600 token
+python3 -m wmr_bridge --bind 0.0.0.0 --token-file token
 ```
 
 No third-party packages are required: the WebSocket implementation, protocol
 codecs, decoder and tests use only the Python standard library (3.10+).
 
+`--bind` defaults to `127.0.0.1`. If you bind to any non-loopback address
+without `--token` or `--token-file`, the daemon exits before opening a socket
+instead of silently serving controller telemetry to the LAN. `--insecure-no-token`
+is the explicit, typed escape hatch and is unsafe on any shared network.
+
 Useful flags:
 
 | Flag | Meaning |
 | --- | --- |
-| `--bind`, `--port` | WebSocket listen address (default `0.0.0.0:8765`) |
-| `--token`, `--token-file` | require a shared token from clients |
+| `--bind`, `--port` | WebSocket listen address (default `127.0.0.1:8765`); a non-loopback address requires a token |
+| `--token`, `--token-file` | require a shared token from clients (the file form is preferred) |
+| `--allow-origin ORIGIN` | allow this browser `Origin` (repeatable); other `Origin` values are rejected |
+| `--insecure-no-token` | allow a non-loopback bind without a token (**unsafe**) |
 | `--hidraw PATH` | open a specific node instead of auto-discovery |
 | `--left MATCH`, `--right MATCH` | assign by MAC, path or name part |
 | `--all-hidraw` | consider every HID device (then use `--left/--right`) |
@@ -166,6 +179,8 @@ sudo mkdir -p /opt/wmr-bridge /etc/wmr-bridge
 sudo cp -r pi /opt/wmr-bridge/
 sudo install -m 600 /dev/null /etc/wmr-bridge/token
 sudo sh -c 'head -c 24 /dev/urandom | base64 > /etc/wmr-bridge/token'
+sudo chown wmr:wmr /etc/wmr-bridge/token
+sudo chmod 600 /etc/wmr-bridge/token
 sudo cp /opt/wmr-bridge/pi/systemd/wmr-bridge.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now wmr-bridge
@@ -173,8 +188,10 @@ journalctl -u wmr-bridge -f
 ```
 
 The unit runs as `wmr` with `SupplementaryGroups=input`, restarts on failure and
-reads the token from `/etc/wmr-bridge/token`. It does not enable itself until
-you do.
+reads the token from `/etc/wmr-bridge/token`. The token file must be owned by
+`wmr` (mode 0600): a root-owned file is unreadable by the service, which then
+exits with a message naming the path and the uid it runs as. It does not enable
+itself until you do.
 
 ### Wi-Fi and firewall
 
@@ -195,7 +212,15 @@ Sec-WebSocket-Protocol: wmr-wifi-v1
 ```
 
 The server accepts the connection, selects `wmr-wifi-v1` when offered, and
-immediately sends one JSON `hello`:
+immediately sends one JSON `hello`. The HTTP upgrade must complete within
+**5 seconds**, otherwise the server sends `408 Request Timeout` and closes, so a
+half-open TCP connection cannot hold a slot.
+
+Requests that carry an `Origin` header (browsers always do; the probe and the
+companion app do not) are rejected with `403 Forbidden` unless that exact origin
+was allowed at startup with `--allow-origin <value>` (repeatable). This stops a
+web page on the LAN from opening a socket to the daemon. Origin matching is
+case-insensitive on the normalised value; `*` is not a wildcard.
 
 ```json
 {
@@ -230,8 +255,13 @@ Success is `{"type":"auth_ok"}`. Failure sends
 `4401`. No control message other than `auth` is processed before authentication.
 
 The token is a shared secret, not a user account. It is compared in constant
-time. If no token is configured, any client on the network can subscribe; only
-do that on a trusted network.
+time. A token is **required whenever the daemon listens on a non-loopback
+address**: `--bind` defaults to `127.0.0.1`, and binding to a LAN address
+without `--token`/`--token-file` exits with an error instead of starting. This
+is the path the owner runs (Pi on the LAN, phone connecting to it), so configure
+`--token-file /etc/wmr-bridge/token`. `--insecure-no-token` overrides the check
+for deliberate lab use only; it is unsafe because every host that can reach the
+port can subscribe. With no token on loopback, only local clients can connect.
 
 ### Control messages
 
@@ -353,7 +383,9 @@ Records of both hands may share a batch; each carries its own hand.
 successfully decoded while a decoded/batched client was subscribed; `delivered`
 counts records enqueued for a client (a batch contributes one per record);
 `errors` counts malformed frames or non-input report IDs; `dropped` counts
-messages dropped because a client queue was full.
+messages dropped because a client queue was full. The per-hand `dropped` counts
+the same drops attributed to that hand (a dropped batch contributes one per
+record it contained).
 
 ### Sequence and timing semantics
 
@@ -366,7 +398,8 @@ messages dropped because a client queue was full.
   loss), or a decoded record was discarded. It is not evidence of downstream
   loss; use `dropped` for that.
 - `device_ticks` is the controller's own 100 ns clock and remains the primary
-  sensor timestep. `rx_time_us` is a host clock for latency/jitter only; its
+  sensor timestep. `rx_time_us` is a host clock for latency/jitter only; it is
+  Linux's monotonic clock, which counts from boot, not from daemon start. Its
   origin differs from the ESP32's `esp_timer`, so do not compare the raw values
   across bridges.
 - The JSON `ping`/`pong` pair is the FF15 analogue. `t` is echoed unchanged and
@@ -396,17 +429,32 @@ is a documented follow-up rather than silently pretending to support it.
 
 ## Security
 
-This is a **test bridge**, like the firmware. It is not hardened.
+This is a **bench bridge**, not an internet-facing service. The mechanical
+safeguards below are enforced by the daemon; the transport is still plaintext.
 
-- The WebSocket is plaintext. The optional token prevents accidental clients on
-  a trusted LAN; it does not encrypt controller data and does not resist an
-  on-path attacker. Use WPA2/WPA3, a dedicated/trusted network, or an SSH tunnel
-  until TLS is implemented.
-- Bind to the LAN interface you intend (`--bind`), and never port-forward 8765
-  from the internet.
-- Store the token in a mode-600 file and prefer `--token-file` over `--token`
-  (the latter is visible in the process list). The daemon warns if the token
-  file is group/world-readable.
+- **Loopback by default, token required on the LAN.** `--bind` defaults to
+  `127.0.0.1`. Serving the Pi's LAN address requires both an explicit
+  `--bind 0.0.0.0` (or the Pi's address) **and** `--token`/`--token-file`; the
+  daemon refuses to start otherwise. The token is what protects the owner's
+  actual setup (Pi on the LAN, phone connecting to it). `--insecure-no-token`
+  exists only as a typed escape hatch for an isolated lab link; never use it on
+  a shared or untrusted network.
+- **Browser origins are rejected by default.** A request with an `Origin`
+  header is refused unless that exact origin was passed with `--allow-origin`.
+  The probe and the companion app do not send `Origin`; browsers always do, so
+  a web page cannot open a socket to the daemon.
+- **Bounded handshake.** An HTTP upgrade that does not complete within 5 seconds
+  is closed, so half-open connections cannot accumulate.
+- The WebSocket is plaintext. The token prevents unauthorised clients, but it
+  does not encrypt controller data and does not resist an on-path attacker. Use
+  WPA2/WPA3, a dedicated/trusted network, or an SSH tunnel until TLS is
+  implemented.
+- Never port-forward 8765 from the internet. Bind only the interface you
+  intend, and keep the firewall closed except for the LAN clients you expect.
+- Store the token in a mode-600 file **owned by the service user** (`wmr`) and
+  prefer `--token-file` over `--token` (the latter is visible in the process
+  list). The daemon warns if the token file is group/world-readable, and its
+  read error names the path and the uid it is running as.
 - On the Bluetooth side, the Pi trusts the controllers you pair in BlueZ. The
   bridge assigns LEFT/RIGHT by HID name (or by `--left/--right`), which is not
   authentication; a spoofed device that BlueZ pairs could claim a hand. Bond the
@@ -414,7 +462,7 @@ This is a **test bridge**, like the firmware. It is not hardened.
 - Controller motion data can be personal data. Captures and logs should be
   handled accordingly. The repository samples contain no Bluetooth address.
 - There is no rate limiting, no per-client authorisation beyond the token, and
-  no TLS yet. Treat it as bench equipment.
+  no TLS yet. Treat it as bench equipment with a small, local attack surface.
 
 ## Performance expectations and limits
 
@@ -445,14 +493,23 @@ Covers: FF11 golden fragments and every capacity 13..244 for both hands, FF12
 golden record and C-parity sample records, FF14 batches, reassembler rules,
 hidraw discovery/normalisation, WebSocket handshake/fragmentation/ping/close,
 the JSON control protocol, authentication, stream exclusion, batching and
-replay. No hardware or third-party packages.
+replay. It also covers the non-loopback-without-token refusal, the loopback
+default, Origin rejection and allow-listing, the handshake timeout, the
+`auth_failed` path for a non-ASCII token, per-hand drop accounting and closing
+active sockets on shutdown. No hardware or third-party packages.
 
 Replay smoke test:
 
 ```bash
-python3 -m wmr_bridge --replay ../samples/controller_frames.txt --port 8765
+python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1 --port 8765
 python3 tools/wifi_probe.py --stream batched --duration 10
 ```
+
+`decoded` can legitimately trail `reports` by however long the daemon ran before
+the client subscribed: reports are only decoded while a decoded/batched
+subscriber is attached ([`pi/wmr_bridge/bridge.py`](../pi/wmr_bridge/bridge.py)
+`ingest`). That difference is not loss; use sequence gaps and `dropped` to judge
+loss.
 
 ### Hardware checklist (not yet run)
 
@@ -484,7 +541,7 @@ treat the Pi path as unverified.
 | Client gets `auth_failed` | token mismatch; check `/etc/wmr-bridge/token` and the client flag |
 | Client gets `stream_active` | send `unsubscribe` before switching streams |
 | High RTT or drops | confirm 5 GHz, disable Wi-Fi power save, check channel congestion, inspect `status.dropped` |
-| Port unreachable | `--bind 0.0.0.0`, firewall, correct Pi address, same VLAN/client isolation off |
+| Port unreachable | `--bind 0.0.0.0` (plus a token, or the daemon refuses to start), firewall, correct Pi address, same VLAN/client isolation off |
 
 ## Future work
 
@@ -502,4 +559,4 @@ treat the Pi path as unverified.
 | `pi/wmr_bridge/` | host bridge package: protocol, decoder, BlueZ, WebSocket, server, CLI |
 | `pi/tools/wifi_probe.py` | bench client: throughput, sequence gaps, RTT, status |
 | `pi/systemd/` | service unit and environment example |
-| `pi/tests/` | 68 host tests (no hardware) |
+| `pi/tests/` | 84 host tests (no hardware) |

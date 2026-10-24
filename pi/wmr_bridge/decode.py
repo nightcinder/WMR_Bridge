@@ -1,3 +1,8 @@
+# Ported from src/wmr_decode.c (with src/wmr_decoded.c) in this repository.
+# Those files carry the BlueKitchen BTstack licence header, which permits
+# personal, non-commercial use only; this port inherits those terms. See
+# license_header.txt at the repository root. Not MIT.
+
 """Port of ``src/wmr_decode.c`` and ``src/wmr_decoded.c`` to Python.
 
 Only the parts needed by the Linux/Pi host bridge are here: the 46-byte

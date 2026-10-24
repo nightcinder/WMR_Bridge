@@ -1,10 +1,10 @@
 # WMR Bridge on Linux / Raspberry Pi (Wi-Fi transport)
 
-This directory is an experimental **host-side replacement for the ESP32** for
-any Linux machine with Bluetooth Classic and a 5 GHz Wi-Fi adapter. A
-Raspberry Pi 4 or 5 is the reference target (dual-band Wi-Fi and BT 5.0);
-a Pi Zero 2 W is **not** suitable because its Wi-Fi is 2.4 GHz only, which
-shares the radio band with Bluetooth.
+This directory is the **second supported target** (the ESP32 remains
+first-class): a host-side replacement for the ESP32 for any Linux machine with
+Bluetooth Classic and a 5 GHz Wi-Fi adapter. A Raspberry Pi 4 or 5 is the
+reference target (dual-band Wi-Fi and BT 5.0); a Pi Zero 2 W is **not** suitable
+because its Wi-Fi is 2.4 GHz only, which shares the radio band with Bluetooth.
 
 The host bridge:
 
@@ -21,12 +21,16 @@ plan are in [`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md).
 
 ```bash
 cd pi
-python3 -m unittest discover -s tests -v          # 68 host tests
-python3 -m wmr_bridge --replay ../samples/controller_frames.txt
+python3 -m unittest discover -s tests -v          # 84 host tests
+python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 
 # in a second terminal
 python3 tools/wifi_probe.py --stream batched --duration 10
 ```
+
+`--bind` defaults to `127.0.0.1`, so the quick start needs no token and is not
+reachable from the LAN. `decoded` can trail `reports` by the time the daemon ran
+before the client subscribed; that is not loss (see `docs/PI_BRIDGE.md`).
 
 The replay path is a complete smoke test of the WebSocket transport, the
 decoder and the three stream formats.
@@ -46,11 +50,15 @@ bluetoothctl connect "AA:BB:CC:DD:EE:FF"
 sudo usermod -aG input "$USER"   # or run the bridge as a user in group input
 cd pi
 python3 -m wmr_bridge --list     # confirm both controllers are visible
-python3 -m wmr_bridge --bind 0.0.0.0 --port 8765
+
+# Pi on the LAN, phone connecting to it: a token is required.
+python3 -m wmr_bridge --bind 0.0.0.0 --token-file /etc/wmr-bridge/token
 ```
 
 Then point the companion app's Wi-Fi transport (or `tools/wifi_probe.py`) at
-`ws://<pi-address>:8765/wmr`.
+`ws://<pi-address>:8765/wmr`. Requests carrying a browser `Origin` are rejected
+unless that origin is allow-listed with `--allow-origin`; the companion app and
+the probe do not send one.
 
 ## Files
 
@@ -66,7 +74,7 @@ Then point the companion app's Wi-Fi transport (or `tools/wifi_probe.py`) at
 | `wmr_bridge/__main__.py` | `python3 -m wmr_bridge` CLI |
 | `tools/wifi_probe.py` | bench client: throughput, gaps, RTT, status |
 | `systemd/wmr-bridge.service` | unit file for an unattended bridge |
-| `tests/` | 68 host tests; no hardware required |
+| `tests/` | 84 host tests; no hardware required |
 
 ## Status
 

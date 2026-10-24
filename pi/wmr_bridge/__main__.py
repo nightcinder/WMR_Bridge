@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import errno
+import ipaddress
 import logging
 import os
 import signal
@@ -30,10 +32,26 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    parser.add_argument("--bind", default="0.0.0.0", help="address to listen on (default 0.0.0.0)")
+    parser.add_argument(
+        "--bind",
+        default="127.0.0.1",
+        help="address to listen on (default 127.0.0.1, loopback only)",
+    )
     parser.add_argument("--port", type=int, default=8765, help="WebSocket port (default 8765)")
     parser.add_argument("--token", help="shared token required from clients (prefer --token-file)")
     parser.add_argument("--token-file", help="file holding the shared token on its first line")
+    parser.add_argument(
+        "--allow-origin",
+        action="append",
+        default=[],
+        metavar="ORIGIN",
+        help="allow this browser Origin header (repeatable); other Origin values are rejected",
+    )
+    parser.add_argument(
+        "--insecure-no-token",
+        action="store_true",
+        help="permit a non-loopback bind without a token (UNSAFE; do not use on a shared network)",
+    )
     parser.add_argument("--queue-size", type=int, default=512, help="per-client outbound queue (frames)")
     parser.add_argument("--batch-max", type=int, default=9, help="records per FF14 batch (1..9)")
     parser.add_argument("--batch-hold-ms", type=float, default=5.0, help="maximum batch wait in ms")
@@ -77,7 +95,20 @@ def _read_token(args: argparse.Namespace) -> str | None:
             with open(args.token_file, "r", encoding="utf-8") as handle:
                 token = handle.readline().rstrip("\r\n")
         except OSError as exc:
-            raise SystemExit(f"cannot read --token-file: {exc}") from exc
+            reason = exc.strerror or str(exc)
+            if exc.errno in (errno.EACCES, errno.EPERM):
+                hint = (
+                    "the provided systemd unit runs as user 'wmr', so a "
+                    "root-owned token file is not readable by it. Check "
+                    f"'ls -l {args.token_file}' and fix ownership with "
+                    f"'sudo chown wmr:wmr {args.token_file}' (mode 0600)"
+                )
+            else:
+                hint = f"check that {args.token_file} exists and is readable"
+            raise SystemExit(
+                f"cannot read --token-file {args.token_file}: {reason}. "
+                f"This daemon is running as uid {os.getuid()}; {hint}."
+            ) from exc
         try:
             mode = os.stat(args.token_file).st_mode
             if mode & (stat.S_IRGRP | stat.S_IROTH):
@@ -87,6 +118,35 @@ def _read_token(args: argparse.Namespace) -> str | None:
     if token == "":
         raise SystemExit("token is empty")
     return token
+
+
+def _is_loopback_bind(host: str) -> bool:
+    """True only when every address ``host`` resolves to is a loopback address."""
+
+    try:
+        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except OSError:
+        return False
+    addresses = {info[4][0] for info in infos}
+    if not addresses:
+        return False
+    try:
+        return all(ipaddress.ip_address(address).is_loopback for address in addresses)
+    except ValueError:
+        return False
+
+
+def _require_auth_for_bind(args: argparse.Namespace, token: str | None) -> None:
+    """Refuse to expose an unauthenticated listener beyond loopback."""
+
+    if token is not None or args.insecure_no_token or _is_loopback_bind(args.bind):
+        return
+    raise SystemExit(
+        f"--bind {args.bind} is not a loopback address but no token was given. "
+        "Pass --token-file PATH (preferred) or --token VALUE, or pass "
+        "--insecure-no-token to serve without authentication anyway "
+        "(unsafe: every host that can reach this port can read controller data)."
+    )
 
 
 def _local_addresses() -> list[str]:
@@ -115,6 +175,7 @@ def _print_devices() -> int:
 
 async def _run(args: argparse.Namespace) -> int:
     token = _read_token(args)
+    _require_auth_for_bind(args, token)
     bridge = Bridge(
         token=token,
         queue_size=args.queue_size,
@@ -123,12 +184,27 @@ async def _run(args: argparse.Namespace) -> int:
         fragment_capacity=args.fragment_capacity,
         auth_timeout_s=args.auth_timeout,
     )
-    server = BridgeServer(bridge, host=args.bind, port=args.port)
+    server = BridgeServer(
+        bridge,
+        host=args.bind,
+        port=args.port,
+        allowed_origins=tuple(args.allow_origin),
+    )
     await server.start()
 
     addresses = _local_addresses() if args.bind in ("0.0.0.0", "::") else [args.bind]
     LOG.info("listening on %s", ", ".join(f"ws://{address}:{server.port}/wmr" for address in addresses))
-    LOG.info("authentication: %s", "shared token required" if token else "none (trusted LAN only)")
+    if token:
+        LOG.info("authentication: shared token required")
+    elif _is_loopback_bind(args.bind):
+        LOG.info("authentication: none (loopback only)")
+    else:
+        LOG.warning(
+            "authentication: NONE (--insecure-no-token) on non-loopback %s",
+            args.bind,
+        )
+    if args.allow_origin:
+        LOG.info("allowed browser origins: %s", ", ".join(args.allow_origin))
     LOG.info("payloads: FF11 raw, FF12 decoded, FF14 batched; protocol 1")
 
     replay: ReplaySource | None = None

@@ -71,6 +71,20 @@ def _parse_json(text: str) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def _tokens_equal(candidate: str, expected: str) -> bool:
+    """Compare tokens as UTF-8 bytes.
+
+    ``hmac.compare_digest`` rejects non-ASCII strings with ``TypeError``; bytes
+    comparison keeps the constant-time property and turns a malformed client
+    token into an ordinary authentication failure.
+    """
+
+    try:
+        return hmac.compare_digest(candidate.encode("utf-8"), expected.encode("utf-8"))
+    except UnicodeEncodeError:
+        return False
+
+
 class Subscriber:
     """One connected client and its outbound queue."""
 
@@ -123,6 +137,8 @@ class Subscriber:
             for message in encode_raw_messages(frame, self.bridge.fragment_capacity):
                 if self._enqueue(message):
                     self.bridge.hands[frame.hand].delivered += 1
+                else:
+                    self.bridge.hands[frame.hand].dropped += 1
         elif self.stream in ("decoded", "batched"):
             if record is None:
                 return
@@ -130,6 +146,8 @@ class Subscriber:
             if self.stream == "decoded":
                 if self._enqueue(packed):
                     self.bridge.hands[frame.hand].delivered += 1
+                else:
+                    self.bridge.hands[frame.hand].dropped += 1
             else:
                 self._batch.append((frame.hand, packed))
                 if len(self._batch) >= self.bridge.batch_max:
@@ -155,6 +173,9 @@ class Subscriber:
             self.bridge.stats_batches += 1
             for hand, _packed in records:
                 self.bridge.hands[hand].delivered += 1
+        else:
+            for hand, _packed in records:
+                self.bridge.hands[hand].dropped += 1
 
     def reset_stream(self) -> None:
         if self._batch_timer is not None:
@@ -323,7 +344,7 @@ class Bridge:
             or message.get("type") != "auth"
             or not isinstance(message.get("token"), str)
             or self.token is None
-            or not hmac.compare_digest(message["token"], self.token)
+            or not _tokens_equal(message["token"], self.token)
         ):
             await subscriber.send_json({"type": "error", "code": "auth_failed"})
             await subscriber.websocket.close(4401, "authentication failed")

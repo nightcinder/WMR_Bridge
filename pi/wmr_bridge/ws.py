@@ -32,6 +32,7 @@ OP_PONG = 0xA
 
 DEFAULT_MAX_MESSAGE = 1 << 20
 MAX_HEADER_BYTES = 16 * 1024
+DEFAULT_HANDSHAKE_TIMEOUT = 5.0
 
 CLOSE_NORMAL = 1000
 CLOSE_GOING_AWAY = 1001
@@ -106,6 +107,41 @@ def _all(headers: list[tuple[str, str]], name: str) -> str:
     return ", ".join(value for key, value in headers if key == name)
 
 
+def _normalise_origin(value: str) -> str:
+    return value.strip().rstrip("/").lower()
+
+
+def _close_payload(code: int, reason: str) -> bytes:
+    """Build a close payload without splitting a UTF-8 sequence.
+
+    The reason field is limited to 123 bytes (125 minus the 2-byte code).
+    Truncating the encoded bytes directly can leave an incomplete sequence,
+    which peers must reject, so drop whole trailing characters instead.
+    """
+
+    encoded = reason.encode("utf-8")
+    if len(encoded) > 123:
+        encoded = encoded[:123]
+        while encoded:
+            try:
+                encoded.decode("utf-8")
+                break
+            except UnicodeDecodeError:
+                encoded = encoded[:-1]
+    return code.to_bytes(2, "big") + encoded
+
+
+def _close_details(payload: bytes) -> tuple[int, str]:
+    """Decode a received close payload; a 1-byte payload is a protocol error."""
+
+    if not payload:
+        return CLOSE_NORMAL, ""
+    if len(payload) == 1:
+        raise WebSocketError("close frame payload is 1 byte; a close code needs 2")
+    code = int.from_bytes(payload[:2], "big")
+    return code, payload[2:].decode("utf-8", errors="replace")
+
+
 @dataclass
 class WebSocket:
     reader: asyncio.StreamReader
@@ -167,8 +203,7 @@ class WebSocket:
     async def close(self, code: int = CLOSE_NORMAL, reason: str = "") -> None:
         if not self._closed and not self._close_sent:
             try:
-                payload = code.to_bytes(2, "big") + reason.encode("utf-8")[:123]
-                await self._send_frame(OP_CLOSE, payload)
+                await self._send_frame(OP_CLOSE, _close_payload(code, reason))
                 self._close_sent = True
             except (WebSocketClosed, ConnectionError, asyncio.CancelledError):
                 pass
@@ -228,10 +263,7 @@ class WebSocket:
                 raise WebSocketClosed(CLOSE_GOING_AWAY, "connection error") from exc
 
             if opcode == OP_CLOSE:
-                code, reason = CLOSE_NORMAL, ""
-                if len(payload) >= 2:
-                    code = int.from_bytes(payload[:2], "big")
-                    reason = payload[2:].decode("utf-8", errors="replace")
+                code, reason = _close_details(payload)
                 if not self._close_sent:
                     try:
                         await self._send_frame(OP_CLOSE, payload[:125])
@@ -295,15 +327,27 @@ async def accept(
     *,
     subprotocols: tuple[str, ...] = (SUBPROTOCOL,),
     max_message: int = DEFAULT_MAX_MESSAGE,
+    allowed_origins: tuple[str, ...] = (),
+    handshake_timeout: float = DEFAULT_HANDSHAKE_TIMEOUT,
 ) -> WebSocket:
     """Perform the server side of the WebSocket handshake."""
 
-    raw = await _read_http_headers(reader)
+    try:
+        raw = await asyncio.wait_for(_read_http_headers(reader), timeout=handshake_timeout)
+    except asyncio.TimeoutError as exc:
+        await _reject(writer, 408, "Request Timeout")
+        raise WebSocketError("HTTP handshake timed out") from exc
     start, headers = _parse_headers(raw)
     parts = start.split(" ")
     if len(parts) != 3 or parts[0] != "GET" or not parts[2].startswith("HTTP/1."):
         await _reject(writer, 400, "Bad Request")
         raise WebSocketError(f"bad request line: {start!r}")
+    origin = _first(headers, "origin")
+    if origin is not None:
+        allowed = {_normalise_origin(item) for item in allowed_origins if item.strip()}
+        if _normalise_origin(origin) not in allowed:
+            await _reject(writer, 403, "Forbidden")
+            raise WebSocketError(f"origin not allowed: {origin!r}")
     if "websocket" not in _header_tokens(_all(headers, "upgrade")):
         await _reject(writer, 426, "Upgrade Required", [("Upgrade", "websocket")])
         raise WebSocketError("not a WebSocket upgrade")
@@ -372,6 +416,7 @@ async def connect(
     max_message: int = DEFAULT_MAX_MESSAGE,
     ssl: Any = None,
     timeout: float = 10.0,
+    origin: str | None = None,
 ) -> WebSocket:
     """Open a WebSocket client connection."""
 
@@ -390,6 +435,8 @@ async def connect(
     ]
     if subprotocol:
         lines.append(f"Sec-WebSocket-Protocol: {subprotocol}")
+    if origin is not None:
+        lines.append(f"Origin: {origin}")
     writer.write(("\r\n".join(lines) + "\r\n\r\n").encode("ascii"))
     await writer.drain()
 
@@ -421,13 +468,28 @@ async def serve(
     *,
     subprotocols: tuple[str, ...] = (SUBPROTOCOL,),
     max_message: int = DEFAULT_MAX_MESSAGE,
+    allowed_origins: tuple[str, ...] = (),
+    handshake_timeout: float = DEFAULT_HANDSHAKE_TIMEOUT,
 ) -> asyncio.AbstractServer:
     """Start a WebSocket server; ``handler(websocket)`` runs per connection."""
 
     async def _client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
-            websocket = await accept(reader, writer, subprotocols=subprotocols, max_message=max_message)
+            websocket = await accept(
+                reader,
+                writer,
+                subprotocols=subprotocols,
+                max_message=max_message,
+                allowed_origins=allowed_origins,
+                handshake_timeout=handshake_timeout,
+            )
         except (WebSocketError, ConnectionError, asyncio.IncompleteReadError):
+            if not writer.is_closing():
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except (ConnectionError, OSError):
+                    pass
             return
         try:
             await handler(websocket)

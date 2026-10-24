@@ -7,7 +7,7 @@ import json
 import unittest
 from pathlib import Path
 
-from wmr_bridge.bridge import Bridge
+from wmr_bridge.bridge import Bridge, Subscriber
 from wmr_bridge.inputs import read_capture
 from wmr_bridge.protocol import Reassembler, parse_batch, unpack_record
 from wmr_bridge.server import BridgeServer
@@ -169,6 +169,35 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         record = unpack_record(await asyncio.wait_for(client.recv_binary(), 2))
         self.assertEqual(record.sequence, 3)
 
+    async def test_server_close_closes_active_clients(self) -> None:
+        client, _ = await self.connect()
+        await self.server.close()
+        with self.assertRaises(wsmod.WebSocketClosed):
+            await asyncio.wait_for(client.recv(), 2)
+
+    async def test_per_hand_dropped_counts_queue_rejections(self) -> None:
+        class FullQueue:
+            def put_nowait(self, _payload: bytes) -> None:
+                raise asyncio.QueueFull
+
+            async def get(self) -> bytes:
+                await asyncio.Event().wait()
+                raise AssertionError("unreachable")
+
+        bridge = Bridge(queue_size=1)
+        subscriber = Subscriber(bridge, object())  # type: ignore[arg-type]
+        subscriber.stream = "decoded"
+        subscriber._queue = FullQueue()  # type: ignore[assignment]
+        bridge.subscribers.add(subscriber)
+        try:
+            bridge.ingest(0, SAMPLE_DATA)
+            bridge.ingest(0, SAMPLE_DATA)
+        finally:
+            subscriber.close()
+        self.assertEqual(bridge.hands[0].dropped, 2)
+        self.assertEqual(bridge.hands[0].delivered, 0)
+        self.assertEqual(bridge.stats_dropped, 2)
+
 
 class AuthBridgeTests(BridgeTests):
     token = "s3cret"
@@ -189,6 +218,14 @@ class AuthBridgeTests(BridgeTests):
         with self.assertRaises(wsmod.WebSocketClosed):
             await asyncio.wait_for(client.recv(), 2)
 
+    async def test_non_ascii_token_is_auth_failed(self) -> None:
+        client, _ = await self.connect(authenticate=False)
+        await client.send_json({"type": "auth", "token": "pässwörd"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "error", "code": "auth_failed"})
+        with self.assertRaises(wsmod.WebSocketClosed):
+            await asyncio.wait_for(client.recv(), 2)
+
     async def test_control_before_auth_is_refused(self) -> None:
         client, _ = await self.connect(authenticate=False)
         await client.send_json({"type": "subscribe", "stream": "raw"})
@@ -202,6 +239,8 @@ class AuthBridgeTests(BridgeTests):
     test_binary_from_client_is_rejected = None  # type: ignore[assignment]
     test_bad_json = None  # type: ignore[assignment]
     test_unknown_message = None  # type: ignore[assignment]
+    test_server_close_closes_active_clients = None  # type: ignore[assignment]
+    test_per_hand_dropped_counts_queue_rejections = None  # type: ignore[assignment]
 
 
 if __name__ == "__main__":

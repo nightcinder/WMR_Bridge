@@ -8,11 +8,11 @@ phone side is the companion app [wmr-companion](https://github.com/nightcinder/w
 the overall state, hardware results and roadmap are in its
 [docs/STATUS.md](https://github.com/nightcinder/wmr-companion/blob/main/docs/STATUS.md).
 
-A second, experimental **Linux / Raspberry Pi host bridge** is included in
+A second, supported **Linux / Raspberry Pi host bridge** is included in
 [`pi/`](pi/README.md): it uses BlueZ for Classic Bluetooth and replaces BLE with
 a WebSocket on 5 GHz Wi-Fi, while sending the same FF11/FF12/FF14 payloads. See
 [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md). It is host-tested but has not been run on
-hardware yet.
+hardware yet; the ESP32 remains first-class.
 
 ```
  WMR LEFT  --\  Classic Bluetooth HID                       BLE GATT notifications
@@ -147,7 +147,7 @@ only; manual, refused while connected).
 
 ## Linux / Raspberry Pi host bridge (Wi-Fi)
 
-The firmware in `src/` is the default. An experimental host implementation in
+The firmware in `src/` is the default. A supported second target in
 [`pi/`](pi/README.md) instead runs on a Linux machine with Bluetooth Classic and
 a 5 GHz Wi-Fi adapter (a Raspberry Pi 4 or 5 is the reference). BlueZ owns the
 Classic HID host side; the bridge reads `/dev/hidraw*`, decodes reports, and
@@ -240,7 +240,7 @@ Open:
 - The remaining unknowns in [docs/DECODING.md](docs/DECODING.md) (accel scale, temperature, battery, input ranges).
 - Where the roughly 40 ms phone round trip goes (median, user-reported first run).
 - BLE security (no pairing or encryption today), see [docs/SECURITY.md](docs/SECURITY.md).
-- Hardware validation of the experimental Linux/Raspberry Pi Wi-Fi host bridge
+- Hardware validation of the supported Linux/Raspberry Pi Wi-Fi host bridge
   (P1-P10 in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md)); it is host-tested only.
 
 ## Configuration
