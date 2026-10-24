@@ -34,6 +34,38 @@ characteristic.
   [`runs/README.md`](runs/README.md). Do not enable prediction by default until
   the tracking-quality sitting has measured its error.
 
+### Does one ESP32 lose too much?
+
+**For a VR-grade dual-controller target, yes. For the current 3DoF viewer, no.**
+
+- The current viewer survives because the effective rate stays at 150-165 Hz
+  and the gyro is integrated across the gaps. That is the use it was measured
+  in, and it is why smoothing is worth considering there.
+- A VR-grade target needs roughly 3-5 % loss or better per hand. One ESP32
+  delivers 18-25 % with both controllers and a phone, 9-11 % per hand even with
+  no phone, and about 10.8 % on RIGHT alone. The best single-bridge case,
+  LEFT alone at about 0.5 %, does not generalise to the pair. Against a 3-5 %
+  bar, one ESP32 misses by a factor of four to eight.
+- This is not a CPU, queue or firmware-buffering limit. The bridge forwards
+  what it receives (`tx == rx`, `drop=0`, queue high-water 31 of 256), and the
+  loss is already present with no phone connected. The deficit is in the radio
+  path that delivers controller reports, not in the ESP32's ability to process
+  them.
+- It follows that more than one ESP32 is **justified for VR-grade tracking**:
+  one Classic link per radio is the architecture the multi-bridge sheet tests.
+  It is also **not proven to be enough**. With one bridge per hand, LEFT is
+  expected to return toward its alone level and RIGHT to lose the roughly eight
+  points that appear when LEFT is also connected; RIGHT's own ~10.8 % is still
+  there, so even two bridges may not reach a 3-5 % bar. That sitting has not
+  run ([`runs/sheets/multi-bridge.md`](runs/sheets/multi-bridge.md)).
+- The Pi/Wi-Fi bridge moves only the phone link. It can remove BLE airtime from
+  the ESP32 radio, but it cannot remove the 9-11 % no-phone baseline, so it is
+  not a single-ESP32 fix either.
+- **Architecture decision:** a single ESP32 is adequate for the current 3DoF
+  demo and gamepad output, and is not adequate as the final radio for
+  VR-grade dual-controller tracking. Prediction does not change that answer;
+  it hides sample age, not missing reports.
+
 ## 1. The three links and what each one loses
 
 The product has three Bluetooth links:
@@ -312,7 +344,81 @@ These are host tests, no hardware:
 - Non-finite gyro: the predictor returns the last pose instead of producing a
   NaN.
 
-## 5. If prediction is built, when is it "done"?
+## 5. Is the 2026-10-22 latency run still current?
+
+**Short answer: treat it as history, not as a current measurement. The firmware's
+normal WMR/FF14 path has no known latency-relevant change since the run, but the
+client latency path has been refactored and extended, and a fresh run on the
+current APK and firmware is needed before quoting 40.8 ms as current.** This is a
+test-freshness question, separate from whether the loss figure is still
+representative.
+
+The run was made at 2026-10-22 14:56, when firmware `main` was `203108c`
+(2026-10-22 14:41) and companion `main` was `3df70a4` (14:42). The export does
+not record the actual APK or firmware hash. Current `main` is `6520deb` on the
+firmware side and a later commit on the companion side.
+
+### 5.1 Firmware changes since the run
+
+| Change | Latency relevance |
+| --- | --- |
+| Single-hand mode (`3c9fad3`) | Default both-hands build is unchanged; it gates which hands are served |
+| FF16 packaged version (`41771f8`) | Read-only characteristic and console command; no stream path |
+| Build/flash framework (`a1859ad`), LEFT/RIGHT variants (`547ab09`) | Packaging and default build selection; the both-hands runtime path is unchanged |
+| Pi/Wi-Fi bridge (`079ef19`) | Separate host bridge; not the ESP32 BLE path |
+| PSVR2 framework (`32de94a`) | Compile-time opt-in, off by default; the default WMR build keeps its frame limit and paths |
+| RGB status LED (`d2c7553`) | Status only; adds an LED poll timer, no transport or batching change |
+| FF14 edge fixes (`b2268dd`) | Receiver-side batch bounds, 64-bit hold-timer rounding, and abandoning a partial frame on a bad-magic fragment. Normal 15 ms FF14 operation is unchanged; the timer fix only matters for very large hold values |
+| Docs and flasher (`6520deb` and the docs commits) | No runtime change |
+
+So no known firmware change invalidates the old latency number, and none
+explains the 40.8 ms either. The old commits are not current `main`, though:
+a current figure still has to be measured on a current image.
+
+### 5.2 App changes since the run
+
+The app changed materially, including in the exact path that produced the
+number:
+
+- `b818a21` added the latency screen's no-stream mode, stream selector and ping
+  interval after the run.
+- `29f6b02`, `abc3090`, `8dc21df` and others changed the fusion/gamepad path
+  (CPU work per sample, not the transport itself).
+- The package extraction (`5d37cf8`, `e90dde0`, and follow-ups) moved the
+  latency recorder, transport and export into `wmr_core`/`wmr_ble`.
+- `76268ca` changed the latency export to per-bridge attribution and version 3;
+  the saved run is version 2.
+- `9c42006` added multi-bridge support, and `28e0e45` changed how a latency run
+  stops across provider disposal.
+
+The run therefore used a client that no longer exists. The old figure is still
+useful as a historical data point, but it is not a current measurement of the
+current app.
+
+### 5.3 Is a new latency test required?
+
+**Yes, for any current latency claim.** Do not run a new bespoke test first; the
+two existing sheets already define it:
+
+- [wmr-companion LATENCY.md](https://github.com/nightcinder/wmr-companion/blob/main/docs/LATENCY.md)
+  "Run sheet": six runs at one fixed position (none, FF11, FF12, FF14, then
+  none and FF14 repeated), 120 s each, FF15 echo on, 250 ms ping interval, with
+  the current firmware and APK hashes recorded.
+- [latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md):
+  the Flutter client against the bare-Kotlin GATT probe, which is the
+  decision that actually needs a current number.
+
+Add the current **both-hands versus single-hand** comparison if the question is
+specifically the single-ESP32 capacity, rather than only the client. The
+controller-loss runs already answer the direction (both hands are worse), but
+they predate the current firmware too.
+
+The old run is also weak as a fixed-position baseline: RSSI moved from -69 to
+-48 dBm during it, so its 40.8 ms cannot be treated as a property of the
+hardware at a fixed distance. A rerun should hold the phone and controllers in
+one taped position and record RSSI at the start and end.
+
+## 6. If prediction is built, when is it "done"?
 
 The acceptance criteria for a future implementation are deliberately separate
 from this document:
@@ -331,7 +437,7 @@ from this document:
 
 Until those exist, this is a **design recommendation, not a shipped feature**.
 
-## 6. What would change this answer
+## 7. What would change this answer
 
 - **Loss falls below about 5 % per hand** (for example with one bridge per
   controller, or a better Classic link): prediction becomes optional polish,
@@ -347,11 +453,17 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
   the native path must consume the Dart predictor. Do not create two
   incompatible definitions of "predicted pose".
 
-## 7. Bottom line
+## 8. Bottom line
 
 - Loss is real and concentrated on the two Classic uplinks: about 18-25 % per
   hand with both controllers and a phone, about 9-11 % even with no phone, and
   essentially zero on the BLE downlink in the measured run.
+- **One ESP32 is enough for the current 3DoF demo and gamepad use, and not
+  enough for VR-grade dual-controller tracking.** At 18-25 % it misses a 3-5 %
+  target by a factor of four to eight; the no-phone baseline and RIGHT-alone
+  loss show the limit is the radio path, not ESP32 CPU or queueing. Two bridges
+  are justified for that target but not yet measured, and even they may not
+  remove RIGHT's own ~10.8 %.
 - It is too much for VR-grade tracking but survivable for the current 3DoF
   viewer because the library integrates over the controller's tick gaps. The
   visible defect is stale poses: over 20 ms one third of the time, over 50 ms
@@ -362,8 +474,12 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
 - Put it in the shared library (`wmr_core`), driven by an app-supplied render
   time. Do not put it on the ESP32, which cannot see the loss, and do not make
   it an app-only feature, which would duplicate it per platform.
-- Build it only after the loss work, as an opt-in presentation layer with the
-  tests and hardware acceptance in sections 4-5.
+- The 40.8 ms latency figure is historical. The normal firmware stream path has
+  no known latency-relevant change, but the app's latency/transport path was
+  refactored after the run; rerun the existing latency-2 and stream sheets on
+  the current builds before quoting a current number.
+- Build prediction only after the loss work, as an opt-in presentation layer
+  with the tests and hardware acceptance in sections 4-6.
 
 ## Evidence and limits
 
@@ -381,4 +497,8 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
 - The run had one phone, one position and a moving RSSI (-69 to -48 dBm). It
   does not establish a loss rate for the hardware, and it does not separate
   radio contention from the controller's own behaviour.
+- The firmware and app commit audit in section 5 uses the repository histories:
+  firmware `203108c` at the run versus `6520deb` now; companion `3df70a4` at
+  the run versus the later `main`. It is a code-history comparison, not a
+  measurement of the current builds.
 - No new hardware was run and no firmware or library code was changed.

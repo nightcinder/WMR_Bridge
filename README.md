@@ -274,7 +274,7 @@ in the app repo list what is still not run.
 
 Open:
 
-- Explaining and reducing controller-to-ESP32 report loss (issue [#18](../../issues/18)); coexistence options tested so far showed no effect ([docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md), [docs/runs/](docs/runs/README.md)). Whether a capped pose predictor should hide the remaining sample-age jitter, and why it belongs in the shared library rather than the firmware or app: [docs/PREDICTION.md](docs/PREDICTION.md).
+- Explaining and reducing controller-to-ESP32 report loss (issue [#18](../../issues/18)); coexistence options tested so far showed no effect ([docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md), [docs/runs/](docs/runs/README.md)). Why the measured loss is too much for a single ESP32 to be the final VR-grade radio, whether a capped pose predictor should hide the remaining sample-age jitter, and why it belongs in the shared library rather than the firmware or app: [docs/PREDICTION.md](docs/PREDICTION.md).
 - The remaining unknowns in [docs/DECODING.md](docs/DECODING.md) (accel scale, temperature, battery, input ranges).
 - Where the roughly 40 ms phone round trip goes (median, user-reported first run).
 - BLE security (no pairing or encryption today), see [docs/SECURITY.md](docs/SECURITY.md).
