@@ -228,6 +228,12 @@ when a matching manifest and images are next to it.
 
 - Chrome and Edge on desktop only (Web Serial). Firefox and Safari are not
   supported.
+- Supported OS and CPU architectures:
+  - Windows: x64, x86, and ARM64 (Windows on ARM) with appropriate USB-to-UART bridge drivers (CP210x, CH340, FTDI).
+  - macOS: Intel (x64) and Apple Silicon (ARM64 / M1/M2/M3/M4+).
+  - Linux: x64 and ARM/ARM64 (Chromium builds) provided the user has permissions to access the serial device (e.g. `dialout` or `uucp` group membership / udev rules).
+  - ChromeOS: Supported.
+  - Mobile (Android / iOS): Not supported (Web Serial is not available on mobile browsers).
 - Classic ESP32 with at least 2 MB flash. ESP32-S3 has no Classic Bluetooth,
   so it cannot run this firmware.
 - The manifest installs one merged image at offset 0 and asks the installer to

@@ -189,8 +189,9 @@
   <h2>What you need</h2>
   <ul>
     <li>An ESP32 board with 2 MB flash and a USB <strong>data</strong> cable.</li>
-    <li>Chrome or Edge on Windows, macOS or Linux. Firefox and Safari do not
-      support Web Serial.</li>
+    <li>Chrome or Edge on Windows (x64, ARM64), macOS (Intel, Apple Silicon ARM64) or Linux (x64, ARM64). Firefox and Safari do not
+      support Web Serial; mobile browsers (Android/iOS) are unsupported.</li>
+    <li>Appropriate USB-to-UART bridge drivers for your board (e.g. CP210x, CH340, FTDI) and serial port permissions on Linux (e.g. <code>dialout</code> group).</li>
     <li>Nothing else: no Arduino IDE, no ESP-IDF, no Python.</li>
   </ul>
 
