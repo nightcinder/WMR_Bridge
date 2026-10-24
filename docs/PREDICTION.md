@@ -211,6 +211,75 @@ The practical conclusion: the current loss is **acceptable for the existing
 should keep being treated as the main open problem, not as something a
 predictor makes go away.
 
+### 2.5 Have all single-ESP32 contention options been exhausted?
+
+**No.** The obvious firmware and link-policy options have been tried; several
+practical ones have not, and a few candidates are closed by the hardware or by
+the ESP-IDF API. The distinction matters because "we tried the switches" is not
+the same as "a single ESP32 cannot do better".
+
+**Tried, with the recorded result:**
+
+| Option | Result |
+| --- | --- |
+| Classic role: ESP32 already master; force-master variant (V3) | No-op; both links establish as master, so slave scheduling is not the cause |
+| Disable Classic sniff (`WMR_CFG_CLASSIC_NO_SNIFF=1`, V2) | 17.55 % / 23.19 % in one 120 s run, inside the 14-20 % / 19-26 % baseline spread; no effect shown, not proof of no effect |
+| BLE auto latency on (`CONFIG_BTDM_CTRL_AUTO_LATENCY=y`) | A/B/A session against baseline; no effect shown ([`runs/sheets/left-coex.md`](runs/sheets/left-coex.md)) |
+| Bluetooth modem sleep off (`CONFIG_BTDM_CTRL_MODEM_SLEEP=n`) | Same A/B/A session; no effect shown |
+| Fewer BLE notifications: FF12 decimation N=2/N=4 | LEFT stayed about 18-20 %; RIGHT was lower at N=2/N=4 (about 14-15 % / 12-13 %) than at N=1 (28-36 %), but the runs were not interleaved and the change could not be separated from session drift ([`PROTOCOL.md`](PROTOCOL.md)) |
+| FF14 batching (about 48 notifications/s instead of about 300/s) | No clear loss gain; the FF14 run sat inside the FF12 run-to-run spread, and LEFT rose through the session ([`STATUS.md`](STATUS.md)) |
+| Phone connected but no stream, then FF11/FF12/FF14 | Loss rises when the phone is present and more when it streams, but the no-phone baseline is already 9-11 %; BLE is a contributor, not the whole cause (recorded sessions, not all at one position) |
+| One controller alone versus both | LEFT ~0.5 % alone versus ~19 % both; RIGHT ~10.8 % alone versus ~19 % both. The pair adds contention, and RIGHT has a separate baseline loss |
+| Staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`, V1) | **Code exists; the run was never done** ([`runs/sheets/contention-2.md`](runs/sheets/contention-2.md)) |
+
+**Not tested, and practical:**
+
+- **Physical separation / antenna geometry.** The right-asymmetry sheet swaps
+  the controller between hand slots and positions, then swaps the board, to
+  separate controller, position and antenna. It has not run
+  ([`runs/sheets/right-asymmetry.md`](runs/sheets/right-asymmetry.md)). This is
+  the cheapest way to find out whether part of the loss is RF geometry rather
+  than scheduling.
+- **Data Length Extension confirmation.** DLE is enabled in BTstack, but the
+  firmware does not log whether the phone/controller accepted it, so its
+  airtime benefit is unknown. Logging the data-length event and comparing a
+  long-batch hold (for example two connection intervals) would test whether BLE
+  airtime can be reduced further without adding a visible delay.
+- **BLE connection interval/priority variations.** The bridge asks for
+  7.5-15 ms; the phone granted 15 ms with latency 1. A longer interval lowers
+  the number of connection events but adds latency; it is phone-controlled and
+  has not been compared.
+- **Controller task core/priority and HCI buffer count.** Not tuned. The
+  diagnostics argue against this being the cause (`vhci_drop=0`,
+  `log_errors=0`, queue high-water 31/256, `tx == rx`), so it is low value and
+  should come after the RF tests.
+- **Classic TX power and channel/frequency-hopping control.** `esp_bredr_tx_power_set`
+  is not called and the default is already the maximum; Classic AFH is
+  controller-managed and not exposed by this firmware. There is no tested lever
+  here, only a board/antenna change.
+
+**Closed or not a lever on this hardware:**
+
+- **2M BLE PHY** is not available on the original ESP32 (BLE 4.2 only); the
+  firmware never requests it and the controller would reject it. It would need a
+  BLE 5.0 bridge SoC, and the ESP32-S3/C3/C6 parts have no Classic Bluetooth,
+  which the controllers require
+  ([`DECODING.md`](DECODING.md), "PHY").
+- **Classic-against-BLE priority** has no public API. `esp_coex_preference_set`
+  arbitrates Wi-Fi against Bluetooth, not BR/EDR against BLE; the controller
+  firmware that would implement it is closed.
+- **ESP32 controller scheduling and the controllers' own firmware** are not
+  modifiable from this repository.
+
+The tested set already bounds the possible gain. Even if every BLE/coexistence
+lever worked perfectly, the no-phone baseline is 9-11 %, and RIGHT loses about
+10.8 % with no second controller. A single ESP32 therefore cannot reach a 3-5 %
+bar by contention tuning alone; the untested work is worth doing to find where
+the remaining loss belongs, not because a hidden switch is likely to fix it.
+The highest-value next steps are V1, the right-asymmetry sitting, and DLE
+logging, in that order. Multi-bridge remains the architecture that could remove
+the pair-contention component, and it is still unrun.
+
 ## 3. What prediction can and cannot do
 
 ### 3.1 It can
@@ -464,6 +533,12 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
   loss show the limit is the radio path, not ESP32 CPU or queueing. Two bridges
   are justified for that target but not yet measured, and even they may not
   remove RIGHT's own ~10.8 %.
+- **The single-ESP32 contention search is not exhausted.** V1 stagger, the
+  right-asymmetry/antenna sitting, DLE and long-batch logging, and physical
+  placement remain; 2M PHY and Classic-vs-BLE priority are closed by the
+  hardware/API. The no-phone and RIGHT-alone baselines bound the possible gain,
+  so these tests are diagnostic rather than a likely route to 3-5 % on one
+  ESP32.
 - It is too much for VR-grade tracking but survivable for the current 3DoF
   viewer because the library integrates over the controller's tick gaps. The
   visible defect is stale poses: over 20 ms one third of the time, over 50 ms
