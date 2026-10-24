@@ -22,7 +22,7 @@ sheet is [`docs/runs/sheets/pi-bridge.md`](../docs/runs/sheets/pi-bridge.md).
 
 ```bash
 cd pi
-python3 -m unittest discover -s tests -v          # 94 host tests
+python3 -m unittest discover -s tests -v          # 113 host tests
 python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 
 # in a second terminal
