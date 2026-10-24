@@ -20,7 +20,7 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, **not run on hardware** |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has **not** been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38) | Merged | Host tests only, **not run on hardware** |
-| PSVR2 Sense controller framework: name/model discovery, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | PR open | Host tests and firmware build only, **not run on hardware**; no PSVR2 decoder (FF11 raw only) |
+| PSVR2 Sense controller framework: opt-in (`-DWMR_CFG_PSVR2_SUPPORT=1`), name/model discovery, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | PR open | Host tests and firmware build only, **not run on hardware**; opt-in by default to keep DRAM headroom; no PSVR2 decoder (FF11 raw only) |
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 

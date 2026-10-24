@@ -86,9 +86,9 @@ Example (RIGHT, sequence `0x01020304`, 46-byte frame, notification capacity
   opcode + handle, 244 is `WMR_CFG_MAX_NOTIFICATION`.
 - Data per notification = capacity - 12. With the default ATT MTU of 23 the
   capacity is 20 and a 46-byte WMR frame takes 6 notifications
-  (8,8,8,8,8,6 bytes). A 79-byte PSVR2 frame takes 7 at that MTU. With ATT MTU
-  >= 61 a WMR frame fits in one notification (58 bytes); a PSVR2 frame needs
-  ATT MTU >= 91.
+  (8,8,8,8,8,6 bytes). A 79-byte PSVR2 frame takes 10 notifications at that MTU
+  (8*9 + 7 bytes). With ATT MTU >= 61 a WMR frame fits in one notification (58 bytes);
+  a PSVR2 frame needs ATT MTU >= 94 (capacity >= 91).
 - If the negotiated MTU is 15 or less, nothing can be sent (no room for a payload byte).
 - Fragments of one frame are sent **consecutively and in order** before any
   fragment of the next frame. The two hands are interleaved at frame

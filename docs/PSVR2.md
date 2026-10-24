@@ -3,8 +3,13 @@
 **Status: framework only. Host-tested and firmware-build-tested; never run on a PSVR2
 controller.** Tracking issue: [nightcinder/WMR_Bridge#44](https://github.com/nightcinder/WMR_Bridge/issues/44).
 
+PSVR2 Sense controller support is **off by default** (`WMR_CFG_PSVR2_SUPPORT=0`) so
+standard images retain their DRAM headroom for WMR operation (~7.6 KB DRAM free, 6.13%
+headroom). Turning support on (`-DWMR_CFG_PSVR2_SUPPORT=1`) automatically raises
+`WMR_CFG_MAX_FRAME` from 64 to 80 bytes to accommodate the 79-byte `0x31` report.
+
 The bridge started as a WMR-only HID host. This document describes the part of PSVR2
-support that is in the firmware now: identifying the controllers, storing their model,
+support that is in the firmware: identifying the controllers, storing their model,
 carrying their raw frames, and sending the HID handshake that should wake them. Decoding
 the PSVR2 report is deliberately left to a later change (and to the phone first).
 
@@ -15,7 +20,7 @@ the PSVR2 report is deliberately left to a later change (and to the phone first)
 | Discovery (`wmr_discovery.{h,c}`) | `PlayStation VR2 Sense Controller (L)` maps to LEFT and `(R)` to RIGHT, case-insensitive, with the same trailing-space/NUL padding rules as the WMR names. `wmr_discovery_model_for_name` returns `WMR_MODEL_PSVR2`; a run records `found_model[hand]`. |
 | Model storage (`wmr_addr_record_*`) | The 16-byte NVS record keeps version 1 and uses the first reserved byte (offset 14) for two model bits per hand: `00` = WMR, `01` = PSVR2. Older firmware ignores that byte, so downgrading keeps the addresses and reads both hands as WMR. An unknown value makes the record invalid instead of guessing. |
 | Connection state (`wmr_controller.c`) | The model is copied from discovery (or from the name of an incoming connection) into the hand, saved with its address, restored at boot, and shown by `s` as `model=WMR` / `model=PSVR2`. |
-| Raw stream (FF11) | A PSVR2 input report (byte 0 `0xA1`, byte 1 `0x31`, up to 79 bytes) is forwarded byte-for-byte with the usual per-hand sequence number. `WMR_CFG_MAX_FRAME` is now 80. |
+| Raw stream (FF11) | A PSVR2 input report (byte 0 `0xA1`, byte 1 `0x31`, up to 79 bytes) is forwarded byte-for-byte with the usual per-hand sequence number. When PSVR2 support is enabled (`WMR_CFG_PSVR2_SUPPORT=1`), `WMR_CFG_MAX_FRAME` automatically defaults to 80 (default is 64 when PSVR2 is off). |
 | HID wake (`WMR_CFG_PSVR2_WAKE`) | On `descriptor available`, a PSVR2 hand reads HID Feature Report `0x05` over the HID control channel. The handshake status and response length are logged; the payload is hex-dumped when `WMR_CFG_REPORT_HEXDUMP=1`. One attempt per connection. |
 | FF13 | The Microsoft config-block read is **not** sent to a PSVR2 hand: it is WMR-specific. The companion app sees FF13 idle for that hand. |
 | Report classification | For a PSVR2 hand only `0x31` frames are forwarded; anything else is counted in `other_reports`. WMR hands keep the existing `0x01` input / `0x02`+`0x06` config split. |
@@ -63,24 +68,35 @@ LEFT first report: cid=... frame_len=79 descriptor=available
 ## Reproducing the firmware build and host tests
 
 ```bash
+# Build default firmware (PSVR2 support off by default, MAX_FRAME=64)
 python3 tools/firmware/build.py --variant both        # needs ESP-IDF on PATH
+
+# Build with PSVR2 support enabled (implies MAX_FRAME=80)
+EXTRA_CFLAGS="-DWMR_CFG_PSVR2_SUPPORT=1" python3 tools/firmware/build.py --variant both
+
+# Host tests: default configuration (PSVR2 off, 164 checks for discovery)
 gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc \
+    tests/test_discovery.c src/wmr_discovery.c -o /tmp/test_discovery && /tmp/test_discovery
+
+# Host tests: PSVR2 enabled (183 checks for discovery, 6122 checks for protocol)
+gcc -std=c99 -Wall -Wextra -Wconversion -Werror -DWMR_CFG_PSVR2_SUPPORT=1 -Isrc \
     tests/test_discovery.c src/wmr_discovery.c -o /tmp/test_discovery && /tmp/test_discovery
 ```
 
-`WMR_CFG_MAX_FRAME` is 80 rather than the 96 first suggested by the issue: 96 x 256 queued
-frames overflowed `dram0_0_seg` by 568 bytes in the default ESP32 image, while 80 builds
-with headroom (the queue is 256 x 80 = 20,480 bytes). If a report turns out to be longer
-than 80, lower `WMR_CFG_QUEUE_CAPACITY` or move the queue to a smaller element type before
-raising the frame limit again.
+`WMR_CFG_MAX_FRAME` defaults to 64 when `WMR_CFG_PSVR2_SUPPORT` is 0 (saving 4 KB DRAM
+across the 256-frame queue) and expands to 80 when `WMR_CFG_PSVR2_SUPPORT` is 1 (96 x 256
+queued frames overflowed `dram0_0_seg` by 568 bytes in the ESP32 image, while 80 builds
+with ~3.5 KB headroom). If a report turns out to be longer than 80, lower
+`WMR_CFG_QUEUE_CAPACITY` or move the queue to a smaller element type before raising the
+frame limit again.
 
 ## Build switches
 
 | Switch | Default | Effect |
 | --- | --- | --- |
-| `WMR_CFG_PSVR2_SUPPORT` | `1` | `0` removes the PSVR2 names, model storage, raw forwarding, and wake path from the build (WMR-only behaviour). |
+| `WMR_CFG_PSVR2_SUPPORT` | `0` | Off by default. `1` enables PSVR2 names, model storage, raw forwarding, and wake path. Automatically selects `WMR_CFG_MAX_FRAME=80`. |
 | `WMR_CFG_PSVR2_WAKE` | `1` | `0` keeps PSVR2 recognition and raw forwarding but sends no wake request, for diagnostics. |
-| `WMR_CFG_MAX_FRAME` | `80` | Must stay `>= 79` while PSVR2 support is on. |
+| `WMR_CFG_MAX_FRAME` | `64` (`80` if PSVR2 on) | Must stay `>= 79` while PSVR2 support is on. |
 | `WMR_CFG_REPORT_HEXDUMP` | `0` | Also hex-dumps the Feature Report `0x05` response. |
 
 ## Sources
