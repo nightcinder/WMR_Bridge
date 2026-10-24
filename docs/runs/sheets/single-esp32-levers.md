@@ -26,7 +26,7 @@ ordered cheapest first:
 |---|---|
 | Both Classic links are master on the ESP32; V3 is a no-op | [`contention-2-results.md`](contention-2-results.md) §1 |
 | No-sniff V2 showed no effect in one 120 s run (17.55 % / 23.19 %) | [`contention-2-results.md`](contention-2-results.md) §2 |
-| No-phone baseline is 9-13 %; LEFT alone ~0.5 %, RIGHT alone ~10.8 % | [`single-controller.md`](single-controller.md), [`contention-2.md`](contention-2.md) §0 |
+| No-phone baseline is 9-11 % per hand in the analysed run (9-13 % across archived no-phone sessions); LEFT alone ~0.5 %, RIGHT alone ~10.8 % | [`single-controller.md`](single-controller.md), [`contention-2.md`](contention-2.md) §0, [`PREDICTION.md`](../../PREDICTION.md) §1 |
 | The phone's BLE link lost 0 records in the analysed 120 s run | [`PREDICTION.md`](../../PREDICTION.md) §1 |
 | DLE was accepted at 251 octets / 2120 µs on 2026-10-22 | `BLE data length changed: tx 251 octets / 2120 us, rx 251 octets / 2120 us`, [`../logs/ff14-vs-ff12-abba-linklog.txt`](../logs/ff14-vs-ff12-abba-linklog.txt) line 139 |
 | Host-side forwarding is not dropping: `vhci_drop=0`, `log_errors=0`, queue high-water 41/256 over the archived logs | `docs/runs/logs/*.txt`; e.g. `single-controller-both-connected.txt` line 198 |
@@ -166,8 +166,9 @@ calling it free.
 ## 5. Lever 4 — controller task core/priority and HCI buffers
 
 **Do not run unless the diagnostics show host-side drops.** The archived runs
-show `vhci_drop=0` and `log_errors=0` throughout, with `tx == rx` and a queue
-high-water of 41/256 (16 %) in the worst archived run. That rules out host-side
+show `vhci_drop=0` and `log_errors=0` throughout, with `tx` trailing `rx` only
+by records still queued and a queue high-water of 41/256 (16 %, sample
+`q=2/256 high=41`) in the worst archived run. That rules out host-side
 queue/HCI-buffer loss as the cause of the missing reports, so core pinning,
 priority changes and larger HCI buffers have no measured prerequisite and are
 **not run**. If a future run shows `vhci_drop > 0` or `log_errors > 0` in a
@@ -180,10 +181,10 @@ variant.
 |---|---|---|
 | V1 staggered connect | **Not run** | Needs the two V1 images and the A/B/A block in §2; no new code needed |
 | RIGHT asymmetry phases 1-2 | **Not run** | Needs one unflashed session under `right-asymmetry.md` §4; phase 3 only if 1-2 do not separate |
-| DLE confirmation (current build) | **Not run** | Earlier log shows 251/2120 accepted; needs the line captured again on this build |
+| DLE confirmation (current build) | **Not run on the current build; 2026-10-22 log shows 251/2120 accepted** | Capture the line again on this build |
 | Longer requested interval (30 ms) | **Not run** | Needs the B1 image and phone grant |
 | Longer FF14 hold (2 intervals) | **Not run** | Needs the B2 image; knob added in ONY-176 |
-| Controller core/priority, HCI buffers | **Ruled out by diagnostics** | `vhci_drop=0`, `log_errors=0`, queue high-water 41/256; no run |
+| Controller core/priority, HCI buffers | **Ruled out by diagnostics** | `vhci_drop=0`, `log_errors=0`, queue high-water 41/256 (sample `q=2/256 high=41`), `tx` trailing `rx` only by queued records; no run |
 
 Best measured configuration: **unchanged by ONY-176** because no lever has a new
 hardware result. The best measured single-ESP32 configuration remains the

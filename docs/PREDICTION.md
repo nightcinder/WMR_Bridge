@@ -47,7 +47,8 @@ characteristic.
   LEFT alone at about 0.5 %, does not generalise to the pair. Against a 3-5 %
   bar, one ESP32 misses by a factor of four to eight.
 - This is not a CPU, queue or firmware-buffering limit. The bridge forwards
-  what it receives (`tx == rx`, `drop=0`, queue high-water 31 of 256), and the
+  what it receives (`tx` trails `rx` only by records still queued; `drop=0`,
+  queue high-water 41 of 256, sample `q=2/256 high=41`), and the
   loss is already present with no phone connected. The deficit is in the radio
   path that delivers controller reports, not in the ESP32's ability to process
   them.
@@ -91,7 +92,8 @@ to Wi-Fi on the Pi bridge, cannot by itself produce a lossless Classic link.
 The fact that the phone sees no gaps also means the loss is not being hidden by
 the BLE stack. What the ESP32 receives, it forwards. This is consistent with
 [`COUNTERS.md`](COUNTERS.md) and with the bridge's own counters in the recorded
-FF14 runs (`tx == rx`, `drop=0`, `purged=0`, `mtu_skip=0`, `dec_err=0`); this
+FF14 runs (`drop=0`, `purged=0`, `mtu_skip=0`, `dec_err=0`; `tx` trails `rx`
+only by records still queued, so it is not a no-loss proof); this
 particular run did not save the serial log, so those bridge counters are not
 part of its export.
 
@@ -233,11 +235,11 @@ the same as "a single ESP32 cannot do better".
 | Staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`, V1) | **Code exists, run-ready; the run was never done** ([`runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md) §2) |
 | BLE interval: request 30 ms instead of 7.5-15 ms | **Not run.** The request is already a compile-time knob; prerequisite is the B1 image and the phone's granted interval |
 | FF14 hold: two connection intervals (`WMR_CFG_BATCH_HOLD_INTERVALS=2`) | **Not run.** Knob added in ONY-176; default 1 keeps the current one-interval hold |
-| DLE confirmation on the current build | **Partly measured.** The 2026-10-22 log shows 251 octets / 2120 µs accepted; the line still has to be captured on the current image |
-| Controller task core/priority and HCI buffers | **Ruled out by the archived diagnostics:** `vhci_drop=0`, `log_errors=0`, queue high-water 41/256, `tx == rx`; no run needed unless a future window shows a nonzero drop or error counter |
+| DLE confirmation on the current build | **Not run on the current build; the 2026-10-22 log shows 251 octets / 2120 µs accepted.** Capture the line again on this image |
+| Controller task core/priority and HCI buffers | **Ruled out by the archived diagnostics:** `vhci_drop=0`, `log_errors=0`, queue high-water 41/256 (sample `q=2/256 high=41`), and `tx` trailing `rx` only by queued records; no run needed unless a future window shows a nonzero drop or error counter |
 
 **ONY-176 status (2026-10-24).** No new hardware run has happened, so no lever in
-this section has a new result. All five are now either run-ready or ruled out:
+this section has a new result. All six are now either run-ready or ruled out:
 V1 and the BLE interval/hold images are compile-time builds; right-asymmetry
 phases 1-2 need no flash; DLE is already logged and only needs a current-build
 capture; core/priority and HCI buffers are ruled out by the diagnostics above.
@@ -267,7 +269,8 @@ FF14 at MTU 517, the granted 15 ms interval and a one-interval batch hold, with
   has not been compared.
 - **Controller task core/priority and HCI buffer count.** Not tuned, and no
   longer worth a run on current evidence: the archived logs show `vhci_drop=0`,
-  `log_errors=0`, queue high-water 41/256 and `tx == rx`. A future run that
+  `log_errors=0`, a queue high-water of 41/256 (sample `q=2/256 high=41`) and
+  `tx` trailing `rx` only by queued records. A future run that
   shows a nonzero drop or error counter reopens it; otherwise the diagnostics
   rule it out.
 - **Classic TX power and channel/frequency-hopping control.** `esp_bredr_tx_power_set`
@@ -551,7 +554,7 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
   are justified for that target but not yet measured, and even they may not
   remove RIGHT's own ~10.8 %.
 - **The single-ESP32 contention search is not exhausted, but every remaining
-  lever is now run-ready.** V1 stagger, right-asymmetry phases 1-2, current-build
+  lever is now either run-ready or ruled out.** V1 stagger, right-asymmetry phases 1-2, current-build
   DLE capture, a 30 ms interval request and a two-interval FF14 hold have not
   run; the core/priority and HCI-buffer lever is ruled out by zero drop/error
   counters. 2M PHY and Classic-vs-BLE priority are closed by the hardware/API.

@@ -68,9 +68,9 @@ Follow-up to ONY-170. Run sheet: [`docs/runs/sheets/single-esp32-levers.md`](run
 |---|---|---|
 | V1 staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`) | **Not run** | Code on `main`; needs the two V1 images and the A/B/A block at one fixed position |
 | RIGHT asymmetry, phases 1-2 | **Not run** | No reflash; use [`docs/runs/sheets/right-asymmetry.md`](runs/sheets/right-asymmetry.md) §4 with one controller powered at a time |
-| DLE confirmation, current build | **Partly measured** | 2026-10-22 log shows `tx 251 octets / 2120 us, rx 251 octets / 2120 us`; recapture the line on this build |
+| DLE confirmation, current build | **Not run on the current build; 2026-10-22 log shows 251/2120 accepted** | `tx 251 octets / 2120 us, rx 251 octets / 2120 us`; capture the line again on this build |
 | Longer BLE interval (30 ms request) | **Not run** | Existing `WMR_CFG_CONN_INTERVAL_MIN/MAX`; phone must grant it and the granted value must be recorded |
 | Longer FF14 hold (2 intervals) | **Not run** | New `WMR_CFG_BATCH_HOLD_INTERVALS=2`; default 1 leaves current behaviour unchanged |
-| Controller task core/priority, HCI buffers | **Ruled out by diagnostics** | Archived runs: `vhci_drop=0`, `log_errors=0`, queue high-water 41/256, `tx == rx`; no run unless a future window shows a nonzero drop/error counter |
+| Controller task core/priority, HCI buffers | **Ruled out by diagnostics** | Archived runs: `vhci_drop=0`, `log_errors=0`, queue high-water 41/256 (sample `q=2/256 high=41`), `tx` trailing `rx` only by queued records; no run unless a future window shows a nonzero drop/error counter |
 
 **Best measured configuration** is unchanged by ONY-176: the default both-hands FF14 stream at MTU 517 with the granted 15 ms interval and a one-interval batch hold. Its measured dual-hand loss is 18–25 % per hand ([`docs/PREDICTION.md`](PREDICTION.md) §1), and no tested single-ESP32 variant has beaten it. **Next architecture step:** one bridge per hand (multi-bridge) and/or the Pi Wi-Fi host bridge, to remove the BLE/phone link from the ESP32 radio; neither has run.
