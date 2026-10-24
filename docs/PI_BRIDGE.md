@@ -177,25 +177,43 @@ Useful flags:
 
 ### Unattended service
 
+Run the self-contained installer to create the `wmr` system user (`input`
+group), copy `pi/` into `/opt/wmr-bridge/pi`, install
+`pi/udev/99-wmr-bridge.rules` into `/etc/udev/rules.d/`, generate
+`/etc/wmr-bridge/token` (`0600 wmr:wmr`) if absent, and install
+`pi/systemd/wmr-bridge.service` plus `/etc/wmr-bridge/wmr-bridge.env`:
+
+```bash
+sudo ./pi/install.sh
+sudo systemctl enable --now wmr-bridge
+journalctl -u wmr-bridge -f
+```
+
+Or run the equivalent manual steps:
+
 ```bash
 sudo useradd --system --create-home --groups input wmr
 sudo mkdir -p /opt/wmr-bridge /etc/wmr-bridge
 sudo cp -r pi /opt/wmr-bridge/
+sudo cp pi/udev/99-wmr-bridge.rules /etc/udev/rules.d/
 sudo install -m 600 /dev/null /etc/wmr-bridge/token
 sudo sh -c 'head -c 24 /dev/urandom | base64 > /etc/wmr-bridge/token'
 sudo chown wmr:wmr /etc/wmr-bridge/token
 sudo chmod 600 /etc/wmr-bridge/token
+sudo cp /opt/wmr-bridge/pi/systemd/wmr-bridge.env.example /etc/wmr-bridge/wmr-bridge.env
 sudo cp /opt/wmr-bridge/pi/systemd/wmr-bridge.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now wmr-bridge
 journalctl -u wmr-bridge -f
 ```
 
-The unit runs as `wmr` with `SupplementaryGroups=input`, restarts on failure and
-reads the token from `/etc/wmr-bridge/token`. The token file must be owned by
-`wmr` (mode 0600): a root-owned file is unreadable by the service, which then
-exits with a message naming the path and the uid it runs as. It does not enable
-itself until you do.
+The unit runs as `wmr` with `SupplementaryGroups=input`, restarts on failure,
+reads the token from `/etc/wmr-bridge/token`, and loads optional flags from
+`/etc/wmr-bridge/wmr-bridge.env` via `WMR_BRIDGE_ARGS` (for example,
+`WMR_BRIDGE_ARGS=--hand left` on a single-hand Pi without editing the unit
+file). The token file must be owned by `wmr` (mode 0600): a root-owned file is
+unreadable by the service, which then exits with a message naming the path and
+the uid it runs as. It does not enable itself until you do.
 
 ### Wi-Fi and firewall
 
@@ -565,6 +583,7 @@ been run, treat the Pi path as unverified.
 | --- | --- |
 | `pi/wmr_bridge/` | host bridge package: protocol, decoder, BlueZ, WebSocket, server, CLI |
 | `pi/tools/wifi_probe.py` | bench client: throughput, sequence gaps, tick-based missing reports, RTT (min/p50/p95/max), status |
-| `pi/systemd/` | service unit and environment example |
+| `pi/install.sh` | unattended installer (`/opt/wmr-bridge`, udev rule, token, systemd unit & env) |
+| `pi/systemd/` | service unit and environment example (`WMR_BRIDGE_ARGS`) |
 | `pi/udev/` | udev rule (`99-wmr-bridge.rules`) granting `input` group access to `/dev/hidraw*` |
-| `pi/tests/` | 102 host tests (no hardware) |
+| `pi/tests/` | 104 host tests (no hardware) |

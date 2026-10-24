@@ -315,8 +315,24 @@ async def _stop_after_replay(replay: ReplaySource, stop: asyncio.Event) -> None:
         stop.set()
 
 
+def _parse_cli_args(argv: list[str] | None = None, env_args: str | None = None) -> argparse.Namespace:
+    if argv is None:
+        argv = sys.argv[1:]
+    if env_args is None:
+        env_args = os.environ.get("WMR_BRIDGE_ARGS", "")
+    extra = env_args.strip()
+    if extra:
+        import shlex
+
+        # Append WMR_BRIDGE_ARGS unless already present in argv (e.g. via systemd $WMR_BRIDGE_ARGS).
+        extra_tokens = shlex.split(extra)
+        if not (len(argv) >= len(extra_tokens) and argv[-len(extra_tokens) :] == extra_tokens):
+            argv = [*argv, *extra_tokens]
+    return _build_parser().parse_args(argv)
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
+    args = _parse_cli_args(argv, env_args=None if argv is None else "")
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
