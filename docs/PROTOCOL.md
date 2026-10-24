@@ -1,5 +1,11 @@
 # BLE protocol (raw stream, wire version unchanged from the pre-refactor bridge)
 
+> **Transport note.** The FF11/FF12/FF14 **payloads** below are also used by the
+> experimental Linux/Raspberry Pi host bridge, which carries them over a
+> WebSocket on Wi-Fi instead of BLE. GATT-specific details (UUIDs, CCC
+> descriptors, ATT MTU) do not apply there. See
+> [PI_BRIDGE.md](PI_BRIDGE.md) for that transport.
+
 This format is **experimental and unversioned**. It is exactly what the
 pre-refactor firmware sent; the refactor deliberately did not change it. A
 test (`tests/test_protocol.c`, "golden packet") pins the byte layout.
@@ -47,6 +53,8 @@ project's `PROJECT_VER` (ESP-IDF's default is `1`).
 
 The value is at most 31 bytes (the descriptor field is 32 bytes including the terminator).
 This characteristic is independent of the FF11/FF12/FF14 stream exclusion and of FF13/FF15.
+For the full compatibility matrix mapping FF16 strings to firmware characteristics and client
+library packages, see [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Notification format
 

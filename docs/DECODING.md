@@ -864,8 +864,27 @@ is changed.
   for the maximum (`le_set_data_length_max = true`), so a notification of up to MTU-3 bytes can
   be carried in fewer link-layer packets if the controller and the phone accept it. The firmware
   does not log the data-length change event, so whether it took effect is **unknown**.
-- **PHY.** BTstack has `gap_le_set_phy`; whether this ESP32 controller supports anything but the
-  1M PHY was not checked in the sources.
+- **PHY.** Whether this ESP32 controller supports anything but the 1M PHY has now been checked
+  (ONY-98) and the answer is a permanent no — 2M PHY is not available on this hardware at any price.
+  The three independent checks:
+  1. **The firmware never asks for it.** There is no `gap_le_set_phy` / `hci_le_set_phy` call
+     anywhere under `src/`. The only BLE connection tuning is the interval/latency request at
+     `src/wmr_transport.c:154` (`gap_request_connection_parameter_update`). BTstack does not switch
+     PHY on its own — a 2M link needs an explicit LE Set PHY procedure, and the default LE
+     connection PHY is 1M.
+  2. **The hardware cannot do it.** The bridge is the original Classic ESP32 (README build table:
+     ESP32 rev v1.1; `docs/FLASHING.md` calls for a Classic ESP32 because the S3 has no Classic
+     Bluetooth). Espressif states the ESP32 supports Bluetooth LE 4.2 only, and 2M PHY is a BLE 5.0
+     feature, so a PHY update initiated by the phone would be rejected by the controller. Source:
+     <https://docs.espressif.com/projects/esp-faq/en/latest/software-framework/bt/ble.html#does-esp32-support-bluetooth-5-0>
+  3. **It is not observable from the app either.** `universal_ble` exposes no PHY API, so the
+     companion's `BleConnectionInfo.phy` stays null on every platform. A `"phy": null` in a saved
+     latency run means **"not observable"**, not "2M".
+  Consequently, there is no `sdkconfig` option, build flag or variant that enables 2M on this board.
+  A 2M link would need a Bluetooth 5.0 bridge SoC, and the ESP32-S3/C3/C6 parts have no Classic
+  Bluetooth — which the controllers require — so that is a two-radio redesign, not a drop-in part
+  swap. The throughput levers that remain on 4.2 are DLE plus the batching/decimation work already
+  described in this document.
 - **Connection event length.** BTstack's `le_minimum_ce_length` / `le_maximum_ce_length` are
   connection *creation* parameters of a central; the bridge is the peripheral, and the L2CAP
   connection parameter update it sends has no event-length field. The phone decides.

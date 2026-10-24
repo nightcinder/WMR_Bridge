@@ -10,6 +10,12 @@ phone side is the companion app [wmr-companion](https://github.com/nightcinder/w
 the overall state, hardware results and roadmap are in its
 [docs/STATUS.md](https://github.com/nightcinder/wmr-companion/blob/main/docs/STATUS.md).
 
+A second, supported **Linux / Raspberry Pi host bridge** is included in
+[`pi/`](pi/README.md): it uses BlueZ for Classic Bluetooth and replaces BLE with
+a WebSocket on 5 GHz Wi-Fi, while sending the same FF11/FF12/FF14 payloads. See
+[docs/PI_BRIDGE.md](docs/PI_BRIDGE.md). It is host-tested but has not been run on
+hardware yet; the ESP32 remains first-class.
+
 ```
  WMR LEFT  --\  Classic Bluetooth HID                       BLE GATT notifications
               >------------------> ESP32 (BTstack) ------------------------------> Android phone
@@ -78,6 +84,7 @@ The default firmware build operates in the dual-controller topology described ab
 | `tests/`, `samples/` | Host unit tests for the protocol, queue and decoder; sample frames |
 | `tools/` | PC-side capture (`capture_ble.py`, needs hardware and `bleak`) and rotation analysis (`analyze_capture.py`); see [docs/DECODING.md](docs/DECODING.md) |
 | `tools/firmware/` | One-command build, packaging and flash (`build.py`) plus the browser-flasher manifest logic; see [docs/FLASHING.md](docs/FLASHING.md) |
+| `pi/` | Linux / Raspberry Pi host bridge over Wi-Fi: BlueZ hidraw source, WebSocket transport, decoder and host tests; see [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) |
 | `integration/` | The one BTstack file that must be replaced to build this (`main-CMakeLists.txt`, plus a diff) |
 | `docs/` | Build, flashing, protocol, Android, counters, security, reconnect/queue, controller discovery, PSVR2, testing, refactor notes |
 
@@ -144,6 +151,26 @@ and counters, `v` firmware version, `?` help, `d` discovery, `F` **forget** stor
 `k`/`K` **bond reset** LEFT/RIGHT (deletes the ESP32's stored link key for that controller
 only; manual, refused while connected).
 
+## Linux / Raspberry Pi host bridge (Wi-Fi)
+
+The firmware in `src/` is the default. A supported second target in
+[`pi/`](pi/README.md) instead runs on a Linux machine with Bluetooth Classic and
+a 5 GHz Wi-Fi adapter (a Raspberry Pi 4 or 5 is the reference). BlueZ owns the
+Classic HID host side; the bridge reads `/dev/hidraw*`, decodes reports, and
+serves the **same FF11/FF12/FF14 payloads** over a WebSocket. This removes BLE
+airtime from the phone link without changing the companion app's parsers.
+
+```bash
+cd pi
+./run_tests.sh
+python3 -m wmr_bridge --replay ../samples/controller_frames.txt   # no hardware
+python3 tools/wifi_probe.py --stream batched                      # second terminal
+```
+
+For live use, pair the controllers with the Pi first; `python3 -m wmr_bridge --list`
+shows the hidraw nodes. Full setup, the wire protocol, security notes and the
+hardware test checklist are in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md).
+
 ## BLE interface (summary)
 
 Service `0000FF10-0000-1000-8000-00805F9B34FB`; raw characteristic
@@ -152,7 +179,7 @@ Service `0000FF10-0000-1000-8000-00805F9B34FB`; raw characteristic
 decoded `FF14` (notify only, up to 9 records per notification at MTU 517); controller
 config block `FF13` (read in 496-byte windows, CRC-32); echo `FF15` (4-byte request, 20-byte
 answer, independent of the stream exclusion); firmware version `FF16` (read-only UTF-8
-string). All layouts: [docs/PROTOCOL.md](docs/PROTOCOL.md). Each notification is a
+string). Compatibility matrix across firmware versions and Dart library packages: [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md). All layouts: [docs/PROTOCOL.md](docs/PROTOCOL.md). Each notification is a
 12-byte little-endian header (`'R'`, hand, u32 sequence, u16 total length,
 u16 offset, u16 chunk length) followed by a chunk of the frame. A read of FF11
 returns a 16-byte status record. Exact layout, fragmentation and reassembly rules:
@@ -226,6 +253,8 @@ Open:
 - The remaining unknowns in [docs/DECODING.md](docs/DECODING.md) (accel scale, temperature, battery, input ranges).
 - Where the roughly 40 ms phone round trip goes (median, user-reported first run).
 - BLE security (no pairing or encryption today), see [docs/SECURITY.md](docs/SECURITY.md).
+- Hardware validation of the supported Linux/Raspberry Pi Wi-Fi host bridge
+  (P1-P10 in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md)); it is host-tested only.
 
 ## Configuration
 
@@ -241,6 +270,13 @@ be discovered by name). Discovery settings:
 
 ```powershell
 .\tests\run_tests.ps1     # needs gcc, clang or zig on PATH; no ESP-IDF required
+```
+
+The Linux/Pi host bridge has its own standard-library Python suite:
+
+```bash
+cd pi
+python3 -m unittest discover -s tests -v
 ```
 
 ## License
