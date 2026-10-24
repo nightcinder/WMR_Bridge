@@ -127,10 +127,11 @@ If the nodes are not readable by your user:
 sudo usermod -aG input "$USER"     # log out and back in
 ```
 
-or add a udev rule:
+or install the shipped udev rule:
 
-```
-KERNEL=="hidraw*", SUBSYSTEM=="hidraw", MODE="0660", GROUP="input"
+```bash
+sudo cp pi/udev/99-wmr-bridge.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
 ### Run from the checkout
@@ -165,6 +166,7 @@ Useful flags:
 | `--allow-origin ORIGIN` | allow this browser `Origin` (repeatable); other `Origin` values are rejected |
 | `--insecure-no-token` | allow a non-loopback bind without a token (**unsafe**) |
 | `--hidraw PATH` | open a specific node instead of auto-discovery |
+| `--hand {both,left,right}` | only open the selected controller hand (default `both`; for one-Pi-per-hand setups) |
 | `--left MATCH`, `--right MATCH` | assign by MAC, path or name part |
 | `--all-hidraw` | consider every HID device (then use `--left/--right`) |
 | `--batch-max`, `--batch-hold-ms` | FF14 batching (default 9 records, 5 ms) |
@@ -564,4 +566,5 @@ been run, treat the Pi path as unverified.
 | `pi/wmr_bridge/` | host bridge package: protocol, decoder, BlueZ, WebSocket, server, CLI |
 | `pi/tools/wifi_probe.py` | bench client: throughput, sequence gaps, tick-based missing reports, RTT (min/p50/p95/max), status |
 | `pi/systemd/` | service unit and environment example |
-| `pi/tests/` | 94 host tests (no hardware) |
+| `pi/udev/` | udev rule (`99-wmr-bridge.rules`) granting `input` group access to `/dev/hidraw*` |
+| `pi/tests/` | 102 host tests (no hardware) |
