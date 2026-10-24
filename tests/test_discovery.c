@@ -268,6 +268,37 @@ static void test_run_name_requests(void){
     CHECK(wmr_discovery_next_name_request(&d) == NULL);
 }
 
+static void test_run_rounds(void){
+    printf("Discovery run: every inquiry round retries devices and name requests\n");
+    const bool known[2] = {false, false};
+    wmr_discovery_t d;
+    wmr_discovery_start_config(&d, known, 0);   /* both hands, whatever this build selects */
+    wmr_discovery_device_t a = dev(0x51), l = dev(0x52);
+    /* Round 1: the remote name request fails, so the hand stays missing. */
+    CHECK(wmr_discovery_on_inquiry_result(&d, &a, NULL, 0) == WMR_DISC_NAME_QUEUED);
+    const wmr_discovery_device_t *q = wmr_discovery_next_name_request(&d);
+    CHECK(q && memcmp(q->address, a.address, 6) == 0);
+    CHECK(wmr_discovery_on_name(&d, a.address, NULL, 0) == WMR_DISC_IGNORED);
+    CHECK(wmr_discovery_next_name_request(&d) == NULL);
+    CHECK(wmr_discovery_incomplete(&d));
+
+    /* Round 2: the same device is asked again instead of being remembered as handled. */
+    wmr_discovery_begin_round(&d);
+    CHECK(d.pending_count == 0 && d.pending_next == 0 && d.seen_count == 0);
+    CHECK(wmr_discovery_on_inquiry_result(&d, &a, NULL, 0) == WMR_DISC_NAME_QUEUED);
+    q = wmr_discovery_next_name_request(&d);
+    CHECK(q && memcmp(q->address, a.address, 6) == 0);
+    CHECK(wmr_discovery_on_name(&d, a.address, NAME("Motion controller - Left")) == WMR_DISC_MATCHED);
+
+    /* A match survives the reset; another device of that hand is still a duplicate. */
+    wmr_discovery_begin_round(&d);
+    CHECK(d.found[WMR_HAND_LEFT]);
+    CHECK(memcmp(d.found_address[WMR_HAND_LEFT], a.address, 6) == 0);
+    CHECK(wmr_discovery_on_inquiry_result(&d, &l, NAME("Motion controller - Left")) == WMR_DISC_DUPLICATE);
+    CHECK(memcmp(d.found_address[WMR_HAND_LEFT], a.address, 6) == 0);
+    CHECK(wmr_discovery_incomplete(&d));       /* RIGHT is still missing */
+}
+
 static void test_run_limits(void){
     printf("Discovery run: pending list full, stop asking once complete\n");
     const bool known[2] = {false, false};
@@ -383,6 +414,7 @@ int main(void){
     test_run_names_in_inquiry();
     test_run_psvr2();
     test_run_name_requests();
+    test_run_rounds();
     test_run_limits();
     test_incoming();
     test_bridge_hands();

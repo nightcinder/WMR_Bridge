@@ -156,6 +156,12 @@ void wmr_discovery_start(wmr_discovery_t *d, const bool known[WMR_NUM_CONTROLLER
 void wmr_discovery_start_config(wmr_discovery_t *d, const bool known[WMR_NUM_CONTROLLERS],
                                 int bridge_hands);
 
+/* Start the next inquiry round of the same run: forget the addresses seen and the name
+ * requests queued in the previous round, so a controller that was not answering then is
+ * looked for again. Matches already found stay (the first controller per hand is kept).
+ * Call this after every inquiry completes, before the next one starts. */
+void wmr_discovery_begin_round(wmr_discovery_t *d);
+
 /* True while some wanted hand has no candidate yet. */
 bool wmr_discovery_incomplete(const wmr_discovery_t *d);
 
