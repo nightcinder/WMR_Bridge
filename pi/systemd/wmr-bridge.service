@@ -1,0 +1,24 @@
+[Unit]
+Description=WMR Bridge Wi-Fi host bridge (BlueZ Classic BT to WebSocket)
+Documentation=file:/opt/wmr-bridge/docs/PI_BRIDGE.md
+After=bluetooth.target network-online.target
+Wants=bluetooth.target network-online.target
+
+[Service]
+Type=simple
+User=wmr
+Group=wmr
+SupplementaryGroups=input
+WorkingDirectory=/opt/wmr-bridge/pi
+EnvironmentFile=-/etc/wmr-bridge/wmr-bridge.env
+ExecStart=/usr/bin/python3 -m wmr_bridge --bind 0.0.0.0 --port 8765 --token-file /etc/wmr-bridge/token
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
