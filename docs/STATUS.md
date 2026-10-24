@@ -1,14 +1,17 @@
-# WMR Bridge: Firmware Status
-Last updated: 2026-10-24 (Linux/Pi Wi-Fi host bridge is a supported second target; host tests only, not run on Pi hardware; see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)).
+# WMR Bridge: Firmware & Bridge Status
+Last updated: 2026-10-24 (ESP32-over-BLE is the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the second supported first-class target; Pi is host-tests-only until the Pi sitting runs — see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md) and [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md)).
 
-This document tracks **firmware capabilities and firmware-side empirical findings** in this repository.
+This document tracks **firmware and host-bridge capabilities and empirical findings** in this repository. Two supported first-class bridge targets are maintained here:
+- **ESP32-over-BLE (`src/`, default):** BTstack Classic Bluetooth HID host forwarding over BLE GATT (`FF10` service; `FF11`–`FF16`). Bench-tested with two WMR controllers and an Android phone (user-reported figures below).
+- **Linux / Raspberry Pi-over-Wi-Fi (`pi/`, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)):** BlueZ Classic Bluetooth HID host forwarding the same `FF11`/`FF12`/`FF14` payloads over a 5 GHz Wi-Fi WebSocket (`wmr-wifi-v1`). **Second supported target, but host-tests-only until the Pi sitting runs** ([`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md)).
+
 The overall project status, milestones, roadmap, and companion Flutter app state (including 3D viewer, orientation fusion, and host latency tracking) are maintained at the project's single entry point: [nightcinder/wmr-companion docs/STATUS.md](https://github.com/nightcinder/wmr-companion/blob/main/docs/STATUS.md).
 
-## Firmware Capabilities & Milestones
+## Bridge Capabilities & Milestones
 
 | Capability | State | Hardware Check (user-reported) |
 |---|---|---|
-| Classic BT HID host (dual WMR controllers) | Merged | Yes; controllers connect and stream |
+| Classic BT HID host (dual WMR controllers, ESP32-over-BLE default target) | Merged | Yes; controllers connect and stream |
 | IMU & input decoding (200 Hz nominal, 100 ns ticks) | Merged | Yes; gyro rad/s, accel magnitude ~10 |
 | GATT characteristics FF11 (raw) & FF12 (decoded) | Merged | Yes; mutual exclusion and MTU raise tested |
 | FF14 batched notification stream | Merged | Yes; default stream, 9 records/batch, queue drop=0 |
@@ -17,10 +20,10 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Controller discovery by name & NVS address persistence | Merged | Yes; D1–D11 checks passed |
 | Link diagnostics (`link:`, `role:`, `POLICY:`) | Merged | Yes; verified in contention-2 runs |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, **not run on hardware** |
-| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE) | Supported (second target) | **Host tests only, never run on Pi hardware** |
+| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md)) | Merged (second supported target) | **Host tests only (94 tests + loopback replay), never run on Pi hardware or with controllers** |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has **not** been reported |
-| Packaged firmware version over FF16 and the console `v` command (PR #38) | Merged | Host tests only, **not run on hardware** |
-| PSVR2 Sense controller framework: opt-in (`-DWMR_CFG_PSVR2_SUPPORT=1`), name/model discovery, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | PR open | Host tests and firmware build only, **not run on hardware**; opt-in by default to keep DRAM headroom; no PSVR2 decoder (FF11 raw only) |
+| Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Host tests only, **not run on hardware** |
+| PSVR2 Sense controller framework: opt-in (`WMR_CFG_PSVR2_SUPPORT=0` by default; `-DWMR_CFG_PSVR2_SUPPORT=1` to enable), name/model discovery, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (opt-in, off by default) | Host tests and firmware build only, **never run on a PSVR2 controller**; off by default to preserve DRAM headroom; no PSVR2 decoder (FF11 raw only) |
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 
@@ -44,7 +47,7 @@ Full run sheet and figures: [`docs/runs/sheets/contention-2-results.md`](runs/sh
 - **Result:** Median RTT was ~59 ms with no stream vs ~41 ms with active stream; ESP32 turnaround was <0.5 ms (336 µs and 472 µs).
 - **Conclusion:** The ~40 ms RTT is bound by Android GATT write-request and BLE connection interval round trips, not stream congestion or bridge queue delay.
 
-### 4. Next Step: Multi-Bridge Architecture
+### 4. Next Step: Multi-Bridge Architecture & Pi Wi-Fi Host Bridge
 Single-controller runs showed near-zero loss on LEFT (~0.5 %) and baseline on RIGHT (~10.8 %), while both controllers together suffer ~18–25 % loss (user-reported).
 
 However:
@@ -52,3 +55,4 @@ However:
 - Radio contention is the **working hypothesis, not proven**. The master-role and sniff variants are no-ops/null results; that narrows candidates, it does not confirm the cause.
 - Multi-bridge cannot deliver zero loss: RIGHT alone was ~10.8 % with one controller and one phone (user-reported). The best it can do on today's evidence is LEFT ~0.5 % / RIGHT ~10.8 %.
 - **No two-bridge run has happened.** The sitting and its fixed pass criteria are in [`docs/runs/sheets/multi-bridge.md`](runs/sheets/multi-bridge.md); LEFT ≤ 3 % on its own bridge is the pass bar.
+- **No Raspberry Pi Wi-Fi bridge hardware run has happened.** The second supported target (`pi/`, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)) moves the phone link off 2.4 GHz BLE onto 5 GHz Wi-Fi WebSocket; it is host-tests-only until Sitting P in [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md) runs.

@@ -1,9 +1,10 @@
 # WMR_Bridge
 
-ESP32 firmware, built on [BTstack](https://github.com/bluekitchen/btstack), that
+The default bridge is ESP32 firmware, built on [BTstack](https://github.com/bluekitchen/btstack), that
 connects to **two Windows Mixed Reality motion controllers** (or, optionally,
-**PlayStation VR2 Sense controllers**, enabled at build time with
-`-DWMR_CFG_PSVR2_SUPPORT=1`) over Classic Bluetooth and forwards their
+**PlayStation VR2 Sense controllers**, opt-in and off by default with
+`WMR_CFG_PSVR2_SUPPORT=0`, enabled at build time with
+`-DWMR_CFG_PSVR2_SUPPORT=1` and never run on a controller) over Classic Bluetooth and forwards their
 input to an **Android phone** over a custom BLE GATT
 service, either as raw frames (FF11), as decoded IMU and input records (FF12), or as batches of those records (FF14). The
 phone side is the companion app [wmr-companion](https://github.com/nightcinder/wmr-companion);
@@ -13,8 +14,11 @@ the overall state, hardware results and roadmap are in its
 A second, supported **Linux / Raspberry Pi host bridge** is included in
 [`pi/`](pi/README.md): it uses BlueZ for Classic Bluetooth and replaces BLE with
 a WebSocket on 5 GHz Wi-Fi, while sending the same FF11/FF12/FF14 payloads. See
-[docs/PI_BRIDGE.md](docs/PI_BRIDGE.md). It is host-tested but has not been run on
-hardware yet; the ESP32 remains first-class.
+[docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) and the bring-up run sheet
+[docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). Both the ESP32-over-BLE
+firmware (default) and the Pi-over-Wi-Fi daemon are supported first-class bridge
+targets; the Pi bridge is host-tests-only until the Pi sitting runs, while the
+ESP32 firmware has the bench runs recorded below.
 
 ```
  WMR LEFT  --\  Classic Bluetooth HID                       BLE GATT notifications
@@ -169,7 +173,9 @@ python3 tools/wifi_probe.py --stream batched                      # second termi
 
 For live use, pair the controllers with the Pi first; `python3 -m wmr_bridge --list`
 shows the hidraw nodes. Full setup, the wire protocol, security notes and the
-hardware test checklist are in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md).
+hardware test checklist are in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md), and the
+first-sitting bring-up procedure is in
+[docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md).
 
 ## BLE interface (summary)
 
@@ -192,7 +198,8 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 | What | Result |
 | --- | --- |
 | Firmware build (ESP-IDF v6.1, ESP32) | Passes, no warnings from this code |
-| Host unit tests of the protocol encoder, reassembler and queue (6087 checks) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
+| Host unit tests of the protocol encoder, reassembler and queue (6107 checks default, 6122 with `-DWMR_CFG_PSVR2_SUPPORT=1`) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
+| Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 94 tests) | Pass (host tests only; never run on a Raspberry Pi or with real controllers) |
 | Flash and boot on a real ESP32 | Passes; advertises; stats print every 5 s; no debug spam |
 | **One bench run, about 15 s, both controllers and a phone** (log pasted by the user, not instrumented on the phone) | Both controllers connected on their own; ATT MTU went 23 to 517; about 174/s (LEFT) and 154/s (RIGHT); sent = received for both hands; 0 drops, 0 offline, 0 purged, 0 send errors; queue back to 0 after a startup peak of 11; counter accounting added up exactly |
 
@@ -216,7 +223,10 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 - **Regression comparison** against the original single-file version under identical conditions.
 - **PSVR2 Sense controllers.** The recognition, model storage, raw forwarding and HID wake
   path are host-tested and build-tested but have never run on a PSVR2 controller. The
-  feature is opt-in at build time ([docs/PSVR2.md](docs/PSVR2.md)).
+  feature is opt-in and off by default (`WMR_CFG_PSVR2_SUPPORT=0`; [docs/PSVR2.md](docs/PSVR2.md)).
+- **Linux / Raspberry Pi Wi-Fi host bridge (`pi/`).** Second supported target, but
+  host-tests-only until the Pi sitting runs ([docs/PI_BRIDGE.md](docs/PI_BRIDGE.md),
+  [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md)).
 - Known oddity, not investigated: each controller logs `SET_PROTOCOL handshake status=0x03`.
 
 Full list and details: [docs/TESTING.md](docs/TESTING.md).
@@ -232,8 +242,8 @@ Full list and details: [docs/TESTING.md](docs/TESTING.md).
 - Single phone, exactly two controllers. Controllers are recognised by name until their
   addresses are stored; a name can be spoofed (see [docs/DISCOVERY.md](docs/DISCOVERY.md)).
 - PSVR2 Sense controllers are **raw-only** today: FF12/FF14 have no PSVR2 decoder, FF13 is
-  not read, and the wake request is unverified (see [docs/PSVR2.md](docs/PSVR2.md)). PSVR2
-  support is **off by default** (`-DWMR_CFG_PSVR2_SUPPORT=1` enables it). Each
+  not read, and the wake request is unverified and has never run on a controller (see [docs/PSVR2.md](docs/PSVR2.md)). PSVR2
+  support is **off by default** (`WMR_CFG_PSVR2_SUPPORT=0`; `-DWMR_CFG_PSVR2_SUPPORT=1` enables it). Each
   hand's model is independent, but the decoded stream remains WMR-only.
 - `tx` means "accepted by the Bluetooth stack", not "received by the phone".
 
@@ -254,7 +264,7 @@ Open:
 - Where the roughly 40 ms phone round trip goes (median, user-reported first run).
 - BLE security (no pairing or encryption today), see [docs/SECURITY.md](docs/SECURITY.md).
 - Hardware validation of the supported Linux/Raspberry Pi Wi-Fi host bridge
-  (P1-P10 in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md)); it is host-tested only.
+  (P1-P10 in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) and [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md)); it is host-tested only.
 
 ## Configuration
 
@@ -275,8 +285,7 @@ be discovered by name). Discovery settings:
 The Linux/Pi host bridge has its own standard-library Python suite:
 
 ```bash
-cd pi
-python3 -m unittest discover -s tests -v
+./pi/run_tests.sh
 ```
 
 ## License
