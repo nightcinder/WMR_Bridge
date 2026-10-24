@@ -424,23 +424,23 @@ async def connect(
         asyncio.open_connection(host, port, ssl=ssl, server_hostname=host if ssl else None),
         timeout,
     )
-    key = base64.b64encode(os.urandom(16)).decode("ascii")
-    lines = [
-        f"GET {path} HTTP/1.1",
-        f"Host: {host}:{port}",
-        "Upgrade: websocket",
-        "Connection: Upgrade",
-        f"Sec-WebSocket-Key: {key}",
-        "Sec-WebSocket-Version: 13",
-    ]
-    if subprotocol:
-        lines.append(f"Sec-WebSocket-Protocol: {subprotocol}")
-    if origin is not None:
-        lines.append(f"Origin: {origin}")
-    writer.write(("\r\n".join(lines) + "\r\n\r\n").encode("ascii"))
-    await writer.drain()
-
     try:
+        key = base64.b64encode(os.urandom(16)).decode("ascii")
+        lines = [
+            f"GET {path} HTTP/1.1",
+            f"Host: {host}:{port}",
+            "Upgrade: websocket",
+            "Connection: Upgrade",
+            f"Sec-WebSocket-Key: {key}",
+            "Sec-WebSocket-Version: 13",
+        ]
+        if subprotocol:
+            lines.append(f"Sec-WebSocket-Protocol: {subprotocol}")
+        if origin is not None:
+            lines.append(f"Origin: {origin}")
+        writer.write(("\r\n".join(lines) + "\r\n\r\n").encode("ascii"))
+        await writer.drain()
+
         raw = await asyncio.wait_for(_read_http_headers(reader), timeout)
         start, headers = _parse_headers(raw)
         parts = start.split(" ")

@@ -109,6 +109,38 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(wsmod.WebSocketError):
             wsmod._close_details(b"\x03")
 
+    async def test_connect_closes_the_writer_when_the_handshake_write_fails(self) -> None:
+        from unittest import mock
+
+        class FakeReader:
+            pass
+
+        class FakeWriter:
+            def __init__(self) -> None:
+                self.closed = False
+
+            def write(self, _data: bytes) -> None:
+                pass
+
+            async def drain(self) -> None:
+                raise ConnectionResetError("peer went away")
+
+            def close(self) -> None:
+                self.closed = True
+
+            async def wait_closed(self) -> None:
+                pass
+
+        writer = FakeWriter()
+
+        async def fake_open_connection(*_args, **_kwargs):
+            return FakeReader(), writer
+
+        with mock.patch("wmr_bridge.ws.asyncio.open_connection", fake_open_connection):
+            with self.assertRaises(ConnectionResetError):
+                await wsmod.connect("127.0.0.1", 1)
+        self.assertTrue(writer.closed)
+
 
 class OriginTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
