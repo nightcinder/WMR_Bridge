@@ -19,6 +19,7 @@ if( EXAMPLE STREQUAL "wmr_bridge" )
         "${WMR_BRIDGE_DIR}/src/wmr_cfgmgr.c"
         "${WMR_BRIDGE_DIR}/src/wmr_console.c"
         "${WMR_BRIDGE_DIR}/src/wmr_controller.c"
+        "${WMR_BRIDGE_DIR}/src/wmr_ctrl.c"
         "${WMR_BRIDGE_DIR}/src/wmr_decode.c"
         "${WMR_BRIDGE_DIR}/src/wmr_decoded.c"
         "${WMR_BRIDGE_DIR}/src/wmr_devloss.c"

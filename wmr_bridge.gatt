@@ -22,3 +22,7 @@ CHARACTERISTIC, 0000FF13-0000-1000-8000-00805F9B34FB, READ | WRITE | NOTIFY | DY
 // FF16: firmware version, a read-only UTF-8 string with no terminator. It is the same
 // PROJECT_VER value that tools/firmware/build.py writes to manifest.json and build-info.json.
 CHARACTERISTIC, 0000FF16-0000-1000-8000-00805F9B34FB, READ | DYNAMIC,
+// FF17: controller scan and status v2 control characteristic (docs/PROTOCOL.md).
+// Write 1-2 bytes (opcode + hand), read or notify 20-byte status v2.
+// Independent of the FF11/FF12/FF14 exclusion.
+CHARACTERISTIC, 0000FF17-0000-1000-8000-00805F9B34FB, READ | WRITE | NOTIFY | DYNAMIC,

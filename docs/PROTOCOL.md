@@ -19,6 +19,7 @@ test (`tests/test_protocol.c`, "golden packet") pins the byte layout.
 | Service | `0000FF10-0000-1000-8000-00805F9B34FB` | primary |
 | Characteristic | `0000FF11-0000-1000-8000-00805F9B34FB` | read, notify |
 | Characteristic | `0000FF16-0000-1000-8000-00805F9B34FB` | read (firmware version) |
+| Characteristic | `0000FF17-0000-1000-8000-00805F9B34FB` | read, write, notify (control & status v2) |
 | Client Characteristic Configuration (0x2902) | - | read/write |
 
 Advertising: flags `0x02` (LE general discoverable), complete local name
@@ -808,6 +809,94 @@ of the BLE service, FF13 has **no authentication or encryption** (see
 - NVS persistence, and an eviction rule for it.
 - Behaviour if a controller never answers (this design: FAILED after the bounded
   retries; a console key could retry).
+
+# Controller scan and status v2, FF17 (implemented in firmware)
+
+Characteristic `0000FF17-0000-1000-8000-00805F9B34FB`, READ | WRITE | NOTIFY | DYNAMIC in service `FF10`.
+
+FF17 exposes controller scanning (discovery), manual connect/disconnect, stored address reset,
+and bond clearing to companion applications over BLE, mapping directly onto the ESP32 console
+actions. It also provides a 20-byte versioned status (Status v2) that reports connection state,
+connecting state, HID descriptor status, address source, controller model, last 3 address bytes,
+discovery state and round, and the last executed command and result.
+
+FF17 is **independent** of the FF11/FF12/FF14 stream exclusion (like FF13 and FF15). It can be
+read, written, or subscribed to while any stream mode or no stream is active.
+
+## Write commands (1-2 bytes)
+
+Writes execute control actions that mirror serial console commands. Writes take 1 or 2 bytes:
+`opcode` (byte 0) and optional `hand` (byte 1; `0x00` = LEFT, `0x01` = RIGHT).
+
+| Opcode | Name | Size | Argument | Action / firmware function |
+| --- | --- | --- | --- | --- |
+| `0x01` | DISCOVER | 1-2 B | hand ignored | `wmr_controller_discover()`: starts bounded inquiry/discovery for unbound hands |
+| `0x02` | CONNECT | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_connect(hand)`: initiates Classic BT HID connection |
+| `0x03` | DISCONNECT | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_disconnect(hand)`: closes Classic BT HID connection |
+| `0x04` | FORGET_ADDRS | 1-2 B | hand ignored | `wmr_controller_forget_addresses()`: clears stored NVS addresses (refused if connected/connecting) |
+| `0x05` | FORGET_BOND | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_forget_bond(hand)`: clears paired link key (refused if connected/connecting) |
+
+### Result codes and ATT errors
+
+Every write returns an ATT response:
+- On success (`WMR_CTRL_RES_OK` = `0x00`): ATT status `0x00` (success).
+- On failure / refusal: ATT application error `0x80 + result_code`.
+
+The result codes are:
+
+| Code | Name | Description |
+| --- | --- | --- |
+| `0x00` | OK | Action initiated or succeeded |
+| `0x01` | BUSY | Controller busy, connection attempt pending, or discovery in progress |
+| `0x02` | NO_ADDRESS | Controller address is unknown |
+| `0x03` | NOTHING_TO_DO | All required controller addresses are already known |
+| `0x04` | NOT_CONNECTED | Controller has no active connection to disconnect |
+| `0x05` | NOT_ENABLED | Hand is excluded by this firmware build (`WMR_CFG_BRIDGE_HANDS`) |
+| `0x06` | INVALID_PARAM | Unknown opcode, invalid hand index, or incorrect length |
+
+The opcode and result code of the most recent write command are also recorded in the
+`last_command` and `last_result` fields of the FF17 status structure and notified immediately.
+
+## Read and Notify: Status v2 (20 bytes)
+
+Reading FF17 or receiving an FF17 notification returns a 20-byte payload. At 20 bytes, it fits
+within the default ATT MTU of 23 bytes (20-byte payload + 3-byte ATT header) without requiring
+MTU exchange.
+
+| Offset | Size | Field | Description |
+| --- | --- | --- | --- |
+| 0 | u8 | `version` | Format version, `1` |
+| 1 | u8 | `left_flags` | Bit 0: connected, Bit 1: connecting, Bit 2: descriptor received, Bits 3..7: reserved (0) |
+| 2 | u8 | `left_addr_source` | 0: None, 1: Compile override, 2: Stored in NVS |
+| 3 | u8 | `left_model` | 0: WMR, 1: PSVR2 |
+| 4..6 | 3 B | `left_addr_tail` | Last 3 bytes of Bluetooth address (device ID: bytes 3, 4, 5); `00 00 00` if no address |
+| 7 | u8 | `reserved0` | Reserved, `0` |
+| 8 | u8 | `right_flags` | Bit 0: connected, Bit 1: connecting, Bit 2: descriptor received, Bits 3..7: reserved (0) |
+| 9 | u8 | `right_addr_source`| 0: None, 1: Compile override, 2: Stored in NVS |
+| 10 | u8 | `right_model` | 0: WMR, 1: PSVR2 |
+| 11..13 | 3 B | `right_addr_tail`| Last 3 bytes of Bluetooth address (device ID: bytes 3, 4, 5); `00 00 00` if no address |
+| 14 | u8 | `reserved1` | Reserved, `0` |
+| 15 | u8 | `discovery_state` | 0: Idle, 1: Inquiry, 2: Remote name requests, 3: Connecting discovered |
+| 16 | u8 | `discovery_round` | Current discovery round (0 when idle) |
+| 17 | u8 | `last_command` | Opcode of the last write command (`0x00` if none) |
+| 18 | u8 | `last_result` | Result code of the last write command (`0x00` if none/OK) |
+| 19 | u8 | `reserved2` | Reserved, `0` |
+
+### Notifications
+
+When the CCC descriptor is set to `0x0001`, the ESP32 sends a 20-byte notification whenever:
+- A controller's connected, connecting, or descriptor status changes.
+- Discovery starts, advances phase/round, or finishes.
+- A write command executes (providing immediate asynchronous confirmation of opcode and result).
+
+Notifications do not count toward stream transmission counters.
+
+### Radio contention
+
+Bluetooth inquiry (discovery) shares the 2.4 GHz radio and antenna with ongoing BLE notifications.
+While discovery is active (`discovery_state != 0`), packet loss or latency jitter may increase on
+running controller streams. The client UI should display a temporary notice (e.g. "Scanning... stream
+may stutter") while `discovery_state` is non-zero.
 
 # Proposals (NOT decided, NOT implemented, NOT part of the spec above)
 

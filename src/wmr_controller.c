@@ -581,6 +581,8 @@ void wmr_controller_get_status(unsigned hand, wmr_controller_status_t *out){
     memset(out, 0, sizeof(*out));
     if (hand >= WMR_NUM_CONTROLLERS) return;
     out->connected            = controllers[hand].connected;
+    out->connecting           = (controllers[hand].cid != 0 && !controllers[hand].connected) ||
+                                (disc_phase == DISC_CONNECT && (disc_connect_mask & (1u << hand)) != 0);
     out->descriptor_available = controllers[hand].descriptor_available;
     out->reports              = (uint32_t) controllers[hand].reports;
     out->other_reports        = (uint32_t) controllers[hand].other_reports;
@@ -591,26 +593,25 @@ void wmr_controller_get_status(unsigned hand, wmr_controller_status_t *out){
 
 /* ---- Console-driven requests ------------------------------------------- */
 
-/* Returns true if a connection attempt was started. */
-static bool connect_hand(unsigned hand){
+static wmr_connect_result_t connect_hand_impl(unsigned hand){
     controller_t *c = &controllers[hand];
     if (!WMR_BRIDGE_HAND_ENABLED(hand)){
         printf("%s is not served by this build (WMR_CFG_BRIDGE_HANDS=%d)\n",
                c->name, WMR_CFG_BRIDGE_HANDS);
-        return false;
+        return WMR_CONNECT_NOT_ENABLED;
     }
-    if (!stack_ready){ printf("Stack not ready\n"); return false; }
+    if (!stack_ready){ printf("Stack not ready\n"); return WMR_CONNECT_BUSY; }
     if (c->source == WMR_ADDR_NONE){
         printf("%s address unknown: put it in pairing mode and press d (discovery)\n", c->name);
-        return false;
+        return WMR_CONNECT_NO_ADDRESS;
     }
-    if (connect_pending){ printf("Another connection/discovery is pending\n"); return false; }
-    if (c->cid){ printf("%s already open or opening, cid=%u\n", c->name, c->cid); return false; }
+    if (connect_pending){ printf("Another connection/discovery is pending\n"); return WMR_CONNECT_BUSY; }
+    if (c->cid){ printf("%s already open or opening, cid=%u\n", c->name, c->cid); return WMR_CONNECT_BUSY; }
 #if WMR_CFG_STAGGER_FIRST_HAND
     if (stagger_blocks(hand)){
         stagger_hold(hand);
         stagger_pending_connect = true;
-        return false;
+        return WMR_CONNECT_BUSY;
     }
     if (hand == STAGGER_SECOND_HAND) stagger_pending_connect = false;
 #endif
@@ -624,25 +625,31 @@ static bool connect_hand(unsigned hand){
         printf("%s connect request failed: 0x%02x\n", c->name, status);
         c->cid = 0;
         connect_pending = false;
-        return false;
+        return WMR_CONNECT_BUSY;
     }
-    return true;
+    return WMR_CONNECT_OK;
 }
 
-void wmr_controller_connect(unsigned hand){
-    if (hand >= WMR_NUM_CONTROLLERS) return;
+/* Returns true if a connection attempt was started. */
+static bool connect_hand(unsigned hand){
+    return connect_hand_impl(hand) == WMR_CONNECT_OK;
+}
+
+wmr_connect_result_t wmr_controller_connect(unsigned hand){
+    if (hand >= WMR_NUM_CONTROLLERS) return WMR_CONNECT_BUSY;
     if (disc_phase == DISC_INQUIRY || disc_phase == DISC_NAMES){
         printf("Discovery is running; wait for it to finish\n");
-        return;
+        return WMR_CONNECT_BUSY;
     }
-    connect_hand(hand);
+    return connect_hand_impl(hand);
 }
 
-void wmr_controller_disconnect(unsigned hand){
-    if (hand >= WMR_NUM_CONTROLLERS) return;
+wmr_disconnect_result_t wmr_controller_disconnect(unsigned hand){
+    if (hand >= WMR_NUM_CONTROLLERS) return WMR_DISCONNECT_NOT_CONNECTED;
     controller_t *c = &controllers[hand];
-    if (!c->cid){ printf("%s has no connection\n", c->name); return; }
+    if (!c->cid){ printf("%s has no connection\n", c->name); return WMR_DISCONNECT_NOT_CONNECTED; }
     hid_host_disconnect(c->cid);
+    return WMR_DISCONNECT_OK;
 }
 
 wmr_bond_reset_result_t wmr_controller_forget_bond(unsigned hand){
@@ -1302,4 +1309,12 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
         default:
             break;
     }
+}
+
+uint8_t wmr_controller_discovery_phase(void){
+    return (uint8_t) disc_phase;
+}
+
+uint8_t wmr_controller_discovery_round(void){
+    return (uint8_t) disc_round;
 }
