@@ -27,6 +27,8 @@ jobs:
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_discovery.c src/wmr_discovery.c -o test_discovery
       - name: Build link-diagnostics tests
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_diag.c src/wmr_devloss.c src/wmr_diag.c -o test_diag
+      - name: Build status-LED tests
+        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_status_led.c src/wmr_status_led.c -o test_status_led
       - name: Run protocol and queue tests
         run: ./test_protocol samples/controller_frames.txt
       - name: Run decoder tests
@@ -51,6 +53,8 @@ jobs:
           gcc -std=c99 -Wall -Wextra -Wconversion -Werror -DWMR_CFG_PSVR2_SUPPORT=1 -Isrc tests/test_protocol.c src/wmr_protocol.c src/wmr_queue.c src/wmr_decoded.c src/wmr_decode.c -o test_protocol_psvr2 && ./test_protocol_psvr2 samples/controller_frames.txt
       - name: Run link-diagnostics tests
         run: ./test_diag
+      - name: Run status-LED tests
+        run: ./test_status_led
       - name: Run capture/analysis script tests
         run: python3 tests/test_analyze_capture.py
       - name: Run Linux/Pi host-bridge tests

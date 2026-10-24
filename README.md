@@ -124,6 +124,21 @@ For one hand per bridge (or single-hand testing on a single board), add
 `--variant left` or `--variant right`; `--variant both` is the default and is
 unchanged. See [Two bridges](docs/FLASHING.md#two-bridges-one-hand-each).
 
+### Status LED
+
+The firmware drives one addressable RGB LED (WS2812/NeoPixel) and shows how many
+controllers are connected: **red** = none, **green** = one, **blue** = two.
+Connect the LED's data line to **GPIO 4** (the default), plus 5 V and GND. The
+LED is red at boot until a controller connects.
+
+A classic ESP32 devkit usually has no addressable LED on board, so this assumes
+an external WS2812. If yours is wired elsewhere, pass the pin at build time:
+`EXTRA_CFLAGS="-DWMR_CFG_STATUS_LED_GPIO=27"` (PowerShell:
+`$env:EXTRA_CFLAGS = "-DWMR_CFG_STATUS_LED_GPIO=27"`). Set
+`-DWMR_CFG_STATUS_LED=0` to build without one. The colour follows the
+*connected* controllers, not the stored pairings, and a single-hand build can
+only ever show green.
+
 The manual steps remain in [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md).
 Short version: put this repo at `<btstack>\wmr_bridge`, copy
 `integration\main-CMakeLists.txt` over `port\esp32\main\CMakeLists.txt`, then
