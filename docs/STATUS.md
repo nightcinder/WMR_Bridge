@@ -25,6 +25,7 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Host tests only, **not run on hardware** |
 | PSVR2 Sense controller framework: opt-in (`WMR_CFG_PSVR2_SUPPORT=0` by default; `-DWMR_CFG_PSVR2_SUPPORT=1` to enable), name/model discovery, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (opt-in, off by default) | Host tests and firmware build only, **never run on a PSVR2 controller**; off by default to preserve DRAM headroom; no PSVR2 decoder (FF11 raw only) |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: ~45–52 min dual-controller, ~58–65 min single-controller; not recommended for session VR |
+| Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE; one ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and the 40.8 ms latency figure predates the current client. Lists which contention options were tried and which remain (V1 stagger, antenna/position, DLE); recommends a capped, opt-in predictor in the shared library. No code or hardware run |
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 
@@ -47,6 +48,7 @@ Full run sheet and figures: [`docs/runs/sheets/contention-2-results.md`](runs/sh
 - Tested with latency screen stream selector (`stream: none` vs `stream: batched`, 60 s each, 250 ms ping interval; app side tracked in companion `docs/STATUS.md`).
 - **Result:** Median RTT was ~59 ms with no stream vs ~41 ms with active stream; ESP32 turnaround was <0.5 ms (336 µs and 472 µs).
 - **Conclusion:** The ~40 ms RTT is bound by Android GATT write-request and BLE connection interval round trips, not stream congestion or bridge queue delay.
+- **Freshness:** this measurement is from the 2026-10-22 app commit `3df70a4`. The client latency path was refactored after it (latency modes, `wmr_core` extraction, multi-bridge, export v3), so treat the number as historical until the existing latency-2 and stream sheets run on current builds; see [`docs/PREDICTION.md`](PREDICTION.md) §5.
 
 ### 4. Next Step: Multi-Bridge Architecture & Pi Wi-Fi Host Bridge
 Single-controller runs showed near-zero loss on LEFT (~0.5 %) and baseline on RIGHT (~10.8 %), while both controllers together suffer ~18–25 % loss (user-reported).

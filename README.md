@@ -90,7 +90,7 @@ The default firmware build operates in the dual-controller topology described ab
 | `tools/firmware/` | One-command build, packaging and flash (`build.py`) plus the browser-flasher manifest logic; see [docs/FLASHING.md](docs/FLASHING.md) |
 | `pi/` | Linux / Raspberry Pi host bridge over Wi-Fi: BlueZ hidraw source, WebSocket transport, decoder and host tests; see [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) |
 | `integration/` | The one BTstack file that must be replaced to build this (`main-CMakeLists.txt`, plus a diff) |
-| `docs/` | Build, flashing, protocol, Android, counters, security, reconnect/queue, controller discovery, PSVR2, battery life investigation, testing, refactor notes |
+| `docs/` | Build, flashing, protocol, Android, counters, security, reconnect/queue, controller discovery, PSVR2, battery life and packet-loss/prediction investigations, testing, refactor notes |
 
 Module responsibilities, in brief: `wmr_controller` (HID side), `wmr_transport`
 (BLE side, queue pump), `wmr_protocol` and `wmr_queue` (pure C, no BTstack,
@@ -284,7 +284,7 @@ in the app repo list what is still not run.
 
 Open:
 
-- Explaining and reducing controller-to-ESP32 report loss (issue [#18](../../issues/18)); coexistence options tested so far showed no effect ([docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md), [docs/runs/](docs/runs/README.md)).
+- Explaining and reducing controller-to-ESP32 report loss (issue [#18](../../issues/18)); coexistence options tested so far showed no effect ([docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md), [docs/runs/](docs/runs/README.md)). Why the measured loss is too much for a single ESP32 to be the final VR-grade radio, whether a capped pose predictor should hide the remaining sample-age jitter, and why it belongs in the shared library rather than the firmware or app: [docs/PREDICTION.md](docs/PREDICTION.md).
 - The remaining unknowns in [docs/DECODING.md](docs/DECODING.md) (accel scale, temperature, battery, input ranges).
 - Where the roughly 40 ms phone round trip goes (median, user-reported first run).
 - BLE security (no pairing or encryption today), see [docs/SECURITY.md](docs/SECURITY.md).
