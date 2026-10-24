@@ -358,6 +358,16 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_BATCH_HOLD_DEFAULT_US     15000
 #endif
 
+/* FF14 hold in connection intervals. 1 = one interval (default and current behaviour).
+ * 2 holds a partial batch for two intervals, trading about one interval of extra latency
+ * for fewer, larger notifications; the ONY-176 airtime sitting uses 2 as its variant. */
+#ifndef WMR_CFG_BATCH_HOLD_INTERVALS
+#define WMR_CFG_BATCH_HOLD_INTERVALS      1
+#endif
+#if WMR_CFG_BATCH_HOLD_INTERVALS < 1 || WMR_CFG_BATCH_HOLD_INTERVALS > 4
+#error "WMR_CFG_BATCH_HOLD_INTERVALS must be 1..4"
+#endif
+
 /* ---- Link diagnostics (wmr_linkdiag.c) ----------------------------------- */
 
 /* Every interval each connected Classic link is polled with 3 HCI commands (Read RSSI,

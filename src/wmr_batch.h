@@ -95,10 +95,10 @@ typedef enum {
     WMR_BATCH_FLUSH_TIMEOUT     /* the oldest record has waited the hold time */
 } wmr_batch_flush_t;
 
-/* How long the oldest queued record may wait before a partial batch is sent: one connection
- * interval, or WMR_CFG_BATCH_HOLD_DEFAULT_US while the interval is unknown (0). The bound
- * documented is this plus one controller report period (about 5 ms), which covers the
- * next arrival check. */
+/* How long the oldest queued record may wait before a partial batch is sent:
+ * WMR_CFG_BATCH_HOLD_INTERVALS connection intervals (1 by default), or the same multiple of
+ * WMR_CFG_BATCH_HOLD_DEFAULT_US while the interval is unknown (0). The bound documented is
+ * this plus one controller report period (about 5 ms), which covers the next arrival check. */
 uint32_t wmr_batch_hold_us(uint32_t conn_interval_us);
 
 /* Flush when `queued` records fill a notification (`max_count` > 0), or when the oldest

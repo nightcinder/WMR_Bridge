@@ -47,7 +47,8 @@ characteristic.
   LEFT alone at about 0.5 %, does not generalise to the pair. Against a 3-5 %
   bar, one ESP32 misses by a factor of four to eight.
 - This is not a CPU, queue or firmware-buffering limit. The bridge forwards
-  what it receives (`tx == rx`, `drop=0`, queue high-water 31 of 256), and the
+  what it receives (`tx` trails `rx` only by records still queued; `drop=0`,
+  queue high-water 41 of 256, sample `q=2/256 high=41`), and the
   loss is already present with no phone connected. The deficit is in the radio
   path that delivers controller reports, not in the ESP32's ability to process
   them.
@@ -91,7 +92,8 @@ to Wi-Fi on the Pi bridge, cannot by itself produce a lossless Classic link.
 The fact that the phone sees no gaps also means the loss is not being hidden by
 the BLE stack. What the ESP32 receives, it forwards. This is consistent with
 [`COUNTERS.md`](COUNTERS.md) and with the bridge's own counters in the recorded
-FF14 runs (`tx == rx`, `drop=0`, `purged=0`, `mtu_skip=0`, `dec_err=0`); this
+FF14 runs (`drop=0`, `purged=0`, `mtu_skip=0`, `dec_err=0`; `tx` trails `rx`
+only by records still queued, so it is not a no-loss proof); this
 particular run did not save the serial log, so those bridge counters are not
 part of its export.
 
@@ -218,7 +220,7 @@ practical ones have not, and a few candidates are closed by the hardware or by
 the ESP-IDF API. The distinction matters because "we tried the switches" is not
 the same as "a single ESP32 cannot do better".
 
-**Tried, with the recorded result:**
+**Status of each option:**
 
 | Option | Result |
 | --- | --- |
@@ -230,29 +232,47 @@ the same as "a single ESP32 cannot do better".
 | FF14 batching (about 48 notifications/s instead of about 300/s) | No clear loss gain; the FF14 run sat inside the FF12 run-to-run spread, and LEFT rose through the session ([`STATUS.md`](STATUS.md)) |
 | Phone connected but no stream, then FF11/FF12/FF14 | Loss rises when the phone is present and more when it streams, but the no-phone baseline is already 9-11 %; BLE is a contributor, not the whole cause (recorded sessions, not all at one position) |
 | One controller alone versus both | LEFT ~0.5 % alone versus ~19 % both; RIGHT ~10.8 % alone versus ~19 % both. The pair adds contention, and RIGHT has a separate baseline loss |
-| Staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`, V1) | **Code exists; the run was never done** ([`runs/sheets/contention-2.md`](runs/sheets/contention-2.md)) |
+| Staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`, V1) | **Code exists, run-ready; the run was never done** ([`runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md) §2) |
+| BLE interval: request 30 ms instead of 7.5-15 ms | **Not run.** The request is already a compile-time knob; prerequisite is the B1 image and the phone's granted interval |
+| FF14 hold: two connection intervals (`WMR_CFG_BATCH_HOLD_INTERVALS=2`) | **Not run.** Knob added in ONY-176; default 1 keeps the current one-interval hold |
+| DLE confirmation on the current build | **Not run on the current build; the 2026-10-22 log shows 251 octets / 2120 µs accepted.** Capture the line again on this image |
+| Controller task core/priority and HCI buffers | **Ruled out by the archived diagnostics:** `vhci_drop=0`, `log_errors=0`, queue high-water 41/256 (sample `q=2/256 high=41`), and `tx` trailing `rx` only by queued records; no run needed unless a future window shows a nonzero drop or error counter |
+
+**ONY-176 status (2026-10-24).** No new hardware run has happened, so no lever in
+this section has a new result. All six are now either run-ready or ruled out:
+V1 and the BLE interval/hold images are compile-time builds; right-asymmetry
+phases 1-2 need no flash; DLE is already logged and only needs a current-build
+capture; core/priority and HCI buffers are ruled out by the diagnostics above.
+The run order, commands and per-lever pass rules are in
+[`runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md).
+The best measured configuration therefore remains unchanged: default both-hands
+FF14 at MTU 517, the granted 15 ms interval and a one-interval batch hold, with
+18-25 % dual-hand loss. No single-ESP32 variant has yet beaten it.
 
 **Not tested, and practical:**
 
 - **Physical separation / antenna geometry.** The right-asymmetry sheet swaps
   the controller between hand slots and positions, then swaps the board, to
-  separate controller, position and antenna. It has not run
-  ([`runs/sheets/right-asymmetry.md`](runs/sheets/right-asymmetry.md)). This is
-  the cheapest way to find out whether part of the loss is RF geometry rather
-  than scheduling.
-- **Data Length Extension confirmation.** DLE is enabled in BTstack, but the
-  firmware does not log whether the phone/controller accepted it, so its
-  airtime benefit is unknown. Logging the data-length event and comparing a
-  long-batch hold (for example two connection intervals) would test whether BLE
-  airtime can be reduced further without adding a visible delay.
+  separate controller, position and antenna. Its phases 1-2 have not run, and
+  they need no reflash ([`runs/sheets/right-asymmetry.md`](runs/sheets/right-asymmetry.md),
+  [`runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md) §3).
+  This is the cheapest way to find out whether part of the loss is RF geometry
+  rather than scheduling.
+- **Data Length Extension and BLE airtime.** The firmware now logs the
+  data-length event; the 2026-10-22 log shows 251 octets / 2120 µs accepted, so
+  DLE is not the unknown it was. A current-build capture and the A/B of a 30 ms
+  interval request and a two-interval FF14 hold have not run
+  ([`runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md) §4).
 - **BLE connection interval/priority variations.** The bridge asks for
   7.5-15 ms; the phone granted 15 ms with latency 1. A longer interval lowers
   the number of connection events but adds latency; it is phone-controlled and
   has not been compared.
-- **Controller task core/priority and HCI buffer count.** Not tuned. The
-  diagnostics argue against this being the cause (`vhci_drop=0`,
-  `log_errors=0`, queue high-water 31/256, `tx == rx`), so it is low value and
-  should come after the RF tests.
+- **Controller task core/priority and HCI buffer count.** Not tuned, and no
+  longer worth a run on current evidence: the archived logs show `vhci_drop=0`,
+  `log_errors=0`, a queue high-water of 41/256 (sample `q=2/256 high=41`) and
+  `tx` trailing `rx` only by queued records. A future run that
+  shows a nonzero drop or error counter reopens it; otherwise the diagnostics
+  rule it out.
 - **Classic TX power and channel/frequency-hopping control.** `esp_bredr_tx_power_set`
   is not called and the default is already the maximum; Classic AFH is
   controller-managed and not exposed by this firmware. There is no tested lever
@@ -533,12 +553,13 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
   loss show the limit is the radio path, not ESP32 CPU or queueing. Two bridges
   are justified for that target but not yet measured, and even they may not
   remove RIGHT's own ~10.8 %.
-- **The single-ESP32 contention search is not exhausted.** V1 stagger, the
-  right-asymmetry/antenna sitting, DLE and long-batch logging, and physical
-  placement remain; 2M PHY and Classic-vs-BLE priority are closed by the
-  hardware/API. The no-phone and RIGHT-alone baselines bound the possible gain,
-  so these tests are diagnostic rather than a likely route to 3-5 % on one
-  ESP32.
+- **The single-ESP32 contention search is not exhausted, but every remaining
+  lever is now either run-ready or ruled out.** V1 stagger, right-asymmetry phases 1-2, current-build
+  DLE capture, a 30 ms interval request and a two-interval FF14 hold have not
+  run; the core/priority and HCI-buffer lever is ruled out by zero drop/error
+  counters. 2M PHY and Classic-vs-BLE priority are closed by the hardware/API.
+  The no-phone and RIGHT-alone baselines bound the possible gain, so these tests
+  are diagnostic rather than a likely route to 3-5 % on one ESP32.
 - It is too much for VR-grade tracking but survivable for the current 3DoF
   viewer because the library integrates over the controller's tick gaps. The
   visible defect is stale poses: over 20 ms one third of the time, over 50 ms
