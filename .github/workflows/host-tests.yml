@@ -47,5 +47,8 @@ jobs:
         run: ./test_diag
       - name: Run capture/analysis script tests
         run: python3 tests/test_analyze_capture.py
+      - name: Run Linux/Pi host-bridge tests
+        working-directory: pi
+        run: python3 -m unittest discover -s tests -v
       - name: Run firmware packaging tests
         run: python3 tests/test_firmware_package.py

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wmr-bridge-pi"
+description = "Linux/Raspberry Pi Wi-Fi host bridge for WMR motion controllers"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dynamic = ["version"]
+dependencies = []
+
+[project.scripts]
+wmr-bridge = "wmr_bridge.__main__:main"
+
+[tool.setuptools]
+packages = ["wmr_bridge"]
+
+[tool.setuptools.dynamic]
+version = { attr = "wmr_bridge.__version__" }

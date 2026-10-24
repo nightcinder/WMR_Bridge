@@ -1,6 +1,6 @@
 # WMR Bridge: Firmware Status
 
-Last updated: 2026-10-23 (contention-2 hardware results; see [`docs/runs/sheets/contention-2-results.md`](runs/sheets/contention-2-results.md)).
+Last updated: 2026-10-24 (experimental Linux/Pi Wi-Fi host bridge; see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)).
 
 This document tracks **firmware capabilities and firmware-side empirical findings** in this repository.
 The overall project status, milestones, roadmap, and companion Flutter app state (including 3D viewer, orientation fusion, and host latency tracking) are maintained at the project's single entry point: [nightcinder/wmr-companion docs/STATUS.md](https://github.com/nightcinder/wmr-companion/blob/main/docs/STATUS.md).
@@ -18,6 +18,7 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Controller discovery by name & NVS address persistence | Merged | Yes; D1–D11 checks passed |
 | Link diagnostics (`link:`, `role:`, `POLICY:`) | Merged | Yes; verified in contention-2 runs |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, **not run on hardware** |
+| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE) | Experimental | **Host tests only, not run on hardware** |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has **not** been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38) | Merged | Host tests only, **not run on hardware** |
 
