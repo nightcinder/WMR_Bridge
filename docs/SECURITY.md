@@ -18,6 +18,15 @@ secure.
 - There is no rate limiting or input validation beyond the CCC write (the
   characteristic accepts no other writes).
 
+**Multi-bridge (two ESP32 bridges).** In single-hand mode (`--variant left` /
+`--variant right`) one bridge serves one hand, and two bridges advertise
+concurrently as `WMR Bridge L` and `WMR Bridge R`. Each bridge keeps the same
+unauthenticated, unencrypted GATT service described above, so an unwanted
+central can hijack or block **one hand independently** while the other hand
+continues streaming. Splitting the hands across radios does not add any
+authentication or encryption. Whether BLE pairing/encryption is required at all
+is still open and awaits M12 bench evidence (M13.3).
+
 ## Classic Bluetooth side (controllers)
 
 - The ESP32 is Classic-discoverable (`gap_discoverable_control(1)`) and accepts
@@ -38,6 +47,28 @@ secure.
   device** that asks (`gap_ssp_confirmation_response`). This is a test
   convenience; it provides no protection against man-in-the-middle pairing.
 - Legacy PIN requests are rejected.
+
+## Linux / Raspberry Pi Wi-Fi host bridge (`pi/`)
+
+The Linux/Pi host bridge in [`pi/`](../pi/) has a different security posture from
+the ESP32 firmware: the phone link is Wi-Fi WebSocket instead of BLE. It was
+hardened in #47 / ONY-116; the full contract is in
+[PI_BRIDGE.md](PI_BRIDGE.md).
+
+- `--bind` defaults to loopback (`127.0.0.1`). Binding to any non-loopback
+  address requires a shared bearer token (`--token-file` is preferred; the file
+  must be mode `0600` and owned by the service user, `wmr`), otherwise the
+  daemon exits before opening a socket.
+- Requests carrying an `Origin` header are rejected unless that exact origin was
+  allow-listed (`--allow-origin`), so a browser page cannot open a socket.
+- The HTTP upgrade and token authentication must each complete within 5 seconds;
+  half-open connections are closed.
+- The WebSocket is **plaintext**: the token authorises clients but does not
+  encrypt controller data. The daemon has no TLS yet; terminate TLS externally
+  (reverse proxy or SSH tunnel) or keep it on a trusted WPA2/WPA3 network.
+- BlueZ on the host OS manages Classic Bluetooth pairing with the controllers.
+  The bridge trusts the devices paired there and assigns LEFT/RIGHT by HID name,
+  which is not authentication.
 
 ## Local
 

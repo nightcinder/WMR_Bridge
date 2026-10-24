@@ -90,7 +90,7 @@ The host daemon requires:
 
 ### 1.4 Client Selection
 
-- **Option A (Preferred):** `wmr-companion` app with the native Dart Wi-Fi transport (milestone M14.1, ONY-115).
+- **Option A (Preferred):** `wmr-companion` app with `wmr_ws` and the Connect screen's Wi-Fi `host:port` entry. Both are landed on `wmr-companion` `main` (#61 / M14.1, #62 / M14.3), but the app-side path remains host-tested/loopback-only until Sitting P runs on the Pi.
 - **Option B (Fallback):** `pi/tools/wifi_probe.py` in this repository. It requires only Python 3.10+ (no Flutter or Android toolchain) and can run on a laptop or a phone via Termux on the same 5 GHz Wi-Fi network.
 
 ### 1.5 Security & Token Setup
