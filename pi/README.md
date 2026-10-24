@@ -1,7 +1,7 @@
 # WMR Bridge on Linux / Raspberry Pi (Wi-Fi transport)
 
-This directory is the **second supported target** (the ESP32 remains
-first-class): a host-side replacement for the ESP32 for any Linux machine with
+This directory is the **second supported first-class target** (ESP32-over-BLE is
+the default): a host-side replacement for the ESP32 for any Linux machine with
 Bluetooth Classic and a 5 GHz Wi-Fi adapter. A Raspberry Pi 4 or 5 is the
 reference target (dual-band Wi-Fi and BT 5.0); a Pi Zero 2 W is **not** suitable
 because its Wi-Fi is 2.4 GHz only, which shares the radio band with Bluetooth.
@@ -15,7 +15,8 @@ The host bridge:
 - carries them over a WebSocket on Wi-Fi instead of BLE GATT.
 
 The full design, wire protocol, security notes, setup steps and hardware test
-plan are in [`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md).
+plan are in [`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md), and the bring-up run
+sheet is [`docs/runs/sheets/pi-bridge.md`](../docs/runs/sheets/pi-bridge.md).
 
 ## Quick start (replay, no controllers)
 

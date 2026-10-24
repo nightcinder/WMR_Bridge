@@ -1,8 +1,10 @@
 # Linux / Raspberry Pi host bridge over Wi-Fi
 
-**Status: the second supported target (the ESP32 remains first-class), host-tested
+**Status: the second supported first-class target (ESP32-over-BLE is the default), host-tested
 in this repository but not yet run on a Raspberry Pi or with real controllers.**
-Everything below is the design and the bench plan, not a hardware result.
+Everything below is the design and the bench plan, not a hardware result; the
+bring-up run sheet for the first sitting is
+[`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md).
 
 This document specifies a second bridge implementation for any Linux machine
 with **Bluetooth Classic** and a **5 GHz Wi-Fi** adapter. A Raspberry Pi 4 or 5
@@ -529,8 +531,9 @@ loss.
 | P10 | 8 h soak | no memory growth, no fd leak, no queue drops at idle |
 
 Record host model, OS, BlueZ/kernel versions, Wi-Fi band/channel, controller
-addresses (or omit them), and the probe output. Until P1-P10 have been run,
-treat the Pi path as unverified.
+addresses (or omit them), and the probe output in the bring-up run sheet
+[`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md). Until P1-P10 have
+been run, treat the Pi path as unverified.
 
 ## Troubleshooting
 
@@ -547,8 +550,8 @@ treat the Pi path as unverified.
 
 ## Future work
 
-- Hardware validation and a run sheet (P1-P10) in `docs/runs/`.
-- Companion app Wi-Fi transport (separate issue/repository).
+- Hardware validation of P1-P10 using the bring-up run sheet [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md).
+- Companion app Wi-Fi transport (`wmr_ws` and connect UI in `wmr-companion`).
 - TLS or a pinned-key handshake for non-LAN use; mDNS advertisement.
 - FF13 calibration-blob forwarding and an FF16-equivalent endpoint.
 - Native packaging (`pip install`, `.deb`) and udev rules shipped as files.
