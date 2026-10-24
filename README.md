@@ -85,7 +85,7 @@ The default firmware build operates in the dual-controller topology described ab
 | --- | --- |
 | `src/` | The firmware: controller handling, BLE transport, protocol, queue, console, init |
 | `wmr_bridge.gatt` | GATT database |
-| `tests/`, `samples/` | Host unit tests for the protocol, queue and decoder; sample frames |
+| `tests/`, `samples/` | Host unit tests (protocol, queue, decoder, FF14 batching, FF15 echo, FF13 config, discovery, diagnostics, status LED); sample frames |
 | `tools/` | PC-side capture (`capture_ble.py`, needs hardware and `bleak`) and rotation analysis (`analyze_capture.py`); see [docs/DECODING.md](docs/DECODING.md) |
 | `tools/firmware/` | One-command build, packaging and flash (`build.py`) plus the browser-flasher manifest logic; see [docs/FLASHING.md](docs/FLASHING.md) |
 | `pi/` | Linux / Raspberry Pi host bridge over Wi-Fi: BlueZ hidraw source, WebSocket transport, decoder and host tests; see [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) |
@@ -116,9 +116,12 @@ python3 tools/firmware/build.py --idf-export ~/esp/esp-idf/export.sh --flash /de
 
 The first run clones the pinned BTstack commit into `.fw-build/`; later runs
 reuse it. The output in `dist/` includes a merged factory image and a browser
-flasher page. To install a released build without ESP-IDF, use the browser
-installer described in [docs/FLASHING.md](docs/FLASHING.md); for a local build,
-serve `dist/` over HTTP.
+flasher page. `v0.1.0` is the current tagged release (2026-10-24); to install it
+without ESP-IDF, use the hosted browser installer at
+<https://nightcinder.github.io/WMR_Bridge/>, which serves all three variants.
+The [GitHub release](https://github.com/nightcinder/WMR_Bridge/releases/latest)
+also carries the images, manifests and the Pi bridge tarball. For a local build,
+serve `dist/` over HTTP; details are in [docs/FLASHING.md](docs/FLASHING.md).
 
 For one hand per bridge (or single-hand testing on a single board), add
 `--variant left` or `--variant right`; `--variant both` is the default and is
@@ -137,7 +140,7 @@ an external WS2812. If yours is wired elsewhere, pass the pin at build time:
 `$env:EXTRA_CFLAGS = "-DWMR_CFG_STATUS_LED_GPIO=27"`). Set
 `-DWMR_CFG_STATUS_LED=0` to build without one. The colour follows the
 *connected* controllers, not the stored pairings, and a single-hand build can
-only ever show green.
+only ever show red or green.
 
 The manual steps remain in [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md).
 Short version: put this repo at `<btstack>\wmr_bridge`, copy
@@ -186,11 +189,18 @@ python3 -m wmr_bridge --replay ../samples/controller_frames.txt   # no hardware
 python3 tools/wifi_probe.py --stream batched                      # second terminal
 ```
 
+The `0.1.0` release adds `--hand left|right` for one Pi per hand, optional mDNS
+advertisement (`--advertise-mdns`), a udev rule for `/dev/hidraw*` access and a
+self-contained `pi/install.sh` installer for a systemd service;
+`--replay-once` stops after one replay pass.
+
 For live use, pair the controllers with the Pi first; `python3 -m wmr_bridge --list`
 shows the hidraw nodes. Full setup, the wire protocol, security notes and the
 hardware test checklist are in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md), and the
 first-sitting bring-up procedure is in
-[docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md).
+[docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). The
+`wmr-pi-bridge-0.1.0.tar.gz` asset on the GitHub release contains the same
+`pi/` tree.
 
 ## BLE interface (summary)
 
@@ -213,8 +223,8 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 | What | Result |
 | --- | --- |
 | Firmware build (ESP-IDF v6.1, ESP32) | Passes, no warnings from this code |
-| Host unit tests of the protocol encoder, reassembler and queue (6107 checks default, 6122 with `-DWMR_CFG_PSVR2_SUPPORT=1`) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
-| Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 94 tests) | Pass (host tests only; never run on a Raspberry Pi or with real controllers) |
+| Host unit tests of the protocol encoder, reassembler and queue (6112 checks default, 6127 with `-DWMR_CFG_PSVR2_SUPPORT=1`) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
+| Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 113 tests) | Pass (host tests only; never run on a Raspberry Pi or with real controllers) |
 | Flash and boot on a real ESP32 | Passes; advertises; stats print every 5 s; no debug spam |
 | **One bench run, about 15 s, both controllers and a phone** (log pasted by the user, not instrumented on the phone) | Both controllers connected on their own; ATT MTU went 23 to 517; about 174/s (LEFT) and 154/s (RIGHT); sent = received for both hands; 0 drops, 0 offline, 0 purged, 0 send errors; queue back to 0 after a startup peak of 11; counter accounting added up exactly |
 
