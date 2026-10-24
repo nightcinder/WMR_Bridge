@@ -12,6 +12,7 @@
 #include "wmr_protocol.h"
 #include "wmr_queue.h"
 #include "wmr_decoded.h"
+#include "wmr_psvr2.h"
 
 static int checks, failures;
 
@@ -310,6 +311,41 @@ static void test_malformed_poisons_partial(void){
     CHECK(r.frames_incomplete[0] == 1);
 }
 
+#if WMR_CFG_PSVR2_SUPPORT
+static void test_psvr2_frame(void){
+    printf("PSVR2-length frame: predicate, round-trip, decoder boundary\n");
+    CHECK(WMR_CFG_MAX_FRAME >= WMR_PSVR2_INPUT_FRAME_MAX);
+    wmr_frame_t f;
+    make_frame(&f, WMR_HAND_RIGHT, 7, WMR_PSVR2_INPUT_FRAME_MAX);
+    f.data[0] = WMR_PSVR2_HID_HEADER;
+    f.data[1] = WMR_PSVR2_INPUT_REPORT_ID;
+    CHECK(wmr_psvr2_is_input_report(f.data, f.length));
+    CHECK(!wmr_psvr2_is_input_report(f.data, 2));           /* header + report ID only */
+    CHECK(!wmr_psvr2_is_input_report(NULL, f.length));
+    f.data[0] = 0xA2;
+    CHECK(!wmr_psvr2_is_input_report(f.data, f.length));
+    f.data[0] = WMR_PSVR2_HID_HEADER;
+    f.data[1] = 0x01;
+    CHECK(!wmr_psvr2_is_input_report(f.data, f.length));    /* a WMR report ID is not PSVR2 */
+    f.data[1] = WMR_PSVR2_INPUT_REPORT_ID;
+
+    static const uint16_t capacities[] = { 44, 244 };
+    for (unsigned i = 0; i < sizeof(capacities) / sizeof(capacities[0]); i++){
+        wmr_reassembler_t r;
+        wmr_reassembler_init(&r);
+        wmr_frame_t out;
+        unsigned count;
+        CHECK(send_frame(&r, &f, capacities[i], &out, &count) == WMR_PROTO_FRAME_COMPLETE);
+        CHECK(frames_equal(&f, &out) && count >= 1);
+    }
+
+    /* The decoded stream has no PSVR2 parser yet: FF12/FF14 must reject the frame
+     * rather than half-decode it. It is counted as a decode error there. */
+    uint8_t record[WMR_DECODED_SIZE];
+    CHECK(!wmr_decoded_from_frame(&f, record));
+}
+#endif
+
 static void test_queue(void){
     printf("queue\n");
     static wmr_queue_t q;                /* large; keep off the stack */
@@ -478,6 +514,9 @@ int main(int argc, char **argv){
     test_duplicate_fragment();
     test_malformed();
     test_malformed_poisons_partial();
+#if WMR_CFG_PSVR2_SUPPORT
+    test_psvr2_frame();
+#endif
     test_queue();
     test_decoded_golden();
     test_decoded_rejects();

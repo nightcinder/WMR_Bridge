@@ -159,6 +159,30 @@ The result is three manifests (`manifest.json`, `manifest-left.json`,
 The browser installer offers all three. If only one variant was built, the page
 marks the others as not included in that build.
 
+### PSVR2 support (opt-in)
+
+PSVR2 Sense controller support is **off by default** in standard release images
+(`WMR_CFG_PSVR2_SUPPORT=0`) to preserve DRAM headroom for WMR operation (~7.6 KB
+DRAM free vs ~3.5 KB with PSVR2 on).
+
+To build an image with PSVR2 support enabled, pass `-DWMR_CFG_PSVR2_SUPPORT=1`
+through `EXTRA_CFLAGS`. This automatically expands `WMR_CFG_MAX_FRAME` from 64
+to 80 bytes to accommodate the 79-byte `0x31` reports:
+
+```bash
+# Linux / macOS
+EXTRA_CFLAGS="-DWMR_CFG_PSVR2_SUPPORT=1" python3 tools/firmware/build.py --variant both --idf-export ~/esp/esp-idf/export.sh --out dist
+```
+
+```powershell
+# Windows PowerShell
+$env:EXTRA_CFLAGS = "-DWMR_CFG_PSVR2_SUPPORT=1"
+python tools\firmware\build.py --variant both
+Remove-Item Env:EXTRA_CFLAGS
+```
+
+See [docs/PSVR2.md](PSVR2.md) for framework details, open hardware questions, and build switches.
+
 ## Browser flasher (end users)
 
 The flasher is a static page using ESP Web Tools. The user connects the board

@@ -43,6 +43,12 @@ jobs:
         run: ./test_cfg
       - name: Run discovery tests
         run: ./test_discovery
+      - name: Run discovery and protocol tests with PSVR2 and hand variants
+        run: |
+          gcc -std=c99 -Wall -Wextra -Wconversion -Werror -DWMR_CFG_PSVR2_SUPPORT=1 -Isrc tests/test_discovery.c src/wmr_discovery.c -o test_discovery_psvr2 && ./test_discovery_psvr2
+          gcc -std=c99 -Wall -Wextra -Wconversion -Werror -DWMR_CFG_BRIDGE_HANDS=1 -Isrc tests/test_discovery.c src/wmr_discovery.c -o test_discovery_h1 && ./test_discovery_h1
+          gcc -std=c99 -Wall -Wextra -Wconversion -Werror -DWMR_CFG_BRIDGE_HANDS=2 -Isrc tests/test_discovery.c src/wmr_discovery.c -o test_discovery_h2 && ./test_discovery_h2
+          gcc -std=c99 -Wall -Wextra -Wconversion -Werror -DWMR_CFG_PSVR2_SUPPORT=1 -Isrc tests/test_protocol.c src/wmr_protocol.c src/wmr_queue.c src/wmr_decoded.c src/wmr_decode.c -o test_protocol_psvr2 && ./test_protocol_psvr2 samples/controller_frames.txt
       - name: Run link-diagnostics tests
         run: ./test_diag
       - name: Run capture/analysis script tests

@@ -66,14 +66,19 @@ fragment: a 12-byte header followed by a chunk of one controller frame.
 | 0 | u8 | `magic` | `0x52` (`'R'`) |
 | 1 | u8 | `hand` | 0 = LEFT, 1 = RIGHT |
 | 2 | u32 | `sequence` | Per-hand frame number (see rules) |
-| 6 | u16 | `total_len` | Length of the whole frame in bytes (observed: 46) |
+| 6 | u16 | `total_len` | Length of the whole frame in bytes (46 for WMR, 79 for PSVR2) |
 | 8 | u16 | `offset` | Offset of this chunk within the frame |
 | 10 | u16 | `chunk_len` | Bytes of frame data in this notification |
 | 12 | `chunk_len` | `data` | `frame[offset .. offset+chunk_len)` |
 
 The frame is the controller's HID input report **exactly as BTstack delivers
-it**: byte 0 = `0xA1` (HID DATA/input transaction header), byte 1 = report ID
-(observed `0x01`), then 44 payload bytes. 46 bytes in total. It is not decoded.
+it**: byte 0 = `0xA1` (HID DATA/input transaction header), byte 1 = report ID,
+then the payload. A WMR report is report ID `0x01` with 44 payload bytes, 46
+bytes in total. A PSVR2 Sense report is report ID `0x31` with up to 77 payload
+bytes, 79 bytes in total; the raw stream carries it unchanged, and the phone has
+to parse it (there is no FF12/FF14 decoder for it yet, see [PSVR2.md](PSVR2.md)).
+Nothing in either stream is decoded by the bridge, and the 12-byte fragment
+header is identical for both.
 
 Example (RIGHT, sequence `0x01020304`, 46-byte frame, notification capacity
 44 bytes), first fragment header then second fragment header:
@@ -88,9 +93,10 @@ Example (RIGHT, sequence `0x01020304`, 46-byte frame, notification capacity
 - The notification capacity is `min(ATT_MTU - 3, 244)`: 3 bytes are ATT
   opcode + handle, 244 is `WMR_CFG_MAX_NOTIFICATION`.
 - Data per notification = capacity - 12. With the default ATT MTU of 23 the
-  capacity is 20 and a 46-byte frame takes 6 notifications
-  (8,8,8,8,8,6 bytes). With ATT MTU >= 61 it fits in one notification
-  (58 bytes).
+  capacity is 20 and a 46-byte WMR frame takes 6 notifications
+  (8,8,8,8,8,6 bytes). A 79-byte PSVR2 frame takes 10 notifications at that MTU
+  (8*9 + 7 bytes). With ATT MTU >= 61 a WMR frame fits in one notification (58 bytes);
+  a PSVR2 frame needs ATT MTU >= 94 (capacity >= 91).
 - If the negotiated MTU is 15 or less, nothing can be sent (no room for a payload byte).
 - Fragments of one frame are sent **consecutively and in order** before any
   fragment of the next frame. The two hands are interleaved at frame
@@ -283,7 +289,9 @@ rotation capture in [DECODING.md](DECODING.md) is done.
 - A queued frame that is not a valid 46-byte input report (wrong length, transaction
   header, or report ID) is discarded and counted in the per-hand `dec_err` statistic.
   Config responses are not expected here: they are separated by report ID before this
-  point in the FF13 design (implemented, see below).
+  point in the FF13 design (implemented, see below). A PSVR2 `0x31` frame is also
+  discarded here until a PSVR2 decoder exists, so FF12/FF14 are WMR-only; use FF11 for a
+  PSVR2 hand ([PSVR2.md](PSVR2.md)).
 - Samples of the two hands may interleave freely. Ordering is per hand by `sequence`.
 
 ## Bench-test items (not blockers)
@@ -553,6 +561,10 @@ unverified on hardware.
 `wmr_controller_protocol.h`). They have **never been tried through this bridge**;
 every item marked "unverified" must be checked on hardware before relying on it.
 
+**WMR hands only.** The descriptor-available handler sends the block read only to a
+`WMR_MODEL_WMR` hand. A PSVR2 hand gets the Feature Report `0x05` wake read instead and no
+FF13 command; see [PSVR2.md](PSVR2.md).
+
 Goal: the ESP32 reads each controller's firmware config block once, caches it per
 hand, and serves it to the phone **byte-for-byte as received**. The ESP32 does not
 de-obfuscate, parse, or interpret it. The phone de-obfuscates (Monado's fixed
@@ -611,12 +623,14 @@ blocking the HID callback.
 
 ## Separating config responses from input reports
 
-Today the HID report handler (`handle_report` in `wmr_controller.c`) passes **every**
-report to `wmr_transport_submit_report`, which increments the per-hand sequence,
-counts it as received, and (when subscribed) copies it into a frame of at most 64
-bytes. A config response is 78 bytes including its report ID, plus the 1-byte HID
-transaction header, 79 bytes in all, so today it would consume a sequence number and
-be dropped as oversize.
+Today the HID report handler (`handle_report` in `wmr_controller.c`) classifies by
+report ID, applies the per-model rule below, and passes input reports to
+`wmr_transport_submit_report`, which increments the per-hand sequence, counts it as
+received, and (when subscribed) copies it into a frame of at most `WMR_CFG_MAX_FRAME`
+(64 by default, 80 when PSVR2 support is enabled). A config response is 78 bytes
+including its report ID, plus the 1-byte HID
+transaction header, 79 bytes in all, so without the rule below it would consume a
+sequence number and be forwarded as an input frame.
 
 Rule for the new design, applied **in the HID handler before anything is counted or
 queued**: look at the report ID, which is byte 1 of what BTstack delivers (byte 0 is
@@ -624,17 +638,20 @@ the `0xA1` DATA/input header).
 
 | Report ID | Handling |
 | --- | --- |
-| `0x01` | Input report: existing path, unchanged (sequence, raw FF11 or decoded FF12) |
-| `0x02`, `0x06` | Config command response: goes only to the config reader; **not** sequence-numbered, not counted in `rx`, not queued, not forwarded on FF11/FF12 |
+| `0x01` | WMR input report: existing path, unchanged (sequence, raw FF11 or decoded FF12) |
+| `0x02`, `0x06` | WMR config command response: goes only to the config reader; **not** sequence-numbered, not counted in `rx`, not queued, not forwarded on FF11/FF12 |
+| `0x31` | PSVR2 input report (PSVR2 hand only): forwarded on FF11; FF12/FF14 reject it until a PSVR2 decoder exists |
 | anything else | Counted in a separate "other reports" counter, not forwarded |
 
 Classification is by report ID, not by length, so a malformed short response cannot
 leak into the sample stream. While a config read is in progress the controller keeps
 streaming `0x01` input reports interleaved with the responses; the reader ignores
-non-matching IDs exactly as Monado's loop does, and input handling is unaffected.
-`WMR_CFG_MAX_FRAME` (64) stays as it is, since config responses never reach that
-queue. The sequence counter is not advanced by config traffic, so FF11/FF12 sequence
-numbers stay contiguous.
+non-matching IDs exactly as Monado's loop does, and input handling is unaffected. A
+PSVR2 hand never gets the FF13 read at all (the commands are Microsoft-specific), so
+its `0x02`/`0x06` reports, if any, are counted as "other".
+`WMR_CFG_MAX_FRAME` is 80 when PSVR2 support is on (64 by default) so a PSVR2 frame
+fits; config responses still never reach that queue. The sequence counter is not advanced
+by config traffic, so FF11/FF12 sequence numbers stay contiguous.
 
 ## Cache
 

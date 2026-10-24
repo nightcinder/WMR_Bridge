@@ -55,11 +55,55 @@ static bool name_equals(const uint8_t *name, size_t len, const char *want){
     return true;
 }
 
-int wmr_discovery_hand_for_name(const uint8_t *name, size_t len){
+typedef struct {
+    const char *name;
+    int         hand;
+    wmr_model_t model;
+} controller_name_t;
+
+/* The names are matched in order. A WMR and a PSVR2 controller of the same hand therefore
+ * both map to that hand; the first one found in a discovery run wins, exactly as two WMR
+ * controllers of one hand already did. */
+static const controller_name_t controller_names[] = {
+    { WMR_DISCOVERY_NAME_LEFT,   WMR_HAND_LEFT,  WMR_MODEL_WMR   },
+    { WMR_DISCOVERY_NAME_RIGHT,  WMR_HAND_RIGHT, WMR_MODEL_WMR   },
+#if WMR_CFG_PSVR2_SUPPORT
+    { WMR_DISCOVERY_NAME_PSVR2_LEFT,  WMR_HAND_LEFT,  WMR_MODEL_PSVR2 },
+    { WMR_DISCOVERY_NAME_PSVR2_RIGHT, WMR_HAND_RIGHT, WMR_MODEL_PSVR2 },
+#endif
+};
+
+#define CONTROLLER_NAME_COUNT (sizeof(controller_names) / sizeof(controller_names[0]))
+
+const char *wmr_model_name(wmr_model_t model){
+    switch (model){
+        case WMR_MODEL_WMR:   return "WMR";
+#if WMR_CFG_PSVR2_SUPPORT
+        case WMR_MODEL_PSVR2: return "PSVR2";
+#endif
+        default:              return "?";
+    }
+}
+
+/* Hand and model for a name; hand -1 and model WMR_MODEL_COUNT when unknown. */
+static int identify_name(const uint8_t *name, size_t len, wmr_model_t *model){
     if (!name) return -1;
-    if (name_equals(name, len, WMR_DISCOVERY_NAME_LEFT))  return WMR_HAND_LEFT;
-    if (name_equals(name, len, WMR_DISCOVERY_NAME_RIGHT)) return WMR_HAND_RIGHT;
+    for (unsigned i = 0; i < CONTROLLER_NAME_COUNT; i++){
+        if (!name_equals(name, len, controller_names[i].name)) continue;
+        if (model) *model = controller_names[i].model;
+        return controller_names[i].hand;
+    }
     return -1;
+}
+
+int wmr_discovery_hand_for_name(const uint8_t *name, size_t len){
+    return identify_name(name, len, NULL);
+}
+
+wmr_model_t wmr_discovery_model_for_name(const uint8_t *name, size_t len){
+    wmr_model_t model = WMR_MODEL_COUNT;
+    if (identify_name(name, len, &model) < 0) return WMR_MODEL_COUNT;
+    return model;
 }
 
 /* ---- Stored addresses ---------------------------------------------------- */
@@ -70,12 +114,16 @@ static bool all_zero(const uint8_t a[6]){
 }
 
 /* Layout: [0] version, [1] bit0 LEFT valid, bit1 RIGHT valid, [2..7] LEFT, [8..13] RIGHT,
- * [14..15] reserved 0. An invalid slot is stored as zeros. */
+ * [14] 2 model bits per hand, [15] reserved 0. An invalid slot is stored as zeros. */
 void wmr_addr_record_pack(const wmr_addr_record_t *r, uint8_t out[WMR_ADDR_RECORD_SIZE]){
     memset(out, 0, WMR_ADDR_RECORD_SIZE);
     out[0] = WMR_ADDR_RECORD_VERSION;
     for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
-        if (!r->valid[h]) continue;
+        if (!r->valid[h]) continue;             /* invalid slots stay all-zero, model bits included */
+#if WMR_CFG_PSVR2_SUPPORT
+        unsigned model = (unsigned) r->model[h];
+        out[14] = (uint8_t) (out[14] | ((model & 0x3u) << (2 * h)));
+#endif
         out[1] = (uint8_t) (out[1] | (1u << h));
         memcpy(&out[2 + 6 * h], r->address[h], 6);
     }
@@ -88,6 +136,14 @@ bool wmr_addr_record_unpack(const uint8_t *in, size_t size, wmr_addr_record_t *o
     wmr_addr_record_t r;
     memset(&r, 0, sizeof(r));
     for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
+        unsigned model = (in[14] >> (2 * h)) & 0x3u;
+#if !WMR_CFG_PSVR2_SUPPORT
+        /* A record written by a PSVR2-enabled build must not disable the hand in a
+         * WMR-only build: keep the address and treat it as WMR. Pressing F is not needed. */
+        if (model == WMR_MODEL_PSVR2) model = WMR_MODEL_WMR;
+#endif
+        if (model >= WMR_MODEL_COUNT) return false;
+        r.model[h] = (wmr_model_t) model;
         if (!(in[1] & (1u << h))) continue;
         if (all_zero(&in[2 + 6 * h])) return false;
         r.valid[h] = true;
@@ -153,8 +209,9 @@ static int pending_index(const wmr_discovery_t *d, const uint8_t address[6]){
     return -1;
 }
 
-/* A device of `hand` (or -1) was identified. */
-static wmr_disc_result_t classify(wmr_discovery_t *d, const uint8_t address[6], int hand){
+/* A device of `hand`/`model` (hand -1 for a non-controller) was identified. */
+static wmr_disc_result_t classify(wmr_discovery_t *d, const uint8_t address[6], int hand,
+                                  wmr_model_t model){
     /* A hand this build does not serve is treated exactly like a non-controller device:
      * its name is ignored during inquiry and remote name requests. */
     if (!wmr_bridge_hand_enabled(d->bridge_hands, hand)) return WMR_DISC_IGNORED;
@@ -165,6 +222,7 @@ static wmr_disc_result_t classify(wmr_discovery_t *d, const uint8_t address[6], 
         return WMR_DISC_DUPLICATE;
     }
     d->found[hand] = true;
+    d->found_model[hand] = model;
     memcpy(d->found_address[hand], address, 6);
     return WMR_DISC_MATCHED;
 }
@@ -179,7 +237,9 @@ wmr_disc_result_t wmr_discovery_on_inquiry_result(wmr_discovery_t *d, const wmr_
     }
     if (name && len){
         if (d->seen_count < WMR_DISCOVERY_MAX_SEEN) memcpy(d->seen[d->seen_count++], dev->address, 6);
-        return classify(d, dev->address, wmr_discovery_hand_for_name(name, len));
+        wmr_model_t model = WMR_MODEL_COUNT;
+        int hand = identify_name(name, len, &model);
+        return classify(d, dev->address, hand, model);
     }
     if (d->pending_count == WMR_DISCOVERY_MAX_PENDING){
         d->skipped++;
@@ -199,7 +259,9 @@ const wmr_discovery_device_t *wmr_discovery_next_name_request(wmr_discovery_t *d
 
 wmr_disc_result_t wmr_discovery_on_name(wmr_discovery_t *d, const uint8_t address[6],
                                         const uint8_t *name, size_t len){
-    return classify(d, address, wmr_discovery_hand_for_name(name, len));
+    wmr_model_t model = WMR_MODEL_COUNT;
+    int hand = identify_name(name, len, &model);
+    return classify(d, address, hand, model);
 }
 
 int wmr_discovery_incoming_hand_config(const bool known[WMR_NUM_CONTROLLERS], int bridge_hands,

@@ -47,6 +47,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "wmr_config.h"
+#include "wmr_discovery.h"
 
 /* Receives every HID input report (A1, report ID, payload...). Runs in the
  * HID callback: copy the bytes if keeping them, and return quickly. */
@@ -66,6 +67,7 @@ typedef struct {
     uint32_t other_reports;   /* neither input nor config reports; dropped, not forwarded */
     wmr_addr_source_t address_source;
     uint8_t  address[6];         /* valid unless address_source is WMR_ADDR_NONE */
+    wmr_model_t model;           /* WMR or PSVR2; WMR_MODEL_WMR until identified */
 } wmr_controller_status_t;
 
 typedef enum {
@@ -114,6 +116,8 @@ void wmr_controller_print_addresses(void);
 const char *wmr_controller_address_source_name(wmr_addr_source_t source);
 
 const char *wmr_controller_name(unsigned hand);
+/* Model of `hand` (WMR or PSVR2); WMR_MODEL_WMR when nothing has identified it yet. */
+wmr_model_t wmr_controller_model(unsigned hand);
 /* Which hand has this Bluetooth address, or -1. */
 int wmr_controller_hand_for_address(const uint8_t address[6]);
 void wmr_controller_get_status(unsigned hand, wmr_controller_status_t *out);
