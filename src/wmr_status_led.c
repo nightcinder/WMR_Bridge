@@ -67,6 +67,14 @@ const char *wmr_status_led_color_name(wmr_status_led_color_t color){
     }
 }
 
+bool wmr_status_led_gpio_allowed(int gpio){
+    if (gpio < 0 || gpio > 39) return false;        /* ESP32 GPIO range */
+    if (gpio >= 6 && gpio <= 11) return false;      /* SPI flash */
+    if (gpio == 1 || gpio == 3) return false;       /* console UART0 */
+    if (gpio >= 34) return false;                   /* input only on the ESP32 */
+    return true;
+}
+
 #ifdef ESP_PLATFORM
 
 #include <stdio.h>
@@ -79,11 +87,16 @@ const char *wmr_status_led_color_name(wmr_status_led_color_t color){
 
 #if WMR_CFG_STATUS_LED
 
+/* Two data lines at most: the primary pin plus the ATOM Lite's onboard LED. */
+#define LED_MAX_PINS 2
+
 /* WS2812 data, GRB order. Static because rmt_transmit reads it asynchronously. */
 static uint8_t led_grb[3];
 
-static rmt_channel_handle_t led_channel;
-static rmt_encoder_handle_t led_encoder;
+static rmt_channel_handle_t led_channels[LED_MAX_PINS];
+static rmt_encoder_handle_t led_encoders[LED_MAX_PINS];
+static int led_pins[LED_MAX_PINS];
+static unsigned led_pin_count;
 static esp_timer_handle_t led_timer;
 static wmr_status_led_color_t led_color;
 static bool led_color_known;
@@ -106,14 +119,17 @@ static bool led_write(wmr_status_led_color_t color){
         .loop_count = 0,
         .flags = { .eot_level = 0 },
     };
-    esp_err_t err = rmt_transmit(led_channel, led_encoder, led_grb, sizeof(led_grb),
-                                 &tx_config);
-    if (err != ESP_OK){
-        /* Leave the colour unknown so the next poll retries the same frame. */
-        printf("LED: transmit failed: %s\n", esp_err_to_name(err));
-        return false;
+    bool ok = true;
+    for (unsigned i = 0; i < led_pin_count; i++){
+        esp_err_t err = rmt_transmit(led_channels[i], led_encoders[i], led_grb,
+                                     sizeof(led_grb), &tx_config);
+        if (err != ESP_OK){
+            printf("LED: transmit failed on GPIO %d: %s\n", led_pins[i], esp_err_to_name(err));
+            ok = false;
+        }
     }
-    return true;
+    /* Leave the colour unknown on any failure so the next poll retries the same frame. */
+    return ok;
 }
 
 void wmr_status_led_show(wmr_status_led_color_t color){
@@ -137,9 +153,11 @@ static void led_poll(void *arg){
     wmr_status_led_show(wmr_status_led_color_for_connected(connected));
 }
 
-void wmr_status_led_init(void){
+static bool led_add_pin(int gpio){
+    if (led_pin_count >= LED_MAX_PINS) return false;
+
     rmt_tx_channel_config_t channel_config = {
-        .gpio_num = (gpio_num_t) WMR_CFG_STATUS_LED_GPIO,
+        .gpio_num = (gpio_num_t) gpio,
         .clk_src = RMT_CLK_SRC_DEFAULT,
         .resolution_hz = 20000000,          /* 50 ns per tick */
         .mem_block_symbols = 64,            /* ESP32 requires even and >= 64 */
@@ -152,10 +170,11 @@ void wmr_status_led_init(void){
             .init_level = 0,
         },
     };
-    esp_err_t err = rmt_new_tx_channel(&channel_config, &led_channel);
+    rmt_channel_handle_t channel = NULL;
+    esp_err_t err = rmt_new_tx_channel(&channel_config, &channel);
     if (err != ESP_OK){
-        printf("LED: RMT channel init failed: %s\n", esp_err_to_name(err));
-        return;
+        printf("LED: RMT channel init failed on GPIO %d: %s\n", gpio, esp_err_to_name(err));
+        return false;
     }
 
     rmt_bytes_encoder_config_t encoder_config = {
@@ -163,17 +182,47 @@ void wmr_status_led_init(void){
         .bit1 = { .level0 = 1, .duration0 = 17, .level1 = 0, .duration1 = 8  },
         .flags = { .msb_first = 1 },
     };
-    err = rmt_new_bytes_encoder(&encoder_config, &led_encoder);
+    rmt_encoder_handle_t encoder = NULL;
+    err = rmt_new_bytes_encoder(&encoder_config, &encoder);
     if (err != ESP_OK){
         printf("LED: RMT encoder init failed: %s\n", esp_err_to_name(err));
-        return;
+        rmt_del_channel(channel);
+        return false;
     }
-    err = rmt_enable(led_channel);
+    err = rmt_enable(channel);
     if (err != ESP_OK){
-        printf("LED: RMT enable failed: %s\n", esp_err_to_name(err));
+        printf("LED: RMT enable failed on GPIO %d: %s\n", gpio, esp_err_to_name(err));
+        rmt_del_encoder(encoder);
+        rmt_del_channel(channel);
+        return false;
+    }
+
+    led_channels[led_pin_count] = channel;
+    led_encoders[led_pin_count] = encoder;
+    led_pins[led_pin_count] = gpio;
+    led_pin_count++;
+    return true;
+}
+
+void wmr_status_led_init(void){
+    const int configured[LED_MAX_PINS] = { WMR_CFG_STATUS_LED_GPIO, WMR_CFG_STATUS_LED_GPIO_ALT };
+    for (unsigned i = 0; i < LED_MAX_PINS; i++){
+        const int gpio = configured[i];
+        if (gpio < 0) continue;                     /* -1 disables this entry */
+        if (!wmr_status_led_gpio_allowed(gpio)){
+            printf("LED: GPIO %d is reserved or input-only; skipped\n", gpio);
+            continue;
+        }
+        (void) led_add_pin(gpio);
+    }
+    if (led_pin_count == 0){
+        printf("LED: no usable data pin; status LED off\n");
         return;
     }
     led_ready = true;
+    printf("LED: WS2812 on GPIO");
+    for (unsigned i = 0; i < led_pin_count; i++) printf(" %d", led_pins[i]);
+    printf("\n");
     wmr_status_led_show(WMR_STATUS_LED_RED);
 
     const esp_timer_create_args_t timer_args = {
@@ -181,7 +230,7 @@ void wmr_status_led_init(void){
         .arg = NULL,
         .name = "status_led",
     };
-    err = esp_timer_create(&timer_args, &led_timer);
+    esp_err_t err = esp_timer_create(&timer_args, &led_timer);
     if (err == ESP_OK){
         err = esp_timer_start_periodic(led_timer, (uint64_t) WMR_CFG_STATUS_LED_POLL_MS * 1000);
     }

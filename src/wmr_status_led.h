@@ -44,6 +44,8 @@
 #ifndef WMR_STATUS_LED_H
 #define WMR_STATUS_LED_H
 
+#include <stdbool.h>
+
 typedef enum {
     WMR_STATUS_LED_RED = 0,
     WMR_STATUS_LED_GREEN,
@@ -56,6 +58,10 @@ typedef enum {
 wmr_status_led_color_t wmr_status_led_color_for_connected(unsigned connected);
 
 const char *wmr_status_led_color_name(wmr_status_led_color_t color);
+
+/* True when `gpio` can carry the LED frame: an output-capable ESP32 GPIO that is not
+ * reserved for the flash (6..11) or the console UART (1, 3). Input-only pins 34..39 fail. */
+bool wmr_status_led_gpio_allowed(int gpio);
 
 /* Set up the LED (when WMR_CFG_STATUS_LED is 1) and start polling the controller
  * status every WMR_CFG_STATUS_LED_POLL_MS. On the host this is a no-op. */

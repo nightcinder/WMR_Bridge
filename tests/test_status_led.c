@@ -42,6 +42,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "wmr_config.h"
 #include "wmr_status_led.h"
 
 static int checks, failures;
@@ -65,6 +66,24 @@ static void test_names(void){
     CHECK(strcmp(wmr_status_led_color_name(WMR_STATUS_LED_COUNT), "?") == 0);
 }
 
+static void test_gpio_selection(void){
+    printf("gpio selection\n");
+    CHECK(wmr_status_led_gpio_allowed(4));                  /* documented external LED pin */
+    CHECK(wmr_status_led_gpio_allowed(27));                 /* ATOM Lite onboard LED */
+    CHECK(wmr_status_led_gpio_allowed(0));
+    CHECK(!wmr_status_led_gpio_allowed(-1));                /* disables an entry */
+    CHECK(!wmr_status_led_gpio_allowed(1));                 /* console UART0 */
+    CHECK(!wmr_status_led_gpio_allowed(3));                 /* console UART0 */
+    CHECK(!wmr_status_led_gpio_allowed(6));                 /* SPI flash */
+    CHECK(!wmr_status_led_gpio_allowed(11));                /* SPI flash */
+    CHECK(!wmr_status_led_gpio_allowed(34));                /* input only */
+    CHECK(!wmr_status_led_gpio_allowed(40));                /* out of range */
+    CHECK(wmr_status_led_gpio_allowed(WMR_CFG_STATUS_LED_GPIO));
+#if WMR_CFG_STATUS_LED_GPIO_ALT >= 0
+    CHECK(wmr_status_led_gpio_allowed(WMR_CFG_STATUS_LED_GPIO_ALT));
+#endif
+}
+
 static void test_host_stubs(void){
     printf("host stubs\n");
     wmr_status_led_init();
@@ -75,6 +94,7 @@ static void test_host_stubs(void){
 int main(void){
     test_mapping();
     test_names();
+    test_gpio_selection();
     test_host_stubs();
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

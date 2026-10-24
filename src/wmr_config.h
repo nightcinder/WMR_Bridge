@@ -268,14 +268,23 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 /* ---- Status LED --------------------------------------------------------- */
 
 /* One addressable RGB LED (WS2812/NeoPixel): red = no controller connected, green = one,
- * blue = two. Data line on WMR_CFG_STATUS_LED_GPIO; the LED needs 5 V and GND. Set
- * WMR_CFG_STATUS_LED to 0 in builds without an LED. Single-hand builds only ever reach
- * green, because the other hand is not served. */
+ * blue = two. The LED needs 5 V and GND. Set WMR_CFG_STATUS_LED to 0 in builds without
+ * an LED. Single-hand builds only ever reach green, because the other hand is not served.
+ *
+ * The same frame is driven on more than one data pin so a prebuilt image works without
+ * knowing the board: WMR_CFG_STATUS_LED_GPIO (default 4) is the documented external-LED
+ * pin on a devkit, and WMR_CFG_STATUS_LED_GPIO_ALT (default 27) is the M5Stack ATOM
+ * Lite's onboard SK6812. Pins with nothing wired see only one short frame per poll.
+ * Set the ALT pin to -1 when you drive a single LED, or override the primary pin with
+ * -DWMR_CFG_STATUS_LED_GPIO=<n>. */
 #ifndef WMR_CFG_STATUS_LED
 #define WMR_CFG_STATUS_LED          1
 #endif
 #ifndef WMR_CFG_STATUS_LED_GPIO
 #define WMR_CFG_STATUS_LED_GPIO     4
+#endif
+#ifndef WMR_CFG_STATUS_LED_GPIO_ALT
+#define WMR_CFG_STATUS_LED_GPIO_ALT 27
 #endif
 #ifndef WMR_CFG_STATUS_LED_BRIGHTNESS
 #define WMR_CFG_STATUS_LED_BRIGHTNESS  32
