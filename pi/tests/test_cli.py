@@ -92,6 +92,11 @@ class HandFilterTests(unittest.TestCase):
         self.assertEqual(parser.parse_args(["--hand", "left"]).hand, "left")
         self.assertEqual(parser.parse_args(["--hand", "right"]).hand, "right")
 
+    def test_advertise_mdns_is_opt_in(self) -> None:
+        parser = _build_parser()
+        self.assertFalse(parser.parse_args([]).advertise_mdns)
+        self.assertTrue(parser.parse_args(["--advertise-mdns"]).advertise_mdns)
+
     def test_hidraw_manager_ignores_disallowed_hand(self) -> None:
         from wmr_bridge.bluez import HidrawDevice
         from wmr_bridge.bridge import Bridge

@@ -351,6 +351,7 @@ async def run(args: argparse.Namespace) -> int:
     elapsed = time.monotonic() - started
     summary = counters.snapshot(elapsed)
     summary["elapsedS"] = round(elapsed, 2)
+    summary["handFilter"] = hello.get("handFilter")
     summary["recordsPerSecond"] = round(counters.records / elapsed, 1) if elapsed else 0
     if ping_times:
         summary["rttMs"] = summarize_rtt(ping_times)
