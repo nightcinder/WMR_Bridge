@@ -48,6 +48,7 @@
 #include "wmr_cfg.h"
 #include "wmr_cfgmgr.h"
 #include "wmr_controller.h"
+#include "wmr_ctrl.h"
 #include "wmr_diag.h"
 #include "wmr_echo.h"
 #include "wmr_linkdiag.h"
@@ -79,6 +80,11 @@
 
 /* FF16: the firmware version (ESP-IDF PROJECT_VER), read-only. */
 #define VERSION_VALUE_HANDLE ATT_CHARACTERISTIC_0000FF16_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
+
+/* FF17: controller scan and status v2 (read + write + notify), independent of the
+ * stream exclusion. */
+#define CTRL_VALUE_HANDLE    ATT_CHARACTERISTIC_0000FF17_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
+#define CTRL_CCC_HANDLE      ATT_CHARACTERISTIC_0000FF17_0000_1000_8000_00805F9B34FB_01_CLIENT_CONFIGURATION_HANDLE
 
 #define STATUS_SIZE 16
 
@@ -115,6 +121,12 @@ static bool cfg_subscribed;
 static uint8_t cfg_cursor_hand;
 static uint32_t cfg_cursor_offset;
 static bool cfg_notify_pending[WMR_NUM_CONTROLLERS];
+/* FF17: control & status v2 subscription, pending notification and last command/result */
+static bool ctrl_subscribed;
+static bool ctrl_notify_pending;
+static uint8_t ctrl_last_command;
+static uint8_t ctrl_last_result;
+static uint8_t ctrl_last_notified[WMR_CTRL_STATUS_SIZE];
 
 static btstack_timer_source_t pump_timer;
 /* FF14: fires when the oldest queued record has waited long enough to send a partial batch. */
@@ -213,7 +225,7 @@ static void pump_kick(void){
     wmr_episode_note_queue(&drop_episode, queue.count);
     if (phone_handle == HCI_CON_HANDLE_INVALID || send_pending) return;
     /* A pending echo needs a send opportunity whatever the stream is doing. */
-    if (!echo.pending && !cfg_notify_owed()){
+    if (!echo.pending && !cfg_notify_owed() && !ctrl_notify_pending){
         if (stream_mode == WMR_STREAM_NONE || !queue.count) return;
         if (stream_mode == WMR_STREAM_BATCHED && !batch_due()) return;
     }
@@ -384,6 +396,41 @@ static void pump_send_cfg(void){
     }
 }
 
+static void build_ctrl_status(uint8_t *out){
+    wmr_ctrl_status_t s;
+    memset(&s, 0, sizeof(s));
+    s.version = WMR_CTRL_VERSION;
+    for (unsigned hand = 0; hand < WMR_NUM_CONTROLLERS; hand++){
+        wmr_controller_status_t cs;
+        wmr_controller_get_status(hand, &cs);
+        s.hands[hand].connected            = cs.connected;
+        s.hands[hand].connecting           = cs.connecting;
+        s.hands[hand].descriptor_available = cs.descriptor_available;
+        s.hands[hand].address_source       = (uint8_t) cs.address_source;
+        s.hands[hand].model                = (uint8_t) cs.model;
+        memcpy(s.hands[hand].address, cs.address, 6);
+    }
+    s.discovery_state = wmr_controller_discovery_phase();
+    s.discovery_round = wmr_controller_discovery_round();
+    s.last_command    = ctrl_last_command;
+    s.last_result     = ctrl_last_result;
+    wmr_ctrl_pack_status(&s, out);
+}
+
+static void pump_send_ctrl(void){
+    if (!ctrl_notify_pending || !ctrl_subscribed || phone_handle == HCI_CON_HANDLE_INVALID) return;
+    uint8_t status[WMR_CTRL_STATUS_SIZE];
+    build_ctrl_status(status);
+    uint8_t result = att_server_notify(phone_handle, CTRL_VALUE_HANDLE, status, sizeof(status));
+    if (result != ERROR_CODE_SUCCESS){
+        stats.errors++;
+        return;
+    }
+    memcpy(ctrl_last_notified, status, sizeof(status));
+    ctrl_notify_pending = false;
+    pump_kick();
+}
+
 /* Send the pending echo (FF15) if there is one, otherwise one fragment (FF11), one record
  * (FF12) or one batch (FF14) from the head of the queue. Runs on ATT_EVENT_CAN_SEND_NOW. */
 static void pump_send_one(void){
@@ -391,6 +438,10 @@ static void pump_send_one(void){
     if (phone_handle == HCI_CON_HANDLE_INVALID) return;
     if (echo.pending){
         pump_send_echo();
+        return;
+    }
+    if (ctrl_notify_pending){
+        pump_send_ctrl();
         return;
     }
     if (cfg_notify_owed()){
@@ -437,6 +488,13 @@ static void pump_retry_tick(btstack_timer_source_t *timer){
 
 static void status_tick_handler(btstack_timer_source_t *timer){
     status_tick++;
+    if (ctrl_subscribed && phone_handle != HCI_CON_HANDLE_INVALID){
+        uint8_t current[WMR_CTRL_STATUS_SIZE];
+        build_ctrl_status(current);
+        if (memcmp(current, ctrl_last_notified, sizeof(current)) != 0){
+            ctrl_notify_pending = true;
+        }
+    }
     pump_kick();
     btstack_run_loop_set_timer(timer, WMR_CFG_STATUS_TICK_MS);
     btstack_run_loop_add_timer(timer);
@@ -524,6 +582,15 @@ static uint16_t att_read(hci_con_handle_t handle, uint16_t attribute,
         uint8_t ccc[2] = {cfg_subscribed ? 1 : 0, 0};
         return att_read_callback_handle_blob(ccc, sizeof(ccc), offset, buffer, buffer_size);
     }
+    if (attribute == CTRL_VALUE_HANDLE){
+        uint8_t status[WMR_CTRL_STATUS_SIZE];
+        build_ctrl_status(status);
+        return att_read_callback_handle_blob(status, sizeof(status), offset, buffer, buffer_size);
+    }
+    if (attribute == CTRL_CCC_HANDLE){
+        uint8_t ccc[2] = {ctrl_subscribed ? 1 : 0, 0};
+        return att_read_callback_handle_blob(ccc, sizeof(ccc), offset, buffer, buffer_size);
+    }
     return 0;
 }
 
@@ -533,6 +600,13 @@ static void cfg_reset_connection(void){
     cfg_cursor_hand = 0;
     cfg_cursor_offset = 0;
     memset(cfg_notify_pending, 0, sizeof(cfg_notify_pending));
+}
+
+/* FF17: a phone connect or disconnect clears the CCC, pending notifications and last state. */
+static void ctrl_reset_connection(void){
+    ctrl_subscribed = false;
+    ctrl_notify_pending = false;
+    memset(ctrl_last_notified, 0, sizeof(ctrl_last_notified));
 }
 
 /* FF13 value read: the window at the connection's cursor. The ATT read offset (long reads)
@@ -601,6 +675,88 @@ static int echo_ccc_write(hci_con_handle_t handle, uint16_t transaction_mode, ui
     return 0;
 }
 
+/* FF17 control write: opcode + optional hand. */
+static int ctrl_write(const uint8_t *buffer, uint16_t buffer_size){
+    uint8_t opcode = 0;
+    uint8_t hand = 0;
+    if (!wmr_ctrl_parse_command(buffer, buffer_size, &opcode, &hand)){
+        ctrl_last_command = buffer_size > 0 ? buffer[0] : 0;
+        ctrl_last_result = WMR_CTRL_RES_INVALID_PARAM;
+        if (ctrl_subscribed){
+            ctrl_notify_pending = true;
+            pump_kick();
+        }
+        return wmr_ctrl_res_to_att_error(WMR_CTRL_RES_INVALID_PARAM);
+    }
+    ctrl_last_command = opcode;
+    uint8_t res = WMR_CTRL_RES_OK;
+    switch (opcode){
+        case WMR_CTRL_OP_DISCOVER: {
+            wmr_discovery_start_result_t dr = wmr_controller_discover();
+            if (dr == WMR_DISCOVERY_STARTED) res = WMR_CTRL_RES_OK;
+            else if (dr == WMR_DISCOVERY_BUSY) res = WMR_CTRL_RES_BUSY;
+            else if (dr == WMR_DISCOVERY_NOTHING_TO_DO) res = WMR_CTRL_RES_NOTHING_TO_DO;
+            break;
+        }
+        case WMR_CTRL_OP_CONNECT: {
+            wmr_connect_result_t cr = wmr_controller_connect(hand);
+            if (cr == WMR_CONNECT_OK) res = WMR_CTRL_RES_OK;
+            else if (cr == WMR_CONNECT_BUSY) res = WMR_CTRL_RES_BUSY;
+            else if (cr == WMR_CONNECT_NO_ADDRESS) res = WMR_CTRL_RES_NO_ADDRESS;
+            else if (cr == WMR_CONNECT_NOT_ENABLED) res = WMR_CTRL_RES_NOT_ENABLED;
+            break;
+        }
+        case WMR_CTRL_OP_DISCONNECT: {
+            wmr_disconnect_result_t dr = wmr_controller_disconnect(hand);
+            if (dr == WMR_DISCONNECT_OK) res = WMR_CTRL_RES_OK;
+            else if (dr == WMR_DISCONNECT_NOT_CONNECTED) res = WMR_CTRL_RES_NOT_CONNECTED;
+            break;
+        }
+        case WMR_CTRL_OP_FORGET_ADDRS: {
+            wmr_forget_result_t fr = wmr_controller_forget_addresses();
+            if (fr == WMR_FORGET_OK) res = WMR_CTRL_RES_OK;
+            else if (fr == WMR_FORGET_BUSY) res = WMR_CTRL_RES_BUSY;
+            break;
+        }
+        case WMR_CTRL_OP_FORGET_BOND: {
+            wmr_bond_reset_result_t br = wmr_controller_forget_bond(hand);
+            if (br == WMR_BOND_RESET_OK) res = WMR_CTRL_RES_OK;
+            else if (br == WMR_BOND_RESET_BUSY) res = WMR_CTRL_RES_BUSY;
+            else if (br == WMR_BOND_RESET_NO_ADDRESS) res = WMR_CTRL_RES_NO_ADDRESS;
+            break;
+        }
+        default:
+            res = WMR_CTRL_RES_INVALID_PARAM;
+            break;
+    }
+    ctrl_last_result = res;
+    if (ctrl_subscribed){
+        ctrl_notify_pending = true;
+        pump_kick();
+    }
+    return wmr_ctrl_res_to_att_error(res);
+}
+
+/* FF17 CCC: independent of the FF11/FF12/FF14 exclusion. */
+static int ctrl_ccc_write(hci_con_handle_t handle, uint16_t transaction_mode, uint16_t offset,
+                          const uint8_t *buffer, uint16_t buffer_size){
+    if (transaction_mode != ATT_TRANSACTION_MODE_NONE) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
+    if (offset != 0) return ATT_ERROR_INVALID_OFFSET;
+    if (buffer_size != 2) return ATT_ERROR_INVALID_ATTRIBUTE_VALUE_LENGTH;
+    uint16_t value = little_endian_read_16(buffer, 0);
+    if (value > 1) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
+    if (phone_handle != HCI_CON_HANDLE_INVALID && handle != phone_handle)
+        return ATT_ERROR_WRITE_NOT_PERMITTED;
+    phone_handle = handle;
+    ctrl_subscribed = value == 1;
+    if (!ctrl_subscribed){
+        ctrl_notify_pending = false;
+        memset(ctrl_last_notified, 0, sizeof(ctrl_last_notified));
+    }
+    printf("BLE control (FF17) notifications %s\n", ctrl_subscribed ? "enabled" : "disabled");
+    return 0;
+}
+
 static int att_write(hci_con_handle_t handle, uint16_t attribute,
                      uint16_t transaction_mode, uint16_t offset,
                      uint8_t *buffer, uint16_t buffer_size){
@@ -614,6 +770,13 @@ static int att_write(hci_con_handle_t handle, uint16_t attribute,
         return cfg_ccc_write(handle, transaction_mode, offset, buffer, buffer_size);
     if (attribute == ECHO_CCC_HANDLE)
         return echo_ccc_write(handle, transaction_mode, offset, buffer, buffer_size);
+    if (attribute == CTRL_VALUE_HANDLE){
+        if (transaction_mode != ATT_TRANSACTION_MODE_NONE) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
+        if (offset != 0) return ATT_ERROR_INVALID_OFFSET;
+        return ctrl_write(buffer, buffer_size);
+    }
+    if (attribute == CTRL_CCC_HANDLE)
+        return ctrl_ccc_write(handle, transaction_mode, offset, buffer, buffer_size);
     wmr_stream_t which;
     if (!ccc_stream(attribute, &which)) return 0;
     if (transaction_mode != ATT_TRANSACTION_MODE_NONE) return ATT_ERROR_REQUEST_NOT_SUPPORTED;
@@ -662,7 +825,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
         case BTSTACK_EVENT_STATE:
             if (btstack_event_state_get_state(packet) == HCI_STATE_WORKING){
                 gap_advertisements_enable(1);
-                printf("BLE advertising: %s (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream, FF15 echo, FF13 config block)\n",
+                printf("BLE advertising: %s (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream, FF15 echo, FF13 config block, FF17 control)\n",
                        WMR_CFG_BLE_NAME);
             }
             break;
@@ -708,6 +871,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     echo_subscribed = false;
                     wmr_echo_cancel(&echo);
                     cfg_reset_connection();
+                    ctrl_reset_connection();
                     printf("BLE phone connected, handle=0x%04x\n", phone_handle);
                     conn_update_pending = false;
                     if (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
@@ -739,6 +903,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                 echo_subscribed = false;
                 wmr_echo_cancel(&echo);
                 cfg_reset_connection();
+                ctrl_reset_connection();
                 conn_known = false;
                 conn_update_pending = false;
                 btstack_run_loop_remove_timer(&conn_request_timer);

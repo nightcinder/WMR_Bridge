@@ -65,4 +65,9 @@ $exeLed = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_status_led.exe"
 if ($LASTEXITCODE -ne 0) { throw "compile failed (status led)" }
 & $exeLed
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeCtrl = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_ctrl.exe"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_ctrl.c" "$root\src\wmr_ctrl.c" -o $exeCtrl
+if ($LASTEXITCODE -ne 0) { throw "compile failed (ctrl)" }
+& $exeCtrl
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 exit $protocolStatus

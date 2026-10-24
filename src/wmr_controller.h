@@ -62,6 +62,7 @@ typedef enum {
 
 typedef struct {
     bool     connected;
+    bool     connecting;
     bool     descriptor_available;
     uint32_t reports;   /* reports since the current connection started */
     uint32_t other_reports;   /* neither input nor config reports; dropped, not forwarded */
@@ -69,6 +70,18 @@ typedef struct {
     uint8_t  address[6];         /* valid unless address_source is WMR_ADDR_NONE */
     wmr_model_t model;           /* WMR or PSVR2; WMR_MODEL_WMR until identified */
 } wmr_controller_status_t;
+
+typedef enum {
+    WMR_CONNECT_OK = 0,
+    WMR_CONNECT_BUSY,
+    WMR_CONNECT_NO_ADDRESS,
+    WMR_CONNECT_NOT_ENABLED
+} wmr_connect_result_t;
+
+typedef enum {
+    WMR_DISCONNECT_OK = 0,
+    WMR_DISCONNECT_NOT_CONNECTED
+} wmr_disconnect_result_t;
 
 typedef enum {
     WMR_BOND_RESET_OK = 0,
@@ -94,9 +107,9 @@ void wmr_controller_init(wmr_report_sink_t sink);
 /* HCI events: pairing responses and stack-state tracking. */
 void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size);
 
-/* Outgoing connection / disconnect requests (console driven). */
-void wmr_controller_connect(unsigned hand);
-void wmr_controller_disconnect(unsigned hand);
+/* Outgoing connection / disconnect requests. */
+wmr_connect_result_t wmr_controller_connect(unsigned hand);
+wmr_disconnect_result_t wmr_controller_disconnect(unsigned hand);
 
 /* MANUAL BOND RESET: delete only this ESP32's stored link key for `hand`.
  * Never called automatically. Refused while the controller is connected or
@@ -123,5 +136,9 @@ int wmr_controller_hand_for_address(const uint8_t address[6]);
 void wmr_controller_get_status(unsigned hand, wmr_controller_status_t *out);
 /* Raw HID cid (0 if none); for the console status line. */
 uint16_t wmr_controller_cid(unsigned hand);
+
+/* Discovery state and round (for FF17 status). */
+uint8_t wmr_controller_discovery_phase(void);
+uint8_t wmr_controller_discovery_round(void);
 
 #endif /* WMR_CONTROLLER_H */
