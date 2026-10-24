@@ -66,6 +66,12 @@ def _build_parser() -> argparse.ArgumentParser:
     hid = parser.add_argument_group("controllers (BlueZ)")
     hid.add_argument("--hidraw", action="append", default=[], metavar="PATH", help="open this /dev/hidrawN")
     hid.add_argument("--all-hidraw", action="store_true", help="watch every HID device, not only WMR names")
+    hid.add_argument(
+        "--hand",
+        choices=("both", "left", "right"),
+        default="both",
+        help="only open the selected controller hand (default both; mirrors WMR_CFG_BRIDGE_HANDS)",
+    )
     hid.add_argument("--left", metavar="MATCH", help="assign a device to LEFT by address, path or name part")
     hid.add_argument("--right", metavar="MATCH", help="assign a device to RIGHT by address, path or name part")
     hid.add_argument("--poll-interval", type=float, default=1.0, help="hidraw hotplug poll interval in seconds")
@@ -226,16 +232,20 @@ async def _run(args: argparse.Namespace) -> int:
             args.replay_hand,
         )
     else:
+        allowed_hands = (
+            (0,) if args.hand == "left" else (1,) if args.hand == "right" else (0, 1)
+        )
         manager = HidrawManager(
             bridge,
             left_spec=args.left,
             right_spec=args.right,
+            allowed_hands=allowed_hands,
             explicit_paths=args.hidraw,
             include_all=args.all_hidraw,
             poll_interval=args.poll_interval,
         )
         manager.start()
-        LOG.info("watching hidraw for WMR controllers")
+        LOG.info("watching hidraw for WMR controllers (hand=%s)", args.hand)
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
