@@ -17,6 +17,7 @@ from . import __version__
 from .bluez import discover_hidraw
 from .bridge import Bridge
 from .inputs import HidrawManager, ReplaySource, read_capture
+from .mdns import MdnsAdvertiser
 from .server import BridgeServer
 
 LOG = logging.getLogger("wmr_bridge")
@@ -88,6 +89,14 @@ def _build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--replay-once", action="store_true", help="stop after one pass of the capture")
 
     parser.add_argument("--list", action="store_true", help="list hidraw devices and exit")
+    parser.add_argument(
+        "--advertise-mdns",
+        action="store_true",
+        help=(
+            "publish _wmr-bridge._tcp.local. with avahi-publish-service or "
+            "systemd-resolved when available (optional; never fatal)"
+        ),
+    )
     parser.add_argument("--duration", type=float, help="stop after this many seconds (bench/testing)")
     parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     parser.add_argument("--log-file", help="append logs to this file instead of stderr")
@@ -182,6 +191,9 @@ def _print_devices() -> int:
 async def _run(args: argparse.Namespace) -> int:
     token = _read_token(args)
     _require_auth_for_bind(args, token)
+    allowed_hands = (
+        (0,) if args.hand == "left" else (1,) if args.hand == "right" else (0, 1)
+    )
     bridge = Bridge(
         token=token,
         queue_size=args.queue_size,
@@ -189,6 +201,7 @@ async def _run(args: argparse.Namespace) -> int:
         batch_hold_ms=args.batch_hold_ms,
         fragment_capacity=args.fragment_capacity,
         auth_timeout_s=args.auth_timeout,
+        allowed_hands=allowed_hands,
     )
     server = BridgeServer(
         bridge,
@@ -212,6 +225,12 @@ async def _run(args: argparse.Namespace) -> int:
     if args.allow_origin:
         LOG.info("allowed browser origins: %s", ", ".join(args.allow_origin))
     LOG.info("payloads: FF11 raw, FF12 decoded, FF14 batched; protocol 1")
+    LOG.info("hand filter: %s", ", ".join(bridge.hand_filter))
+
+    advertiser: MdnsAdvertiser | None = None
+    if args.advertise_mdns:
+        advertiser = MdnsAdvertiser(port=server.port, hands=bridge.hand_filter)
+        advertiser.start()
 
     replay: ReplaySource | None = None
     manager: HidrawManager | None = None
@@ -232,9 +251,6 @@ async def _run(args: argparse.Namespace) -> int:
             args.replay_hand,
         )
     else:
-        allowed_hands = (
-            (0,) if args.hand == "left" else (1,) if args.hand == "right" else (0, 1)
-        )
         manager = HidrawManager(
             bridge,
             left_spec=args.left,
@@ -296,6 +312,8 @@ async def _run(args: argparse.Namespace) -> int:
             await replay.close()
         if manager is not None:
             await manager.close()
+        if advertiser is not None:
+            advertiser.close()
         await server.close()
         LOG.info("stopped: %s", bridge.status())
     return 0
