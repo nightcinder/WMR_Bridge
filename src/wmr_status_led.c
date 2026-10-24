@@ -89,7 +89,7 @@ static wmr_status_led_color_t led_color;
 static bool led_color_known;
 static bool led_ready;
 
-static void led_write(wmr_status_led_color_t color){
+static bool led_write(wmr_status_led_color_t color){
     const uint8_t scale = WMR_CFG_STATUS_LED_BRIGHTNESS;
     uint8_t r = 0, g = 0, b = 0;
 
@@ -109,17 +109,20 @@ static void led_write(wmr_status_led_color_t color){
     esp_err_t err = rmt_transmit(led_channel, led_encoder, led_grb, sizeof(led_grb),
                                  &tx_config);
     if (err != ESP_OK){
+        /* Leave the colour unknown so the next poll retries the same frame. */
         printf("LED: transmit failed: %s\n", esp_err_to_name(err));
+        return false;
     }
+    return true;
 }
 
 void wmr_status_led_show(wmr_status_led_color_t color){
     if (!led_ready) return;
     if (led_color_known && color == led_color) return;
+    if (!led_write(color)) return;
     led_color = color;
     led_color_known = true;
     printf("LED: %s\n", wmr_status_led_color_name(color));
-    led_write(color);
 }
 
 static void led_poll(void *arg){
@@ -139,7 +142,7 @@ void wmr_status_led_init(void){
         .gpio_num = (gpio_num_t) WMR_CFG_STATUS_LED_GPIO,
         .clk_src = RMT_CLK_SRC_DEFAULT,
         .resolution_hz = 20000000,          /* 50 ns per tick */
-        .mem_block_symbols = 48,
+        .mem_block_symbols = 64,            /* ESP32 requires even and >= 64 */
         .trans_queue_depth = 4,
         .intr_priority = 0,
         .flags = {
