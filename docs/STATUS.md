@@ -25,7 +25,7 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Host tests only, **not run on hardware** |
 | PSVR2 Sense controller framework: opt-in (`WMR_CFG_PSVR2_SUPPORT=0` by default; `-DWMR_CFG_PSVR2_SUPPORT=1` to enable), name/model discovery, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (opt-in, off by default) | Host tests and firmware build only, **never run on a PSVR2 controller**; off by default to preserve DRAM headroom; no PSVR2 decoder (FF11 raw only) |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: ~45–52 min dual-controller, ~58–65 min single-controller; not recommended for session VR |
-| Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE; one ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and the 40.8 ms latency figure predates the current client. Lists which contention options were tried and which remain (V1 stagger, antenna/position, DLE); recommends a capped, opt-in predictor in the shared library. No code or hardware run |
+| Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 levers run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE; one ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and the 40.8 ms latency figure predates the current client. ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers ([`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). No new hardware run |
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 
@@ -59,3 +59,18 @@ However:
 - Multi-bridge cannot deliver zero loss: RIGHT alone was ~10.8 % with one controller and one phone (user-reported). The best it can do on today's evidence is LEFT ~0.5 % / RIGHT ~10.8 %.
 - **No two-bridge run has happened.** The sitting and its fixed pass criteria are in [`docs/runs/sheets/multi-bridge.md`](runs/sheets/multi-bridge.md); LEFT ≤ 3 % on its own bridge is the pass bar.
 - **No Raspberry Pi Wi-Fi bridge hardware run has happened.** The second supported target (`pi/`, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)) moves the phone link off 2.4 GHz BLE onto 5 GHz Wi-Fi WebSocket; it is host-tests-only until Sitting P in [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md) runs.
+
+## 5. Single-ESP32 Contention Levers (ONY-176)
+
+Follow-up to ONY-170. Run sheet: [`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md). **No lever here has a new hardware result.** This table is the run-ready state, not evidence.
+
+| Lever | Status | Result / prerequisite |
+|---|---|---|
+| V1 staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`) | **Not run** | Code on `main`; needs the two V1 images and the A/B/A block at one fixed position |
+| RIGHT asymmetry, phases 1-2 | **Not run** | No reflash; use [`docs/runs/sheets/right-asymmetry.md`](runs/sheets/right-asymmetry.md) §4 with one controller powered at a time |
+| DLE confirmation, current build | **Partly measured** | 2026-10-22 log shows `tx 251 octets / 2120 us, rx 251 octets / 2120 us`; recapture the line on this build |
+| Longer BLE interval (30 ms request) | **Not run** | Existing `WMR_CFG_CONN_INTERVAL_MIN/MAX`; phone must grant it and the granted value must be recorded |
+| Longer FF14 hold (2 intervals) | **Not run** | New `WMR_CFG_BATCH_HOLD_INTERVALS=2`; default 1 leaves current behaviour unchanged |
+| Controller task core/priority, HCI buffers | **Ruled out by diagnostics** | Archived runs: `vhci_drop=0`, `log_errors=0`, queue high-water 41/256, `tx == rx`; no run unless a future window shows a nonzero drop/error counter |
+
+**Best measured configuration** is unchanged by ONY-176: the default both-hands FF14 stream at MTU 517 with the granted 15 ms interval and a one-interval batch hold. Its measured dual-hand loss is 18–25 % per hand ([`docs/PREDICTION.md`](PREDICTION.md) §1), and no tested single-ESP32 variant has beaten it. **Next architecture step:** one bridge per hand (multi-bridge) and/or the Pi Wi-Fi host bridge, to remove the BLE/phone link from the ESP32 radio; neither has run.

@@ -1,6 +1,6 @@
 # Run sheet: contention-2 — staggered connect and Classic link policy
 
-> **Proposed sheet, not yet run.** The `WMR_CFG_...` flags below do not exist yet; a later task adds the one Nick picks. Nothing here is a hardware result. Figures quoted from earlier runs are user-reported.
+> **Proposed sheet, not yet run.** The `WMR_CFG_...` flags below exist on `main`; V2 and V3 were run (see [`contention-2-results.md`](contention-2-results.md)), but **V1 has still not been run**. Nothing here is a hardware result. Figures quoted from earlier runs are user-reported. The ONY-176 run order is in [`single-esp32-levers.md`](single-esp32-levers.md).
 
 Question: LEFT loses about 0.5 % on its own but about 19 % with RIGHT connected, while RIGHT loses about 10.8 % on its own and about 19 % with LEFT connected. Is that extra loss created by the way the second Classic link is brought up, by sniff mode in the current link policy, or by the ESP32 not scheduling the two ACL links as master? The working hypothesis is still radio contention between the two Classic links and the BLE link, but it is not proven, and the asymmetry (LEFT almost clean alone, RIGHT not) says RIGHT also has a link problem of its own.
 
@@ -80,7 +80,7 @@ They are not proposed as a variant for three reasons. (1) There is no Classic "p
 
 ## 2. Build the images (Anya, ESP-IDF PowerShell) — **not yet run**
 
-The flag does not exist in this PR. After the implementation PR adds it, build the REF and the one VAR image from the same commit, into separate folders, once. Do not assign `$env:Path`; the ESP-IDF profile appends to it, and appending is the only safe change.
+The flags exist on `main`. Build the REF and the one VAR image from the same commit, into separate folders, once. Do not assign `$env:Path`; the ESP-IDF profile appends to it, and appending is the only safe change. For the current V1 build commands and A/B/A block, use [`single-esp32-levers.md`](single-esp32-levers.md) §2; for V2/V3 the steps below still apply.
 
 ```powershell
 # Load ESP-IDF. This profile appends the tool paths; never replace $env:Path with a new value.

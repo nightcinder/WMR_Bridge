@@ -385,11 +385,12 @@ one of these holds:
   counted in `batch_full_flushes`; or
 - **the oldest queued record has waited one connection interval** (the interval the phone
   granted; 15 ms until it is known, `WMR_CFG_BATCH_HOLD_DEFAULT_US`): the queue is then
-  flushed as a partial batch.
+  flushed as a partial batch. `WMR_CFG_BATCH_HOLD_INTERVALS` (default 1) multiplies the
+  hold; 2 is the ONY-176 airtime variant and adds about one interval of batch latency.
 
-So a record is held for batching no longer than one connection interval, checked by a
-timer that is armed for exactly the remaining time (plus up to one report period, about 5 ms,
-if a check is delayed). The decision is the pure function `wmr_batch_flush_reason`, and its
+So a record is held for batching no longer than the configured number of connection
+intervals, checked by a timer that is armed for exactly the remaining time (plus up to one
+report period, about 5 ms, if a check is delayed). The decision is the pure function `wmr_batch_flush_reason`, and its
 bound is simulated in `tests/test_batch.c`. This bound is on the batching **hold**: if the BLE
 stack cannot send (the previous notification has not been accepted yet, or the link is
 busy) records wait in the queue longer, exactly as FF12 records do. Decimation is not

@@ -6,6 +6,10 @@
 
 ## Overview
 
+**V1 (staggered connect) was not run in this sitting.** The code is on `main`; its
+run order is in [`single-esp32-levers.md`](single-esp32-levers.md) §2. V2 and V3
+results are below.
+
 This sheet records empirical hardware bench results evaluating the candidate hypotheses for Classic Bluetooth upstream report loss (issue #18), along with round-trip latency (RTT) separation measurements.
 
 ### Background and Hypotheses Tested

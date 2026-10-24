@@ -141,18 +141,18 @@ static void test_real_record(void){
 
 static void test_flush_rule(void){
     printf("FF14 flush rule\n");
-    const uint32_t hold = 15000;
-    CHECK(wmr_batch_hold_us(15000) == 15000);
-    CHECK(wmr_batch_hold_us(7500) == 7500);
-    CHECK(wmr_batch_hold_us(0) == WMR_CFG_BATCH_HOLD_DEFAULT_US);
+    const uint32_t hold = 15000u * WMR_CFG_BATCH_HOLD_INTERVALS;
+    CHECK(wmr_batch_hold_us(15000) == 15000u * WMR_CFG_BATCH_HOLD_INTERVALS);
+    CHECK(wmr_batch_hold_us(7500) == 7500u * WMR_CFG_BATCH_HOLD_INTERVALS);
+    CHECK(wmr_batch_hold_us(0) == WMR_CFG_BATCH_HOLD_DEFAULT_US * WMR_CFG_BATCH_HOLD_INTERVALS);
     /* nothing queued: never */
     CHECK(wmr_batch_flush_reason(0, 9, 999999, hold) == WMR_BATCH_FLUSH_NO);
     /* partial and young: keep collecting */
     CHECK(wmr_batch_flush_reason(1, 9, 0, hold) == WMR_BATCH_FLUSH_NO);
-    CHECK(wmr_batch_flush_reason(8, 9, 14999, hold) == WMR_BATCH_FLUSH_NO);
+    CHECK(wmr_batch_flush_reason(8, 9, hold - 1u, hold) == WMR_BATCH_FLUSH_NO);
     /* partial flush on timeout */
-    CHECK(wmr_batch_flush_reason(1, 9, 15000, hold) == WMR_BATCH_FLUSH_TIMEOUT);
-    CHECK(wmr_batch_flush_reason(3, 9, 20000, hold) == WMR_BATCH_FLUSH_TIMEOUT);
+    CHECK(wmr_batch_flush_reason(1, 9, hold, hold) == WMR_BATCH_FLUSH_TIMEOUT);
+    CHECK(wmr_batch_flush_reason(3, 9, hold + 5000u, hold) == WMR_BATCH_FLUSH_TIMEOUT);
     /* full batch flushes at once, however young; so does a backlog */
     CHECK(wmr_batch_flush_reason(9, 9, 0, hold) == WMR_BATCH_FLUSH_FULL);
     CHECK(wmr_batch_flush_reason(200, 9, 0, hold) == WMR_BATCH_FLUSH_FULL);
@@ -160,11 +160,11 @@ static void test_flush_rule(void){
     /* MTU too small (max 0): flush so the pump can discard */
     CHECK(wmr_batch_flush_reason(1, 0, 0, hold) == WMR_BATCH_FLUSH_FULL);
     /* timer */
-    CHECK(wmr_batch_timer_ms(0, hold) == 15);
-    CHECK(wmr_batch_timer_ms(5000, hold) == 10);
-    CHECK(wmr_batch_timer_ms(14001, hold) == 1);
-    CHECK(wmr_batch_timer_ms(14500, hold) == 1);        /* rounds up */
-    CHECK(wmr_batch_timer_ms(15000, hold) == 1);        /* already due: at least 1 ms */
+    CHECK(wmr_batch_timer_ms(0, hold) == (hold + 999u) / 1000u);
+    CHECK(wmr_batch_timer_ms(5000, hold) == (hold - 5000u + 999u) / 1000u);
+    CHECK(wmr_batch_timer_ms(hold - 999u, hold) == 1);  /* rounds up */
+    CHECK(wmr_batch_timer_ms(hold - 500u, hold) == 1);   /* rounds up */
+    CHECK(wmr_batch_timer_ms(hold, hold) == 1);          /* already due: at least 1 ms */
     CHECK(wmr_batch_timer_ms(99999, hold) == 1);
     CHECK(wmr_batch_timer_ms(0, UINT32_MAX) == 4294968u);   /* no 32-bit wrap before rounding */
 
