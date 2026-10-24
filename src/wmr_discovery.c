@@ -78,7 +78,9 @@ static const controller_name_t controller_names[] = {
 const char *wmr_model_name(wmr_model_t model){
     switch (model){
         case WMR_MODEL_WMR:   return "WMR";
+#if WMR_CFG_PSVR2_SUPPORT
         case WMR_MODEL_PSVR2: return "PSVR2";
+#endif
         default:              return "?";
     }
 }

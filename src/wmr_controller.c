@@ -405,7 +405,6 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
 
 #if WMR_CFG_PSVR2_SUPPORT && WMR_CFG_PSVR2_WAKE
 static btstack_timer_source_t psvr2_wake_timer;
-static bool psvr2_wake_timer_armed;
 static void psvr2_wake_timer_fire(btstack_timer_source_t *timer);
 
 /* PSVR2 Sense controllers stay silent until the host reads HID Feature Report 0x05 over
@@ -426,8 +425,9 @@ static void psvr2_wake(controller_t *c){
 
 static void psvr2_wake_arm(controller_t *c){
     c->psvr2_wake_pending = true;
-    if (psvr2_wake_timer_armed) return;
-    psvr2_wake_timer_armed = true;
+    /* Restart on every arm: both hands can become ready inside one delay window, and a
+     * shared timer that kept its original deadline would give the second hand a much
+     * shorter delay (possibly none) before its GET_REPORT. */
     btstack_run_loop_remove_timer(&psvr2_wake_timer);
     btstack_run_loop_set_timer(&psvr2_wake_timer, WMR_CFG_PSVR2_WAKE_DELAY_MS);
     btstack_run_loop_add_timer(&psvr2_wake_timer);
@@ -437,7 +437,6 @@ static void psvr2_wake_arm(controller_t *c){
 
 static void psvr2_wake_timer_fire(btstack_timer_source_t *timer){
     (void) timer;
-    psvr2_wake_timer_armed = false;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         controller_t *c = &controllers[i];
         if (!c->psvr2_wake_pending) continue;

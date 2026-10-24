@@ -56,7 +56,11 @@ static void test_models(void){
     printf("Controller model by name\n");
     CHECK(wmr_model_name(WMR_MODEL_WMR)[0] == 'W');
     CHECK(strcmp(wmr_model_name(WMR_MODEL_WMR), "WMR") == 0);
+#if WMR_CFG_PSVR2_SUPPORT
     CHECK(strcmp(wmr_model_name(WMR_MODEL_PSVR2), "PSVR2") == 0);
+#else
+    CHECK(strcmp(wmr_model_name(WMR_MODEL_PSVR2), "?") == 0);   /* no PSVR2 string in a WMR-only build */
+#endif
     CHECK(strcmp(wmr_model_name(WMR_MODEL_COUNT), "?") == 0);
     CHECK(wmr_discovery_model_for_name(NAME("Motion controller - Left")) == WMR_MODEL_WMR);
     CHECK(wmr_discovery_model_for_name(NAME("Motion controller - Right")) == WMR_MODEL_WMR);
