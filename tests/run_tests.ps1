@@ -60,4 +60,9 @@ $exeDiag = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_diag.exe"
 if ($LASTEXITCODE -ne 0) { throw "compile failed (diag)" }
 & $exeDiag
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeLed = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_status_led.exe"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_status_led.c" "$root\src\wmr_status_led.c" -o $exeLed
+if ($LASTEXITCODE -ne 0) { throw "compile failed (status led)" }
+& $exeLed
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 exit $protocolStatus

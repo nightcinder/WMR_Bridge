@@ -54,6 +54,7 @@
 #include "wmr_console.h"
 #include "wmr_controller.h"
 #include "wmr_linkdiag.h"
+#include "wmr_status_led.h"
 #include "wmr_transport.h"
 
 static btstack_packet_callback_registration_t hci_registration;
@@ -125,6 +126,7 @@ int btstack_main(int argc, const char *argv[]){
     gap_discoverable_control(1);
 
     setvbuf(stdout, NULL, _IONBF, 0);
+    wmr_status_led_init();                              /* red/green/blue = 0/1/2 controllers */
     wmr_console_init();
     hci_power_control(HCI_POWER_ON);
     return 0;

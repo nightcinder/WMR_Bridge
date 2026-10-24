@@ -265,6 +265,28 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_STATS_INTERVAL_MS  5000
 #endif
 
+/* ---- Status LED --------------------------------------------------------- */
+
+/* One addressable RGB LED (WS2812/NeoPixel): red = no controller connected, green = one,
+ * blue = two. Data line on WMR_CFG_STATUS_LED_GPIO; the LED needs 5 V and GND. Set
+ * WMR_CFG_STATUS_LED to 0 in builds without an LED. Single-hand builds only ever reach
+ * green, because the other hand is not served. */
+#ifndef WMR_CFG_STATUS_LED
+#define WMR_CFG_STATUS_LED          1
+#endif
+#ifndef WMR_CFG_STATUS_LED_GPIO
+#define WMR_CFG_STATUS_LED_GPIO     4
+#endif
+#ifndef WMR_CFG_STATUS_LED_BRIGHTNESS
+#define WMR_CFG_STATUS_LED_BRIGHTNESS  32
+#endif
+#if WMR_CFG_STATUS_LED_BRIGHTNESS < 0 || WMR_CFG_STATUS_LED_BRIGHTNESS > 255
+#error "WMR_CFG_STATUS_LED_BRIGHTNESS must be 0..255"
+#endif
+#ifndef WMR_CFG_STATUS_LED_POLL_MS
+#define WMR_CFG_STATUS_LED_POLL_MS  250
+#endif
+
 /* ---- Classic contention variants (docs/runs/sheets/contention-2.md) ------ */
 
 /* The three variants below are pre-implemented so one can be selected at build time
