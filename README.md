@@ -90,7 +90,7 @@ The default firmware build operates in the dual-controller topology described ab
 | `tools/firmware/` | One-command build, packaging and flash (`build.py`) plus the browser-flasher manifest logic; see [docs/FLASHING.md](docs/FLASHING.md) |
 | `pi/` | Linux / Raspberry Pi host bridge over Wi-Fi: BlueZ hidraw source, WebSocket transport, decoder and host tests; see [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) |
 | `integration/` | The one BTstack file that must be replaced to build this (`main-CMakeLists.txt`, plus a diff) |
-| `docs/` | Build, flashing, protocol, Android, counters, security, reconnect/queue, controller discovery, PSVR2, testing, refactor notes |
+| `docs/` | Build, flashing, protocol, Android, counters, security, reconnect/queue, controller discovery, PSVR2, battery life investigation, testing, refactor notes |
 
 Module responsibilities, in brief: `wmr_controller` (HID side), `wmr_transport`
 (BLE side, queue pump), `wmr_protocol` and `wmr_queue` (pure C, no BTstack,
