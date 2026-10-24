@@ -25,6 +25,7 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Host tests only, **not run on hardware** |
 | PSVR2 Sense controller framework: opt-in (`WMR_CFG_PSVR2_SUPPORT=0` by default; `-DWMR_CFG_PSVR2_SUPPORT=1` to enable), name/model discovery, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (opt-in, off by default) | Host tests and firmware build only, **never run on a PSVR2 controller**; off by default to preserve DRAM headroom; no PSVR2 decoder (FF11 raw only) |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: ~45–52 min dual-controller, ~58–65 min single-controller; not recommended for session VR |
+| Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE; recommends a capped, opt-in predictor in the shared library, not on the ESP32 or in the app. No code or hardware run |
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 
