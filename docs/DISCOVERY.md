@@ -11,13 +11,27 @@ scanning.
 
 ## Names
 
-| Name (case-insensitive, whole name) | Hand |
-| --- | --- |
-| `Motion controller - Left` | LEFT |
-| `Motion controller - Right` | RIGHT |
+| Name (case-insensitive, whole name) | Hand | Model |
+| --- | --- | --- |
+| `Motion controller - Left` | LEFT | WMR |
+| `Motion controller - Right` | RIGHT | WMR |
+| `PlayStation VR2 Sense Controller (L)` | LEFT | PSVR2 |
+| `PlayStation VR2 Sense Controller (R)` | RIGHT | PSVR2 |
 
-Trailing spaces and NUL padding are ignored; anything else must match. These are the names
-given in issue #2. Check D2 in TESTING.md covers them (reported passed, no output pasted).
+Trailing spaces and NUL padding are ignored; anything else must match. The WMR names are the
+ones given in issue #2; the PSVR2 names come from the ONY-81 investigation and the
+[PSVR2 tracking issue](https://github.com/nightcinder/WMR_Bridge/issues/44). Check D2 in
+TESTING.md covers the WMR names (reported passed, no output pasted); the PSVR2 names have
+not been seen by this firmware. What the bridge does differently for a PSVR2 hand is in
+[PSVR2.md](PSVR2.md).
+
+## Model
+
+The name decides the controller's **model** (`wmr_model_t`: `WMR` or `PSVR2`), not just its
+hand. The model is stored with the address and restored on later boots, so a reconnect does
+not have to ask for the name again. It selects the HID wake handshake, whether the Microsoft
+FF13 config read is sent, and which report IDs are forwarded. A device that matches neither
+name is not a controller.
 
 ## Where an address comes from
 
@@ -28,10 +42,12 @@ Per hand, in this order:
    reported at boot and ignored.
 2. **Stored**: found by discovery (or by name on an incoming connection) and saved in NVS
    through BTstack's TLV store (the same store as the link keys), tag `WMRA`, a 16-byte record
-   (`wmr_addr_record_pack`, golden bytes in the test).
+   (`wmr_addr_record_pack`, golden bytes in the test). Byte 14 carries two model bits per
+   hand (00 = WMR, 01 = PSVR2); bytes 15 stay reserved. The version stays 1, so firmware
+   from before PSVR2 support still reads the record and treats both hands as WMR.
 3. **None**: the hand is unknown until discovery finds it.
 
-The `s` command prints each hand's address and its source.
+The `s` command prints each hand's address, its source and its model.
 
 ## Discovery
 
@@ -67,7 +83,8 @@ the controller in pairing mode again and press `d`.
 
 The **first** device found with a hand's name is used for that hand; any other device with
 the same name in the same discovery is logged (`another device with a controller name ...
-ignored`) and not used. Keep only one controller of each hand in pairing mode during
+ignored`) and not used. This applies across models too: a WMR LEFT found first keeps a
+PSVR2 LEFT out. Keep only one controller of each hand in pairing mode during
 discovery. If the wrong one was taken: `F`, then discovery again with only the right one in
 pairing mode. Asking for confirmation on the console was considered and not done: the bridge
 runs headless in normal use.
@@ -106,7 +123,8 @@ with `L` and `R` first. It does **not** delete link keys; that is still the per-
 
 ## Security
 
-A Bluetooth name is not authentication: any device can call itself `Motion controller - Left`.
+A Bluetooth name is not authentication: any device can call itself `Motion controller - Left`
+or `PlayStation VR2 Sense Controller (L)`.
 Before this change the bridge trusted two compiled-in addresses (since removed; the addresses now live in NVS), which can also be spoofed.
 What changes:
 

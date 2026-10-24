@@ -1,6 +1,6 @@
 # WMR Bridge: Firmware Status
 
-Last updated: 2026-10-23 (contention-2 hardware results; see [`docs/runs/sheets/contention-2-results.md`](runs/sheets/contention-2-results.md)).
+Last updated: 2026-10-24 (PSVR2 framework; see [`docs/PSVR2.md`](PSVR2.md)).
 
 This document tracks **firmware capabilities and firmware-side empirical findings** in this repository.
 The overall project status, milestones, roadmap, and companion Flutter app state (including 3D viewer, orientation fusion, and host latency tracking) are maintained at the project's single entry point: [nightcinder/wmr-companion docs/STATUS.md](https://github.com/nightcinder/wmr-companion/blob/main/docs/STATUS.md).
@@ -20,6 +20,7 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, **not run on hardware** |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has **not** been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38) | Merged | Host tests only, **not run on hardware** |
+| PSVR2 Sense controller framework: name/model discovery, model persistence, 79-byte raw frames, Feature Report `0x05` wake ([docs/PSVR2.md](PSVR2.md)) | PR open | Host tests and firmware build only, **not run on hardware**; no PSVR2 decoder (FF11 raw only) |
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 

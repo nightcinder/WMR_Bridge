@@ -22,6 +22,8 @@ static int hand(const char *s){
     return wmr_discovery_hand_for_name((const uint8_t *) s, strlen(s));
 }
 
+#define NAME(s) (const uint8_t *) (s), strlen(s)
+
 static void test_names(void){
     printf("Name matching\n");
     CHECK(hand("Motion controller - Left") == WMR_HAND_LEFT);
@@ -40,6 +42,30 @@ static void test_names(void){
     CHECK(hand("Xbox Wireless Controller") == -1);
     CHECK(hand("") == -1);
     CHECK(wmr_discovery_hand_for_name(NULL, 5) == -1);
+#if WMR_CFG_PSVR2_SUPPORT
+    CHECK(hand("PlayStation VR2 Sense Controller (L)") == WMR_HAND_LEFT);
+    CHECK(hand("PlayStation VR2 Sense Controller (R)") == WMR_HAND_RIGHT);
+    CHECK(hand("PLAYSTATION VR2 SENSE CONTROLLER (L)") == WMR_HAND_LEFT);
+    CHECK(hand("playstation vr2 sense controller (r)  ") == WMR_HAND_RIGHT);
+    CHECK(hand("PlayStation VR2 Sense Controller") == -1);              /* hand suffix is required */
+    CHECK(hand("PlayStation VR2 Sense Controller (X)") == -1);
+#endif
+}
+
+static void test_models(void){
+    printf("Controller model by name\n");
+    CHECK(wmr_model_name(WMR_MODEL_WMR)[0] == 'W');
+    CHECK(strcmp(wmr_model_name(WMR_MODEL_WMR), "WMR") == 0);
+    CHECK(strcmp(wmr_model_name(WMR_MODEL_PSVR2), "PSVR2") == 0);
+    CHECK(strcmp(wmr_model_name(WMR_MODEL_COUNT), "?") == 0);
+    CHECK(wmr_discovery_model_for_name(NAME("Motion controller - Left")) == WMR_MODEL_WMR);
+    CHECK(wmr_discovery_model_for_name(NAME("Motion controller - Right")) == WMR_MODEL_WMR);
+    CHECK(wmr_discovery_model_for_name(NAME("Keyboard")) == WMR_MODEL_COUNT);
+    CHECK(wmr_discovery_model_for_name(NULL, 0) == WMR_MODEL_COUNT);
+#if WMR_CFG_PSVR2_SUPPORT
+    CHECK(wmr_discovery_model_for_name(NAME("PlayStation VR2 Sense Controller (L)")) == WMR_MODEL_PSVR2);
+    CHECK(wmr_discovery_model_for_name(NAME("PlayStation VR2 Sense Controller (R)")) == WMR_MODEL_PSVR2);
+#endif
 }
 
 static void test_record(void){
@@ -71,12 +97,32 @@ static void test_record(void){
     CHECK(memcmp(out, golden_right, sizeof(out)) == 0);
 
     wmr_addr_record_t back;
+    uint8_t bad[WMR_ADDR_RECORD_SIZE];
     CHECK(wmr_addr_record_unpack(golden_both, sizeof(golden_both), &back));
     CHECK(back.valid[0] && back.valid[1] && back.address[0][0] == 0x11 && back.address[1][5] == 0xFF);
+    CHECK(back.model[0] == WMR_MODEL_WMR && back.model[1] == WMR_MODEL_WMR);   /* no model byte = WMR */
     CHECK(wmr_addr_record_unpack(golden_right, sizeof(golden_right), &back));
     CHECK(!back.valid[0] && back.valid[1]);
 
-    uint8_t bad[WMR_ADDR_RECORD_SIZE];
+    /* Models share the first reserved byte, two bits per hand. */
+    r.valid[0] = r.valid[1] = true;
+    r.model[0] = WMR_MODEL_WMR;
+    r.model[1] = WMR_MODEL_PSVR2;
+    wmr_addr_record_pack(&r, out);
+    CHECK(out[14] == 0x04 && out[15] == 0x00);
+    CHECK(wmr_addr_record_unpack(out, sizeof(out), &back));
+    CHECK(back.model[0] == WMR_MODEL_WMR && back.model[1] == WMR_MODEL_PSVR2);
+    r.model[0] = WMR_MODEL_PSVR2;
+    wmr_addr_record_pack(&r, out);
+    CHECK(out[14] == 0x05);
+    CHECK(wmr_addr_record_unpack(out, sizeof(out), &back));
+    CHECK(back.model[0] == WMR_MODEL_PSVR2 && back.model[1] == WMR_MODEL_PSVR2);
+    /* Unknown model values make the record invalid rather than guessing WMR. */
+    memcpy(bad, out, sizeof(bad)); bad[14] = 0x02;
+    CHECK(!wmr_addr_record_unpack(bad, sizeof(bad), &back));
+    memcpy(bad, out, sizeof(bad)); bad[14] = 0x08;
+    CHECK(!wmr_addr_record_unpack(bad, sizeof(bad), &back));
+
     CHECK(!wmr_addr_record_unpack(golden_both, 15, &back) && !back.valid[0] && !back.valid[1]);
     memcpy(bad, golden_both, sizeof(bad)); bad[0] = 2;
     CHECK(!wmr_addr_record_unpack(bad, sizeof(bad), &back));
@@ -106,8 +152,6 @@ static wmr_discovery_device_t dev(uint8_t last){
     return d;
 }
 
-#define NAME(s) (const uint8_t *) (s), strlen(s)
-
 static void test_run_names_in_inquiry(void){
     printf("Discovery run: names in the inquiry response\n");
     const bool known[2] = {false, false};
@@ -128,6 +172,47 @@ static void test_run_names_in_inquiry(void){
     CHECK(d.found[0] && d.found[1] && memcmp(d.found_address[1], r.address, 6) == 0);
     CHECK(wmr_discovery_next_name_request(&d) == NULL);
     CHECK(d.results == 6);
+}
+
+static void test_run_psvr2(void){
+    const bool none[2] = {false, false};
+    wmr_discovery_t d;
+#if WMR_CFG_PSVR2_SUPPORT
+    printf("Discovery run: PSVR2 names and per-hand models\n");
+    wmr_discovery_start_config(&d, none, 0);
+    wmr_discovery_device_t l = dev(31), r = dev(32), l2 = dev(33);
+    CHECK(wmr_discovery_on_inquiry_result(&d, &l, NAME("PlayStation VR2 Sense Controller (L)"))
+          == WMR_DISC_MATCHED);
+    CHECK(d.found_model[WMR_HAND_LEFT] == WMR_MODEL_PSVR2);
+    /* A second LEFT, this time a WMR controller, is still a duplicate hand: first wins. */
+    CHECK(wmr_discovery_on_inquiry_result(&d, &l2, NAME("Motion controller - Left"))
+          == WMR_DISC_DUPLICATE);
+    CHECK(d.found_model[WMR_HAND_LEFT] == WMR_MODEL_PSVR2);
+    CHECK(wmr_discovery_on_inquiry_result(&d, &r, NAME("Motion controller - Right"))
+          == WMR_DISC_MATCHED);
+    CHECK(d.found_model[WMR_HAND_RIGHT] == WMR_MODEL_WMR);
+    CHECK(!wmr_discovery_incomplete(&d));
+
+    /* Remote-name path: a PSVR2 name answers a queued name request. */
+    wmr_discovery_start_config(&d, none, 2);   /* RIGHT only */
+    CHECK(wmr_discovery_on_inquiry_result(&d, &r, NULL, 0) == WMR_DISC_NAME_QUEUED);
+    const wmr_discovery_device_t *q = wmr_discovery_next_name_request(&d);
+    CHECK(q && memcmp(q->address, r.address, 6) == 0);
+    CHECK(wmr_discovery_on_name(&d, r.address, NAME("PlayStation VR2 Sense Controller (R)"))
+          == WMR_DISC_MATCHED);
+    CHECK(d.found_model[WMR_HAND_RIGHT] == WMR_MODEL_PSVR2);
+
+    CHECK(wmr_discovery_incoming_hand_config(none, 0, NAME("PlayStation VR2 Sense Controller (L)"))
+          == WMR_HAND_LEFT);
+    CHECK(wmr_discovery_incoming_hand_config(none, 2, NAME("PlayStation VR2 Sense Controller (L)")) == -1);
+#else
+    printf("Discovery run: PSVR2 support compiled out\n");
+    wmr_discovery_start_config(&d, none, 0);
+    wmr_discovery_device_t l = dev(31);
+    CHECK(wmr_discovery_on_inquiry_result(&d, &l, NAME("PlayStation VR2 Sense Controller (L)"))
+          == WMR_DISC_IGNORED);
+    CHECK(wmr_discovery_incomplete(&d));
+#endif
 }
 
 static void test_run_name_requests(void){
@@ -266,8 +351,10 @@ static void test_bridge_hands(void){
 
 int main(void){
     test_names();
+    test_models();
     test_record();
     test_run_names_in_inquiry();
+    test_run_psvr2();
     test_run_name_requests();
     test_run_limits();
     test_incoming();

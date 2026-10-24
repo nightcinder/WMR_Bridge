@@ -47,12 +47,14 @@
 #include "wmr_controller.h"
 #include "wmr_discovery.h"
 #include "wmr_linkdiag.h"
+#include "wmr_psvr2.h"
 
 typedef struct {
     const char *name;
     const char *override;             /* compile-time address, or NULL */
     wmr_addr_source_t source;         /* where `address` came from; NONE = unknown */
     bd_addr_t   address;
+    wmr_model_t model;                /* WMR until discovery/name says otherwise */
     uint16_t    cid;                  /* 0 = no connection tracked */
     bool        connected;
     bool        descriptor_available;
@@ -356,6 +358,7 @@ static void addresses_save(void){
         if (!WMR_BRIDGE_HAND_ENABLED(i)) continue;
         if (controllers[i].source != WMR_ADDR_STORED) continue;
         r.valid[i] = true;
+        r.model[i] = controllers[i].model;
         memcpy(r.address[i], controllers[i].address, 6);
     }
     uint8_t value[WMR_ADDR_RECORD_SIZE];
@@ -381,6 +384,7 @@ static void addresses_load(void){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         if (!r.valid[i] || controllers[i].source == WMR_ADDR_OVERRIDE) continue;
         memcpy(controllers[i].address, r.address[i], 6);
+        controllers[i].model = r.model[i];
         controllers[i].source = WMR_ADDR_STORED;
     }
 }
@@ -388,14 +392,31 @@ static void addresses_load(void){
 static void print_addresses(void){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         const controller_t *c = &controllers[i];
-        printf("%s address: %s (%s)\n", c->name,
+        printf("%s address: %s (%s, model %s)\n", c->name,
                c->source == WMR_ADDR_NONE ? "unknown" : bd_addr_to_str(c->address),
-               wmr_controller_address_source_name(c->source));
+               wmr_controller_address_source_name(c->source),
+               c->source == WMR_ADDR_NONE ? "unknown" : wmr_model_name(c->model));
     }
 }
 
 static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
                                uint8_t *packet, uint16_t size);
+
+#if WMR_CFG_PSVR2_SUPPORT && WMR_CFG_PSVR2_WAKE
+/* PSVR2 Sense controllers stay silent until the host reads HID Feature Report 0x05 over
+ * the control channel. The descriptor-available event is the safe point: in REPORT mode
+ * the HID channels are up and no protocol-mode request is pending (wmr_psvr2.h,
+ * docs/PSVR2.md). One attempt per connection; the response is logged by
+ * HID_SUBEVENT_GET_REPORT_RESPONSE. Unverified on hardware. */
+static void psvr2_wake(controller_t *c){
+    uint8_t status = hid_host_send_get_report(c->cid, HID_REPORT_TYPE_FEATURE,
+                                             WMR_PSVR2_WAKE_FEATURE_ID);
+    printf("PSVR2: %s wake: GET_REPORT feature 0x%02x status=0x%02x\n",
+           c->name, WMR_PSVR2_WAKE_FEATURE_ID, status);
+    if (status != ERROR_CODE_SUCCESS)
+        printf("PSVR2: %s wake request refused; reconnect (l/r) to try again\n", c->name);
+}
+#endif
 static void disc_timer_fire(btstack_timer_source_t *timer);
 static bool connect_hand(unsigned hand);
 static void disc_connect_next(void);
@@ -508,6 +529,10 @@ const char *wmr_controller_name(unsigned hand){
     return hand < WMR_NUM_CONTROLLERS ? controllers[hand].name : "?";
 }
 
+wmr_model_t wmr_controller_model(unsigned hand){
+    return hand < WMR_NUM_CONTROLLERS ? controllers[hand].model : WMR_MODEL_COUNT;
+}
+
 uint16_t wmr_controller_cid(unsigned hand){
     return hand < WMR_NUM_CONTROLLERS ? controllers[hand].cid : 0;
 }
@@ -528,6 +553,7 @@ void wmr_controller_get_status(unsigned hand, wmr_controller_status_t *out){
     out->reports              = (uint32_t) controllers[hand].reports;
     out->other_reports        = (uint32_t) controllers[hand].other_reports;
     out->address_source       = controllers[hand].source;
+    out->model                = controllers[hand].model;
     memcpy(out->address, controllers[hand].address, 6);
 }
 
@@ -704,6 +730,7 @@ static void disc_round_done(void){
         if (!WMR_BRIDGE_HAND_ENABLED(i)) continue;
         if (!disc.found[i] || controllers[i].source != WMR_ADDR_NONE) continue;
         memcpy(controllers[i].address, disc.found_address[i], 6);
+        controllers[i].model = disc.found_model[i];
         controllers[i].source = WMR_ADDR_STORED;
         disc_connect_mask |= 1u << i;
         changed = true;
@@ -736,7 +763,8 @@ static void disc_log(wmr_disc_result_t r, const bd_addr_t address, const char *h
         case WMR_DISC_MATCHED:
             for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
                 if (disc.found[i] && memcmp(disc.found_address[i], address, 6) == 0)
-                    printf("Discovery: %s is %s (%s)\n", controllers[i].name, bd_addr_to_str(address), how);
+                    printf("Discovery: %s is %s (%s, model %s)\n", controllers[i].name,
+                           bd_addr_to_str(address), how, wmr_model_name(disc.found_model[i]));
             }
             break;
         case WMR_DISC_DUPLICATE:
@@ -866,8 +894,10 @@ static void incoming_resolved(const uint8_t *name, size_t len){
     }
     controller_t *c = &controllers[hand];
     memcpy(c->address, name_address, 6);
+    c->model = wmr_discovery_model_for_name(name, len);
     c->source = WMR_ADDR_STORED;
-    printf("Incoming: %s is %s (by name)\n", c->name, bd_addr_to_str(c->address));
+    printf("Incoming: %s is %s (by name, model %s)\n", c->name, bd_addr_to_str(c->address),
+           wmr_model_name(c->model));
     addresses_save();
     /* The ACL link came up before the address was known, so link diagnostics missed it. */
     wmr_linkdiag_link_identified((unsigned) hand, incoming_con_handle);
@@ -1077,17 +1107,25 @@ static void handle_report(const uint8_t *packet){
     uint16_t length = hid_subevent_report_get_report_len(packet);
     /* Classify by report ID before anything is counted or queued (docs/PROTOCOL.md, FF13):
      * config command responses go to the config reader only and never take a sequence
-     * number or enter the sample stream. */
-    switch (wmr_cfg_classify(report, length)){
-        case WMR_CFG_REPORT_CONFIG:
-            wmr_cfgmgr_on_report((unsigned) (c - controllers), report, length);
-            return;
-        case WMR_CFG_REPORT_OTHER:
+     * number or enter the sample stream. PSVR2 controllers have their own report ID and do
+     * not speak the Microsoft config protocol, so only 0x31 input frames are forwarded. */
+    if (c->model == WMR_MODEL_PSVR2){
+        if (!wmr_psvr2_is_input_report(report, length)){
             c->other_reports++;
             return;
-        case WMR_CFG_REPORT_INPUT:
-        default:
-            break;
+        }
+    } else {
+        switch (wmr_cfg_classify(report, length)){
+            case WMR_CFG_REPORT_CONFIG:
+                wmr_cfgmgr_on_report((unsigned) (c - controllers), report, length);
+                return;
+            case WMR_CFG_REPORT_OTHER:
+                c->other_reports++;
+                return;
+            case WMR_CFG_REPORT_INPUT:
+            default:
+                break;
+        }
     }
     c->reports++;
     /* Hand EVERY report over before any logging. The report buffer is only
@@ -1150,11 +1188,35 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             c = controller_for_cid(cid);
             if (!c) break;
             c->descriptor_available = status == ERROR_CODE_SUCCESS;
-            printf("%s descriptor status=0x%02x\n", c->name, status);
-            if (c->descriptor_available) wmr_cfgmgr_on_descriptor((unsigned) (c - controllers));
+            printf("%s descriptor status=0x%02x (model %s)\n", c->name, status,
+                   wmr_model_name(c->model));
+            if (c->descriptor_available){
+                if (c->model == WMR_MODEL_PSVR2){
+#if WMR_CFG_PSVR2_SUPPORT && WMR_CFG_PSVR2_WAKE
+                    psvr2_wake(c);
+#else
+                    printf("PSVR2: %s connected; wake request disabled in this build\n", c->name);
+#endif
+                } else {
+                    wmr_cfgmgr_on_descriptor((unsigned) (c - controllers));
+                }
+            }
             connect_pending = false;
             disc_connect_progress();
             break;
+        case HID_SUBEVENT_GET_REPORT_RESPONSE: {
+            cid = hid_subevent_get_report_response_get_hid_cid(packet);
+            status = hid_subevent_get_report_response_get_handshake_status(packet);
+            c = controller_for_cid(cid);
+            uint16_t report_len = hid_subevent_get_report_response_get_report_len(packet);
+            printf("%s GET_REPORT response: status=0x%02x len=%u\n",
+                   c ? c->name : "?", status, report_len);
+#if WMR_CFG_REPORT_HEXDUMP
+            if (status == ERROR_CODE_SUCCESS && report_len)
+                printf_hexdump(hid_subevent_get_report_response_get_report(packet), report_len);
+#endif
+            break;
+        }
         case HID_SUBEVENT_REPORT:
             handle_report(packet);
             break;

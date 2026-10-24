@@ -132,12 +132,47 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_HID_DESCRIPTOR_STORAGE  4096
 #endif
 
+/* ---- PlayStation VR2 Sense controllers ---------------------------------- */
+
+/* The bridge also recognises Sony's PSVR2 Sense controllers by name (see
+ * wmr_discovery.h for the names and the per-hand model). Their input reports are 0x31
+ * frames of up to WMR_PSVR2_INPUT_FRAME_MAX bytes (A1, report ID, 77 payload bytes),
+ * forwarded on the raw stream (FF11). They send no input until the host reads HID
+ * Feature Report 0x05 over the control channel, and they do not speak Microsoft's FF13
+ * config protocol; both are handled per controller model in wmr_controller.c. There is
+ * no PSVR2 parser in the decoded stream yet, so FF12/FF14 count those frames as decode
+ * errors. Scope and open questions: docs/PSVR2.md.
+ *
+ * Both switches are compile-time so a build can be pinned to WMR-only behaviour:
+ *   -DWMR_CFG_PSVR2_SUPPORT=0   do not match PSVR2 names at all
+ *   -DWMR_CFG_PSVR2_WAKE=0      match PSVR2 but send no wake request (diagnostics) */
+#ifndef WMR_CFG_PSVR2_SUPPORT
+#define WMR_CFG_PSVR2_SUPPORT      1
+#endif
+#ifndef WMR_CFG_PSVR2_WAKE
+#define WMR_CFG_PSVR2_WAKE         1
+#endif
+
+/* HID transaction header, input report ID and largest complete frame (A1 + report ID +
+ * payload). 0x31 reports carry 77 payload bytes, so the frame is 79 bytes. */
+#define WMR_PSVR2_HID_HEADER       0xA1
+#define WMR_PSVR2_INPUT_REPORT_ID  0x31
+#define WMR_PSVR2_INPUT_FRAME_MAX  79
+/* HID Feature Report read that wakes a PSVR2 Sense controller (unverified on hardware). */
+#define WMR_PSVR2_WAKE_FEATURE_ID  0x05
+
 /* ---- Frames, queue and wire format ------------------------------------- */
 
 /* Largest controller frame (A1 + report ID + payload) that is forwarded.
- * Observed frames are 46 bytes. Longer frames are counted as drops. */
+ * WMR frames are 46 bytes; PSVR2 input frames are up to 79. 80 is the smallest
+ * value that carries a PSVR2 frame and still fits the static queue in ESP32
+ * DRAM (96 overflows dram0_0_seg; see docs/PSVR2.md). Longer frames are counted
+ * as drops. */
 #ifndef WMR_CFG_MAX_FRAME
-#define WMR_CFG_MAX_FRAME          64
+#define WMR_CFG_MAX_FRAME          80
+#endif
+#if WMR_CFG_PSVR2_SUPPORT && WMR_CFG_MAX_FRAME < WMR_PSVR2_INPUT_FRAME_MAX
+#error "WMR_CFG_PSVR2_SUPPORT needs WMR_CFG_MAX_FRAME >= WMR_PSVR2_INPUT_FRAME_MAX (79)"
 #endif
 
 /* Bounded FIFO shared by both hands, in whole frames. When full, new

@@ -94,9 +94,10 @@ static void print_controllers(void){
         if (s.address_source != WMR_ADDR_NONE)
             snprintf(address, sizeof(address), "%02X:%02X:%02X:%02X:%02X:%02X", s.address[0], s.address[1],
                      s.address[2], s.address[3], s.address[4], s.address[5]);
-        printf("%s cid=%u connected=%u descriptor=%u reports=%lu other=%lu address=%s (%s)\n",
+        printf("%s cid=%u connected=%u descriptor=%u model=%s reports=%lu other=%lu address=%s (%s)\n",
                wmr_controller_name(i), wmr_controller_cid(i), s.connected,
-               s.descriptor_available, (unsigned long) s.reports, (unsigned long) s.other_reports, address,
+               s.descriptor_available, wmr_model_name(s.model),
+               (unsigned long) s.reports, (unsigned long) s.other_reports, address,
                wmr_controller_address_source_name(s.address_source));
     }
 }

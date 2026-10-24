@@ -53,28 +53,53 @@
 #include <stdbool.h>
 #include "wmr_config.h"
 
-#define WMR_DISCOVERY_NAME_LEFT   "Motion controller - Left"
-#define WMR_DISCOVERY_NAME_RIGHT  "Motion controller - Right"
+#define WMR_DISCOVERY_NAME_LEFT          "Motion controller - Left"
+#define WMR_DISCOVERY_NAME_RIGHT         "Motion controller - Right"
+#define WMR_DISCOVERY_NAME_PSVR2_LEFT    "PlayStation VR2 Sense Controller (L)"
+#define WMR_DISCOVERY_NAME_PSVR2_RIGHT   "PlayStation VR2 Sense Controller (R)"
+
+/* Controller family, decided from the Bluetooth name. The name is the only discriminator
+ * before a connection, so the model is stored next to the address and used after a
+ * reconnect (wake handshake, FF13, report classification). WMR_MODEL_COUNT means "not a
+ * recognised controller name". */
+typedef enum {
+    WMR_MODEL_WMR = 0,      /* Windows Mixed Reality motion controller (the default) */
+    WMR_MODEL_PSVR2 = 1,    /* PlayStation VR2 Sense controller */
+    WMR_MODEL_COUNT
+} wmr_model_t;
+
+/* "WMR", "PSVR2", or "?" for WMR_MODEL_COUNT / an out-of-range value. */
+const char *wmr_model_name(wmr_model_t model);
 
 /* Hand (WMR_HAND_LEFT / WMR_HAND_RIGHT) whose name this is, or -1. Case-insensitive, whole
  * name; trailing NUL bytes and spaces are ignored (names arrive as fixed-size, NUL-padded
  * fields). `name` need not be NUL-terminated. */
 int wmr_discovery_hand_for_name(const uint8_t *name, size_t len);
 
+/* Model for a recognised controller name, or WMR_MODEL_COUNT when it is not one. */
+wmr_model_t wmr_discovery_model_for_name(const uint8_t *name, size_t len);
+
 /* ---- Stored addresses ---------------------------------------------------- */
 
+/* Layout: [0] version, [1] valid bits, [2..7] LEFT address, [8..13] RIGHT address,
+ * [14] model bits (2 per hand, little-endian; 0 = WMR, 1 = PSVR2), [15] reserved 0.
+ * Version stays 1: firmware before PSVR2 support ignores byte 14, and a record written
+ * by it reads back as WMR_MODEL_WMR for both hands. An unrecognised model value makes
+ * the record invalid instead of silently treating the controller as a WMR one. */
 #define WMR_ADDR_RECORD_VERSION  1
-#define WMR_ADDR_RECORD_SIZE     16   /* version, valid bits, 2 x 6-byte address, 2 reserved */
+#define WMR_ADDR_RECORD_SIZE     16   /* version, valid bits, 2 x 6-byte address, models, reserved */
 
 typedef struct {
     bool    valid[WMR_NUM_CONTROLLERS];
     uint8_t address[WMR_NUM_CONTROLLERS][6];   /* Bluetooth order as BTstack prints it */
+    wmr_model_t model[WMR_NUM_CONTROLLERS];    /* meaningful when valid[] is true */
 } wmr_addr_record_t;
 
 void wmr_addr_record_pack(const wmr_addr_record_t *r, uint8_t out[WMR_ADDR_RECORD_SIZE]);
 
 /* Returns false (and clears `out`) unless size == 16, the version is 1, no unknown valid bit
- * is set, and no valid address is all zero. */
+ * is set, no valid address is all zero, and every model value is known. Model bits for an
+ * invalid hand are accepted but not used. */
 bool wmr_addr_record_unpack(const uint8_t *in, size_t size, wmr_addr_record_t *out);
 
 /* Parse "AA:BB:CC:DD:EE:FF" (hex, either case). Returns false on anything else. */
@@ -109,6 +134,7 @@ typedef struct {
     bool     found[WMR_NUM_CONTROLLERS];
     int      bridge_hands;                   /* WMR_CFG_BRIDGE_HANDS for this run */
     uint8_t  found_address[WMR_NUM_CONTROLLERS][6];
+    wmr_model_t found_model[WMR_NUM_CONTROLLERS];   /* valid when found[] is true */
     wmr_discovery_device_t pending[WMR_DISCOVERY_MAX_PENDING];
     unsigned pending_count;
     unsigned pending_next;                   /* next pending device to ask for its name */

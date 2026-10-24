@@ -1,8 +1,9 @@
 # WMR_Bridge
 
 ESP32 firmware, built on [BTstack](https://github.com/bluekitchen/btstack), that
-connects to **two Windows Mixed Reality motion controllers** over Classic
-Bluetooth and forwards their input to an **Android phone** over a custom BLE GATT
+connects to **two Windows Mixed Reality motion controllers** (or, optionally,
+**PlayStation VR2 Sense controllers**) over Classic Bluetooth and forwards their
+input to an **Android phone** over a custom BLE GATT
 service, either as raw frames (FF11), as decoded IMU and input records (FF12), or as batches of those records (FF14). The
 phone side is the companion app [wmr-companion](https://github.com/nightcinder/wmr-companion);
 the overall state, hardware results and roadmap are in its
@@ -11,7 +12,7 @@ the overall state, hardware results and roadmap are in its
 ```
  WMR LEFT  --\  Classic Bluetooth HID                       BLE GATT notifications
               >------------------> ESP32 (BTstack) ------------------------------> Android phone
- WMR RIGHT --/  46-byte frames        bounded queue          service FF10 / characteristic FF11
+ WMR RIGHT --/  46/79-byte frames     bounded queue          service FF10 / characteristic FF11
 ```
 
 The raw stream (FF11) is a **raw pipe**: each controller frame goes to the phone
@@ -38,14 +39,16 @@ implemented; see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 ## What it does
 
 - **Controllers.** Acts as the Bluetooth HID host for two controllers (LEFT and
-  RIGHT), found by their Bluetooth names (`Motion controller - Left` / `- Right`)
-  and remembered by address in NVS ([docs/DISCOVERY.md](docs/DISCOVERY.md); not yet
+  RIGHT), found by their Bluetooth names (`Motion controller - Left` / `- Right`,
+  or `PlayStation VR2 Sense Controller (L)` / `(R)`) and remembered by address and
+  model in NVS ([docs/DISCOVERY.md](docs/DISCOVERY.md); not yet
   run on hardware). Controllers reconnect to the
   ESP32 on their own (incoming connection); the console can also connect
   outwards. Each hand has its own connection state.
-- **Frames.** Each controller sends 46-byte input reports (`A1`, report ID `01`,
+- **Frames.** A WMR controller sends 46-byte input reports (`A1`, report ID `01`,
   44 payload bytes) at roughly 150-180 reports per second per hand in the one
-  run that was measured.
+  run that was measured. A PSVR2 Sense controller sends `A1 31` reports of up to
+  79 bytes; these are forwarded raw only for now ([docs/PSVR2.md](docs/PSVR2.md)).
 - **Queue.** Frames from both hands go into one bounded FIFO (256 frames). If it
   fills, the newest frame is dropped and counted.
 - **BLE.** The ESP32 advertises as `WMR Bridge`. When the phone subscribes to FF11,
@@ -73,7 +76,7 @@ The default firmware build operates in the dual-controller topology described ab
 | `tools/` | PC-side capture (`capture_ble.py`, needs hardware and `bleak`) and rotation analysis (`analyze_capture.py`); see [docs/DECODING.md](docs/DECODING.md) |
 | `tools/firmware/` | One-command build, packaging and flash (`build.py`) plus the browser-flasher manifest logic; see [docs/FLASHING.md](docs/FLASHING.md) |
 | `integration/` | The one BTstack file that must be replaced to build this (`main-CMakeLists.txt`, plus a diff) |
-| `docs/` | Build, flashing, protocol, Android, counters, security, reconnect/queue, controller discovery, testing, refactor notes |
+| `docs/` | Build, flashing, protocol, Android, counters, security, reconnect/queue, controller discovery, PSVR2, testing, refactor notes |
 
 Module responsibilities, in brief: `wmr_controller` (HID side), `wmr_transport`
 (BLE side, queue pump), `wmr_protocol` and `wmr_queue` (pure C, no BTstack,
@@ -181,6 +184,9 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 - **Sample captures** labelled by hand. `samples/controller_frames.txt` comes from earlier
   bring-up sessions where LEFT/RIGHT was not recorded.
 - **Regression comparison** against the original single-file version under identical conditions.
+- **PSVR2 Sense controllers.** The recognition, model storage, raw forwarding and HID wake
+  path are host-tested and build-tested but have never run on a PSVR2 controller
+  ([docs/PSVR2.md](docs/PSVR2.md)).
 - Known oddity, not investigated: each controller logs `SET_PROTOCOL handshake status=0x03`.
 
 Full list and details: [docs/TESTING.md](docs/TESTING.md).
@@ -195,6 +201,9 @@ Full list and details: [docs/TESTING.md](docs/TESTING.md).
 - No flash encryption or secure boot. The serial console is unauthenticated.
 - Single phone, exactly two controllers. Controllers are recognised by name until their
   addresses are stored; a name can be spoofed (see [docs/DISCOVERY.md](docs/DISCOVERY.md)).
+- PSVR2 Sense controllers are **raw-only** today: FF12/FF14 have no PSVR2 decoder, FF13 is
+  not read, and the wake request is unverified (see [docs/PSVR2.md](docs/PSVR2.md)). Each
+  hand's model is independent, but the decoded stream remains WMR-only.
 - `tx` means "accepted by the Bluetooth stack", not "received by the phone".
 
 Details and hardening suggestions: [docs/SECURITY.md](docs/SECURITY.md),
