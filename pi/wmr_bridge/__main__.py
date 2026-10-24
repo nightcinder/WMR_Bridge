@@ -267,6 +267,11 @@ async def _run(args: argparse.Namespace) -> int:
         duration_task = asyncio.create_task(
             _stop_after(stop, args.duration), name="duration"
         )
+    replay_task: asyncio.Task[None] | None = None
+    if replay is not None and args.replay_once:
+        replay_task = asyncio.create_task(
+            _stop_after_replay(replay, stop), name="replay-stop"
+        )
 
     try:
         await stop.wait()
@@ -275,6 +280,8 @@ async def _run(args: argparse.Namespace) -> int:
         status_task.cancel()
         if duration_task is not None:
             duration_task.cancel()
+        if replay_task is not None:
+            replay_task.cancel()
         if replay is not None:
             await replay.close()
         if manager is not None:
@@ -287,6 +294,15 @@ async def _run(args: argparse.Namespace) -> int:
 async def _stop_after(stop: asyncio.Event, seconds: float) -> None:
     await asyncio.sleep(max(0.0, seconds))
     stop.set()
+
+
+async def _stop_after_replay(replay: ReplaySource, stop: asyncio.Event) -> None:
+    try:
+        await replay.wait()
+    finally:
+        # --replay-once promises a clean exit after one pass, even if the
+        # replay failed part-way through.
+        stop.set()
 
 
 def main(argv: list[str] | None = None) -> int:

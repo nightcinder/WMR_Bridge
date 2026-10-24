@@ -186,6 +186,14 @@ class Subscriber:
             self._batch_timer.cancel()
             self._batch_timer = None
         self._batch.clear()
+        # Binary payloads already queued belong to the stream being left. The
+        # control reply is sent directly (not through this queue), so leaving
+        # them would deliver old-stream bytes after `unsubscribed`.
+        while True:
+            try:
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
         self.stream = None
 
     def close(self) -> None:

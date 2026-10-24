@@ -108,6 +108,12 @@ static void test_golden(void){
     memcpy(bad, b.data, sizeof(bad));
     bad[1] = 0; CHECK(!wmr_batch_parse(bad, wmr_batch_size(&b), &count, &records));
     bad[1] = 5; CHECK(!wmr_batch_parse(bad, wmr_batch_size(&b), &count, &records));    /* count disagrees with size */
+    /* A self-consistent batch with more than the format maximum is still invalid. */
+    uint8_t over[WMR_BATCH_HEADER_SIZE + (WMR_BATCH_MAX_COUNT + 1) * WMR_DECODED_SIZE];
+    memset(over, 0, sizeof(over));
+    over[0] = WMR_BATCH_VERSION;
+    over[1] = WMR_BATCH_MAX_COUNT + 1;
+    CHECK(!wmr_batch_parse(over, sizeof(over), &count, &records));
     /* An FF12 v1 record is not a valid batch and a batch is not a valid v1 record. */
     CHECK(!wmr_batch_parse(recs[0], WMR_DECODED_SIZE, &count, &records));
     CHECK(!wmr_decoded_unpack(b.data, wmr_batch_size(&b), &d));
@@ -160,6 +166,7 @@ static void test_flush_rule(void){
     CHECK(wmr_batch_timer_ms(14500, hold) == 1);        /* rounds up */
     CHECK(wmr_batch_timer_ms(15000, hold) == 1);        /* already due: at least 1 ms */
     CHECK(wmr_batch_timer_ms(99999, hold) == 1);
+    CHECK(wmr_batch_timer_ms(0, UINT32_MAX) == 4294968u);   /* no 32-bit wrap before rounding */
 
     /* Simulation: records arrive every 5 ms (one hand, 200/s); the pump checks every 1 ms. The
      * oldest record must never wait more than the hold time plus one report period (5 ms), and
