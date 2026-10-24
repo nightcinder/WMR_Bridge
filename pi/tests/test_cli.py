@@ -11,6 +11,7 @@ from unittest import mock
 from wmr_bridge.__main__ import (
     _build_parser,
     _is_loopback_bind,
+    _parse_cli_args,
     _read_token,
     _require_auth_for_bind,
     _run,
@@ -121,6 +122,12 @@ class HandFilterTests(unittest.TestCase):
             reader_cls.assert_called_once_with("/dev/hidraw1")
             self.assertTrue(bridge.hands[0].connected)
             self.assertFalse(bridge.hands[1].connected)
+
+    def test_wmr_bridge_args_env_supports_hand_and_custom_flags(self) -> None:
+        args = _parse_cli_args(["--bind", "0.0.0.0"], env_args="--hand left --batch-max 4")
+        self.assertEqual(args.bind, "0.0.0.0")
+        self.assertEqual(args.hand, "left")
+        self.assertEqual(args.batch_max, 4)
 
 
 if __name__ == "__main__":
