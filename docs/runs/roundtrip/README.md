@@ -47,7 +47,7 @@ Notes for re-deriving the runs:
 - The FF11 run's RIGHT records start 35.1 s in (an 85 s span); its RIGHT
   stalls, gaps and rate are therefore not full-run figures. Raw frames carry no
   device ticks, so FF11 has no tick loss.
-- The FF11 and FF12 medians sit 4.3–4.5 ms above FF14 in this sitting, but the
+- The FF11 and FF12 medians sit 3.8–4.3 ms above FF14 in this sitting, but the
   runs are sequential rather than interleaved and the RSSI samples differ by up
   to 8 dB. That is not a clean stream effect and is not reported as one.
 - The echo CSV holds the per-ping figures (write-call time, queue depth the

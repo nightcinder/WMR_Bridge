@@ -620,8 +620,8 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
 
 - Loss, rates, inter-arrival, stalls, sequence gaps and delay figures:
   [`runs/roundtrip/latency-20261022-145631.json`](runs/roundtrip/latency-20261022-145631.json)
-  and its `-samples.csv`, one 120 s run on 2026-10-22, user-reported. The five
-  2026-10-24 runs (FF14, FF11, FF12, none and the 18:43 FF14) and their
+  and its `-samples.csv`, one 120 s run on 2026-10-22, user-reported. The four
+  2026-10-24 runs (FF14, FF11, FF12 and none) and their
   echo/samples CSVs are in the same folder, with the setup and the figures in
   [`runs/roundtrip/README.md`](runs/roundtrip/README.md).
 - Missing-run lengths and age-of-newest-sample tables: computed for this
