@@ -119,6 +119,17 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #ifndef WMR_CFG_DISCOVERY_ROUNDS
 #define WMR_CFG_DISCOVERY_ROUNDS        6
 #endif
+/* Pause before a discovery burst is tried again while a hand still has no address (a
+ * controller put in pairing mode after the burst started is then found without a reboot),
+ * and how many extra bursts are tried before discovery stops and waits for `d`. Inquiry
+ * shares the radio with a controller that is already streaming, so this stays bounded.
+ * Only used when auto-start is enabled. */
+#ifndef WMR_CFG_DISCOVERY_RETRY_MS
+#define WMR_CFG_DISCOVERY_RETRY_MS      15000
+#endif
+#ifndef WMR_CFG_DISCOVERY_RETRIES
+#define WMR_CFG_DISCOVERY_RETRIES       3
+#endif
 /* Delay after the stack comes up before automatic discovery starts, so known controllers
  * that reconnect on their own are not competing with an inquiry. */
 #ifndef WMR_CFG_DISCOVERY_START_DELAY_MS

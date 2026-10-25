@@ -68,8 +68,16 @@ It looks only for hands that have no address; a known hand is never replaced.
    one at a time. A controller in pairing mode pairs on that connection (Secure Simple
    Pairing, auto-confirmed as before).
 4. If a hand is still missing, another round runs, up to `WMR_CFG_DISCOVERY_ROUNDS` (6, about
-   a minute of inquiry), then discovery stops and says which hand was not found. Press `d`
-   to try again.
+   a minute of inquiry). Every round starts from a clean slate: devices seen earlier are
+   looked for again and name requests that failed are repeated, while a hand already matched
+   keeps its first controller. When the rounds are exhausted and a hand still has no address,
+   discovery waits `WMR_CFG_DISCOVERY_RETRY_MS` (15 s) and starts another burst, up to
+   `WMR_CFG_DISCOVERY_RETRIES` (3) extra bursts, so a controller put in pairing mode after
+   the first burst is found without rebooting. After that it stops and waits for `d`; the
+   bound matters because an inquiry shares the radio with a controller that is already
+   streaming. With `WMR_CFG_DISCOVERY_AUTOSTART` = 0 there is no automatic start or retry and
+   `d` is the only way. An inquiry that cannot start because a connection is still using the
+   radio is retried the same way instead of ending discovery.
 
 While discovery runs, `l`/`r` are refused. A controller that is already connected keeps
 streaming, but an inquiry shares the ESP32's Classic radio with it, so expect more missing

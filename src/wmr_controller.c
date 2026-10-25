@@ -663,19 +663,58 @@ wmr_bond_reset_result_t wmr_controller_forget_bond(unsigned hand){
 
 /* ---- Discovery ----------------------------------------------------------- */
 
+/* Wait before another discovery attempt. Used when an inquiry cannot start (the radio is
+ * busy with a connection) and when a run ends with a hand still missing: the controller may
+ * only be put in pairing mode after the run, so giving up until the next reboot is wrong.
+ * Bounded, because an inquiry shares the radio with a controller that is already streaming;
+ * after WMR_CFG_DISCOVERY_RETRIES extra bursts, discovery waits for the console (`d`).
+ * With auto-start compiled out, discovery is only ever started by the console. */
+#if WMR_CFG_DISCOVERY_AUTOSTART
+static unsigned disc_retries;
+
+static void disc_schedule_retry(void){
+    if (disc_retries >= WMR_CFG_DISCOVERY_RETRIES){
+        printf("Discovery: giving up after %u extra burst(s); put the controller in pairing mode and press d\n",
+               disc_retries);
+        disc_retries = 0;      /* the next `d` starts with a fresh budget */
+        disc_phase = DISC_IDLE;
+        btstack_run_loop_remove_timer(&disc_timer);
+        return;
+    }
+    disc_retries++;
+    disc_phase = DISC_IDLE;
+    btstack_run_loop_remove_timer(&disc_timer);
+    btstack_run_loop_set_timer(&disc_timer, WMR_CFG_DISCOVERY_RETRY_MS);
+    btstack_run_loop_add_timer(&disc_timer);
+    printf("Discovery: trying again in %u s\n", (unsigned) (WMR_CFG_DISCOVERY_RETRY_MS / 1000));
+}
+#endif
+
 static void disc_finish(void){
     disc_phase = DISC_IDLE;
     btstack_run_loop_remove_timer(&disc_timer);
+    bool missing = false;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
-        if (disc.wanted[i] && controllers[i].source == WMR_ADDR_NONE)
-            printf("Discovery: %s not found after %u round(s). Put it in pairing mode and press d\n",
-                   controllers[i].name, disc_round);
+        if (disc.wanted[i] && controllers[i].source == WMR_ADDR_NONE){
+            printf("Discovery: %s not found after %u round(s)\n", controllers[i].name, disc_round);
+            missing = true;
+        }
     }
     printf("Discovery finished\n");
+#if WMR_CFG_DISCOVERY_AUTOSTART
+    if (missing){
+        disc_schedule_retry();
+    } else {
+        disc_retries = 0;
+    }
+#else
+    (void) missing;
+#endif
 }
 
 static void disc_inquiry_round(void){
     disc_round++;
+    wmr_discovery_begin_round(&disc);
     disc_phase = DISC_INQUIRY;
     printf("Discovery round %u/%u: inquiry for %u x 1.28 s, looking for", disc_round,
            WMR_CFG_DISCOVERY_ROUNDS, WMR_CFG_DISCOVERY_INQUIRY_LEN);
@@ -686,7 +725,11 @@ static void disc_inquiry_round(void){
     int rc = gap_inquiry_start(WMR_CFG_DISCOVERY_INQUIRY_LEN);
     if (rc != 0){
         printf("Discovery: inquiry could not start (%d)\n", rc);
+#if WMR_CFG_DISCOVERY_AUTOSTART
+        disc_schedule_retry();
+#else
         disc_finish();
+#endif
     }
 }
 
@@ -750,7 +793,15 @@ static void disc_timer_fire(btstack_timer_source_t *timer){
     for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
         if (WMR_BRIDGE_HAND_ENABLED(h) && !known[h]) need_discovery = true;
     }
-    if (disc_phase == DISC_IDLE && need_discovery) wmr_controller_discover();
+    if (disc_phase == DISC_IDLE && need_discovery){
+        if (wmr_controller_discover() == WMR_DISCOVERY_BUSY){
+#if WMR_CFG_DISCOVERY_AUTOSTART
+            /* A connection (or an incoming name check) still holds the radio; the retry
+             * must not be the last one, or a hand would stay missing until the next boot. */
+            disc_schedule_retry();
+#endif
+        }
+    }
 }
 
 /* Called whenever a connection attempt ends (descriptor, failure, close). */

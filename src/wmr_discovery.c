@@ -188,6 +188,16 @@ void wmr_discovery_start(wmr_discovery_t *d, const bool known[WMR_NUM_CONTROLLER
     wmr_discovery_start_config(d, known, WMR_CFG_BRIDGE_HANDS);
 }
 
+void wmr_discovery_begin_round(wmr_discovery_t *d){
+    /* The per-round bookkeeping is deliberately thrown away: a device that did not answer
+     * the previous inquiry, or whose remote name request failed, must be handled again in
+     * this round. Matches already made (found[]) stay, so the first controller per hand
+     * still wins for the whole discovery. */
+    d->pending_count = 0;
+    d->pending_next = 0;
+    d->seen_count = 0;
+}
+
 bool wmr_discovery_incomplete(const wmr_discovery_t *d){
     for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
         if (d->wanted[h] && !d->found[h]) return true;
