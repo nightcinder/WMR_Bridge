@@ -435,12 +435,14 @@ These are host tests, no hardware:
 
 ## 5. Is the 2026-10-22 latency run still current?
 
-**Short answer: treat it as history, not as a current measurement. The firmware's
-normal WMR/FF14 path has no known latency-relevant change since the run, but the
-client latency path has been refactored and extended, and a fresh run on the
-current APK and firmware is needed before quoting 40.8 ms as current.** This is a
-test-freshness question, separate from whether the loss figure is still
-representative.
+**Short answer: the FF14 two-controller figure is current; the stream ladder and
+latency-2 are not. A 120 s run on 2026-10-24 with firmware `v0.1.1` and the
+`0.1.0` app measured rtt p50 40.5 ms against 40.8 ms on 2026-10-22, so neither
+the client refactor nor the firmware changes since then moved the median. That
+run covers one stream and one position: the stream-against-stream sheet and
+latency-2 (app against the native probe) are still not run, and the 59 ms
+no-stream figure remains historical.** The rest of this section keeps the
+2026-10-22 comparison as the record of what changed between the two builds.
 
 The run was made at 2026-10-22 14:56, when firmware `main` was `203108c`
 (2026-10-22 14:41) and companion `main` was `3df70a4` (14:42). The export does
@@ -484,10 +486,25 @@ The run therefore used a client that no longer exists. The old figure is still
 useful as a historical data point, but it is not a current measurement of the
 current app.
 
-### 5.3 Is a new latency test required?
+### 5.3 The 2026-10-24 FF14 run
 
-**Yes, for any current latency claim.** Do not run a new bespoke test first; the
-two existing sheets already define it:
+One run now covers the FF14 slot: 2026-10-24 18:43:35, 120 s, FF14 batched,
+250 ms pings, both controllers, WMR_Bridge `v0.1.1` and wmr-companion `0.1.0`
+(owner-reported versions; the export records neither hash). rtt p50 40.5 ms,
+p95 73.6 ms, p99 102.5 ms, max 125.3 ms; 479 of 479 pings answered, median ESP32
+turnaround 0.40 ms. Stream tick loss was LEFT 21.0 %, RIGHT 15.2 %, inside the
+18–25 % band. RSSI was -86 to -81 dBm, weaker than 2026-10-22 and steadier, but
+the position was not recorded. Files:
+[`runs/roundtrip/`](runs/roundtrip/README.md).
+
+That closes the FF14 freshness question only. It does not cover no stream,
+FF11 or FF12, so the 59 ms no-stream figure and the split between app, plugin
+and radio remain open.
+
+### 5.4 What is still required for a current latency claim
+
+**The stream ladder and latency-2.** Do not run a new bespoke test; the two
+existing sheets already define what is missing:
 
 - [wmr-companion LATENCY.md](https://github.com/nightcinder/wmr-companion/blob/main/docs/LATENCY.md)
   "Run sheet": six runs at one fixed position (none, FF11, FF12, FF14, then
@@ -504,8 +521,10 @@ they predate the current firmware too.
 
 The old run is also weak as a fixed-position baseline: RSSI moved from -69 to
 -48 dBm during it, so its 40.8 ms cannot be treated as a property of the
-hardware at a fixed distance. A rerun should hold the phone and controllers in
-one taped position and record RSSI at the start and end.
+hardware at a fixed distance. The 2026-10-24 run was steadier (-86 to -81 dBm)
+but its position was not recorded either, so neither is a taped-position
+baseline. Any rerun should hold the phone and controllers in one taped position
+and record RSSI at the start and end.
 
 ## 6. If prediction is built, when is it "done"?
 
@@ -570,10 +589,11 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
 - Put it in the shared library (`wmr_core`), driven by an app-supplied render
   time. Do not put it on the ESP32, which cannot see the loss, and do not make
   it an app-only feature, which would duplicate it per platform.
-- The 40.8 ms latency figure is historical. The normal firmware stream path has
-  no known latency-relevant change, but the app's latency/transport path was
-  refactored after the run; rerun the existing latency-2 and stream sheets on
-  the current builds before quoting a current number.
+- The 40.5–40.8 ms FF14 latency figure is current for both release pairs (the
+  2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app reproduced it), but the
+  no-stream, FF11 and FF12 figures and the app/plugin/radio split still need the
+  existing latency-2 and stream sheets on the current builds before any of them
+  is quoted as current.
 - Build prediction only after the loss work, as an opt-in presentation layer
   with the tests and hardware acceptance in sections 4-6.
 
@@ -581,7 +601,9 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
 
 - Loss, rates, inter-arrival, stalls, sequence gaps and delay figures:
   [`runs/roundtrip/latency-20261022-145631.json`](runs/roundtrip/latency-20261022-145631.json)
-  and its `-samples.csv`, one 120 s run on 2026-10-22, user-reported.
+  and its `-samples.csv`, one 120 s run on 2026-10-22, user-reported. The
+  2026-10-24 run and its echo/samples CSVs are in the same folder, with the
+  setup and both figures in [`runs/roundtrip/README.md`](runs/roundtrip/README.md).
 - Missing-run lengths and age-of-newest-sample tables: computed for this
   document from `device_dt_us` and `arrival_us` in that CSV, using the median
   `device_dt_us` as the period and `round(dt / period) - 1` for missing reports.
@@ -590,11 +612,16 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
 - Single-controller and no-phone loss: [`STATUS.md`](STATUS.md) and
   [`runs/sheets/contention-2-results.md`](runs/sheets/contention-2-results.md),
   user-reported.
-- The run had one phone, one position and a moving RSSI (-69 to -48 dBm). It
-  does not establish a loss rate for the hardware, and it does not separate
-  radio contention from the controller's own behaviour.
+- The runs had one phone each, an unrecorded position and a moving RSSI
+  (-69 to -48 dBm on 2026-10-22, -86 to -81 dBm on 2026-10-24). They do not
+  establish a loss rate for the hardware, and they do not separate radio
+  contention from the controller's own behaviour.
 - The firmware and app commit audit in section 5 uses the repository histories:
-  firmware `203108c` at the run versus `6520deb` now; companion `3df70a4` at
-  the run versus the later `main`. It is a code-history comparison, not a
-  measurement of the current builds.
-- No new hardware was run and no firmware or library code was changed.
+  firmware `203108c` at the 2026-10-22 run versus `6520deb` then; companion
+  `3df70a4` at that run versus the later `main`. It is a code-history
+  comparison, not a measurement of the current builds. The 2026-10-24 run used
+  the `v0.1.1`/`0.1.0` release pair, reported by the owner; the export records
+  no hashes.
+- No new hardware was run for this document and no firmware or library code was
+  changed; the 2026-10-24 figures are user-reported exports, archived under
+  `runs/roundtrip/`.
