@@ -74,7 +74,7 @@ Best-effort labels; the file names were assigned when the files were archived.
 
 ## Round trip (`roundtrip/`)
 
-Two FF15 round-trip runs (120 s, FF14, MTU 517, 15 ms, both controllers), exported by the app: summary JSON, per-ping echo CSV, per-record CSV. 2026-10-22: 479 of 479 pings answered, round trip p50 40.8 ms, p99 97.1 ms. 2026-10-24 on WMR_Bridge `v0.1.1` with the wmr-companion `0.1.0` app: 479 of 479 answered, p50 40.5 ms, p99 102.5 ms. File inventory, setup and RSSI per run: [`roundtrip/README.md`](roundtrip/README.md).
+Five FF15 round-trip runs (120 s, MTU 517, 15 ms, both controllers), exported by the app: summary JSON, per-ping echo CSV, per-record CSV. 2026-10-22, FF14: 479 of 479 pings answered, round trip p50 40.8 ms, p99 97.1 ms. 2026-10-24 on WMR_Bridge `v0.1.1` with the wmr-companion `0.1.0` app, one pass of the stream ladder: FF14 479 of 479 answered, p50 40.5 ms, p99 102.5 ms; FF11 p50 44.8 ms, p99 119.9 ms; FF12 p50 44.3 ms, p99 124.7 ms; none p50 61.6 ms, p99 106.4 ms. File inventory, the 35 s late RIGHT start on FF11, RSSI sampling and other caveats per run: [`roundtrip/README.md`](roundtrip/README.md).
 
 ## Reading the logs
 

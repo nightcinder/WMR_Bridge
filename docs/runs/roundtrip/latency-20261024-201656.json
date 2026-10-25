@@ -1,0 +1,128 @@
+{
+  "format": "wmr-latency",
+  "version": 3,
+  "source": "wmr_companion app (phone)",
+  "started": "2026-10-24T20:14:40.838177",
+  "stream": "raw",
+  "duration_us": 120013463,
+  "round_trip": {
+    "measured": true,
+    "source": "FF15 echo",
+    "sent": 479,
+    "answered": 479,
+    "timeouts": 0,
+    "failed_writes": 0,
+    "rtt": {
+      "count": 479,
+      "min_us": 17961,
+      "p50_us": 44825,
+      "p90_us": 77241,
+      "p95_us": 93318,
+      "p99_us": 119916,
+      "max_us": 149955
+    },
+    "end_to_end": {
+      "count": 479,
+      "min_us": 18528,
+      "p50_us": 46712,
+      "p90_us": 80110,
+      "p95_us": 96219,
+      "p99_us": 129977,
+      "max_us": 163284
+    },
+    "turnaround": {
+      "count": 479,
+      "min_us": 247,
+      "p50_us": 1255,
+      "p90_us": 2098,
+      "p95_us": 10061,
+      "p99_us": 28037,
+      "max_us": 43398
+    },
+    "max_queue_depth": 255,
+    "counters": {
+      "late_or_duplicate_answers": 0,
+      "bad_answers": 0,
+      "pings_skipped_busy": 0
+    },
+    "bridge_id": "8c:94:df:12:b9:b6",
+    "ping_interval_us": 250000
+  },
+  "link": {
+    "8c:94:df:12:b9:b6": {
+      "mtu": 517,
+      "rssi_start_dbm": -84,
+      "rssi_end_dbm": -86,
+      "connection_interval_us": 15000,
+      "phy": null,
+      "high_priority_requested": true
+    }
+  },
+  "counters": {
+    "incomplete_frames": 0,
+    "reassembly_errors": 0,
+    "decoded_parse_errors": 0
+  },
+  "rows_dropped": 0,
+  "mode_changed": false,
+  "hands": [
+    {
+      "hand": "LEFT",
+      "bridge_id": "8c:94:df:12:b9:b6",
+      "bridge_records": {
+        "8c:94:df:12:b9:b6": 16786
+      },
+      "records": 16786,
+      "arrivals": 16786,
+      "span_us": 119910563,
+      "rate_per_s": 139.99,
+      "inter_arrival": {
+        "count": 16785,
+        "min_us": 31,
+        "p50_us": 1050,
+        "p90_us": 22539,
+        "p95_us": 32162,
+        "p99_us": 61746,
+        "max_us": 144427
+      },
+      "stalls_over_50000us": 297,
+      "sequence_gaps": 18,
+      "sequence_loss": 0.0011,
+      "out_of_order": 0,
+      "missing_from_ticks": null,
+      "tick_loss": null,
+      "period_us": null,
+      "delay_above_window_min": null,
+      "delay_variation": null
+    },
+    {
+      "hand": "RIGHT",
+      "bridge_id": "8c:94:df:12:b9:b6",
+      "bridge_records": {
+        "8c:94:df:12:b9:b6": 13333
+      },
+      "records": 13333,
+      "arrivals": 13333,
+      "span_us": 84887999,
+      "rate_per_s": 157.07,
+      "inter_arrival": {
+        "count": 13332,
+        "min_us": 28,
+        "p50_us": 1089,
+        "p90_us": 18105,
+        "p95_us": 29761,
+        "p99_us": 59158,
+        "max_us": 166688
+      },
+      "stalls_over_50000us": 193,
+      "sequence_gaps": 26,
+      "sequence_loss": 0.0019,
+      "out_of_order": 0,
+      "missing_from_ticks": null,
+      "tick_loss": null,
+      "period_us": null,
+      "delay_above_window_min": null,
+      "delay_variation": null
+    }
+  ]
+}
