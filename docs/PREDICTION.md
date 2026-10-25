@@ -435,14 +435,17 @@ These are host tests, no hardware:
 
 ## 5. Is the 2026-10-22 latency run still current?
 
-**Short answer: the FF14 two-controller figure is current; the stream ladder and
-latency-2 are not. A 120 s run on 2026-10-24 with firmware `v0.1.1` and the
-`0.1.0` app measured rtt p50 40.5 ms against 40.8 ms on 2026-10-22, so neither
-the client refactor nor the firmware changes since then moved the median. That
-run covers one stream and one position: the stream-against-stream sheet and
-latency-2 (app against the native probe) are still not run, and the 59 ms
-no-stream figure remains historical.** The rest of this section keeps the
-2026-10-22 comparison as the record of what changed between the two builds.
+**Short answer: the stream ladder has one current pass; the repeats and
+latency-2 are not run. Four 120 s runs on 2026-10-24 with firmware `v0.1.1`
+and the `0.1.0` app measured rtt p50 40.5 ms (FF14) against 40.8 ms on
+2026-10-22, 44.8 ms (FF11), 44.3 ms (FF12) and 61.6 ms with no stream. So
+neither the client refactor nor the firmware changes since then moved the
+streamed median, and the old ~59 ms no-stream penalty reproduced. The runs are
+sequential at one stated position rather than interleaved, the FF14 and none
+repeats are missing, and latency-2 (app against the native probe) is still not
+run, so the split between app, plugin and radio remains open.** The rest of
+this section keeps the 2026-10-22 comparison as the record of what changed
+between the two builds.
 
 The run was made at 2026-10-22 14:56, when firmware `main` was `203108c`
 (2026-10-22 14:41) and companion `main` was `3df70a4` (14:42). The export does
@@ -486,10 +489,10 @@ The run therefore used a client that no longer exists. The old figure is still
 useful as a historical data point, but it is not a current measurement of the
 current app.
 
-### 5.3 The 2026-10-24 FF14 run
+### 5.3 The 2026-10-24 runs
 
-One run now covers the FF14 slot: 2026-10-24 18:43:35, 120 s, FF14 batched,
-250 ms pings, both controllers, WMR_Bridge `v0.1.1` and wmr-companion `0.1.0`
+The FF14 slot is covered by 2026-10-24 18:43:35, 120 s, FF14 batched, 250 ms
+pings, both controllers, WMR_Bridge `v0.1.1` and wmr-companion `0.1.0`
 (owner-reported versions; the export records neither hash). rtt p50 40.5 ms,
 p95 73.6 ms, p99 102.5 ms, max 125.3 ms; 479 of 479 pings answered, median ESP32
 turnaround 0.40 ms. Stream tick loss was LEFT 21.0 %, RIGHT 15.2 %, inside the
@@ -497,22 +500,38 @@ turnaround 0.40 ms. Stream tick loss was LEFT 21.0 %, RIGHT 15.2 %, inside the
 the position was not recorded. Files:
 [`runs/roundtrip/`](runs/roundtrip/README.md).
 
-That closes the FF14 freshness question only. It does not cover no stream,
-FF11 or FF12, so the 59 ms no-stream figure and the split between app, plugin
-and radio remain open.
+A later sitting on the same release pair adds the other three streams: none at
+20:11:49 (p50 61.6 ms, 438 of 479 pings over 50 ms, floor 45.0 ms, turnaround
+0.31 ms), FF11 raw at 20:14:40 (p50 44.8 ms, 191 over 50 ms, 18/26 sequence
+gaps) and FF12 decoded at 20:16:56 (p50 44.3 ms, 194 over 50 ms, 36/58 gaps,
+tick loss 30.7 % LEFT / 17.6 % RIGHT). All three answered 479 of 479 pings.
+The no-stream run is 17–21 ms slower than any streamed mode while its RSSI
+sample was the best of the sitting (-80 dBm at both ends), which is the
+opposite of a stream-load effect and matches the 2026-10-22 no-stream result.
+The FF11 RIGHT stream did not start until 35.1 s into that run, so its LEFT-only
+figures are complete. The runs were sequential, not interleaved, and the RSSI
+samples span 8 dB (the app reads RSSI twice per run, at start and stop, at 1 dB
+resolution, so that spread does not prove the rig moved): the 4 ms FF11/FF12
+penalty against FF14 cannot be separated from session drift.
+
+The FF14 and no-stream repeats, and latency-2, remain open. In particular, no
+run yet separates the app's share of the round trip from the radio's.
 
 ### 5.4 What is still required for a current latency claim
 
-**The stream ladder and latency-2.** Do not run a new bespoke test; the two
+**The ladder repeats and latency-2.** Do not run a new bespoke test; the two
 existing sheets already define what is missing:
 
 - [wmr-companion LATENCY.md](https://github.com/nightcinder/wmr-companion/blob/main/docs/LATENCY.md)
   "Run sheet": six runs at one fixed position (none, FF11, FF12, FF14, then
   none and FF14 repeated), 120 s each, FF15 echo on, 250 ms ping interval, with
-  the current firmware and APK hashes recorded.
+  the current firmware and APK hashes recorded. The 2026-10-24 sitting covers
+  the first four (one pass, not interleaved); the two repeats are still needed
+  before a 4 ms difference between streams is called real.
 - [latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md):
   the Flutter client against the bare-Kotlin GATT probe, which is the
-  decision that actually needs a current number.
+  decision that actually needs a current number. The probe is merged
+  (`tool/gatt_probe`, PR #36) and builds an APK in CI; the sitting has not run.
 
 Add the current **both-hands versus single-hand** comparison if the question is
 specifically the single-ESP32 capacity, rather than only the client. The
@@ -589,11 +608,11 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
 - Put it in the shared library (`wmr_core`), driven by an app-supplied render
   time. Do not put it on the ESP32, which cannot see the loss, and do not make
   it an app-only feature, which would duplicate it per platform.
-- The 40.5–40.8 ms FF14 latency figure is current for both release pairs (the
-  2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app reproduced it), but the
-  no-stream, FF11 and FF12 figures and the app/plugin/radio split still need the
-  existing latency-2 and stream sheets on the current builds before any of them
-  is quoted as current.
+- The 40.5–44.8 ms streamed latency figures are current for the `0.1.1`/`0.1.0`
+  release pair (the 2026-10-24 runs reproduced the 2026-10-22 FF14 median and
+  added none/FF11/FF12), but the ladder repeats and the app/plugin/radio split
+  still need the existing latency-2 sitting before the stream ordering or a
+  native-vs-Flutter decision is quoted as a result.
 - Build prediction only after the loss work, as an opt-in presentation layer
   with the tests and hardware acceptance in sections 4-6.
 
@@ -601,9 +620,10 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
 
 - Loss, rates, inter-arrival, stalls, sequence gaps and delay figures:
   [`runs/roundtrip/latency-20261022-145631.json`](runs/roundtrip/latency-20261022-145631.json)
-  and its `-samples.csv`, one 120 s run on 2026-10-22, user-reported. The
-  2026-10-24 run and its echo/samples CSVs are in the same folder, with the
-  setup and both figures in [`runs/roundtrip/README.md`](runs/roundtrip/README.md).
+  and its `-samples.csv`, one 120 s run on 2026-10-22, user-reported. The four
+  2026-10-24 runs (FF14, FF11, FF12 and none) and their
+  echo/samples CSVs are in the same folder, with the setup and the figures in
+  [`runs/roundtrip/README.md`](runs/roundtrip/README.md).
 - Missing-run lengths and age-of-newest-sample tables: computed for this
   document from `device_dt_us` and `arrival_us` in that CSV, using the median
   `device_dt_us` as the period and `round(dt / period) - 1` for missing reports.
@@ -612,10 +632,13 @@ Until those exist, this is a **design recommendation, not a shipped feature**.
 - Single-controller and no-phone loss: [`STATUS.md`](STATUS.md) and
   [`runs/sheets/contention-2-results.md`](runs/sheets/contention-2-results.md),
   user-reported.
-- The runs had one phone each, an unrecorded position and a moving RSSI
-  (-69 to -48 dBm on 2026-10-22, -86 to -81 dBm on 2026-10-24). They do not
-  establish a loss rate for the hardware, and they do not separate radio
-  contention from the controller's own behaviour.
+- The runs had one phone each, an unrecorded position and RSSI sampled only at
+  the start and end of each run (-69 to -48 dBm on 2026-10-22; -80 to -88 dBm
+  across the 2026-10-24 sitting, whose owner states the rig did not move). They
+  do not establish a loss rate for the hardware, and they do not separate radio
+  contention from the controller's own behaviour. The 2026-10-24 ladder is one
+  sequential pass, not the interleaved sheet, so stream-to-stream differences
+  of a few ms are not results.
 - The firmware and app commit audit in section 5 uses the repository histories:
   firmware `203108c` at the 2026-10-22 run versus `6520deb` then; companion
   `3df70a4` at that run versus the later `main`. It is a code-history
