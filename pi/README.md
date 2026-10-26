@@ -81,7 +81,7 @@ the probe do not send one.
 
 ## Version
 
-Current package version: `0.1.0` (`wmr_bridge.__version__`); `0.2.1` after PR #78 merges.
+Current package version: `0.2.1` (`wmr_bridge.__version__`).
 
 ## Logs
 
