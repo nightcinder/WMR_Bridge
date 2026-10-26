@@ -245,13 +245,15 @@ was allowed at startup with `--allow-origin <value>` (repeatable). This stops a
 web page on the LAN from opening a socket to the daemon. Origin matching is
 case-insensitive on the normalised value; `*` is not a wildcard.
 
+JSON examples below use the 0.2.1 package version from PR #78; current main reports 0.1.0.
+
 ```json
 {
   "type": "hello",
   "protocol": 1,
   "transport": "wifi",
   "device": "wmr-pi",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "handFilter": ["LEFT", "RIGHT"],
   "hostname": "wmr-pi",
   "authRequired": true,
@@ -394,7 +396,7 @@ Records of both hands may share a batch; each carries its own hand.
 ```json
 {
   "type": "status",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "handFilter": ["LEFT", "RIGHT"],
   "uptimeS": 42.5,
   "hostTimeUs": 123456789,
@@ -589,6 +591,19 @@ Record host model, OS, BlueZ/kernel versions, Wi-Fi band/channel, controller
 addresses (or omit them), and the probe output in the bring-up run sheet
 [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md). Until P1-P10 have
 been run, treat the Pi path as unverified.
+
+## Daemon logs
+
+The daemon uses Python's `logging` module. Hand and client events are logged at
+INFO/WARNING:
+- Hand connect/disconnect: `LEFT connected: /dev/hidraw0 (AA:BB:...)` and
+  `LEFT disconnected: /dev/hidraw0 after 123 report(s)`.
+- Client connect/disconnect: `client connected: <peer>` / `client disconnected: <peer>`.
+- Subscribe/unsubscribe: `client <peer> subscribed to batched` /
+  `client <peer> unsubscribed`.
+- No controller: a one-time warning `no WMR controllers found; pair one in bluetoothctl, check ...`.
+- Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
+- `hello.version` reports the package version (`0.2.1` after PR #78 merges; `0.1.0` on current main).
 
 ## Troubleshooting
 

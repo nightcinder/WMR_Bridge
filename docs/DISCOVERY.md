@@ -169,6 +169,18 @@ What changes:
 
 See [SECURITY.md](SECURITY.md).
 
+## Reading the monitor: pairing walkthrough (ONY-313)
+
+Firmware logs one format: `[    12.345] I pair   LEFT ready: HID descriptor received (model WMR)`.
+A successful pairing run shows, in order: discovery (`found ... at ... (..., model ...)`), link up (`... link up at ... (handle=0x..., role=...)`), authentication (`... authenticated`), encryption (`... link encrypted`), descriptor (`... ready: HID descriptor received (model ...)`), first report (`... is streaming: first input report ...`). Discovery ends with a per-hand summary: ready / waiting for descriptor / known but disconnected / not paired with next action.
+
+Failure hints on the `pair` tag:
+- `authentication failed: ... (link key mismatch) (0x05)` — remove the controller's old pairing or press `k`/`K` for a bond reset.
+- `PIN or key missing (controller lost the bond)` (0x06).
+- `remote user terminated` (0x13).
+
+Firmware and Pi hardware runs are unverified unless a run sheet proves otherwise.
+
 ## Not done / open
 
 - Real names, pairing-mode behaviour and timings: not yet checked on hardware.

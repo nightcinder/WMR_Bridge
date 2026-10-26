@@ -186,7 +186,7 @@ labels.
 ### Hosting
 
 The installer is live at **<https://nightcinder.github.io/WMR_Bridge/>**,
-serving the latest tagged release (`v0.1.0`) images (all three variants).
+serving the latest tagged release (`v0.2.0`) images (all three variants).
 
 `.github/workflows/firmware.yml` deploys `dist/` to GitHub Pages on a `v*`
 tag. This keeps the manifest and the images same-origin, which the browser
@@ -272,15 +272,15 @@ The build runs in the official `espressif/idf:v6.1` container; no self-hosted
 runner or secrets are needed. `actions/checkout` uses full history so
 `git describe` can produce a version.
 
-To publish a release:
+To publish the pending 0.2.1 release (after PR #78 merges):
 
 ```bash
-git tag -a v0.1.0 -m "WMR Bridge v0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.1 -m "WMR Bridge v0.2.1"
+git push origin v0.2.1
 ```
 
 The release job writes `manifest.json` (and the single-hand
-`manifest-left.json` / `manifest-right.json`) with `"version": "0.1.0"` (the
+`manifest-left.json` / `manifest-right.json`) with `"version": "0.2.1"` (the
 leading `v` is stripped) and `build-info*.json` with the variant, flag values,
 source and toolchain commits. The same version is passed to ESP-IDF as
 `PROJECT_VER`, so the running firmware reports it on the console (`v`) and over
