@@ -44,7 +44,9 @@ Per hand, in this order:
    name instead of being pinned this way.
 2. **Stored**: found by discovery (or by name on an incoming connection) and saved in NVS
    through BTstack's TLV store (the same store as the link keys), tag `WMRA`, a 16-byte record
-   (`wmr_addr_record_pack`, golden bytes in the test). Byte 14 carries two model bits per
+   (`wmr_addr_record_pack`, golden bytes in the test). Only an address that has connected
+   successfully (or that already has a link key) is stored, so a stored address is one the
+   bridge has paired with. Byte 14 carries two model bits per
    hand (00 = WMR, 01 = PSVR2); bytes 15 stay reserved. Model bits are written only for a
    valid hand. The version stays 1, so firmware from before PSVR2 support still reads the
    record and treats both hands as WMR.
@@ -63,13 +65,23 @@ It looks only for hands that have no address; a known hand is never replaced.
    (up to 8 per round). The inquiry stops early once every wanted hand is found.
 2. **Remote name requests**, one at a time, for the remembered devices, until every wanted
    hand is found.
-3. **Store and connect.** New addresses are saved, then each new hand is connected outwards,
-   one at a time. A controller in pairing mode pairs on that connection (Secure Simple
-   Pairing, auto-confirmed as before).
+3. **Connect, then store.** Each new hand is connected outwards, one at a time. A controller
+   in pairing mode pairs on that connection (Secure Simple Pairing, auto-confirmed as before).
+   An attempt that does not connect is retried with the same address
+   (`WMR_CFG_PAIR_ATTEMPTS` = 3, `WMR_CFG_PAIR_RETRY_MS` = 1 s apart). The address is written
+   to NVS only once a connection to it has succeeded, or when it already has a link key (for
+   example after `F` forgot the address but kept the bond). A hand whose attempts all fail is
+   dropped again and ends its part of the run: it is reported as `found but did not pair`, and
+   the automatic retry burst (or `d`) starts a fresh run that looks for it again. A failed
+   pairing therefore never leaves a stored address behind that `d` would then refuse to look
+   for.
 4. If a hand is still missing, another round runs, up to `WMR_CFG_DISCOVERY_ROUNDS` (6, about
    a minute of inquiry). Every round starts from a clean slate: devices seen earlier are
    looked for again and name requests that failed are repeated, while a hand already matched
-   keeps its first controller. When the rounds are exhausted and a hand still has no address,
+   keeps its first controller. A hand that acquires its address from an incoming connection
+   while the run is going (the auto-reconnect path) counts as settled: it ends the run instead
+   of another round, it is not logged as missing, and it does not use a retry burst. When the
+   rounds are exhausted and a hand still has no address,
    discovery waits `WMR_CFG_DISCOVERY_RETRY_MS` (15 s) and starts another burst, up to
    `WMR_CFG_DISCOVERY_RETRIES` (3) extra bursts, so a controller put in pairing mode after
    the first burst is found without rebooting. After that it stops and waits for `d`; the
@@ -89,6 +101,14 @@ pairing mode (hold the Windows button until the LEDs flash). For a fresh flash: 
 ESP32, put **one or both** controllers in pairing mode within the first minute, and watch for
 `Discovery: LEFT is ...` and `descriptor status=0x00`. If pairing mode times out first, put
 the controller in pairing mode again and press `d`.
+
+A failed attempt now logs `Pairing: LEFT attempt 1/3 did not connect; retrying ...` and tries
+again; only after the last attempt does it forget the address
+(`Pairing: LEFT did not pair ...; address forgotten. Put it in pairing mode and press d`).
+That means the next `d` (or the next automatic burst) can find the controller again without
+`F`, and the run ends with `Discovery: LEFT was found but did not pair after 3 attempt(s)`.
+If the log says the address was kept because it has a link key, the controller is paired but
+not reachable: press `l`/`r` or wake it.
 
 ### More than one matching controller in range
 

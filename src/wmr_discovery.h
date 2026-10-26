@@ -133,6 +133,7 @@ typedef enum {
 typedef struct {
     bool     wanted[WMR_NUM_CONTROLLERS];    /* hands this build serves that had no address */
     bool     found[WMR_NUM_CONTROLLERS];
+    bool     unusable[WMR_NUM_CONTROLLERS];  /* matched, but its pairing connect failed */
     int      bridge_hands;                   /* WMR_CFG_BRIDGE_HANDS for this run */
     uint8_t  found_address[WMR_NUM_CONTROLLERS][6];
     wmr_model_t found_model[WMR_NUM_CONTROLLERS];   /* valid when found[] is true */
@@ -163,6 +164,16 @@ void wmr_discovery_begin_round(wmr_discovery_t *d);
 
 /* True while some wanted hand has no candidate yet. */
 bool wmr_discovery_incomplete(const wmr_discovery_t *d);
+
+/* A matched hand whose connection (pairing) failed: stop looking for it in this run, but
+ * keep it on record as missing so the end of the run reports it and a later run retries.
+ * Cleared by wmr_discovery_start*. */
+void wmr_discovery_hand_unusable(wmr_discovery_t *d, int hand);
+
+/* True when a wanted hand has no usable match yet: not found, or found but marked unusable.
+ * `wmr_discovery_incomplete` only answers "still worth another inquiry round", so this is
+ * the one to use for the end-of-run report and the automatic retry decision. */
+bool wmr_discovery_hand_missing(const wmr_discovery_t *d, int hand);
 
 /* An inquiry result. `name` is NULL (or len 0) when the response carried no name. */
 wmr_disc_result_t wmr_discovery_on_inquiry_result(wmr_discovery_t *d, const wmr_discovery_device_t *dev,
