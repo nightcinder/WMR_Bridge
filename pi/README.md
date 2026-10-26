@@ -79,6 +79,20 @@ the probe do not send one.
 | `udev/99-wmr-bridge.rules` | udev rule granting `input` group access to `/dev/hidraw*` |
 | `tests/` | host tests; no hardware required |
 
+## Version
+
+Current package version: `0.2.1` (`wmr_bridge.__version__`).
+
+## Logs
+
+The daemon logs hand and client events:
+- Hand connect/disconnect: `LEFT connected: /dev/hidraw0 (AA:BB:...)` and
+  `LEFT disconnected: /dev/hidraw0 after 123 report(s)`.
+- Client connect/disconnect: `client connected: <peer>` / `client disconnected: <peer>`.
+- Subscribe/unsubscribe: `client <peer> subscribed to batched` / `client <peer> unsubscribed`.
+- No controller: a one-time warning `no WMR controllers found; pair one in bluetoothctl, check ...`.
+- Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
+
 ## Status
 
 Host-tested only. It has **not** been run on a Raspberry Pi or with real
