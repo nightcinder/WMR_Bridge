@@ -166,6 +166,7 @@ static bool     disc_pair_wait;         /* the next timer tick is a pairing retr
 static btstack_timer_source_t disc_timer;
 static bool disc_incoming_rejected;
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
+static bool disc_reserve_radio;         /* hold connected hands back while a hand is missing */
 static bool disc_hold_logged;           /* the radio-reservation message is logged once per run */
 static controller_t *controller_for_address(const bd_addr_t address);
 #endif
@@ -180,15 +181,15 @@ static int disc_accept_classic_connection(bd_addr_t address, hci_link_type_t lin
     (void) address;
     if (link_type != HCI_LINK_TYPE_ACL) return 1;
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
-    /* The first round runs on a quiet radio: a controller that already has an address is
-     * held back until it ends. An unknown address is accepted (a controller with no stored
-     * address may connect itself and be identified). */
+    /* Every inquiry round that still has a hand missing runs on a quiet radio: a controller
+     * that already has an address is held back until the round ends. An unknown address is
+     * accepted (a controller with no stored address may connect itself and be identified). */
     if ((disc_phase == DISC_INQUIRY || disc_phase == DISC_NAMES) &&
-        wmr_discovery_reserve_radio(true, disc_round, controller_for_address(address) != NULL)){
+        wmr_discovery_reserve_radio(disc_reserve_radio, controller_for_address(address) != NULL)){
         if (!disc_hold_logged){
             disc_hold_logged = true;
-            WMR_LOGI("pair", "refusing incoming links from paired controllers while the first "
-                     "inquiry round has the radio; they reconnect afterwards");
+            WMR_LOGI("pair", "refusing incoming links from paired controllers while an inquiry "
+                     "round has the radio; they reconnect afterwards");
         }
         return 0;
     }
@@ -863,6 +864,9 @@ static void disc_pair_summary(void){
 
 static void disc_finish(void){
     disc_phase = DISC_IDLE;
+#if WMR_CFG_DISCOVERY_RESERVE_RADIO
+    disc_reserve_radio = false;
+#endif
     btstack_run_loop_remove_timer(&disc_timer);
     bool missing = false;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
@@ -899,6 +903,20 @@ static void disc_inquiry_round(void){
     disc_round++;
     wmr_discovery_begin_round(&disc);
     disc_phase = DISC_INQUIRY;
+#if WMR_CFG_DISCOVERY_RESERVE_RADIO
+    /* A hand that connected in an earlier round would otherwise stream through this one
+     * and share the radio with the inquiry and its name requests, which is how the second
+     * controller stays unheard. Disconnect it for the round; it reconnects afterwards. */
+    if (disc_reserve_radio){
+        for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
+            controller_t *c = &controllers[h];
+            if (!WMR_BRIDGE_HAND_ENABLED(h) || !c->cid) continue;
+            WMR_LOGI("pair", "%s disconnects for inquiry round %u (radio reserved for pairing); "
+                     "it reconnects afterwards", c->name, disc_round);
+            hid_host_disconnect(c->cid);
+        }
+    }
+#endif
     disc_round_results = disc.results;
     char wanted[32] = "";
     size_t used = 0;
@@ -1193,18 +1211,13 @@ wmr_discovery_start_result_t wmr_controller_discover(void){
     disc_incoming_rejected = false;
     memset(disc_pair_attempts, 0, sizeof(disc_pair_attempts));
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
-    /* Give the first inquiry round a quiet radio. A paired controller that is streaming now
-     * would share the radio with the inquiry and with the remote name requests, and the
-     * field logs show the missing controller is then never heard. It reconnects by itself
-     * (or with `l`/`r`) once the first round is over. */
+    /* Discovery only starts while a hand is missing, so every round of this run gets a quiet
+     * radio. A hand that connects in a later round is disconnected again at the start of the
+     * next one (disc_inquiry_round): otherwise it streams through the remaining rounds and
+     * the controller in pairing mode is never heard. It reconnects by itself (or with
+     * `l`/`r`) once the run ends. */
+    disc_reserve_radio = true;
     disc_hold_logged = false;
-    for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
-        controller_t *c = &controllers[h];
-        if (!WMR_BRIDGE_HAND_ENABLED(h) || !c->cid) continue;
-        WMR_LOGI("pair", "%s disconnects for the first inquiry round (radio reserved for "
-                 "pairing); it reconnects afterwards", c->name);
-        hid_host_disconnect(c->cid);
-    }
 #endif
     disc_inquiry_round();
     return WMR_DISCOVERY_STARTED;

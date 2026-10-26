@@ -147,14 +147,15 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #ifndef WMR_CFG_DISCOVERY_START_DELAY_MS
 #define WMR_CFG_DISCOVERY_START_DELAY_MS 3000
 #endif
-/* Reserve the Classic radio for the first round of a discovery run: a controller that
- * already has an address is disconnected when the run starts and its incoming link is
- * refused until the first round ends. The 2026-10-26 field logs show why: every successful
- * discovery of the missing hand happened before the other hand's link came up (3 of 3),
- * while 18 consecutive inquiry rounds with the other hand streaming saw no answer at all.
- * The radio is shared; the first round is what pairs a controller in pairing mode, so give
- * it a quiet radio. The held hand reconnects by itself afterwards. Set to 0 to keep the old
- * behaviour (an already-connected hand keeps streaming through discovery). */
+/* Reserve the Classic radio for every discovery round that still has a hand missing: a
+ * controller that already has an address is disconnected at the start of each such round
+ * and its incoming link is refused until the round ends. The 2026-10-26 field logs show
+ * why: every successful discovery of the missing hand happened while the other hand had no
+ * link, while 18 consecutive inquiry rounds with the other hand streaming saw no answer at
+ * all. A hand connected in an earlier round would otherwise block the remaining rounds, so
+ * discovery can only pair one controller per run. The radio is shared; give each round that
+ * is still looking a quiet radio. The held hand reconnects by itself afterwards. Set to 0 to
+ * keep the old behaviour (an already-connected hand keeps streaming through discovery). */
 #ifndef WMR_CFG_DISCOVERY_RESERVE_RADIO
 #define WMR_CFG_DISCOVERY_RESERVE_RADIO  1
 #endif

@@ -295,12 +295,10 @@ static void test_run_limits(void){
 }
 
 static void test_radio_reservation(void){
-    printf("Radio reservation for the first discovery round\n");
-    CHECK(wmr_discovery_reserve_radio(true, 1, true));      /* known hand held during round 1 */
-    CHECK(!wmr_discovery_reserve_radio(true, 1, false));    /* unknown address may connect itself */
-    CHECK(!wmr_discovery_reserve_radio(true, 2, true));     /* only the first round */
-    CHECK(!wmr_discovery_reserve_radio(true, 0, true));     /* no round running */
-    CHECK(!wmr_discovery_reserve_radio(false, 1, true));    /* disabled by config */
+    printf("Radio reservation for a discovery round with a hand missing\n");
+    CHECK(wmr_discovery_reserve_radio(true, true));      /* known hand held while a round runs */
+    CHECK(!wmr_discovery_reserve_radio(true, false));    /* unknown address may connect itself */
+    CHECK(!wmr_discovery_reserve_radio(false, true));    /* disabled by config */
 }
 
 static void test_incoming(void){
