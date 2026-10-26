@@ -186,7 +186,7 @@ labels.
 ### Hosting
 
 The installer is live at **<https://nightcinder.github.io/WMR_Bridge/>**,
-serving the latest tagged release (`v0.2.1`) images (all three variants).
+serving the latest tagged release (`v0.2.0`) images (all three variants).
 
 `.github/workflows/firmware.yml` deploys `dist/` to GitHub Pages on a `v*`
 tag. This keeps the manifest and the images same-origin, which the browser
@@ -272,7 +272,7 @@ The build runs in the official `espressif/idf:v6.1` container; no self-hosted
 runner or secrets are needed. `actions/checkout` uses full history so
 `git describe` can produce a version.
 
-To publish a release:
+To publish the pending 0.2.1 release (after PR #78 merges):
 
 ```bash
 git tag -a v0.2.1 -m "WMR Bridge v0.2.1"
