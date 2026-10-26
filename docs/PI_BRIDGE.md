@@ -245,7 +245,7 @@ was allowed at startup with `--allow-origin <value>` (repeatable). This stops a
 web page on the LAN from opening a socket to the daemon. Origin matching is
 case-insensitive on the normalised value; `*` is not a wildcard.
 
-JSON examples below use the 0.2.1 package version from PR #78; current main reports 0.1.0.
+JSON examples below use the current 0.2.1 package version; `pi/wmr_bridge/__version__` reports `0.2.1`.
 
 ```json
 {
@@ -603,7 +603,7 @@ INFO/WARNING:
   `client <peer> unsubscribed`.
 - No controller: a one-time warning `no WMR controllers found; pair one in bluetoothctl, check ...`.
 - Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
-- `hello.version` reports the package version (`0.2.1` after PR #78 merges; `0.1.0` on current main).
+- `hello.version` reports the package version (`0.2.1`; `0.1.0` before PR #78 merged).
 
 ## Troubleshooting
 

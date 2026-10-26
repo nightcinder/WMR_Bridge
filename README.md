@@ -113,13 +113,16 @@ python3 tools/firmware/build.py --idf-export ~/esp/esp-idf/export.sh --flash /de
 
 The first run clones the pinned BTstack commit into `.fw-build/`; later runs
 reuse it. The output in `dist/` includes a merged factory image and a browser
-flasher page. `v0.2.0` is the current tagged release; `v0.2.1` (ONY-313 logging
-cleanup) is pending merge of PR #78. To install the current release
-without ESP-IDF, use the hosted browser installer at
-<https://nightcinder.github.io/WMR_Bridge/>, which serves all three variants.
-The [GitHub release](https://github.com/nightcinder/WMR_Bridge/releases/latest)
-also carries the images, manifests and the Pi bridge tarball. For a local build,
-serve `dist/` over HTTP; details are in [docs/FLASHING.md](docs/FLASHING.md).
+flasher page. `v0.2.4` is the current tagged release; it carries the 0.2.x
+logging cleanup (ONY-313) and the ONY-307 discovery fix (failed pairing
+connects retried, the Classic radio reserved while a hand is missing, and the
+ACL slot freed before each discovery page). Packaged releases are CI-built and
+hardware-unverified. To install the current release without ESP-IDF, use the
+hosted browser installer at <https://nightcinder.github.io/WMR_Bridge/>, which
+serves all three variants. The
+[GitHub release](https://github.com/nightcinder/WMR_Bridge/releases/latest)
+also carries the images and manifests. For a local build, serve `dist/` over
+HTTP; details are in [docs/FLASHING.md](docs/FLASHING.md).
 
 For one hand per bridge (or single-hand testing on a single board), add
 `--variant left` or `--variant right`; `--variant both` is the default and is
@@ -215,9 +218,9 @@ shows the hidraw nodes. Full setup, the wire protocol, security notes and the
 hardware test checklist are in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md), and the
 first-sitting bring-up procedure is in
 [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). The
-`wmr-pi-bridge-0.1.0.tar.gz` asset on the v0.1.0 GitHub release (not the
-current v0.2.0 release) contains the same `pi/` tree (Pi package 0.2.1 will
-follow PR #78).
+`wmr-pi-bridge-0.1.0.tar.gz` asset on the v0.1.0 GitHub release is still the
+only packaged Pi tarball; the `pi/` tree in this repository is package `0.2.1`.
+The current `v0.2.4` firmware release does not include a Pi tarball.
 
 ## BLE interface (summary)
 
