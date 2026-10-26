@@ -215,8 +215,9 @@ shows the hidraw nodes. Full setup, the wire protocol, security notes and the
 hardware test checklist are in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md), and the
 first-sitting bring-up procedure is in
 [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). The
-`wmr-pi-bridge-0.1.0.tar.gz` asset on the GitHub release contains the same
-`pi/` tree (Pi package 0.2.1 will follow PR #78).
+`wmr-pi-bridge-0.1.0.tar.gz` asset on the v0.1.0 GitHub release (not the
+current v0.2.0 release) contains the same `pi/` tree (Pi package 0.2.1 will
+follow PR #78).
 
 ## BLE interface (summary)
 
