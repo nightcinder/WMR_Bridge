@@ -163,6 +163,25 @@ static unsigned disc_pair_mask;         /* hands learned in this run, not connec
 static unsigned disc_pair_attempts[WMR_NUM_CONTROLLERS];
 static bool     disc_pair_wait;         /* the next timer tick is a pairing retry */
 static btstack_timer_source_t disc_timer;
+static bool disc_incoming_rejected;
+
+/* Discovery's connect phase pages the controllers itself. The ESP32 has two Classic ACL
+ * slots, and the 2026-10-26 field log shows the second outgoing pairing connect failing
+ * immediately with HCI 0x09 (connection limit exceeded) while the first hand streams. The
+ * other slot is most likely held by the other controller paging the bridge at the same
+ * time. Reject incoming Classic links only while that phase runs, so controllers cannot
+ * take the slot the pairing page needs; normal auto-reconnect resumes when the run ends. */
+static int disc_accept_classic_connection(bd_addr_t address, hci_link_type_t link_type){
+    (void) address;
+    if (link_type != HCI_LINK_TYPE_ACL) return 1;
+    if (disc_phase != DISC_CONNECT) return 1;
+    if (!disc_incoming_rejected){
+        disc_incoming_rejected = true;
+        WMR_LOGI("pair", "rejecting incoming controller links while discovery connects the "
+                 "hands (the radio has no spare ACL slot for pairing)");
+    }
+    return 0;
+}
 
 /* One remote name request at a time, for discovery or for an unknown incoming connection. */
 typedef enum { NAME_NONE = 0, NAME_FOR_DISCOVERY, NAME_FOR_INCOMING } name_purpose_t;
@@ -217,6 +236,7 @@ static const char *pair_status_text(uint8_t status){
         case 0x06: return "PIN or key missing (controller lost the bond)";
         case 0x07: return "memory full";
         case 0x08: return "connection timeout";
+        case 0x09: return "connection limit exceeded (no spare ACL slot)";
         case 0x0c: return "command disallowed";
         case 0x0d: return "connection rejected (no resources)";
         case 0x0e: return "connection rejected (security)";
@@ -652,6 +672,7 @@ void wmr_controller_init(wmr_report_sink_t sink){
 #endif
     hid_host_init(descriptor_storage, sizeof(descriptor_storage));
     hid_host_register_packet_handler(hid_packet_handler);
+    gap_register_classic_connection_filter(disc_accept_classic_connection);
 }
 
 int wmr_controller_hand_for_address(const uint8_t address[6]){
@@ -1131,6 +1152,7 @@ wmr_discovery_start_result_t wmr_controller_discover(void){
     disc_round = 0;
     disc_pair_mask = 0;
     disc_pair_wait = false;
+    disc_incoming_rejected = false;
     memset(disc_pair_attempts, 0, sizeof(disc_pair_attempts));
     disc_inquiry_round();
     return WMR_DISCOVERY_STARTED;

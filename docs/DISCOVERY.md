@@ -67,6 +67,11 @@ It looks only for hands that have no address; a known hand is never replaced.
    hand is found.
 3. **Connect, then store.** Each new hand is connected outwards, one at a time. A controller
    in pairing mode pairs on that connection (Secure Simple Pairing, auto-confirmed as before).
+   While this connect phase runs, incoming Classic links are rejected. The 2026-10-26 field
+   log (LEFT paired and streaming, RIGHT failed immediately on all three attempts with HCI
+   `0x09`, connection limit exceeded) points at the other slot being taken by a controller
+   paging the bridge at the same time, so the bridge's own page has none left. The rejection
+   lasts only for the connect phase, and normal auto-reconnect resumes when the run ends.
    An attempt that does not connect is retried with the same address
    (`WMR_CFG_PAIR_ATTEMPTS` = 3, `WMR_CFG_PAIR_RETRY_MS` = 1 s apart). The address is written
    to NVS only once a connection to it has succeeded, or when it already has a link key (for
@@ -184,8 +189,10 @@ Firmware and Pi hardware runs are unverified unless a run sheet proves otherwise
 ## Not done / open
 
 - Real names, pairing-mode behaviour and timings: not yet checked on hardware.
-- Whether a controller in pairing mode also tries to connect inwards (it would then take the
-  incoming path above, which handles it).
+- Whether a controller in pairing mode also tries to connect inwards: the 2026-10-26 log says
+  yes. Incoming links during the connect phase are now rejected (see step 3) so they cannot
+  take the ACL slot the pairing page needs; whether that is enough to pair two controllers in
+  one run is not yet checked on hardware.
 - The BTstack HID host keeps the incoming L2CAP connection pending while the name is
   requested; how long a controller waits before giving up is not known. A controller that
   gives up is handled (the late name answer is ignored).
