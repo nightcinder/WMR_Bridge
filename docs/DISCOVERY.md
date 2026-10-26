@@ -78,7 +78,10 @@ It looks only for hands that have no address; a known hand is never replaced.
 4. If a hand is still missing, another round runs, up to `WMR_CFG_DISCOVERY_ROUNDS` (6, about
    a minute of inquiry). Every round starts from a clean slate: devices seen earlier are
    looked for again and name requests that failed are repeated, while a hand already matched
-   keeps its first controller. When the rounds are exhausted and a hand still has no address,
+   keeps its first controller. A hand that acquires its address from an incoming connection
+   while the run is going (the auto-reconnect path) counts as settled: it ends the run instead
+   of another round, it is not logged as missing, and it does not use a retry burst. When the
+   rounds are exhausted and a hand still has no address,
    discovery waits `WMR_CFG_DISCOVERY_RETRY_MS` (15 s) and starts another burst, up to
    `WMR_CFG_DISCOVERY_RETRIES` (3) extra bursts, so a controller put in pairing mode after
    the first burst is found without rebooting. After that it stops and waits for `d`; the

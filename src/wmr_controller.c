@@ -723,6 +723,12 @@ static void disc_finish(void){
     btstack_run_loop_remove_timer(&disc_timer);
     bool missing = false;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
+        /* A hand that regained its address some other way during the run (an incoming
+         * connection sets WMR_ADDR_STORED) is not missing: disc.found[] stays false for it,
+         * but reporting it and scheduling a retry would invite a needless `F` that wipes a
+         * working bond. A hand actually dropped by disc_pair_failed() has source NONE here
+         * and is still reported. */
+        if (controllers[i].source != WMR_ADDR_NONE) continue;
         if (!wmr_discovery_hand_missing(&disc, (int) i)) continue;
         if (disc.found[i]){
             printf("Discovery: %s was found but did not pair after %u attempt(s)\n",
@@ -765,9 +771,17 @@ static void disc_inquiry_round(void){
     }
 }
 
-/* After a round's connections are done: another round if a hand is still missing. */
+/* After a round's connections are done: another round if a hand is still missing. A hand
+ * that acquired its address from an incoming connection during the round is not worth
+ * another inquiry even though disc.found[] stayed false, so it is skipped here as well as
+ * in disc_finish() (wmr_discovery_incomplete() itself only describes the discovery state). */
 static void disc_after_connects(void){
-    if (wmr_discovery_incomplete(&disc) && disc_round < WMR_CFG_DISCOVERY_ROUNDS){
+    bool missing = false;
+    for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
+        if (!disc.wanted[i] || disc.found[i]) continue;
+        if (controllers[i].source == WMR_ADDR_NONE) missing = true;
+    }
+    if (missing && disc_round < WMR_CFG_DISCOVERY_ROUNDS){
         disc_inquiry_round();
         return;
     }
