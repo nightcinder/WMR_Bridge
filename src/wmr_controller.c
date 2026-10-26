@@ -163,12 +163,22 @@ static unsigned disc_connect_mask;      /* hands found in this round, still to c
 static unsigned disc_pair_mask;         /* hands learned in this run, not connected yet */
 static unsigned disc_pair_attempts[WMR_NUM_CONTROLLERS];
 static bool     disc_pair_wait;         /* the next timer tick is a pairing retry */
+static uint32_t disc_pair_retry_ms;     /* delay before that retry (0x09 waits longer) */
 static btstack_timer_source_t disc_timer;
 static bool disc_incoming_rejected;
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
 static bool disc_reserve_radio;         /* hold connected hands back while a hand is missing */
 static bool disc_hold_logged;           /* the radio-reservation message is logged once per run */
-static controller_t *controller_for_address(const bd_addr_t address);
+static bool disc_release_wait;          /* an ACL drop is in flight before the inquiry starts */
+#endif
+
+#if WMR_CFG_DISCOVERY_RESERVE_RADIO
+/* An inquiry round with a hand still missing owns the Classic radio: the inquiry and its
+ * remote name requests must not share it with a streaming or self-connecting controller. */
+static bool disc_radio_reserved(void){
+    return wmr_discovery_round_holds_radio(disc_reserve_radio,
+              disc_phase == DISC_INQUIRY || disc_phase == DISC_NAMES);
+}
 #endif
 
 /* Discovery's connect phase pages the controllers itself. The ESP32 has two Classic ACL
@@ -181,15 +191,15 @@ static int disc_accept_classic_connection(bd_addr_t address, hci_link_type_t lin
     (void) address;
     if (link_type != HCI_LINK_TYPE_ACL) return 1;
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
-    /* Every inquiry round that still has a hand missing runs on a quiet radio: a controller
-     * that already has an address is held back until the round ends. An unknown address is
-     * accepted (a controller with no stored address may connect itself and be identified). */
-    if ((disc_phase == DISC_INQUIRY || disc_phase == DISC_NAMES) &&
-        wmr_discovery_reserve_radio(disc_reserve_radio, controller_for_address(address) != NULL)){
+    /* Every inquiry round that still has a hand missing runs on a quiet radio: every
+     * incoming link is refused until the round ends, known or not. A known hand is
+     * disconnected at the round start, so this keeps it from reopening the slot; an unknown
+     * controller is found by the inquiry instead and connected in the connect phase. */
+    if (disc_radio_reserved()){
         if (!disc_hold_logged){
             disc_hold_logged = true;
-            WMR_LOGI("pair", "refusing incoming links from paired controllers while an inquiry "
-                     "round has the radio; they reconnect afterwards");
+            WMR_LOGI("pair", "refusing incoming links while an inquiry round has the radio; "
+                     "controllers reconnect afterwards");
         }
         return 0;
     }
@@ -584,7 +594,7 @@ static void disc_timer_fire(btstack_timer_source_t *timer);
 static wmr_connect_result_t connect_hand_impl(unsigned hand);
 static void disc_connect_next(void);
 static void disc_connect_progress(void);
-static void disc_pair_failed(unsigned hand);
+static void disc_pair_failed(unsigned hand, uint8_t status);
 static void accept_incoming(controller_t *c, uint16_t cid);
 
 #if WMR_CFG_STAGGER_FIRST_HAND
@@ -862,10 +872,17 @@ static void disc_pair_summary(void){
     }
 }
 
+static void disc_arm_timer(uint32_t ms){
+    btstack_run_loop_remove_timer(&disc_timer);
+    btstack_run_loop_set_timer(&disc_timer, ms);
+    btstack_run_loop_add_timer(&disc_timer);
+}
+
 static void disc_finish(void){
     disc_phase = DISC_IDLE;
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
     disc_reserve_radio = false;
+    disc_release_wait = false;
 #endif
     btstack_run_loop_remove_timer(&disc_timer);
     bool missing = false;
@@ -899,25 +916,7 @@ static void disc_finish(void){
 #endif
 }
 
-static void disc_inquiry_round(void){
-    disc_round++;
-    wmr_discovery_begin_round(&disc);
-    disc_phase = DISC_INQUIRY;
-#if WMR_CFG_DISCOVERY_RESERVE_RADIO
-    /* A hand that connected in an earlier round would otherwise stream through this one
-     * and share the radio with the inquiry and its name requests, which is how the second
-     * controller stays unheard. Disconnect it for the round; it reconnects afterwards. */
-    if (disc_reserve_radio){
-        for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
-            controller_t *c = &controllers[h];
-            if (!WMR_BRIDGE_HAND_ENABLED(h) || !c->cid) continue;
-            WMR_LOGI("pair", "%s disconnects for inquiry round %u (radio reserved for pairing); "
-                     "it reconnects afterwards", c->name, disc_round);
-            hid_host_disconnect(c->cid);
-        }
-    }
-#endif
-    disc_round_results = disc.results;
+static void disc_inquiry_begin(void){
     char wanted[32] = "";
     size_t used = 0;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
@@ -941,6 +940,43 @@ static void disc_inquiry_round(void){
         disc_finish();
 #endif
     }
+}
+
+static void disc_inquiry_round(void){
+    disc_round++;
+    wmr_discovery_begin_round(&disc);
+    disc_phase = DISC_INQUIRY;
+    disc_round_results = disc.results;
+#if WMR_CFG_DISCOVERY_RESERVE_RADIO
+    /* A hand that connected in an earlier round would otherwise stream through this one
+     * and share the radio with the inquiry and its name requests, which is how the second
+     * controller stays unheard. Drop its ACL, not just the HID channel: the controller
+     * reopens the channel at once over the still-open link (2026-10-26 field log, 0.2.3),
+     * so the round would never be quiet. The inquiry starts once the link has gone; the
+     * connection filter refuses the controller meanwhile. It reconnects afterwards. */
+    bool dropped = false;
+    if (disc_reserve_radio){
+        for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
+            controller_t *c = &controllers[h];
+            if (!WMR_BRIDGE_HAND_ENABLED(h)) continue;
+            if (!c->cid && c->handle == HCI_CON_HANDLE_INVALID) continue;
+            WMR_LOGI("pair", "%s disconnects for inquiry round %u (radio reserved for pairing); "
+                     "it reconnects afterwards", c->name, disc_round);
+            if (c->handle != HCI_CON_HANDLE_INVALID){
+                dropped = true;
+                gap_disconnect(c->handle);
+            } else {
+                hid_host_disconnect(c->cid);
+            }
+        }
+    }
+    if (dropped){
+        disc_release_wait = true;
+        disc_arm_timer(WMR_CFG_DISCOVERY_RELEASE_MS);
+        return;
+    }
+#endif
+    disc_inquiry_begin();
 }
 
 /* After a round's connections are done: another round if a hand is still missing. A hand
@@ -999,7 +1035,7 @@ static void disc_connect_next(void){
         if (r == WMR_CONNECT_NOT_ENABLED || r == WMR_CONNECT_NO_ADDRESS) continue;
         /* connect_pending was false on entry and the request was refused outright: count
          * this as a failed pairing attempt instead of silently ending the round. */
-        disc_pair_failed(hand);
+        disc_pair_failed(hand, 0);
         if (disc_pair_mask & (1u << hand)){
             disc_connect_progress();                   /* retry after the pairing delay */
             return;
@@ -1010,6 +1046,13 @@ static void disc_connect_next(void){
 
 static void disc_timer_fire(btstack_timer_source_t *timer){
     (void)timer;
+#if WMR_CFG_DISCOVERY_RESERVE_RADIO
+    if (disc_phase == DISC_INQUIRY && disc_release_wait){
+        disc_release_wait = false;
+        disc_inquiry_begin();
+        return;
+    }
+#endif
     if (disc_phase == DISC_CONNECT){
         disc_connect_next();
         return;
@@ -1033,14 +1076,11 @@ static void disc_timer_fire(btstack_timer_source_t *timer){
 }
 
 /* Called whenever a connection attempt ends (descriptor, failure, close). A pairing failure
- * waits WMR_CFG_PAIR_RETRY_MS before the next attempt, so the controller can leave the
- * failed link; other progress uses the short delay as before. */
+ * waits its retry delay before the next attempt, so the controller can leave the failed
+ * link; other progress uses the short delay as before. */
 static void disc_connect_progress(void){
     if (disc_phase != DISC_CONNECT) return;
-    btstack_run_loop_remove_timer(&disc_timer);
-    btstack_run_loop_set_timer(&disc_timer,
-                               disc_pair_wait ? WMR_CFG_PAIR_RETRY_MS : 100);
-    btstack_run_loop_add_timer(&disc_timer);
+    disc_arm_timer(disc_pair_wait ? disc_pair_retry_ms : 100);
 }
 
 /* A connect attempt for a hand learned in this run did not end in a connection. Retry the
@@ -1048,15 +1088,21 @@ static void disc_connect_progress(void){
  * no link key (it never paired) and mark the hand unusable so this run ends and a later run
  * can look for it again. An address with a link key is kept: it is paired, just not
  * connected. */
-static void disc_pair_failed(unsigned hand){
+static void disc_pair_failed(unsigned hand, uint8_t status){
     if (disc_phase != DISC_CONNECT) return;
     if (!(disc_pair_mask & (1u << hand))) return;
     controller_t *c = &controllers[hand];
     disc_pair_attempts[hand]++;
+    disc_pair_retry_ms = (status == ERROR_CODE_CONNECTION_LIMIT_EXCEEDED)
+                         ? WMR_CFG_PAIR_BUSY_RETRY_MS : WMR_CFG_PAIR_RETRY_MS;
+    if (status == ERROR_CODE_CONNECTION_LIMIT_EXCEEDED){
+        WMR_LOGW("pair", "no free ACL slot for %s (HCI 0x09); waiting %u ms for the other "
+                 "link to go", c->name, (unsigned) WMR_CFG_PAIR_BUSY_RETRY_MS);
+    }
     if (disc_pair_attempts[hand] < (unsigned) WMR_CFG_PAIR_ATTEMPTS){
         WMR_LOGW("pair", "%s did not connect (attempt %u/%u); retrying %s in %u ms",
                  c->name, disc_pair_attempts[hand], (unsigned) WMR_CFG_PAIR_ATTEMPTS,
-                 bd_addr_to_str(c->address), (unsigned) WMR_CFG_PAIR_RETRY_MS);
+                 bd_addr_to_str(c->address), (unsigned) disc_pair_retry_ms);
         disc_connect_mask |= 1u << hand;
         disc_pair_wait = true;
         return;
@@ -1116,7 +1162,9 @@ static void disc_round_done(void){
                  missing);
     }
     disc_phase = DISC_CONNECT;
-    disc_connect_next();
+    /* Give the controller time to release the link it used for the last remote name
+     * request: a page sent during that window fails at once with HCI 0x09. */
+    disc_arm_timer(WMR_CFG_DISCOVERY_CONNECT_DELAY_MS);
 }
 
 static void disc_next_name(void){
@@ -1208,9 +1256,11 @@ wmr_discovery_start_result_t wmr_controller_discover(void){
     disc_round = 0;
     disc_pair_mask = 0;
     disc_pair_wait = false;
+    disc_pair_retry_ms = WMR_CFG_PAIR_RETRY_MS;
     disc_incoming_rejected = false;
     memset(disc_pair_attempts, 0, sizeof(disc_pair_attempts));
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
+    disc_release_wait = false;
     /* Discovery only starts while a hand is missing, so every round of this run gets a quiet
      * radio. A hand that connects in a later round is disconnected again at the start of the
      * next one (disc_inquiry_round): otherwise it streams through the remaining rounds and
@@ -1530,6 +1580,19 @@ static void handle_incoming_connection(const uint8_t *packet){
                  bd_addr_to_str(address), pair_status_text(status), status);
         return;
     }
+#if WMR_CFG_DISCOVERY_RESERVE_RADIO
+    /* A controller can reopen a HID channel over an ACL that is still up for a few
+     * milliseconds after the round-start disconnect. Keep it out for the whole round. */
+    if (disc_radio_reserved()){
+        if (!disc_hold_logged){
+            disc_hold_logged = true;
+            WMR_LOGI("pair", "refusing incoming links while an inquiry round has the radio; "
+                     "controllers reconnect afterwards");
+        }
+        hid_host_decline_connection(cid);
+        return;
+    }
+#endif
 
     controller_t *c = controller_for_address(address);
     if (c && !WMR_BRIDGE_HAND_ENABLED((unsigned) (c - controllers))){
@@ -1654,7 +1717,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             if (status != ERROR_CODE_SUCCESS){
                 WMR_LOGW("pair", "%s HID connection failed: %s (0x%02x)",
                          c->name, pair_status_text(status), status);
-                disc_pair_failed((unsigned) (c - controllers));
+                disc_pair_failed((unsigned) (c - controllers), status);
                 c->cid = 0;
                 c->connected = false;
                 connect_pending = false;
@@ -1744,7 +1807,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             c = controller_for_cid(cid);
             if (!c) break;
             c->psvr2_wake_pending = false;
-            if (!c->connected) disc_pair_failed((unsigned) (c - controllers));
+            if (!c->connected) disc_pair_failed((unsigned) (c - controllers), 0);
 #if WMR_CFG_STAGGER_FIRST_HAND
             if ((unsigned) (c - controllers) == STAGGER_FIRST_HAND && !stagger_released){
                 /* Start the 30 s again after the first hand reconnects. */

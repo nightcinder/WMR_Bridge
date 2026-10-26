@@ -72,7 +72,11 @@ It looks only for hands that have no address; a known hand is never replaced.
    `0x09`, connection limit exceeded) points at the other slot being taken by a controller
    paging the bridge at the same time, so the bridge's own page has none left. The rejection
    lasts only for the connect phase, and normal auto-reconnect resumes when the run ends.
-   An attempt that does not connect is retried with the same address
+   The connect phase starts `WMR_CFG_DISCOVERY_CONNECT_DELAY_MS` (1.5 s) after the last
+   name request: the controller keeps the link it used for that request for a moment, and
+   paging during that window fails at once with HCI `0x09`. An attempt that gets `0x09` waits
+   `WMR_CFG_PAIR_BUSY_RETRY_MS` (2.5 s) instead of the normal retry delay, so the other link
+   has time to go. Ordinary attempts are retried with the same address
    (`WMR_CFG_PAIR_ATTEMPTS` = 3, `WMR_CFG_PAIR_RETRY_MS` = 1 s apart). The address is written
    to NVS only once a connection to it has succeeded, or when it already has a link key (for
    example after `F` forgot the address but kept the bond). A hand whose attempts all fail is
@@ -102,12 +106,15 @@ reports on that hand during discovery (not measured). Discovery is bounded for t
 ### Radio reservation while a hand is missing
 
 Every inquiry round that still has a hand missing gets the Classic radio to itself
-(`WMR_CFG_DISCOVERY_RESERVE_RADIO` = 1). If a hand is connected, it is disconnected at the
-start of the round, and its incoming link is refused until that round ends; it reconnects by
-itself (or with `l`/`r`) afterwards. A controller whose address is still unknown is not
-refused, so it can still identify itself by connecting. Because a hand found in one round is
-not connected until after that round, the next round starts quiet again instead of streaming
-through it.
+(`WMR_CFG_DISCOVERY_RESERVE_RADIO` = 1). If a hand is connected, its ACL is dropped at the
+start of the round (`HID`-channel disconnect alone is not enough: the controller reopens the
+channel over the still-open ACL at once, as the 0.2.3 field log shows), and every incoming
+link is refused until that round ends, known address or not. The inquiry starts
+`WMR_CFG_DISCOVERY_RELEASE_MS` (400 ms) after the disconnect so the ACL has gone. The held
+hand reconnects by itself (or with `l`/`r`) afterwards. A controller whose address is still
+unknown can identify itself after the run, when incoming connections are accepted again.
+Because a hand found in one round is not connected until after that round,
+the next round starts quiet again instead of streaming through it.
 
 That is what the 2026-10-26 field logs show (firmware 0.2.2): the missing hand was found in
 the first round in all three runs where the other hand had no link yet, while 18 consecutive
@@ -116,7 +123,10 @@ A fresh-install run shows the same from the other side: RIGHT paired in round 2,
 not heard in rounds 3-6 while RIGHT streamed. The inquiry and the remote name requests share
 the radio with that streaming link. Without this, booting with the paired hand already on
 means the controller in pairing mode is never heard and only a reset (before the paired hand
-reconnects) pairs it, or only one controller pairs per discovery run.
+reconnects) pairs it, or only one controller pairs per discovery run. The 0.2.3 log adds the
+missing half: with only the HID channel dropped, the held hand reopened it 60 ms later and
+kept streaming through every "reserved" round, and the name request for the missing hand
+failed in all four rounds.
 
 Each round now logs what it heard: `inquiry round 2/6 heard 4 device response(s); RIGHT not
 found`, and a failed name request is logged with its address. That separates "the radio heard

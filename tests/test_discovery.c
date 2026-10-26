@@ -296,9 +296,9 @@ static void test_run_limits(void){
 
 static void test_radio_reservation(void){
     printf("Radio reservation for a discovery round with a hand missing\n");
-    CHECK(wmr_discovery_reserve_radio(true, true));      /* known hand held while a round runs */
-    CHECK(!wmr_discovery_reserve_radio(true, false));    /* unknown address may connect itself */
-    CHECK(!wmr_discovery_reserve_radio(false, true));    /* disabled by config */
+    CHECK(wmr_discovery_round_holds_radio(true, true));   /* quiet radio for the whole round */
+    CHECK(!wmr_discovery_round_holds_radio(true, false)); /* connect phase pages the hands */
+    CHECK(!wmr_discovery_round_holds_radio(false, true)); /* disabled by config */
 }
 
 static void test_incoming(void){
