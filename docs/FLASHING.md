@@ -159,29 +159,16 @@ The result is three manifests (`manifest.json`, `manifest-left.json`,
 The browser installer offers all three. If only one variant was built, the page
 marks the others as not included in that build.
 
-### PSVR2 support (opt-in)
+### PSVR2 support
 
-PSVR2 Sense controller support is **off by default** in standard release images
-(`WMR_CFG_PSVR2_SUPPORT=0`) to preserve DRAM headroom for WMR operation (~7.6 KB
-DRAM free vs ~3.5 KB with PSVR2 on).
+PSVR2 Sense controller support is **compiled into every image and searched for by
+default**, alongside WMR. `WMR_CFG_MAX_FRAME` is 80 bytes for every variant, which is the
+smallest value that carries both the 46-byte WMR report and the 79-byte PSVR2 report.
+There is nothing to enable at build time; the two hands search the same inquiry for both
+naming schemes.
 
-To build an image with PSVR2 support enabled, pass `-DWMR_CFG_PSVR2_SUPPORT=1`
-through `EXTRA_CFLAGS`. This automatically expands `WMR_CFG_MAX_FRAME` from 64
-to 80 bytes to accommodate the 79-byte `0x31` reports:
-
-```bash
-# Linux / macOS
-EXTRA_CFLAGS="-DWMR_CFG_PSVR2_SUPPORT=1" python3 tools/firmware/build.py --variant both --idf-export ~/esp/esp-idf/export.sh --out dist
-```
-
-```powershell
-# Windows PowerShell
-$env:EXTRA_CFLAGS = "-DWMR_CFG_PSVR2_SUPPORT=1"
-python tools\firmware\build.py --variant both
-Remove-Item Env:EXTRA_CFLAGS
-```
-
-See [docs/PSVR2.md](PSVR2.md) for framework details, open hardware questions, and build switches.
+See [docs/PSVR2.md](PSVR2.md) for the implemented path, open hardware questions, and the
+remaining `WMR_CFG_PSVR2_WAKE` diagnostic switch.
 
 ## Browser flasher (end users)
 

@@ -154,14 +154,10 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
  * Feature Report 0x05 over the control channel, and they do not speak Microsoft's FF13
  * config protocol; both are handled per controller model in wmr_controller.c. There is
  * no PSVR2 parser in the decoded stream yet, so FF12/FF14 count those frames as decode
- * errors. Scope and open questions: docs/PSVR2.md.
+ * errors. PSVR2 discovery, frames and wake are always compiled in; every hand is
+ * searched for both models by default. Scope and open questions: docs/PSVR2.md.
  *
- * Both switches are compile-time so PSVR2 support is opt-in to preserve DRAM headroom:
- *   -DWMR_CFG_PSVR2_SUPPORT=1   enable PSVR2 discovery, frames, and wake
- *   -DWMR_CFG_PSVR2_WAKE=0      match PSVR2 but send no wake request (diagnostics) */
-#ifndef WMR_CFG_PSVR2_SUPPORT
-#define WMR_CFG_PSVR2_SUPPORT      0
-#endif
+ *   -DWMR_CFG_PSVR2_WAKE=0      recognise PSVR2 but send no wake request (diagnostics) */
 #ifndef WMR_CFG_PSVR2_WAKE
 #define WMR_CFG_PSVR2_WAKE         1
 #endif
@@ -184,20 +180,15 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 /* ---- Frames, queue and wire format ------------------------------------- */
 
 /* Largest controller frame (A1 + report ID + payload) that is forwarded.
- * WMR frames are 46 bytes; PSVR2 input frames are up to 79. When PSVR2 support
- * is enabled, MAX_FRAME defaults to 80 (96 overflows dram0_0_seg; see
- * docs/PSVR2.md). When PSVR2 support is disabled (default), MAX_FRAME defaults
- * to 64 to preserve DRAM headroom for the WMR image. Longer frames are counted
- * as drops. */
+ * WMR frames are 46 bytes; PSVR2 input frames are up to 79. 80 is the smallest
+ * value that carries both and still fits the static queue in ESP32 DRAM (96
+ * overflows dram0_0_seg; see docs/PSVR2.md). Longer frames are counted as
+ * drops. */
 #ifndef WMR_CFG_MAX_FRAME
-#if WMR_CFG_PSVR2_SUPPORT
 #define WMR_CFG_MAX_FRAME          80
-#else
-#define WMR_CFG_MAX_FRAME          64
 #endif
-#endif
-#if WMR_CFG_PSVR2_SUPPORT && WMR_CFG_MAX_FRAME < WMR_PSVR2_INPUT_FRAME_MAX
-#error "WMR_CFG_PSVR2_SUPPORT needs WMR_CFG_MAX_FRAME >= WMR_PSVR2_INPUT_FRAME_MAX (79)"
+#if WMR_CFG_MAX_FRAME < WMR_PSVR2_INPUT_FRAME_MAX
+#error "WMR_CFG_MAX_FRAME must be >= WMR_PSVR2_INPUT_FRAME_MAX (79)"
 #endif
 
 /* Bounded FIFO shared by both hands, in whole frames. When full, new

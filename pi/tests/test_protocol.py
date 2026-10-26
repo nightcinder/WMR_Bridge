@@ -130,6 +130,19 @@ class RawStreamTests(unittest.TestCase):
         with self.assertRaises(ProtocolError):
             Frame(hand=0, sequence=1, data=b"")
 
+    def test_psvr2_79_byte_frame(self) -> None:
+        data = bytes([0x31]) + bytes((i * 3) & 0xFF for i in range(1, 79))
+        reassembler = Reassembler()
+        for capacity in (44, 244):
+            with self.subTest(capacity=capacity):
+                frame = Frame(hand=1, sequence=42, data=data)
+                out = None
+                for message in encode_raw_messages(frame, capacity):
+                    out = reassembler.push(message)
+                self.assertIsNotNone(out)
+                self.assertEqual(out.data, data)
+                self.assertEqual(reassembler.errors, 0)
+
 
 class DecodedRecordTests(unittest.TestCase):
     def test_pack_matches_golden(self) -> None:

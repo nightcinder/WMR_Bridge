@@ -79,6 +79,7 @@ then the payload. A WMR report is report ID `0x01` with 44 payload bytes, 46
 bytes in total. A PSVR2 Sense report is report ID `0x31` with up to 77 payload
 bytes, 79 bytes in total; the raw stream carries it unchanged, and the phone has
 to parse it (there is no FF12/FF14 decoder for it yet, see [PSVR2.md](PSVR2.md)).
+PSVR2 names are searched for by default alongside the WMR names from 0.2 onward.
 Nothing in either stream is decoded by the bridge, and the 12-byte fragment
 header is identical for both.
 
@@ -108,7 +109,7 @@ Example (RIGHT, sequence `0x01020304`, 46-byte frame, notification capacity
 ## Receiver rules (reference: `wmr_reassembler_push`)
 
 A fragment is **valid** if `magic == 0x52`, `hand < 2`, `chunk_len ==
-notification_length - 12`, `chunk_len > 0`, `0 < total_len <= 64`,
+notification_length - 12`, `chunk_len > 0`, `0 < total_len <= 80`,
 `offset < total_len` and `offset + chunk_len <= total_len`.
 
 For a valid fragment of hand *h*:
@@ -630,7 +631,7 @@ Today the HID report handler (`handle_report` in `wmr_controller.c`) classifies 
 report ID, applies the per-model rule below, and passes input reports to
 `wmr_transport_submit_report`, which increments the per-hand sequence, counts it as
 received, and (when subscribed) copies it into a frame of at most `WMR_CFG_MAX_FRAME`
-(64 by default, 80 when PSVR2 support is enabled). A config response is 78 bytes
+(80 bytes). A config response is 78 bytes
 including its report ID, plus the 1-byte HID
 transaction header, 79 bytes in all, so without the rule below it would consume a
 sequence number and be forwarded as an input frame.
@@ -652,8 +653,8 @@ streaming `0x01` input reports interleaved with the responses; the reader ignore
 non-matching IDs exactly as Monado's loop does, and input handling is unaffected. A
 PSVR2 hand never gets the FF13 read at all (the commands are Microsoft-specific), so
 its `0x02`/`0x06` reports, if any, are counted as "other".
-`WMR_CFG_MAX_FRAME` is 80 when PSVR2 support is on (64 by default) so a PSVR2 frame
-fits; config responses still never reach that queue. The sequence counter is not advanced
+`WMR_CFG_MAX_FRAME` is 80 so both a WMR and a PSVR2 frame fit; config responses
+still never reach that queue. The sequence counter is not advanced
 by config traffic, so FF11/FF12 sequence numbers stay contiguous.
 
 ## Cache

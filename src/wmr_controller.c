@@ -403,7 +403,7 @@ static void print_addresses(void){
 static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
                                uint8_t *packet, uint16_t size);
 
-#if WMR_CFG_PSVR2_SUPPORT && WMR_CFG_PSVR2_WAKE
+#if WMR_CFG_PSVR2_WAKE
 static btstack_timer_source_t psvr2_wake_timer;
 static void psvr2_wake_timer_fire(btstack_timer_source_t *timer);
 
@@ -539,7 +539,7 @@ void wmr_controller_init(wmr_report_sink_t sink){
         else printf("%s: compile-time address \"%s\" is not valid; ignored\n", c->name, c->override);
     }
     disc_timer.process = disc_timer_fire;
-#if WMR_CFG_PSVR2_SUPPORT && WMR_CFG_PSVR2_WAKE
+#if WMR_CFG_PSVR2_WAKE
     psvr2_wake_timer.process = psvr2_wake_timer_fire;
 #endif
 #if WMR_CFG_STAGGER_FIRST_HAND
@@ -1225,14 +1225,12 @@ static void handle_report(const uint8_t *packet){
      * config command responses go to the config reader only and never take a sequence
      * number or enter the sample stream. PSVR2 controllers have their own report ID and do
      * not speak the Microsoft config protocol, so only 0x31 input frames are forwarded. */
-#if WMR_CFG_PSVR2_SUPPORT
     if (c->model == WMR_MODEL_PSVR2){
         if (!wmr_psvr2_is_input_report(report, length)){
             c->other_reports++;
             return;
         }
     } else
-#endif
     {
         switch (wmr_cfg_classify(report, length)){
             case WMR_CFG_REPORT_CONFIG:
@@ -1311,7 +1309,6 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             printf("%s descriptor status=0x%02x (model %s)\n", c->name, status,
                    wmr_model_name(c->model));
             if (c->descriptor_available){
-#if WMR_CFG_PSVR2_SUPPORT
                 if (c->model == WMR_MODEL_PSVR2){
 #if WMR_CFG_PSVR2_WAKE
                     psvr2_wake_arm(c);
@@ -1319,7 +1316,6 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
                     printf("PSVR2: %s connected; wake request disabled in this build\n", c->name);
 #endif
                 } else
-#endif
                 {
                     wmr_cfgmgr_on_descriptor((unsigned) (c - controllers));
                 }

@@ -1,10 +1,9 @@
 # WMR_Bridge
 
 The default bridge is ESP32 firmware, built on [BTstack](https://github.com/bluekitchen/btstack), that
-connects to **two Windows Mixed Reality motion controllers** (or, optionally,
-**PlayStation VR2 Sense controllers**, opt-in and off by default with
-`WMR_CFG_PSVR2_SUPPORT=0`, enabled at build time with
-`-DWMR_CFG_PSVR2_SUPPORT=1` and never run on a controller) over Classic Bluetooth and forwards their
+connects to **two Windows Mixed Reality motion controllers** or
+**PlayStation VR2 Sense controllers** (searched for by default, never run on a
+controller) over Classic Bluetooth and forwards their
 input to an **Android phone** over a custom BLE GATT
 service, either as raw frames (FF11), as decoded IMU and input records (FF12), or as batches of those records (FF14). The
 phone side is the companion app [wmr-companion](https://github.com/nightcinder/wmr-companion);
@@ -50,18 +49,16 @@ implemented; see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 ## What it does
 
 - **Controllers.** Acts as the Bluetooth HID host for two controllers (LEFT and
-  RIGHT), found by their Bluetooth names (`Motion controller - Left` / `- Right`,
-  or, in an opt-in PSVR2 build, `PlayStation VR2 Sense Controller (L)` / `(R)`)
-  and remembered by address and
+  RIGHT), found by their Bluetooth names (`Motion controller - Left` / `- Right`
+  or `PlayStation VR2 Sense Controller (L)` / `(R)`) and remembered by address and
   model in NVS ([docs/DISCOVERY.md](docs/DISCOVERY.md); not yet
   run on hardware). Controllers reconnect to the
   ESP32 on their own (incoming connection); the console can also connect
   outwards. Each hand has its own connection state.
 - **Frames.** A WMR controller sends 46-byte input reports (`A1`, report ID `01`,
   44 payload bytes) at roughly 150-180 reports per second per hand in the one
-  run that was measured. In an opt-in PSVR2 build, a PSVR2 Sense controller
-  sends `A1 31` reports of up to 79 bytes; these are forwarded raw only for now
-  ([docs/PSVR2.md](docs/PSVR2.md)).
+  run that was measured. A PSVR2 Sense controller sends `A1 31` reports of up to
+  79 bytes; these are forwarded raw only for now ([docs/PSVR2.md](docs/PSVR2.md)).
 - **Queue.** Frames from both hands go into one bounded FIFO (256 frames). If it
   fills, the newest frame is dropped and counted.
 - **BLE.** The ESP32 advertises as `WMR Bridge`. When the phone subscribes to FF11,
@@ -230,7 +227,7 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 | What | Result |
 | --- | --- |
 | Firmware build (ESP-IDF v6.1, ESP32) | Passes, no warnings from this code |
-| Host unit tests of the protocol encoder, reassembler and queue (6112 checks default, 6127 with `-DWMR_CFG_PSVR2_SUPPORT=1`) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
+| Host unit tests of the protocol encoder, reassembler and queue (6127 checks) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
 | Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 113 tests) | Pass (host tests only; never run on a Raspberry Pi or with real controllers) |
 | Flash and boot on a real ESP32 | Passes; advertises; stats print every 5 s; no debug spam |
 | **One bench run, about 15 s, both controllers and a phone** (log pasted by the user, not instrumented on the phone) | Both controllers connected on their own; ATT MTU went 23 to 517; about 174/s (LEFT) and 154/s (RIGHT); sent = received for both hands; 0 drops, 0 offline, 0 purged, 0 send errors; queue back to 0 after a startup peak of 11; counter accounting added up exactly |
@@ -254,8 +251,8 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
   bring-up sessions where LEFT/RIGHT was not recorded.
 - **Regression comparison** against the original single-file version under identical conditions.
 - **PSVR2 Sense controllers.** The recognition, model storage, raw forwarding and HID wake
-  path are host-tested and build-tested but have never run on a PSVR2 controller. The
-  feature is opt-in and off by default (`WMR_CFG_PSVR2_SUPPORT=0`; [docs/PSVR2.md](docs/PSVR2.md)).
+  path are host-tested and build-tested but have never run on a PSVR2 controller. They are
+  searched for by default alongside WMR ([docs/PSVR2.md](docs/PSVR2.md)).
 - **Linux / Raspberry Pi Wi-Fi host bridge (`pi/`).** Second supported target, but
   host-tests-only until the Pi sitting runs ([docs/PI_BRIDGE.md](docs/PI_BRIDGE.md),
   [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md)).
@@ -274,8 +271,7 @@ Full list and details: [docs/TESTING.md](docs/TESTING.md).
 - Single phone, exactly two controllers. Controllers are recognised by name until their
   addresses are stored; a name can be spoofed (see [docs/DISCOVERY.md](docs/DISCOVERY.md)).
 - PSVR2 Sense controllers are **raw-only** today: FF12/FF14 have no PSVR2 decoder, FF13 is
-  not read, and the wake request is unverified and has never run on a controller (see [docs/PSVR2.md](docs/PSVR2.md)). PSVR2
-  support is **off by default** (`WMR_CFG_PSVR2_SUPPORT=0`; `-DWMR_CFG_PSVR2_SUPPORT=1` enables it). Each
+  not read, and the wake request is unverified and has never run on a controller (see [docs/PSVR2.md](docs/PSVR2.md)). Each
   hand's model is independent, but the decoded stream remains WMR-only.
 - `tx` means "accepted by the Bluetooth stack", not "received by the phone".
 

@@ -23,7 +23,7 @@ DEVICE_NAME = "WMR Bridge"
 FF11_UUID = "0000ff11-0000-1000-8000-00805f9b34fb"
 HEADER_SIZE = 12
 MAGIC = 0x52
-MAX_FRAME = 64
+MAX_FRAME = 80                 # WMR is 46 bytes, PSVR2 up to 79
 
 # (phase name, instructions). The analysis script keys on these names.
 PHASES = [
@@ -167,7 +167,7 @@ class CaptureFile:
 
         # comment / metadata
         @begin <phase> t=<seconds>
-        F <seconds> <hand> <sequence> <hex of the 46-byte frame>
+        F <seconds> <hand> <sequence> <hex of the frame (up to 79 bytes)>
         @end <phase> t=<seconds>
     """
 

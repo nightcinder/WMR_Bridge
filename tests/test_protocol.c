@@ -324,7 +324,6 @@ static void test_malformed_poisons_partial(void){
     CHECK(r.frames_complete[0] == 0);
 }
 
-#if WMR_CFG_PSVR2_SUPPORT
 static void test_psvr2_frame(void){
     printf("PSVR2-length frame: predicate, round-trip, decoder boundary\n");
     CHECK(WMR_CFG_MAX_FRAME >= WMR_PSVR2_INPUT_FRAME_MAX);
@@ -357,7 +356,6 @@ static void test_psvr2_frame(void){
     uint8_t record[WMR_DECODED_SIZE];
     CHECK(!wmr_decoded_from_frame(&f, record));
 }
-#endif
 
 static void test_queue(void){
     printf("queue\n");
@@ -527,9 +525,7 @@ int main(int argc, char **argv){
     test_duplicate_fragment();
     test_malformed();
     test_malformed_poisons_partial();
-#if WMR_CFG_PSVR2_SUPPORT
     test_psvr2_frame();
-#endif
     test_queue();
     test_decoded_golden();
     test_decoded_rejects();
