@@ -148,6 +148,7 @@ class HidrawManager:
         self._hand_of: dict[str, int] = {}
         self._path_of_hand: dict[int, str] = {}
         self._task: asyncio.Task[None] | None = None
+        self._no_controllers_warned = False
 
     def start(self) -> None:
         self._loop = asyncio.get_running_loop()
@@ -183,7 +184,12 @@ class HidrawManager:
             return False
         if hand is None:
             if device.name:
-                LOG.warning("%s (%s) is not a recognised WMR controller", path, device.name)
+                LOG.warning(
+                    "%s (%s) is not a recognised WMR controller; pass --left/--right "
+                    "with its address if it is one",
+                    path,
+                    device.name,
+                )
             else:
                 LOG.warning(
                     "%s has no WMR name; pass --left/--right to assign it", path
@@ -201,7 +207,7 @@ class HidrawManager:
         try:
             reader.open()
         except OSError as exc:
-            LOG.warning("cannot open %s: %s", path, exc)
+            LOG.warning("cannot open %s as %s: %s", path, "LEFT" if hand == 0 else "RIGHT", exc)
             return False
         assert self._loop is not None
         self._loop.add_reader(reader.fd, self._on_readable, hand, reader)
@@ -209,7 +215,13 @@ class HidrawManager:
         self._hand_of[path] = hand
         self._path_of_hand[hand] = path
         self.bridge.set_hand_connected(hand, True, device.uniq)
-        LOG.info("opened %s as %s (%s)", path, "LEFT" if hand == 0 else "RIGHT", device.uniq or "no address")
+        self._no_controllers_warned = False
+        LOG.info(
+            "%s connected: %s (%s)",
+            "LEFT" if hand == 0 else "RIGHT",
+            path,
+            device.uniq or "no address",
+        )
         return True
 
     def _close(self, path: str) -> None:
@@ -227,14 +239,27 @@ class HidrawManager:
                 del self._path_of_hand[hand]
                 self.bridge.set_hand_connected(hand, False)
         reader.close()
-        LOG.info("closed %s", path)
+        if hand is None:
+            LOG.info("closed %s", path)
+        else:
+            LOG.info(
+                "%s disconnected: %s after %d report(s)",
+                "LEFT" if hand == 0 else "RIGHT",
+                path,
+                self.bridge.hands[hand].reports,
+            )
 
     def _on_readable(self, hand: int, reader: HidrawReader) -> None:
         for _ in range(32):
             try:
                 raw = reader.read()
             except OSError as exc:
-                LOG.warning("read error on %s: %s", reader.path, exc)
+                LOG.warning(
+                    "read error on %s (%s): %s; check the controller and Bluetooth pairing",
+                    reader.path,
+                    "LEFT" if hand == 0 else "RIGHT",
+                    exc,
+                )
                 self._close(reader.path)
                 return
             if raw is None:
@@ -263,6 +288,12 @@ class HidrawManager:
                     self._open(device.path)
                 for path in self.explicit_paths:
                     self._open(path)
+                if not self._readers and not self._no_controllers_warned:
+                    LOG.warning(
+                        "no WMR controllers found; pair one in bluetoothctl, check "
+                        "`python3 -m wmr_bridge --list`, then leave it connected"
+                    )
+                    self._no_controllers_warned = True
             except Exception:  # keep the monitor alive; log the reason
                 LOG.exception("hidraw monitor iteration failed")
             await asyncio.sleep(self.poll_interval)

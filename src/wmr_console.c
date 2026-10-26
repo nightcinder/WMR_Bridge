@@ -49,6 +49,7 @@
 #include "wmr_diag.h"
 #include "wmr_linkdiag.h"
 #include "wmr_link.h"
+#include "wmr_log.h"
 #include "wmr_transport.h"
 
 static btstack_timer_source_t stats_timer;
@@ -83,8 +84,12 @@ void wmr_console_on_hci_event(uint8_t *packet, uint16_t size){
  * ESP-IDF in the application descriptor. FF16 serves the same string. */
 static void print_firmware_version(void){
     const esp_app_desc_t *app = esp_app_get_description();
-    printf("WMR Bridge firmware %s (ESP-IDF %s, built %s %s)\n",
-           app->version, app->idf_ver, app->date, app->time);
+    WMR_LOGI("boot", "WMR Bridge firmware %s (ESP-IDF %s, built %s %s)",
+             app->version, app->idf_ver, app->date, app->time);
+    const char *hands = WMR_CFG_BRIDGE_HANDS == 1 ? "LEFT only"
+                      : WMR_CFG_BRIDGE_HANDS == 2 ? "RIGHT only" : "LEFT and RIGHT";
+    WMR_LOGI("boot", "serving %s; BLE name \"%s\"; discovery autostart %s",
+             hands, WMR_CFG_BLE_NAME, WMR_CFG_DISCOVERY_AUTOSTART ? "on" : "off (press d)");
 }
 
 static void print_controllers(void){

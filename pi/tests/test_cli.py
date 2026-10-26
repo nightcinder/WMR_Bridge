@@ -118,10 +118,17 @@ class HandFilterTests(unittest.TestCase):
         with mock.patch.object(manager, "_device_for", return_value=left_device), \
              mock.patch("wmr_bridge.inputs.HidrawReader") as reader_cls:
             reader_cls.return_value.fd = 99
-            self.assertTrue(manager._open("/dev/hidraw1"))
+            with self.assertLogs("wmr_bridge.inputs", level="INFO") as logs:
+                self.assertTrue(manager._open("/dev/hidraw1"))
+            self.assertIn("LEFT connected: /dev/hidraw1", logs.output[0])
             reader_cls.assert_called_once_with("/dev/hidraw1")
             self.assertTrue(bridge.hands[0].connected)
             self.assertFalse(bridge.hands[1].connected)
+
+            with self.assertLogs("wmr_bridge.inputs", level="INFO") as logs:
+                manager._close("/dev/hidraw1")
+            self.assertIn("LEFT disconnected: /dev/hidraw1", logs.output[0])
+            self.assertFalse(bridge.hands[0].connected)
 
     def test_wmr_bridge_args_env_supports_hand_and_custom_flags(self) -> None:
         args = _parse_cli_args(["--bind", "0.0.0.0"], env_args="--hand left --batch-max 4")

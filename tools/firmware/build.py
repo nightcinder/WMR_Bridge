@@ -68,8 +68,11 @@ VARIANT_BUILD_DIRS = {
 COPY_IGNORE_NAMES = {
     ".git",
     ".fw-build",
+    ".paperclip",
+    ".paperclip-inbound",
     ".paperclip-repositories",
     ".claude",
+    ".tmp",
     ".vscode",
     "__pycache__",
     "captures",

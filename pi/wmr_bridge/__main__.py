@@ -212,7 +212,8 @@ async def _run(args: argparse.Namespace) -> int:
     await server.start()
 
     addresses = _local_addresses() if args.bind in ("0.0.0.0", "::") else [args.bind]
-    LOG.info("listening on %s", ", ".join(f"ws://{address}:{server.port}/wmr" for address in addresses))
+    LOG.info("wmr_bridge %s listening on %s", __version__,
+             ", ".join(f"ws://{address}:{server.port}/wmr" for address in addresses))
     if token:
         LOG.info("authentication: shared token required")
     elif _is_loopback_bind(args.bind):
@@ -280,7 +281,8 @@ async def _run(args: argparse.Namespace) -> int:
                 await asyncio.sleep(5.0)
                 status = bridge.status()
                 hands = " ".join(
-                    f"{item['hand'].lower()}={item['reports']}({item['delivered']})"
+                    f"{item['hand'].lower()}={'up' if item['connected'] else 'down'}"
+                    f"/{item['reports']}({item['delivered']})"
                     for item in status["hands"]
                 )
                 LOG.info(

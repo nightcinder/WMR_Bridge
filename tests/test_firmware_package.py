@@ -191,6 +191,9 @@ def test_sync_source_into_btstack_layout():
               "the nested .git directory is not copied")
         check(not os.path.exists(os.path.join(app, ".paperclip-repositories")),
               "the companion repository checkout is not copied")
+        for transient in (".paperclip", ".paperclip-inbound", ".tmp"):
+            check(transient in build.COPY_IGNORE_NAMES,
+                  f"transient workspace directory {transient} is not copied")
         with open(cmake, "rb") as fh:
             installed = fh.read()
         with open(os.path.join(app, "integration", "main-CMakeLists.txt"), "rb") as fh:

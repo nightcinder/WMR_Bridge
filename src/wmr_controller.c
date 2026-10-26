@@ -47,6 +47,7 @@
 #include "wmr_controller.h"
 #include "wmr_discovery.h"
 #include "wmr_linkdiag.h"
+#include "wmr_log.h"
 #include "wmr_psvr2.h"
 
 typedef struct {
@@ -57,6 +58,7 @@ typedef struct {
     wmr_model_t model;                /* WMR until discovery/name says otherwise */
     bool        address_confirmed;    /* the address has been connected to (or has a link key) */
     uint16_t    cid;                  /* 0 = no connection tracked */
+    hci_con_handle_t handle;          /* HCI_CON_HANDLE_INVALID = no Classic link tracked */
     bool        connected;
     bool        descriptor_available;
     bool        psvr2_wake_pending;   /* wake timer armed for this hand */
@@ -76,8 +78,10 @@ typedef struct {
 #endif
 
 static controller_t controllers[WMR_NUM_CONTROLLERS] = {
-    [WMR_HAND_LEFT]  = {.name = "LEFT",  .override = LEFT_OVERRIDE},
-    [WMR_HAND_RIGHT] = {.name = "RIGHT", .override = RIGHT_OVERRIDE},
+    [WMR_HAND_LEFT]  = {.name = "LEFT",  .override = LEFT_OVERRIDE,
+                        .handle = HCI_CON_HANDLE_INVALID},
+    [WMR_HAND_RIGHT] = {.name = "RIGHT", .override = RIGHT_OVERRIDE,
+                        .handle = HCI_CON_HANDLE_INVALID},
 };
 
 static uint8_t descriptor_storage[WMR_CFG_HID_DESCRIPTOR_STORAGE];
@@ -184,8 +188,76 @@ static controller_t *controller_for_address(const bd_addr_t address){
     return NULL;
 }
 
+static controller_t *controller_for_handle(hci_con_handle_t handle){
+    /* 0x0000 is a valid ACL handle, so only 0xFFFF means "not tracked". */
+    if (handle == HCI_CON_HANDLE_INVALID) return NULL;
+    for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
+        if (controllers[i].handle == handle) return &controllers[i];
+    }
+    return NULL;
+}
+
+static const char *hand_or_handle(hci_con_handle_t handle, char *buffer, size_t length){
+    controller_t *c = controller_for_handle(handle);
+    if (c) return c->name;
+    snprintf(buffer, length, "link 0x%04x", handle);
+    return buffer;
+}
+
+/* The status codes a pairing session normally ends with, in words. Unknown
+ * values keep the hex code; the full table is the Bluetooth Core spec. */
+static const char *pair_status_text(uint8_t status){
+    switch (status){
+        case ERROR_CODE_SUCCESS: return "success";
+        case 0x01: return "unknown HCI command";
+        case 0x02: return "no connection";
+        case 0x03: return "hardware failure";
+        case 0x04: return "page timeout";
+        case 0x05: return "authentication failed (link key mismatch)";
+        case 0x06: return "PIN or key missing (controller lost the bond)";
+        case 0x07: return "memory full";
+        case 0x08: return "connection timeout";
+        case 0x0c: return "command disallowed";
+        case 0x0d: return "connection rejected (no resources)";
+        case 0x0e: return "connection rejected (security)";
+        case 0x13: return "remote user terminated";
+        case 0x16: return "terminated by local host";
+        case 0x22: return "LMP response timeout";
+        case 0x28: return "instant passed";
+        case 0x3b: return "unacceptable connection parameters";
+        case 0x3d: return "MIC failure (link key mismatch)";
+        case 0x3e: return "connection failed to be established";
+        default:   return "see HCI error code";
+    }
+}
+
+/* HID handshake results (HIDP) are not HCI error codes: GET_REPORT and
+ * SET_PROTOCOL responses use the values below, so keep them out of
+ * pair_status_text(). */
+static const char *hid_handshake_text(uint8_t status){
+    switch (status){
+        case HID_HANDSHAKE_PARAM_TYPE_SUCCESSFUL: return "success";
+        case HID_HANDSHAKE_PARAM_TYPE_NOT_READY: return "not ready";
+        case HID_HANDSHAKE_PARAM_TYPE_ERR_INVALID_REPORT_ID: return "invalid report ID";
+        case HID_HANDSHAKE_PARAM_TYPE_ERR_UNSUPPORTED_REQUEST: return "unsupported request";
+        case HID_HANDSHAKE_PARAM_TYPE_ERR_INVALID_PARAMETER: return "invalid parameter";
+        case HID_HANDSHAKE_PARAM_TYPE_ERR_UNKNOWN: return "unknown HID handshake error";
+        case HID_HANDSHAKE_PARAM_TYPE_ERR_FATAL: return "fatal HID error";
+        case HID_HANDSHAKE_PARAM_TYPE_ERR_DISCONNECT: return "link closed";
+        default: return "see HID handshake code";
+    }
+}
+
 static void known_hands(bool known[WMR_NUM_CONTROLLERS]){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++) known[i] = controllers[i].source != WMR_ADDR_NONE;
+}
+
+static const char *role_name(hci_role_t role){
+    switch (role){
+        case HCI_ROLE_MASTER: return "master";
+        case HCI_ROLE_SLAVE:  return "slave";
+        default:              return "invalid";
+    }
 }
 
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
@@ -200,16 +272,6 @@ static uint16_t classic_policy_settings(void){
     return LM_LINK_POLICY_ENABLE_ROLE_SWITCH;
 #endif
 }
-
-#if WMR_CFG_CLASSIC_FORCE_MASTER
-static const char *role_name(hci_role_t role){
-    switch (role){
-        case HCI_ROLE_MASTER: return "master";
-        case HCI_ROLE_SLAVE:  return "slave";
-        default:              return "invalid";
-    }
-}
-#endif
 
 static const char *policy_state_name(policy_state_t state){
     switch (state){
@@ -247,8 +309,8 @@ static void policy_pump(void){
                 policy_arm();
                 return;
             }
-            printf("POLICY: %s %s command timed out; retrying\n",
-                   controllers[hand].name, policy_state_name(p->state));
+            WMR_LOGW("link", "%s %s command timed out; retrying",
+                     controllers[hand].name, policy_state_name(p->state));
             p->awaiting = false;
         }
         if (!hci_can_send_command_packet_now()){
@@ -266,8 +328,8 @@ static void policy_pump(void){
             p->awaiting = true;
             p->sent_ms = now;
         } else {
-            printf("POLICY: %s %s command not sent: 0x%02x\n",
-                   controllers[hand].name, policy_state_name(p->state), status);
+            WMR_LOGW("link", "%s %s command not sent: 0x%02x",
+                     controllers[hand].name, policy_state_name(p->state), status);
         }
         policy_arm();
         return;
@@ -283,11 +345,11 @@ static void policy_timer_fire(btstack_timer_source_t *timer){
 
 /* Log the read-back in the same terms as the run sheet: sniff and role-switch bits. */
 static void policy_log_read(const char *name, uint8_t status, uint16_t handle, uint16_t settings){
-    printf("POLICY: %s read handle=0x%04x settings=0x%04x status=0x%02x "
-           "sniff=%s role_switch=%s\n",
-           name, handle, settings, status,
-           (settings & LM_LINK_POLICY_ENABLE_SNIFF_MODE) ? "on" : "clear",
-           (settings & LM_LINK_POLICY_ENABLE_ROLE_SWITCH) ? "on" : "off");
+    WMR_LOGI("link", "%s link policy: handle=0x%04x settings=0x%04x status=0x%02x "
+             "sniff=%s role_switch=%s",
+             name, handle, settings, status,
+             (settings & LM_LINK_POLICY_ENABLE_SNIFF_MODE) ? "on" : "clear",
+             (settings & LM_LINK_POLICY_ENABLE_ROLE_SWITCH) ? "on" : "off");
 }
 
 static void policy_on_command_complete(const uint8_t *packet){
@@ -301,8 +363,8 @@ static void policy_on_command_complete(const uint8_t *packet){
         link_policy_t *p = &policies[hand];
         if (!p->awaiting || p->handle != handle) continue;
         if (opcode == HCI_OPCODE_HCI_WRITE_LINK_POLICY_SETTINGS && p->state == POLICY_WRITE){
-            printf("POLICY: %s write handle=0x%04x settings=0x%04x status=0x%02x\n",
-                   controllers[hand].name, handle, classic_policy_settings(), status);
+            WMR_LOGI("link", "%s link policy write: handle=0x%04x settings=0x%04x status=0x%02x",
+                     controllers[hand].name, handle, classic_policy_settings(), status);
             p->state = POLICY_READ;
         } else if (opcode == HCI_OPCODE_HCI_READ_LINK_POLICY_SETTINGS && p->state == POLICY_READ){
             uint16_t settings = little_endian_read_16(ret, 3);
@@ -335,11 +397,12 @@ static void policy_link_opened(unsigned hand, hci_con_handle_t handle, const bd_
     p->state = POLICY_WRITE;
 #if WMR_CFG_CLASSIC_FORCE_MASTER
     hci_role_t role = gap_get_role(handle);
-    printf("ROLE: %s handle=0x%04x role=%s\n", controllers[hand].name, handle, role_name(role));
+    WMR_LOGI("link", "%s link opened: handle=0x%04x role=%s",
+             controllers[hand].name, handle, role_name(role));
     if (role == HCI_ROLE_SLAVE){
         uint8_t status = gap_request_role(address, HCI_ROLE_MASTER);
-        printf("ROLE: %s switch to master requested: status=0x%02x\n",
-               controllers[hand].name, status);
+        WMR_LOGI("link", "%s master role requested: status=%s (0x%02x)",
+                 controllers[hand].name, pair_status_text(status), status);
     }
 #else
     (void) address;
@@ -372,7 +435,7 @@ static void addresses_save(void){
     const btstack_tlv_t *tlv = NULL;
     void *context = NULL;
     btstack_tlv_get_instance(&tlv, &context);
-    if (!tlv){ printf("Addresses: no TLV storage, not saved\n"); return; }
+    if (!tlv){ WMR_LOGW("boot", "no NVS storage; discovered addresses will not persist"); return; }
     wmr_addr_record_t r;
     memset(&r, 0, sizeof(r));
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
@@ -390,22 +453,24 @@ static void addresses_save(void){
     if (rc == 0){
         memcpy(saved_addr_record, value, sizeof(value));
         saved_addr_record_known = true;
+        WMR_LOGI("pair", "stored addresses saved (LEFT %s, RIGHT %s)",
+                 r.valid[0] ? "yes" : "-", r.valid[1] ? "yes" : "-");
+    } else {
+        WMR_LOGE("pair", "could not save stored addresses (rc=%d)", rc);
     }
-    printf("Addresses saved (LEFT %s, RIGHT %s)%s\n",
-           r.valid[0] ? "stored" : "-", r.valid[1] ? "stored" : "-", rc == 0 ? "" : " FAILED");
 }
 
 static void addresses_load(void){
     const btstack_tlv_t *tlv = NULL;
     void *context = NULL;
     btstack_tlv_get_instance(&tlv, &context);
-    if (!tlv){ printf("Addresses: no TLV storage\n"); return; }
+    if (!tlv){ WMR_LOGW("boot", "no NVS storage; using discovery every boot"); return; }
     uint8_t value[WMR_ADDR_RECORD_SIZE];
     int size = tlv->get_tag(context, WMR_CFG_ADDR_TLV_TAG, value, sizeof(value));
     if (size <= 0) return;
     wmr_addr_record_t r;
     if (!wmr_addr_record_unpack(value, (size_t) size, &r)){
-        printf("Addresses: stored record is not valid (size %d); ignored\n", size);
+        WMR_LOGW("boot", "stored address record is invalid (size %d); ignored", size);
         return;
     }
     memcpy(saved_addr_record, value, sizeof(value));
@@ -422,10 +487,10 @@ static void addresses_load(void){
 static void print_addresses(void){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         const controller_t *c = &controllers[i];
-        printf("%s address: %s (%s, model %s)\n", c->name,
-               c->source == WMR_ADDR_NONE ? "unknown" : bd_addr_to_str(c->address),
-               wmr_controller_address_source_name(c->source),
-               c->source == WMR_ADDR_NONE ? "unknown" : wmr_model_name(c->model));
+        WMR_LOGI("boot", "%s address: %s (%s, model %s)", c->name,
+                 c->source == WMR_ADDR_NONE ? "unknown" : bd_addr_to_str(c->address),
+                 wmr_controller_address_source_name(c->source),
+                 c->source == WMR_ADDR_NONE ? "unknown" : wmr_model_name(c->model));
     }
 }
 
@@ -446,10 +511,10 @@ static void psvr2_wake_timer_fire(btstack_timer_source_t *timer);
 static void psvr2_wake(controller_t *c){
     uint8_t status = hid_host_send_get_report(c->cid, HID_REPORT_TYPE_FEATURE,
                                              WMR_PSVR2_WAKE_FEATURE_ID);
-    printf("PSVR2: %s wake: GET_REPORT feature 0x%02x status=0x%02x\n",
-           c->name, WMR_PSVR2_WAKE_FEATURE_ID, status);
+    WMR_LOGI("psvr2", "%s wake request: GET_REPORT feature 0x%02x, status=%s (0x%02x)",
+             c->name, WMR_PSVR2_WAKE_FEATURE_ID, pair_status_text(status), status);
     if (status != ERROR_CODE_SUCCESS)
-        printf("PSVR2: %s wake request refused; reconnect (l/r) to try again\n", c->name);
+        WMR_LOGW("psvr2", "%s wake request refused; reconnect (l/r) to try again", c->name);
 }
 
 static void psvr2_wake_arm(controller_t *c){
@@ -460,8 +525,8 @@ static void psvr2_wake_arm(controller_t *c){
     btstack_run_loop_remove_timer(&psvr2_wake_timer);
     btstack_run_loop_set_timer(&psvr2_wake_timer, WMR_CFG_PSVR2_WAKE_DELAY_MS);
     btstack_run_loop_add_timer(&psvr2_wake_timer);
-    printf("PSVR2: %s wake scheduled in %u ms\n", c->name,
-           (unsigned) WMR_CFG_PSVR2_WAKE_DELAY_MS);
+    WMR_LOGI("psvr2", "%s wake scheduled in %u ms",
+             c->name, (unsigned) WMR_CFG_PSVR2_WAKE_DELAY_MS);
 }
 
 static void psvr2_wake_timer_fire(btstack_timer_source_t *timer){
@@ -490,8 +555,9 @@ static bool stagger_gate_open(void){
     if ((uint32_t) (btstack_run_loop_get_time_ms() - stagger_first_report_ms) < STAGGER_GATE_MS)
         return false;
     stagger_released = true;
-    printf("STAGGER: %s released at t=%lu\n", controllers[STAGGER_SECOND_HAND].name,
-           (unsigned long) (btstack_run_loop_get_time_ms() / 1000u));
+    WMR_LOGI("stagger", "%s released at t=%lu s",
+             controllers[STAGGER_SECOND_HAND].name,
+             (unsigned long) (btstack_run_loop_get_time_ms() / 1000u));
     return true;
 }
 
@@ -511,9 +577,9 @@ static void stagger_arm(void){
 static void stagger_hold(unsigned hand){
     if (!stagger_hold_logged[hand]){
         stagger_hold_logged[hand] = true;
-        printf("STAGGER: %s held, first=%s reports=%lu\n",
-               controllers[hand].name, controllers[STAGGER_FIRST_HAND].name,
-               controllers[STAGGER_FIRST_HAND].reports);
+        WMR_LOGI("stagger", "%s held until %s reports; first hand reports=%lu",
+                 controllers[hand].name, controllers[STAGGER_FIRST_HAND].name,
+                 controllers[STAGGER_FIRST_HAND].reports);
     }
     stagger_arm();
 }
@@ -569,7 +635,10 @@ void wmr_controller_init(wmr_report_sink_t sink){
         if (wmr_addr_parse(c->override, c->address)){
             c->source = WMR_ADDR_OVERRIDE;
             c->address_confirmed = true;    /* never stored, never dropped */
-        } else printf("%s: compile-time address \"%s\" is not valid; ignored\n", c->name, c->override);
+        } else {
+            WMR_LOGW("boot", "%s compile-time address \"%s\" is not valid; ignored",
+                     c->name, c->override);
+        }
     }
     disc_timer.process = disc_timer_fire;
 #if WMR_CFG_PSVR2_WAKE
@@ -629,17 +698,23 @@ void wmr_controller_get_status(unsigned hand, wmr_controller_status_t *out){
 static wmr_connect_result_t connect_hand_impl(unsigned hand){
     controller_t *c = &controllers[hand];
     if (!WMR_BRIDGE_HAND_ENABLED(hand)){
-        printf("%s is not served by this build (WMR_CFG_BRIDGE_HANDS=%d)\n",
-               c->name, WMR_CFG_BRIDGE_HANDS);
+        WMR_LOGW("pair", "%s is not served by this build (WMR_CFG_BRIDGE_HANDS=%d)",
+                 c->name, WMR_CFG_BRIDGE_HANDS);
         return WMR_CONNECT_NOT_ENABLED;
     }
-    if (!stack_ready){ printf("Stack not ready\n"); return WMR_CONNECT_BUSY; }
+    if (!stack_ready){ WMR_LOGW("pair", "Bluetooth stack is not ready"); return WMR_CONNECT_BUSY; }
     if (c->source == WMR_ADDR_NONE){
-        printf("%s address unknown: put it in pairing mode and press d (discovery)\n", c->name);
+        WMR_LOGW("pair", "%s has no address; put it in pairing mode and press d", c->name);
         return WMR_CONNECT_NO_ADDRESS;
     }
-    if (connect_pending){ printf("Another connection/discovery is pending\n"); return WMR_CONNECT_BUSY; }
-    if (c->cid){ printf("%s already open or opening, cid=%u\n", c->name, c->cid); return WMR_CONNECT_BUSY; }
+    if (connect_pending){
+        WMR_LOGW("pair", "another connection or discovery is still in progress");
+        return WMR_CONNECT_BUSY;
+    }
+    if (c->cid){
+        WMR_LOGW("pair", "%s is already open or opening (cid=%u)", c->name, c->cid);
+        return WMR_CONNECT_BUSY;
+    }
 #if WMR_CFG_STAGGER_FIRST_HAND
     if (stagger_blocks(hand)){
         stagger_hold(hand);
@@ -652,10 +727,11 @@ static wmr_connect_result_t connect_hand_impl(unsigned hand){
     c->other_reports = 0;
     c->descriptor_available = false;
     connect_pending = true;
-    printf("Connecting %s %s\n", c->name, bd_addr_to_str(c->address));
+    WMR_LOGI("pair", "connecting %s at %s", c->name, bd_addr_to_str(c->address));
     uint8_t status = hid_host_connect(c->address, HID_PROTOCOL_MODE_REPORT, &c->cid);
     if (status != ERROR_CODE_SUCCESS){
-        printf("%s connect request failed: 0x%02x\n", c->name, status);
+        WMR_LOGW("pair", "%s connect request failed: %s (0x%02x)",
+                 c->name, pair_status_text(status), status);
         c->cid = 0;
         connect_pending = false;
         return WMR_CONNECT_BUSY;
@@ -666,7 +742,7 @@ static wmr_connect_result_t connect_hand_impl(unsigned hand){
 wmr_connect_result_t wmr_controller_connect(unsigned hand){
     if (hand >= WMR_NUM_CONTROLLERS) return WMR_CONNECT_BUSY;
     if (disc_phase == DISC_INQUIRY || disc_phase == DISC_NAMES){
-        printf("Discovery is running; wait for it to finish\n");
+        WMR_LOGW("pair", "discovery is running; wait for it to finish before connecting");
         return WMR_CONNECT_BUSY;
     }
     return connect_hand_impl(hand);
@@ -675,7 +751,10 @@ wmr_connect_result_t wmr_controller_connect(unsigned hand){
 wmr_disconnect_result_t wmr_controller_disconnect(unsigned hand){
     if (hand >= WMR_NUM_CONTROLLERS) return WMR_DISCONNECT_NOT_CONNECTED;
     controller_t *c = &controllers[hand];
-    if (!c->cid){ printf("%s has no connection\n", c->name); return WMR_DISCONNECT_NOT_CONNECTED; }
+    if (!c->cid){
+        WMR_LOGW("pair", "%s has no connection to close", c->name);
+        return WMR_DISCONNECT_NOT_CONNECTED;
+    }
     hid_host_disconnect(c->cid);
     return WMR_DISCONNECT_OK;
 }
@@ -702,8 +781,8 @@ static unsigned disc_retries;
 
 static void disc_schedule_retry(void){
     if (disc_retries >= WMR_CFG_DISCOVERY_RETRIES){
-        printf("Discovery: giving up after %u extra burst(s); put the controller in pairing mode and press d\n",
-               disc_retries);
+        WMR_LOGW("pair", "discovery gave up after %u retry burst(s); put the controller "
+                 "in pairing mode and press d", disc_retries);
         disc_retries = 0;      /* the next `d` starts with a fresh budget */
         disc_phase = DISC_IDLE;
         btstack_run_loop_remove_timer(&disc_timer);
@@ -714,9 +793,33 @@ static void disc_schedule_retry(void){
     btstack_run_loop_remove_timer(&disc_timer);
     btstack_run_loop_set_timer(&disc_timer, WMR_CFG_DISCOVERY_RETRY_MS);
     btstack_run_loop_add_timer(&disc_timer);
-    printf("Discovery: trying again in %u s\n", (unsigned) (WMR_CFG_DISCOVERY_RETRY_MS / 1000));
+    WMR_LOGI("pair", "discovery will try again in %u s",
+             (unsigned) (WMR_CFG_DISCOVERY_RETRY_MS / 1000));
 }
 #endif
+
+/* One line per served hand after a discovery run, so the serial monitor says
+ * what is ready and what still needs a person. */
+static void disc_pair_summary(void){
+    for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
+        if (!WMR_BRIDGE_HAND_ENABLED(i)) continue;
+        const controller_t *c = &controllers[i];
+        if (c->connected && c->descriptor_available){
+            WMR_LOGI("pair", "%s ready at %s (%s)", c->name, bd_addr_to_str(c->address),
+                     wmr_model_name(c->model));
+        } else if (c->connected){
+            WMR_LOGI("pair", "%s link is up at %s; waiting for the HID descriptor",
+                     c->name, bd_addr_to_str(c->address));
+        } else if (c->source != WMR_ADDR_NONE){
+            WMR_LOGI("pair", "%s is known at %s (%s) but not connected; press %c to reconnect",
+                     c->name, bd_addr_to_str(c->address),
+                     wmr_controller_address_source_name(c->source),
+                     i == WMR_HAND_LEFT ? 'l' : 'r');
+        } else {
+            WMR_LOGW("pair", "%s is not paired; put it in pairing mode and press d", c->name);
+        }
+    }
+}
 
 static void disc_finish(void){
     disc_phase = DISC_IDLE;
@@ -731,14 +834,16 @@ static void disc_finish(void){
         if (controllers[i].source != WMR_ADDR_NONE) continue;
         if (!wmr_discovery_hand_missing(&disc, (int) i)) continue;
         if (disc.found[i]){
-            printf("Discovery: %s was found but did not pair after %u attempt(s)\n",
-                   controllers[i].name, disc_pair_attempts[i]);
+            WMR_LOGW("pair", "%s was found but did not pair after %u attempt(s)",
+                     controllers[i].name, disc_pair_attempts[i]);
         } else {
-            printf("Discovery: %s not found after %u round(s)\n", controllers[i].name, disc_round);
+            WMR_LOGW("pair", "%s was not found after %u inquiry round(s)",
+                     controllers[i].name, disc_round);
         }
         missing = true;
     }
-    printf("Discovery finished\n");
+    WMR_LOGI("pair", "discovery finished");
+    disc_pair_summary();
 #if WMR_CFG_DISCOVERY_AUTOSTART
     if (missing){
         disc_schedule_retry();
@@ -754,15 +859,23 @@ static void disc_inquiry_round(void){
     disc_round++;
     wmr_discovery_begin_round(&disc);
     disc_phase = DISC_INQUIRY;
-    printf("Discovery round %u/%u: inquiry for %u x 1.28 s, looking for", disc_round,
-           WMR_CFG_DISCOVERY_ROUNDS, WMR_CFG_DISCOVERY_INQUIRY_LEN);
+    char wanted[32] = "";
+    size_t used = 0;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
-        if (disc.wanted[i] && !disc.found[i]) printf(" %s", controllers[i].name);
+        if (!disc.wanted[i] || disc.found[i]) continue;
+        int written = snprintf(wanted + used, sizeof(wanted) - used, "%s%s",
+                               used ? "/" : "", controllers[i].name);
+        if (written < 0) break;
+        used += (size_t) written;
+        if (used >= sizeof(wanted)) break;
     }
-    printf(" (put it in pairing mode)\n");
+    WMR_LOGI("pair", "inquiry round %u/%u (%u x 1.28 s), looking for %s; "
+             "put the controller in pairing mode",
+             disc_round, WMR_CFG_DISCOVERY_ROUNDS, WMR_CFG_DISCOVERY_INQUIRY_LEN,
+             wanted[0] ? wanted : "no hand");
     int rc = gap_inquiry_start(WMR_CFG_DISCOVERY_INQUIRY_LEN);
     if (rc != 0){
-        printf("Discovery: inquiry could not start (%d)\n", rc);
+        WMR_LOGW("pair", "inquiry could not start (rc=%d)", rc);
 #if WMR_CFG_DISCOVERY_AUTOSTART
         disc_schedule_retry();
 #else
@@ -882,22 +995,22 @@ static void disc_pair_failed(unsigned hand){
     controller_t *c = &controllers[hand];
     disc_pair_attempts[hand]++;
     if (disc_pair_attempts[hand] < (unsigned) WMR_CFG_PAIR_ATTEMPTS){
-        printf("Pairing: %s attempt %u/%u did not connect; retrying %s in %u ms\n",
-               c->name, disc_pair_attempts[hand], (unsigned) WMR_CFG_PAIR_ATTEMPTS,
-               bd_addr_to_str(c->address), (unsigned) WMR_CFG_PAIR_RETRY_MS);
+        WMR_LOGW("pair", "%s did not connect (attempt %u/%u); retrying %s in %u ms",
+                 c->name, disc_pair_attempts[hand], (unsigned) WMR_CFG_PAIR_ATTEMPTS,
+                 bd_addr_to_str(c->address), (unsigned) WMR_CFG_PAIR_RETRY_MS);
         disc_connect_mask |= 1u << hand;
         disc_pair_wait = true;
         return;
     }
     disc_pair_mask &= ~(1u << hand);
     if (address_is_confirmed(c)){
-        printf("Pairing: %s did not connect after %u attempt(s); address kept\n",
-               c->name, disc_pair_attempts[hand]);
+        WMR_LOGW("pair", "%s did not connect after %u attempt(s); stored address kept",
+                 c->name, disc_pair_attempts[hand]);
         addresses_save();
         return;
     }
-    printf("Pairing: %s did not pair after %u attempt(s); address forgotten. Put it in pairing "
-           "mode and press d\n", c->name, disc_pair_attempts[hand]);
+    WMR_LOGE("pair", "%s did not pair after %u attempt(s); address forgotten. "
+             "Put it in pairing mode and press d", c->name, disc_pair_attempts[hand]);
     c->source = WMR_ADDR_NONE;
     c->model = WMR_MODEL_WMR;
     memset(c->address, 0, sizeof(bd_addr_t));
@@ -952,20 +1065,21 @@ static void disc_log(wmr_disc_result_t r, const bd_addr_t address, const char *h
         case WMR_DISC_MATCHED:
             for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
                 if (disc.found[i] && memcmp(disc.found_address[i], address, 6) == 0)
-                    printf("Discovery: %s is %s (%s, model %s)\n", controllers[i].name,
-                           bd_addr_to_str(address), how, wmr_model_name(disc.found_model[i]));
+                    WMR_LOGI("pair", "found %s at %s (%s, model %s)", controllers[i].name,
+                             bd_addr_to_str(address), how, wmr_model_name(disc.found_model[i]));
             }
             break;
         case WMR_DISC_DUPLICATE:
-            printf("Discovery: another device with a controller name at %s ignored; the first one found is used. "
-                   "Keep only one controller of each hand in pairing mode\n", bd_addr_to_str(address));
+            WMR_LOGW("pair", "another controller at %s has the same name; using the first one. "
+                     "Keep only one controller of each hand in pairing mode", bd_addr_to_str(address));
             break;
         case WMR_DISC_ALREADY_KNOWN:
-            printf("Discovery: %s has a controller name but that hand already has an address; ignored\n",
-                   bd_addr_to_str(address));
+            WMR_LOGW("pair", "%s has a controller name but that hand already has an address; ignored",
+                     bd_addr_to_str(address));
             break;
         case WMR_DISC_QUEUE_FULL:
-            printf("Discovery: too many unnamed devices in range; %s skipped\n", bd_addr_to_str(address));
+            WMR_LOGW("pair", "too many unnamed devices in range; skipped %s",
+                     bd_addr_to_str(address));
             break;
         default:
             break;
@@ -989,10 +1103,16 @@ static void disc_on_inquiry_result(const uint8_t *packet){
 }
 
 wmr_discovery_start_result_t wmr_controller_discover(void){
-    if (!stack_ready){ printf("Stack not ready\n"); return WMR_DISCOVERY_BUSY; }
-    if (disc_phase != DISC_IDLE){ printf("Discovery is already running\n"); return WMR_DISCOVERY_BUSY; }
+    if (!stack_ready){
+        WMR_LOGW("pair", "Bluetooth stack is not ready; cannot start discovery");
+        return WMR_DISCOVERY_BUSY;
+    }
+    if (disc_phase != DISC_IDLE){
+        WMR_LOGI("pair", "discovery is already running");
+        return WMR_DISCOVERY_BUSY;
+    }
     if (connect_pending || name_purpose != NAME_NONE){
-        printf("A connection attempt is pending; try discovery again when it ends\n");
+        WMR_LOGW("pair", "a connection attempt is pending; try discovery again when it ends");
         return WMR_DISCOVERY_BUSY;
     }
     bool known[WMR_NUM_CONTROLLERS];
@@ -1000,9 +1120,11 @@ wmr_discovery_start_result_t wmr_controller_discover(void){
     wmr_discovery_start(&disc, known);
     if (!wmr_discovery_incomplete(&disc)){
         if (WMR_CFG_BRIDGE_HANDS == 0){
-            printf("Both controller addresses are known; nothing to discover (F forgets the stored ones)\n");
+            WMR_LOGI("pair", "LEFT and RIGHT addresses are known; nothing to discover "
+                     "(F forgets the stored addresses)");
         } else {
-            printf("The selected controller address is known; nothing to discover (F forgets the stored one)\n");
+            WMR_LOGI("pair", "the served controller address is known; nothing to discover "
+                     "(F forgets the stored address)");
         }
         return WMR_DISCOVERY_NOTHING_TO_DO;
     }
@@ -1043,8 +1165,8 @@ void wmr_controller_print_addresses(void){
 static void accept_incoming(controller_t *c, uint16_t cid){
     unsigned hand = (unsigned) (c - controllers);
     if (!WMR_BRIDGE_HAND_ENABLED(hand)){
-        printf("%s is excluded by this build (WMR_CFG_BRIDGE_HANDS=%d); declining\n",
-               c->name, WMR_CFG_BRIDGE_HANDS);
+        WMR_LOGW("pair", "%s is not served by this build (WMR_CFG_BRIDGE_HANDS=%d); declining",
+                 c->name, WMR_CFG_BRIDGE_HANDS);
         hid_host_decline_connection(cid);
         return;
     }
@@ -1067,7 +1189,8 @@ static void accept_incoming(controller_t *c, uint16_t cid){
     c->reports = 0;
     c->other_reports = 0;
     connect_pending = true;
-    printf("%s accepting incoming HID connection, cid=%u\n", c->name, cid);
+    WMR_LOGI("pair", "%s accepts the controller's incoming HID connection (cid=%u)",
+             c->name, cid);
     hid_host_accept_connection(cid, HID_PROTOCOL_MODE_REPORT);
 }
 
@@ -1081,18 +1204,20 @@ static void incoming_resolved(const uint8_t *name, size_t len){
     known_hands(known);
     int hand = wmr_discovery_incoming_hand(known, name, len);
     if (hand < 0){
-        printf("Incoming %s: name \"%.*s\" is not a controller without an address; declining\n",
-               bd_addr_to_str(name_address), name ? (int) len : 0, name ? (const char *) name : "");
+        WMR_LOGW("pair", "incoming %s has name \"%.*s\", which is not a controller "
+                 "without an address; declining", bd_addr_to_str(name_address),
+                 name ? (int) len : 0, name ? (const char *) name : "");
         hid_host_decline_connection(cid);
         return;
     }
     controller_t *c = &controllers[hand];
     memcpy(c->address, name_address, 6);
+    c->handle = incoming_con_handle;
     c->model = wmr_discovery_model_for_name(name, len);
     c->source = WMR_ADDR_STORED;
     c->address_confirmed = true;    /* the ACL came up from this address: it is usable */
-    printf("Incoming: %s is %s (by name, model %s)\n", c->name, bd_addr_to_str(c->address),
-           wmr_model_name(c->model));
+    WMR_LOGI("pair", "incoming controller identified as %s at %s (model %s)",
+             c->name, bd_addr_to_str(c->address), wmr_model_name(c->model));
     addresses_save();
     /* The ACL link came up before the address was known, so link diagnostics missed it. */
     wmr_linkdiag_link_identified((unsigned) hand, incoming_con_handle);
@@ -1130,21 +1255,13 @@ static void on_remote_name(const uint8_t *packet){
  * role is whatever BTstack currently has cached for the handle: at connection
  * complete that can still be unknown, and the role-change event fills it in.
  * Logging only: no policy, role request or link state is changed here. */
-static const char *role_name(hci_role_t role){
-    switch (role){
-        case HCI_ROLE_MASTER: return "master";
-        case HCI_ROLE_SLAVE:  return "slave";
-        default:              return "unknown";
-    }
-}
-
 static void log_link_role(const bd_addr_t address, uint8_t status, hci_role_t role,
                           const char *event){
     int hand = wmr_controller_hand_for_address(address);
-    printf("%s role: address=%s role=%s status=0x%02x event=%s t_ms=%lu\n",
-           hand >= 0 ? wmr_controller_name((unsigned) hand) : "?",
-           bd_addr_to_str(address), role_name(role), status, event,
-           (unsigned long) btstack_run_loop_get_time_ms());
+    WMR_LOGI("link", "%s role: address=%s role=%s status=0x%02x event=%s t_ms=%lu",
+             hand >= 0 ? wmr_controller_name((unsigned) hand) : "?",
+             bd_addr_to_str(address), role_name(role), status, event,
+             (unsigned long) btstack_run_loop_get_time_ms());
 }
 
 /* ---- HCI events --------------------------------------------------------- */
@@ -1182,8 +1299,17 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
             hci_event_connection_complete_get_bd_addr(packet, address);
             hci_con_handle_t handle = hci_event_connection_complete_get_connection_handle(packet);
             hci_role_t role = HCI_ROLE_INVALID;
+            controller_t *c = controller_for_address(address);
             if (status == ERROR_CODE_SUCCESS){
                 role = gap_get_role(handle);
+                if (c) c->handle = handle;
+                WMR_LOGI("pair", "%s link up at %s (handle=0x%04x, role=%s)",
+                         c ? c->name : "unknown controller", bd_addr_to_str(address),
+                         handle, role_name(role));
+            } else {
+                WMR_LOGW("pair", "link to %s failed: %s (0x%02x)",
+                         c ? c->name : bd_addr_to_str(address),
+                         pair_status_text(status), status);
             }
             log_link_role(address, status, role, "conn_complete");
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
@@ -1206,47 +1332,78 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
             log_link_role(address, status, role, "role_change");
 #if WMR_CFG_CLASSIC_FORCE_MASTER
             int hand = wmr_controller_hand_for_address(address);
-            printf("ROLE: %s change status=0x%02x role=%s\n",
-                   hand >= 0 ? controllers[hand].name : bd_addr_to_str(address),
-                   status,
-                   role_name(role));
+            WMR_LOGI("link", "%s link role changed to %s (status=%s)",
+                     hand >= 0 ? controllers[hand].name : bd_addr_to_str(address),
+                     role_name(role), pair_status_text(status));
 #endif
             break;
         }
         case HCI_EVENT_AUTHENTICATION_COMPLETE: {
             uint8_t status = hci_event_authentication_complete_get_status(packet);
             hci_con_handle_t handle = hci_event_authentication_complete_get_connection_handle(packet);
-            printf("HCI AUTH_COMPLETE: handle=0x%04x status=0x%02x\n", handle, status);
+            char who[24];
+            const char *name = hand_or_handle(handle, who, sizeof(who));
+            if (status == ERROR_CODE_SUCCESS){
+                WMR_LOGI("pair", "%s authenticated", name);
+            } else {
+                WMR_LOGW("pair", "%s authentication failed: %s (0x%02x); "
+                         "remove the controller's old pairing or press k/K for a bond reset",
+                         name, pair_status_text(status), status);
+            }
             break;
         }
         case HCI_EVENT_ENCRYPTION_CHANGE: {
             uint8_t status = hci_event_encryption_change_get_status(packet);
             hci_con_handle_t handle = hci_event_encryption_change_get_connection_handle(packet);
             uint8_t enabled = hci_event_encryption_change_get_encryption_enabled(packet);
-            printf("HCI ENCRYPTION_CHANGE: handle=0x%04x status=0x%02x enabled=%u\n", handle, status, enabled);
+            char who[24];
+            const char *name = hand_or_handle(handle, who, sizeof(who));
+            if (status == ERROR_CODE_SUCCESS && enabled){
+                WMR_LOGI("pair", "%s link encrypted", name);
+            } else if (status != ERROR_CODE_SUCCESS){
+                WMR_LOGW("pair", "%s encryption failed: %s (0x%02x)",
+                         name, pair_status_text(status), status);
+            } else {
+                WMR_LOGW("pair", "%s encryption was disabled", name);
+            }
             break;
         }
         case HCI_EVENT_SIMPLE_PAIRING_COMPLETE: {
             uint8_t status = hci_event_simple_pairing_complete_get_status(packet);
             hci_event_simple_pairing_complete_get_bd_addr(packet, address);
-            printf("HCI SIMPLE_PAIRING_COMPLETE: address=%s status=0x%02x\n", bd_addr_to_str(address), status);
+            controller_t *c = controller_for_address(address);
+            if (status == ERROR_CODE_SUCCESS){
+                WMR_LOGI("pair", "%s pairing completed at %s",
+                         c ? c->name : "controller", bd_addr_to_str(address));
+            } else {
+                WMR_LOGW("pair", "%s pairing failed at %s: %s (0x%02x)",
+                         c ? c->name : "controller", bd_addr_to_str(address),
+                         pair_status_text(status), status);
+            }
             break;
         }
         case HCI_EVENT_PIN_CODE_REQUEST:
             hci_event_pin_code_request_get_bd_addr(packet, address);
-            printf("Legacy PIN request rejected\n");
+            WMR_LOGW("pair", "legacy PIN request from %s rejected; use SSP pairing",
+                     bd_addr_to_str(address));
             gap_pin_code_negative(address);
             break;
         case HCI_EVENT_USER_CONFIRMATION_REQUEST:
             hci_event_user_confirmation_request_get_bd_addr(packet, address);
-            printf("Accepting SSP confirmation from %s (test setup)\n", bd_addr_to_str(address));
+            WMR_LOGI("pair", "accepting SSP confirmation from %s (test setup)",
+                     bd_addr_to_str(address));
             gap_ssp_confirmation_response(address);
             break;
         case HCI_EVENT_DISCONNECTION_COMPLETE: {
             hci_con_handle_t handle = hci_event_disconnection_complete_get_connection_handle(packet);
             uint8_t status = hci_event_disconnection_complete_get_status(packet);
             uint8_t reason = hci_event_disconnection_complete_get_reason(packet);
-            printf("HCI DISCONN_COMPLETE: handle=0x%04x status=0x%02x reason=0x%02x\n", handle, status, reason);
+            char who[24];
+            const char *name = hand_or_handle(handle, who, sizeof(who));
+            WMR_LOGI("pair", "%s link closed: %s (status=0x%02x reason=0x%02x)",
+                     name, pair_status_text(reason), status, reason);
+            controller_t *c = controller_for_handle(handle);
+            if (c) c->handle = HCI_CON_HANDLE_INVALID;
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
             policy_link_down(handle);
 #endif
@@ -1275,16 +1432,20 @@ static void handle_incoming_connection(const uint8_t *packet){
     uint8_t  status = hid_subevent_incoming_connection_get_status(packet);
     bd_addr_t address;
     hid_subevent_incoming_connection_get_address(packet, address);
-    printf("Incoming HID: address=%s cid=%u status=0x%02x\n",
-           bd_addr_to_str(address), cid, status);
-    if (status != ERROR_CODE_SUCCESS) return;
+    WMR_LOGI("pair", "incoming HID connection from %s (cid=%u)",
+             bd_addr_to_str(address), cid);
+    if (status != ERROR_CODE_SUCCESS){
+        WMR_LOGW("pair", "incoming HID connection from %s failed: %s (0x%02x)",
+                 bd_addr_to_str(address), pair_status_text(status), status);
+        return;
+    }
 
     controller_t *c = controller_for_address(address);
     if (c && !WMR_BRIDGE_HAND_ENABLED((unsigned) (c - controllers))){
         /* A known address of the excluded hand (for example stored by an earlier
          * both-hands build) is treated exactly like a device that is not a controller. */
-        printf("Incoming %s is excluded by this build (WMR_CFG_BRIDGE_HANDS=%d); declining\n",
-               c->name, WMR_CFG_BRIDGE_HANDS);
+        WMR_LOGW("pair", "incoming %s is not served by this build (WMR_CFG_BRIDGE_HANDS=%d); declining",
+                 c->name, WMR_CFG_BRIDGE_HANDS);
         hid_host_decline_connection(cid);
         return;
     }
@@ -1292,12 +1453,14 @@ static void handle_incoming_connection(const uint8_t *packet){
         bool known[WMR_NUM_CONTROLLERS];
         known_hands(known);
         if (known[0] && known[1]){
-            printf("Incoming device is not LEFT or RIGHT; declining\n");
+            WMR_LOGW("pair", "incoming device %s is not LEFT or RIGHT; declining",
+                     bd_addr_to_str(address));
             hid_host_decline_connection(cid);
             return;
         }
         if (name_purpose != NAME_NONE || connect_pending){
-            printf("Incoming unknown device while another check or connection is pending; declining\n");
+            WMR_LOGW("pair", "incoming unknown device %s arrived while another check "
+                     "or connection is pending; declining", bd_addr_to_str(address));
             hid_host_decline_connection(cid);
             return;
         }
@@ -1306,7 +1469,8 @@ static void handle_incoming_connection(const uint8_t *packet){
         incoming_cid = cid;
         incoming_con_handle = hid_subevent_incoming_connection_get_handle(packet);
         connect_pending = true;
-        printf("Incoming unknown device: requesting its name before accepting\n");
+        WMR_LOGI("pair", "incoming unknown device %s; asking its name before accepting",
+                 bd_addr_to_str(address));
         if (gap_remote_name_request(name_address, 1, 0) != 0){
             name_purpose = NAME_NONE;
             incoming_resolved(NULL, 0);
@@ -1314,10 +1478,11 @@ static void handle_incoming_connection(const uint8_t *packet){
         return;
     }
     if (c->cid != 0 && c->cid != cid){
-        printf("%s already tracked with cid=%u; not accepting different cid=%u\n",
-               c->name, c->cid, cid);
+        WMR_LOGW("pair", "%s is already tracked with cid=%u; not accepting cid=%u",
+                 c->name, c->cid, cid);
         return;
     }
+    c->handle = hid_subevent_incoming_connection_get_handle(packet);
     accept_incoming(c, cid);
 }
 static void handle_report(const uint8_t *packet){
@@ -1361,8 +1526,9 @@ static void handle_report(const uint8_t *packet){
             stagger_first_report_ms = btstack_run_loop_get_time_ms();
         }
 #endif
-        printf("%s first report: cid=%u frame_len=%u descriptor=%s\n",
-               c->name, cid, length, c->descriptor_available ? "available" : "not available");
+        WMR_LOGI("pair", "%s is streaming: first input report (cid=%u, %u bytes, "
+                 "descriptor %s)", c->name, cid, length,
+                 c->descriptor_available ? "available" : "not available");
 #if WMR_CFG_REPORT_HEXDUMP
         printf_hexdump(report, length);
 #endif
@@ -1387,14 +1553,16 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             status = hid_subevent_connection_opened_get_status(packet);
             c = controller_for_cid(cid);
             if (!c){
-                printf("Untracked HID open cid=%u status=0x%02x\n", cid, status);
+                WMR_LOGW("pair", "untracked HID open (cid=%u): %s (0x%02x)",
+                         cid, pair_status_text(status), status);
                 if (status == ERROR_CODE_SUCCESS) hid_host_disconnect(cid);
                 connect_pending = false;
                 break;
             }
             c->psvr2_wake_pending = false;
             if (status != ERROR_CODE_SUCCESS){
-                printf("%s connection failed: 0x%02x\n", c->name, status);
+                WMR_LOGW("pair", "%s HID connection failed: %s (0x%02x)",
+                         c->name, pair_status_text(status), status);
                 disc_pair_failed((unsigned) (c - controllers));
                 c->cid = 0;
                 c->connected = false;
@@ -1410,7 +1578,8 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             disc_pair_mask &= ~(1u << (unsigned) (c - controllers));
             disc_pair_attempts[(unsigned) (c - controllers)] = 0;
             if (c->source == WMR_ADDR_STORED) addresses_save();
-            printf("%s connected, cid=%u; waiting for descriptor\n", c->name, cid);
+            WMR_LOGI("pair", "%s HID channel open (cid=%u); waiting for the descriptor",
+                     c->name, cid);
             break;
         case HID_SUBEVENT_DESCRIPTOR_AVAILABLE:
             cid = hid_subevent_descriptor_available_get_hid_cid(packet);
@@ -1418,14 +1587,20 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             c = controller_for_cid(cid);
             if (!c) break;
             c->descriptor_available = status == ERROR_CODE_SUCCESS;
-            printf("%s descriptor status=0x%02x (model %s)\n", c->name, status,
-                   wmr_model_name(c->model));
+            if (c->descriptor_available){
+                WMR_LOGI("pair", "%s ready: HID descriptor received (model %s)",
+                         c->name, wmr_model_name(c->model));
+            } else {
+                WMR_LOGW("pair", "%s HID descriptor failed: %s (0x%02x)",
+                         c->name, pair_status_text(status), status);
+            }
             if (c->descriptor_available){
                 if (c->model == WMR_MODEL_PSVR2){
 #if WMR_CFG_PSVR2_WAKE
                     psvr2_wake_arm(c);
 #else
-                    printf("PSVR2: %s connected; wake request disabled in this build\n", c->name);
+                    WMR_LOGI("pair", "PSVR2 %s connected; wake request disabled in this build",
+                             c->name);
 #endif
                 } else
                 {
@@ -1440,10 +1615,10 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             status = hid_subevent_get_report_response_get_handshake_status(packet);
             c = controller_for_cid(cid);
             uint16_t report_len = hid_subevent_get_report_response_get_report_len(packet);
-            printf("%s GET_REPORT response: status=0x%02x len=%u\n",
-                   c ? c->name : "?", status, report_len);
+            WMR_LOGI("ff13", "%s GET_REPORT response: %s (0x%02x), %u bytes",
+                     c ? c->name : "?", hid_handshake_text(status), status, report_len);
 #if WMR_CFG_REPORT_HEXDUMP
-            if (status == ERROR_CODE_SUCCESS && report_len)
+            if (status == HID_HANDSHAKE_PARAM_TYPE_SUCCESSFUL && report_len)
                 printf_hexdump(hid_subevent_get_report_response_get_report(packet), report_len);
 #endif
             break;
@@ -1453,7 +1628,12 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             break;
         case HID_SUBEVENT_SET_PROTOCOL_RESPONSE:
             status = hid_subevent_set_protocol_response_get_handshake_status(packet);
-            printf("SET_PROTOCOL handshake status=0x%02x\n", status);
+            if (status == HID_HANDSHAKE_PARAM_TYPE_SUCCESSFUL){
+                WMR_LOGI("pair", "HID report protocol selected");
+            } else {
+                WMR_LOGW("pair", "HID SET_PROTOCOL failed: %s (0x%02x)",
+                         hid_handshake_text(status), status);
+            }
             break;
         case HID_SUBEVENT_CONNECTION_CLOSED:
             cid = hid_subevent_connection_closed_get_hid_cid(packet);
@@ -1483,11 +1663,12 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             if ((unsigned) (c - controllers) == STAGGER_SECOND_HAND)
                 stagger_hold_logged[STAGGER_SECOND_HAND] = false;
 #endif
-            printf("%s disconnected, total reports=%lu other_reports=%lu\n", c->name, c->reports,
-                   c->other_reports);
+            WMR_LOGI("pair", "%s disconnected after %lu input report(s) and %lu other report(s)",
+                     c->name, c->reports, c->other_reports);
             wmr_cfgmgr_on_closed((unsigned) (c - controllers));
             if (!c->connected || !c->descriptor_available) connect_pending = false;
             c->cid = 0;
+            c->handle = HCI_CON_HANDLE_INVALID;
             c->connected = false;
             c->descriptor_available = false;
             disc_connect_progress();

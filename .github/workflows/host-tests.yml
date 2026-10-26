@@ -25,10 +25,14 @@ jobs:
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_cfg.c src/wmr_cfg.c -o test_cfg
       - name: Build discovery tests
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_discovery.c src/wmr_discovery.c -o test_discovery
+      - name: Build log-format tests
+        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_log.c -o test_log
       - name: Build link-diagnostics tests
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_diag.c src/wmr_devloss.c src/wmr_diag.c -o test_diag
       - name: Build status-LED tests
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_status_led.c src/wmr_status_led.c -o test_status_led
+      - name: Build FF17 controller-status tests
+        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_ctrl.c src/wmr_ctrl.c -o test_ctrl
       - name: Run protocol and queue tests
         run: ./test_protocol samples/controller_frames.txt
       - name: Run decoder tests
@@ -45,6 +49,8 @@ jobs:
         run: ./test_cfg
       - name: Run discovery tests
         run: ./test_discovery
+      - name: Run log-format tests
+        run: ./test_log
       - name: Run discovery tests with hand variants
         run: |
           gcc -std=c99 -Wall -Wextra -Wconversion -Werror -DWMR_CFG_BRIDGE_HANDS=1 -Isrc tests/test_discovery.c src/wmr_discovery.c -o test_discovery_h1 && ./test_discovery_h1
@@ -53,6 +59,8 @@ jobs:
         run: ./test_diag
       - name: Run status-LED tests
         run: ./test_status_led
+      - name: Run FF17 controller-status tests
+        run: ./test_ctrl
       - name: Run capture/analysis script tests
         run: python3 tests/test_analyze_capture.py
       - name: Run Linux/Pi host-bridge tests
