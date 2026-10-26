@@ -158,12 +158,17 @@ typedef enum {
 static wmr_discovery_t disc;
 static disc_phase_t disc_phase;
 static unsigned disc_round;
+static unsigned disc_round_results;     /* disc.results at the start of this round */
 static unsigned disc_connect_mask;      /* hands found in this round, still to connect */
 static unsigned disc_pair_mask;         /* hands learned in this run, not connected yet */
 static unsigned disc_pair_attempts[WMR_NUM_CONTROLLERS];
 static bool     disc_pair_wait;         /* the next timer tick is a pairing retry */
 static btstack_timer_source_t disc_timer;
 static bool disc_incoming_rejected;
+#if WMR_CFG_DISCOVERY_RESERVE_RADIO
+static bool disc_hold_logged;           /* the radio-reservation message is logged once per run */
+static controller_t *controller_for_address(const bd_addr_t address);
+#endif
 
 /* Discovery's connect phase pages the controllers itself. The ESP32 has two Classic ACL
  * slots, and the 2026-10-26 field log shows the second outgoing pairing connect failing
@@ -174,6 +179,20 @@ static bool disc_incoming_rejected;
 static int disc_accept_classic_connection(bd_addr_t address, hci_link_type_t link_type){
     (void) address;
     if (link_type != HCI_LINK_TYPE_ACL) return 1;
+#if WMR_CFG_DISCOVERY_RESERVE_RADIO
+    /* The first round runs on a quiet radio: a controller that already has an address is
+     * held back until it ends. An unknown address is accepted (a controller with no stored
+     * address may connect itself and be identified). */
+    if ((disc_phase == DISC_INQUIRY || disc_phase == DISC_NAMES) &&
+        wmr_discovery_reserve_radio(true, disc_round, controller_for_address(address) != NULL)){
+        if (!disc_hold_logged){
+            disc_hold_logged = true;
+            WMR_LOGI("pair", "refusing incoming links from paired controllers while the first "
+                     "inquiry round has the radio; they reconnect afterwards");
+        }
+        return 0;
+    }
+#endif
     if (disc_phase != DISC_CONNECT) return 1;
     if (!disc_incoming_rejected){
         disc_incoming_rejected = true;
@@ -880,6 +899,7 @@ static void disc_inquiry_round(void){
     disc_round++;
     wmr_discovery_begin_round(&disc);
     disc_phase = DISC_INQUIRY;
+    disc_round_results = disc.results;
     char wanted[32] = "";
     size_t used = 0;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
@@ -1059,6 +1079,24 @@ static void disc_round_done(void){
         changed = true;
     }
     if (changed) addresses_save();      /* only hands with a link key are stored */
+    /* Say what the round actually heard, so "not found" is distinguishable from "heard but
+     * the name request failed" in a field log. */
+    char missing[32] = "";
+    size_t missing_used = 0;
+    for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
+        if (!WMR_BRIDGE_HAND_ENABLED(i) || !disc.wanted[i] || disc.found[i]) continue;
+        if (controllers[i].source != WMR_ADDR_NONE) continue;
+        int written = snprintf(missing + missing_used, sizeof(missing) - missing_used, "%s%s",
+                               missing_used ? "/" : "", controllers[i].name);
+        if (written < 0) break;
+        missing_used += (size_t) written;
+        if (missing_used >= sizeof(missing)) break;
+    }
+    if (missing[0]){
+        WMR_LOGW("pair", "inquiry round %u/%u heard %u device response(s); %s not found",
+                 disc_round, WMR_CFG_DISCOVERY_ROUNDS, disc.results - disc_round_results,
+                 missing);
+    }
     disc_phase = DISC_CONNECT;
     disc_connect_next();
 }
@@ -1154,6 +1192,20 @@ wmr_discovery_start_result_t wmr_controller_discover(void){
     disc_pair_wait = false;
     disc_incoming_rejected = false;
     memset(disc_pair_attempts, 0, sizeof(disc_pair_attempts));
+#if WMR_CFG_DISCOVERY_RESERVE_RADIO
+    /* Give the first inquiry round a quiet radio. A paired controller that is streaming now
+     * would share the radio with the inquiry and with the remote name requests, and the
+     * field logs show the missing controller is then never heard. It reconnects by itself
+     * (or with `l`/`r`) once the first round is over. */
+    disc_hold_logged = false;
+    for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
+        controller_t *c = &controllers[h];
+        if (!WMR_BRIDGE_HAND_ENABLED(h) || !c->cid) continue;
+        WMR_LOGI("pair", "%s disconnects for the first inquiry round (radio reserved for "
+                 "pairing); it reconnects afterwards", c->name);
+        hid_host_disconnect(c->cid);
+    }
+#endif
     disc_inquiry_round();
     return WMR_DISCOVERY_STARTED;
 }
@@ -1266,6 +1318,10 @@ static void on_remote_name(const uint8_t *packet){
         incoming_resolved(name, len);
         if (disc_phase == DISC_NAMES) disc_next_name();
         return;
+    }
+    if (!name){
+        WMR_LOGW("pair", "no name from %s; asking again in the next round",
+                 bd_addr_to_str(address));
     }
     disc_log(wmr_discovery_on_name(&disc, address, name, len), address, "remote name");
     if (disc_phase == DISC_NAMES) disc_next_name();

@@ -99,6 +99,25 @@ While discovery runs, `l`/`r` are refused. A controller that is already connecte
 streaming, but an inquiry shares the ESP32's Classic radio with it, so expect more missing
 reports on that hand during discovery (not measured). Discovery is bounded for that reason.
 
+### Radio reservation for the first round
+
+The first round of a discovery run gets the Classic radio to itself
+(`WMR_CFG_DISCOVERY_RESERVE_RADIO` = 1). If the other hand is connected when the run starts,
+it is disconnected, and its incoming link is refused until that round ends; it reconnects by
+itself (or with `l`/`r`) afterwards. A controller whose address is still unknown is not
+refused, so it can still identify itself by connecting.
+
+That is what the 2026-10-26 field logs show (firmware 0.2.2): the missing hand was found in
+the first round in all three runs where the other hand had no link yet, while 18 consecutive
+inquiry rounds (two automatic bursts) with the other hand streaming heard no answer from it.
+The inquiry and the remote name requests share the radio with that streaming link. Without
+this, booting with the paired hand already on means the controller in pairing mode is never
+heard and only a reset (before the paired hand reconnects) pairs it.
+
+Each round now logs what it heard: `inquiry round 2/6 heard 4 device response(s); RIGHT not
+found`, and a failed name request is logged with its address. That separates "the radio heard
+nothing" from "the controller was heard but did not answer the name request".
+
 ### Pairing-mode procedure
 
 Assumed, not yet checked on these controllers: a WMR controller answers inquiry only in

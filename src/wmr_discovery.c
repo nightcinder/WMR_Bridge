@@ -187,6 +187,10 @@ void wmr_discovery_begin_round(wmr_discovery_t *d){
     d->seen_count = 0;
 }
 
+bool wmr_discovery_reserve_radio(bool enabled, unsigned round, bool known_address){
+    return enabled && round == 1 && known_address;
+}
+
 bool wmr_discovery_incomplete(const wmr_discovery_t *d){
     for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
         if (d->wanted[h] && !d->found[h]) return true;
