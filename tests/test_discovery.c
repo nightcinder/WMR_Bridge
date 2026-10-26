@@ -294,6 +294,13 @@ static void test_run_limits(void){
     CHECK(wmr_discovery_on_inquiry_result(&d, &y, NAME("Motion controller - Left")) == WMR_DISC_ALREADY_KNOWN);
 }
 
+static void test_radio_reservation(void){
+    printf("Radio reservation for a discovery round with a hand missing\n");
+    CHECK(wmr_discovery_reserve_radio(true, true));      /* known hand held while a round runs */
+    CHECK(!wmr_discovery_reserve_radio(true, false));    /* unknown address may connect itself */
+    CHECK(!wmr_discovery_reserve_radio(false, true));    /* disabled by config */
+}
+
 static void test_incoming(void){
     printf("Incoming connection from an unknown address\n");
     const bool none[2] = {false, false}, left[2] = {true, false}, both[2] = {true, true};
@@ -419,6 +426,7 @@ int main(void){
     test_run_name_requests();
     test_run_rounds();
     test_hand_unusable();
+    test_radio_reservation();
     test_run_limits();
     test_incoming();
     test_bridge_hands();
