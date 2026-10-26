@@ -55,6 +55,7 @@ typedef struct {
     wmr_addr_source_t source;         /* where `address` came from; NONE = unknown */
     bd_addr_t   address;
     wmr_model_t model;                /* WMR until discovery/name says otherwise */
+    bool        address_confirmed;    /* the address has been connected to (or has a link key) */
     uint16_t    cid;                  /* 0 = no connection tracked */
     bool        connected;
     bool        descriptor_available;
@@ -103,7 +104,7 @@ static bool     stagger_first_reported;
 static uint32_t stagger_first_report_ms;
 
 /* A request that arrived while the gate was closed. Outgoing connects and discovery
- * connects are retried through connect_hand(); an incoming HID channel is kept queued
+ * connects are retried through connect_hand_impl(); an incoming HID channel is kept queued
  * and accepted only after the gate opens. */
 static bool     stagger_pending_connect;
 static uint16_t stagger_pending_incoming_cid;
@@ -154,6 +155,9 @@ static wmr_discovery_t disc;
 static disc_phase_t disc_phase;
 static unsigned disc_round;
 static unsigned disc_connect_mask;      /* hands found in this round, still to connect */
+static unsigned disc_pair_mask;         /* hands learned in this run, not connected yet */
+static unsigned disc_pair_attempts[WMR_NUM_CONTROLLERS];
+static bool     disc_pair_wait;         /* the next timer tick is a pairing retry */
 static btstack_timer_source_t disc_timer;
 
 /* One remote name request at a time, for discovery or for an unknown incoming connection. */
@@ -348,6 +352,22 @@ static void policy_link_opened(unsigned hand, hci_con_handle_t handle, const bd_
 
 /* ---- Stored addresses (BTstack TLV, which is NVS on the ESP32) ----------- */
 
+/* The bytes currently in NVS, so a save from every connection open does not rewrite flash
+ * when nothing changed. Updated by addresses_load and addresses_save. */
+static uint8_t saved_addr_record[WMR_ADDR_RECORD_SIZE];
+static bool    saved_addr_record_known;
+
+/* An address may only be written to NVS once it is known to be usable. A successful
+ * connection proves it; a link key (for example after `F` forgot the address but kept the
+ * bond) is just as good. A freshly discovered address has neither until it has connected,
+ * so a failed pairing attempt does not leave a stored address behind. */
+static bool address_is_confirmed(controller_t *c){
+    if (c->address_confirmed) return true;
+    link_key_t link_key;
+    link_key_type_t type;
+    return gap_get_link_key_for_bd_addr(c->address, link_key, &type);
+}
+
 static void addresses_save(void){
     const btstack_tlv_t *tlv = NULL;
     void *context = NULL;
@@ -358,13 +378,19 @@ static void addresses_save(void){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         if (!WMR_BRIDGE_HAND_ENABLED(i)) continue;
         if (controllers[i].source != WMR_ADDR_STORED) continue;
+        if (!address_is_confirmed(&controllers[i])) continue;
         r.valid[i] = true;
         r.model[i] = controllers[i].model;
         memcpy(r.address[i], controllers[i].address, 6);
     }
     uint8_t value[WMR_ADDR_RECORD_SIZE];
     wmr_addr_record_pack(&r, value);
+    if (saved_addr_record_known && memcmp(value, saved_addr_record, sizeof(value)) == 0) return;
     int rc = tlv->store_tag(context, WMR_CFG_ADDR_TLV_TAG, value, sizeof(value));
+    if (rc == 0){
+        memcpy(saved_addr_record, value, sizeof(value));
+        saved_addr_record_known = true;
+    }
     printf("Addresses saved (LEFT %s, RIGHT %s)%s\n",
            r.valid[0] ? "stored" : "-", r.valid[1] ? "stored" : "-", rc == 0 ? "" : " FAILED");
 }
@@ -382,11 +408,14 @@ static void addresses_load(void){
         printf("Addresses: stored record is not valid (size %d); ignored\n", size);
         return;
     }
+    memcpy(saved_addr_record, value, sizeof(value));
+    saved_addr_record_known = true;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         if (!r.valid[i] || controllers[i].source == WMR_ADDR_OVERRIDE) continue;
         memcpy(controllers[i].address, r.address[i], 6);
         controllers[i].model = r.model[i];
         controllers[i].source = WMR_ADDR_STORED;
+        controllers[i].address_confirmed = true;    /* it was stored because it worked */
     }
 }
 
@@ -447,8 +476,10 @@ static void psvr2_wake_timer_fire(btstack_timer_source_t *timer){
 }
 #endif
 static void disc_timer_fire(btstack_timer_source_t *timer);
-static bool connect_hand(unsigned hand);
+static wmr_connect_result_t connect_hand_impl(unsigned hand);
 static void disc_connect_next(void);
+static void disc_connect_progress(void);
+static void disc_pair_failed(unsigned hand);
 static void accept_incoming(controller_t *c, uint16_t cid);
 
 #if WMR_CFG_STAGGER_FIRST_HAND
@@ -514,7 +545,7 @@ static void stagger_retry_pending(void){
     if (stagger_pending_connect){
         if (connect_pending) return;
         stagger_pending_connect = false;
-        connect_hand(STAGGER_SECOND_HAND);
+        (void) connect_hand_impl(STAGGER_SECOND_HAND);
     }
 }
 
@@ -535,8 +566,10 @@ void wmr_controller_init(wmr_report_sink_t sink){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         controller_t *c = &controllers[i];
         if (!c->override) continue;
-        if (wmr_addr_parse(c->override, c->address)) c->source = WMR_ADDR_OVERRIDE;
-        else printf("%s: compile-time address \"%s\" is not valid; ignored\n", c->name, c->override);
+        if (wmr_addr_parse(c->override, c->address)){
+            c->source = WMR_ADDR_OVERRIDE;
+            c->address_confirmed = true;    /* never stored, never dropped */
+        } else printf("%s: compile-time address \"%s\" is not valid; ignored\n", c->name, c->override);
     }
     disc_timer.process = disc_timer_fire;
 #if WMR_CFG_PSVR2_WAKE
@@ -630,11 +663,6 @@ static wmr_connect_result_t connect_hand_impl(unsigned hand){
     return WMR_CONNECT_OK;
 }
 
-/* Returns true if a connection attempt was started. */
-static bool connect_hand(unsigned hand){
-    return connect_hand_impl(hand) == WMR_CONNECT_OK;
-}
-
 wmr_connect_result_t wmr_controller_connect(unsigned hand){
     if (hand >= WMR_NUM_CONTROLLERS) return WMR_CONNECT_BUSY;
     if (disc_phase == DISC_INQUIRY || disc_phase == DISC_NAMES){
@@ -695,10 +723,14 @@ static void disc_finish(void){
     btstack_run_loop_remove_timer(&disc_timer);
     bool missing = false;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
-        if (disc.wanted[i] && controllers[i].source == WMR_ADDR_NONE){
+        if (!wmr_discovery_hand_missing(&disc, (int) i)) continue;
+        if (disc.found[i]){
+            printf("Discovery: %s was found but did not pair after %u attempt(s)\n",
+                   controllers[i].name, disc_pair_attempts[i]);
+        } else {
             printf("Discovery: %s not found after %u round(s)\n", controllers[i].name, disc_round);
-            missing = true;
         }
+        missing = true;
     }
     printf("Discovery finished\n");
 #if WMR_CFG_DISCOVERY_AUTOSTART
@@ -746,6 +778,7 @@ static void disc_after_connects(void){
  * so this also pairs it). Runs again from the timer whenever an attempt ends. */
 static void disc_connect_next(void){
     if (disc_phase != DISC_CONNECT || connect_pending) return;
+    disc_pair_wait = false;
     while (disc_connect_mask){
         unsigned hand;
 #if WMR_CFG_STAGGER_FIRST_HAND
@@ -775,7 +808,16 @@ static void disc_connect_next(void){
 #endif
         disc_connect_mask &= ~(1u << hand);
         if (controllers[hand].cid || controllers[hand].connected) continue;
-        if (connect_hand(hand)) return;
+        wmr_connect_result_t r = connect_hand_impl(hand);
+        if (r == WMR_CONNECT_OK) return;               /* progress arrives as HID events */
+        if (r == WMR_CONNECT_NOT_ENABLED || r == WMR_CONNECT_NO_ADDRESS) continue;
+        /* connect_pending was false on entry and the request was refused outright: count
+         * this as a failed pairing attempt instead of silently ending the round. */
+        disc_pair_failed(hand);
+        if (disc_pair_mask & (1u << hand)){
+            disc_connect_progress();                   /* retry after the pairing delay */
+            return;
+        }
     }
     disc_after_connects();
 }
@@ -804,15 +846,55 @@ static void disc_timer_fire(btstack_timer_source_t *timer){
     }
 }
 
-/* Called whenever a connection attempt ends (descriptor, failure, close). */
+/* Called whenever a connection attempt ends (descriptor, failure, close). A pairing failure
+ * waits WMR_CFG_PAIR_RETRY_MS before the next attempt, so the controller can leave the
+ * failed link; other progress uses the short delay as before. */
 static void disc_connect_progress(void){
     if (disc_phase != DISC_CONNECT) return;
     btstack_run_loop_remove_timer(&disc_timer);
-    btstack_run_loop_set_timer(&disc_timer, 100);
+    btstack_run_loop_set_timer(&disc_timer,
+                               disc_pair_wait ? WMR_CFG_PAIR_RETRY_MS : 100);
     btstack_run_loop_add_timer(&disc_timer);
 }
 
-/* The round's inquiry and name requests are done: keep what was found and connect it. */
+/* A connect attempt for a hand learned in this run did not end in a connection. Retry the
+ * same address a bounded number of times; if that does not work, drop an address that has
+ * no link key (it never paired) and mark the hand unusable so this run ends and a later run
+ * can look for it again. An address with a link key is kept: it is paired, just not
+ * connected. */
+static void disc_pair_failed(unsigned hand){
+    if (disc_phase != DISC_CONNECT) return;
+    if (!(disc_pair_mask & (1u << hand))) return;
+    controller_t *c = &controllers[hand];
+    disc_pair_attempts[hand]++;
+    if (disc_pair_attempts[hand] < (unsigned) WMR_CFG_PAIR_ATTEMPTS){
+        printf("Pairing: %s attempt %u/%u did not connect; retrying %s in %u ms\n",
+               c->name, disc_pair_attempts[hand], (unsigned) WMR_CFG_PAIR_ATTEMPTS,
+               bd_addr_to_str(c->address), (unsigned) WMR_CFG_PAIR_RETRY_MS);
+        disc_connect_mask |= 1u << hand;
+        disc_pair_wait = true;
+        return;
+    }
+    disc_pair_mask &= ~(1u << hand);
+    if (address_is_confirmed(c)){
+        printf("Pairing: %s did not connect after %u attempt(s); address kept\n",
+               c->name, disc_pair_attempts[hand]);
+        addresses_save();
+        return;
+    }
+    printf("Pairing: %s did not pair after %u attempt(s); address forgotten. Put it in pairing "
+           "mode and press d\n", c->name, disc_pair_attempts[hand]);
+    c->source = WMR_ADDR_NONE;
+    c->model = WMR_MODEL_WMR;
+    memset(c->address, 0, sizeof(bd_addr_t));
+    /* Keep the match on record so this run ends instead of spending the remaining inquiry
+     * rounds on a controller that is not in pairing mode; the end-of-run retry and `d`
+     * start a fresh run that looks for it again. */
+    wmr_discovery_hand_unusable(&disc, (int) hand);
+}
+
+/* The round's inquiry and name requests are done: keep what was found and connect it. The
+ * address is not stored until it is confirmed (see address_is_confirmed). */
 static void disc_round_done(void){
     disc_connect_mask = 0;
     bool changed = false;
@@ -822,10 +904,13 @@ static void disc_round_done(void){
         memcpy(controllers[i].address, disc.found_address[i], 6);
         controllers[i].model = disc.found_model[i];
         controllers[i].source = WMR_ADDR_STORED;
+        controllers[i].address_confirmed = false;
         disc_connect_mask |= 1u << i;
+        disc_pair_mask |= 1u << i;
+        disc_pair_attempts[i] = 0;
         changed = true;
     }
-    if (changed) addresses_save();
+    if (changed) addresses_save();      /* only hands with a link key are stored */
     disc_phase = DISC_CONNECT;
     disc_connect_next();
 }
@@ -908,6 +993,9 @@ wmr_discovery_start_result_t wmr_controller_discover(void){
         return WMR_DISCOVERY_NOTHING_TO_DO;
     }
     disc_round = 0;
+    disc_pair_mask = 0;
+    disc_pair_wait = false;
+    memset(disc_pair_attempts, 0, sizeof(disc_pair_attempts));
     disc_inquiry_round();
     return WMR_DISCOVERY_STARTED;
 }
@@ -920,12 +1008,14 @@ wmr_forget_result_t wmr_controller_forget_addresses(void){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         if (controllers[i].source != WMR_ADDR_STORED) continue;
         controllers[i].source = WMR_ADDR_NONE;
+        controllers[i].address_confirmed = false;
         memset(controllers[i].address, 0, sizeof(bd_addr_t));
     }
     const btstack_tlv_t *tlv = NULL;
     void *context = NULL;
     btstack_tlv_get_instance(&tlv, &context);
     if (tlv) tlv->delete_tag(context, WMR_CFG_ADDR_TLV_TAG);
+    saved_addr_record_known = false;
     print_addresses();
     return WMR_FORGET_OK;
 }
@@ -986,6 +1076,7 @@ static void incoming_resolved(const uint8_t *name, size_t len){
     memcpy(c->address, name_address, 6);
     c->model = wmr_discovery_model_for_name(name, len);
     c->source = WMR_ADDR_STORED;
+    c->address_confirmed = true;    /* the ACL came up from this address: it is usable */
     printf("Incoming: %s is %s (by name, model %s)\n", c->name, bd_addr_to_str(c->address),
            wmr_model_name(c->model));
     addresses_save();
@@ -1290,6 +1381,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             c->psvr2_wake_pending = false;
             if (status != ERROR_CODE_SUCCESS){
                 printf("%s connection failed: 0x%02x\n", c->name, status);
+                disc_pair_failed((unsigned) (c - controllers));
                 c->cid = 0;
                 c->connected = false;
                 connect_pending = false;
@@ -1298,6 +1390,12 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             }
             c->connected = true;
             c->descriptor_available = false;
+            /* The connection (and its pairing, if it needed one) succeeded: this address
+             * can now be stored. No-op when it already is. */
+            c->address_confirmed = true;
+            disc_pair_mask &= ~(1u << (unsigned) (c - controllers));
+            disc_pair_attempts[(unsigned) (c - controllers)] = 0;
+            if (c->source == WMR_ADDR_STORED) addresses_save();
             printf("%s connected, cid=%u; waiting for descriptor\n", c->name, cid);
             break;
         case HID_SUBEVENT_DESCRIPTOR_AVAILABLE:
@@ -1361,6 +1459,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             c = controller_for_cid(cid);
             if (!c) break;
             c->psvr2_wake_pending = false;
+            if (!c->connected) disc_pair_failed((unsigned) (c - controllers));
 #if WMR_CFG_STAGGER_FIRST_HAND
             if ((unsigned) (c - controllers) == STAGGER_FIRST_HAND && !stagger_released){
                 /* Start the 30 s again after the first hand reconnects. */

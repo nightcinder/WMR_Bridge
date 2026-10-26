@@ -375,6 +375,41 @@ static void test_bridge_hands(void){
     CHECK(wmr_discovery_incoming_hand_config(both, 2, NAME("Motion controller - Right")) == -1);
 }
 
+static void test_hand_unusable(void){
+    printf("Discovery run: a matched hand that does not pair stays missing without another round\n");
+    const bool known[2] = {false, false};
+    wmr_discovery_t d;
+    wmr_discovery_start_config(&d, known, 0);
+    wmr_discovery_device_t l = dev(0x71), r = dev(0x72);
+    CHECK(wmr_discovery_on_inquiry_result(&d, &l, NAME("Motion controller - Left")) == WMR_DISC_MATCHED);
+    CHECK(wmr_discovery_on_inquiry_result(&d, &r, NAME("Motion controller - Right")) == WMR_DISC_MATCHED);
+    CHECK(!wmr_discovery_incomplete(&d));
+    CHECK(!wmr_discovery_hand_missing(&d, WMR_HAND_LEFT));
+    /* Pairing LEFT failed: the match stays (another inquiry round would not help), but the
+     * hand is reported missing so discovery retries it in a later run. */
+    wmr_discovery_hand_unusable(&d, WMR_HAND_LEFT);
+    CHECK(!wmr_discovery_incomplete(&d));
+    CHECK(wmr_discovery_hand_missing(&d, WMR_HAND_LEFT));
+    CHECK(!wmr_discovery_hand_missing(&d, WMR_HAND_RIGHT));
+    CHECK(d.found[WMR_HAND_LEFT] && memcmp(d.found_address[WMR_HAND_LEFT], l.address, 6) == 0);
+    /* A fresh run clears it and can match the hand (even a different controller) again. */
+    wmr_discovery_start_config(&d, known, 0);
+    CHECK(wmr_discovery_hand_missing(&d, WMR_HAND_LEFT));
+    CHECK(wmr_discovery_incomplete(&d));
+    CHECK(wmr_discovery_on_inquiry_result(&d, &r, NAME("Motion controller - Left")) == WMR_DISC_MATCHED);
+    CHECK(!wmr_discovery_hand_missing(&d, WMR_HAND_LEFT));
+    /* Ignored for an out-of-range hand. */
+    wmr_discovery_hand_unusable(&d, -1);
+    wmr_discovery_hand_unusable(&d, WMR_NUM_CONTROLLERS);
+    CHECK(!wmr_discovery_hand_missing(&d, -1));
+    CHECK(!wmr_discovery_hand_missing(&d, WMR_NUM_CONTROLLERS));
+    /* A hand this run was not looking for (already known) is never reported missing. */
+    const bool left_known[2] = {true, false};
+    wmr_discovery_start_config(&d, left_known, 0);
+    wmr_discovery_hand_unusable(&d, WMR_HAND_LEFT);
+    CHECK(!wmr_discovery_hand_missing(&d, WMR_HAND_LEFT));
+}
+
 int main(void){
     test_names();
     test_models();
@@ -383,6 +418,7 @@ int main(void){
     test_run_psvr2();
     test_run_name_requests();
     test_run_rounds();
+    test_hand_unusable();
     test_run_limits();
     test_incoming();
     test_bridge_hands();

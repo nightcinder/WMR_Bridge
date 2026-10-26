@@ -130,6 +130,18 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #ifndef WMR_CFG_DISCOVERY_RETRIES
 #define WMR_CFG_DISCOVERY_RETRIES       3
 #endif
+/* How many times a controller found by inquiry is connected (which is also when it pairs)
+ * before its address is given up as unusable, and the pause between those attempts. A
+ * failed attempt is common while a controller finishes entering pairing mode; the address
+ * is not written to NVS until a connection to it has succeeded, so giving up ends this run
+ * and lets the next automatic burst (or `d`) look for it again instead of leaving a stored
+ * address that never connects. */
+#ifndef WMR_CFG_PAIR_ATTEMPTS
+#define WMR_CFG_PAIR_ATTEMPTS           3
+#endif
+#ifndef WMR_CFG_PAIR_RETRY_MS
+#define WMR_CFG_PAIR_RETRY_MS           1000
+#endif
 /* Delay after the stack comes up before automatic discovery starts, so known controllers
  * that reconnect on their own are not competing with an inquiry. */
 #ifndef WMR_CFG_DISCOVERY_START_DELAY_MS

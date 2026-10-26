@@ -194,6 +194,16 @@ bool wmr_discovery_incomplete(const wmr_discovery_t *d){
     return false;
 }
 
+void wmr_discovery_hand_unusable(wmr_discovery_t *d, int hand){
+    if (hand < 0 || hand >= WMR_NUM_CONTROLLERS) return;
+    d->unusable[hand] = true;
+}
+
+bool wmr_discovery_hand_missing(const wmr_discovery_t *d, int hand){
+    if (hand < 0 || hand >= WMR_NUM_CONTROLLERS) return false;
+    return d->wanted[hand] && (!d->found[hand] || d->unusable[hand]);
+}
+
 static bool is_candidate(const wmr_discovery_t *d, const uint8_t address[6]){
     for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
         if (d->found[h] && memcmp(d->found_address[h], address, 6) == 0) return true;
