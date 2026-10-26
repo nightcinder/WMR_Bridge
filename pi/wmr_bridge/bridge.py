@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import logging
 import socket
 import time
 from dataclasses import dataclass, field
@@ -36,6 +37,7 @@ from . import ws as wsmod
 
 STREAMS = ("raw", "decoded", "batched")
 HAND_NAMES = ("LEFT", "RIGHT")
+LOG = logging.getLogger(__name__)
 
 
 @dataclass
@@ -329,10 +331,13 @@ class Bridge:
     async def run_client(self, websocket: wsmod.WebSocket) -> None:
         subscriber = Subscriber(self, websocket)
         self.subscribers.add(subscriber)
+        peer = websocket.peer
+        LOG.info("client connected: %s", peer)
         try:
             await subscriber.send_json(self.hello())
             if self.token is not None:
                 if not await self._authenticate(subscriber):
+                    LOG.warning("client %s failed authentication", peer)
                     return
             while not subscriber.closed:
                 try:
@@ -353,6 +358,7 @@ class Bridge:
         finally:
             subscriber.close()
             self.subscribers.discard(subscriber)
+            LOG.info("client disconnected: %s", peer)
             if not websocket.closed:
                 await websocket.close()
 
@@ -403,11 +409,13 @@ class Bridge:
                     "fragmentCapacity": self.fragment_capacity,
                 }
             )
+            LOG.info("client %s subscribed to %s", subscriber.websocket.peer, stream)
             return True
 
         if kind == "unsubscribe":
             subscriber.reset_stream()
             await subscriber.send_json({"type": "unsubscribed"})
+            LOG.info("client %s unsubscribed", subscriber.websocket.peer)
             return True
 
         if kind == "status":
