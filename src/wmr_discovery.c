@@ -187,8 +187,8 @@ void wmr_discovery_begin_round(wmr_discovery_t *d){
     d->seen_count = 0;
 }
 
-bool wmr_discovery_reserve_radio(bool reserve, bool known_address){
-    return reserve && known_address;
+bool wmr_discovery_round_holds_radio(bool reserve, bool inquiry_phase){
+    return reserve && inquiry_phase;
 }
 
 bool wmr_discovery_incomplete(const wmr_discovery_t *d){

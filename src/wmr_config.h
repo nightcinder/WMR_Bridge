@@ -142,6 +142,22 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #ifndef WMR_CFG_PAIR_RETRY_MS
 #define WMR_CFG_PAIR_RETRY_MS           1000
 #endif
+/* Pause before retrying a connect that failed with HCI 0x09 (no free ACL slot). The
+ * controller can keep a link used for a remote name request for a few seconds, so this is
+ * longer than an ordinary failed attempt: paging again immediately repeats the 0x09. */
+#ifndef WMR_CFG_PAIR_BUSY_RETRY_MS
+#define WMR_CFG_PAIR_BUSY_RETRY_MS      2500
+#endif
+/* Pause after the last remote name request before the connect phase pages the hands, long
+ * enough for the controller to release the link it used for the name request. */
+#ifndef WMR_CFG_DISCOVERY_CONNECT_DELAY_MS
+#define WMR_CFG_DISCOVERY_CONNECT_DELAY_MS 1500
+#endif
+/* How long a reserved inquiry round waits for a connected hand's ACL to drop before the
+ * inquiry starts. The controller answers the disconnect command well inside this. */
+#ifndef WMR_CFG_DISCOVERY_RELEASE_MS
+#define WMR_CFG_DISCOVERY_RELEASE_MS    400
+#endif
 /* Delay after the stack comes up before automatic discovery starts, so known controllers
  * that reconnect on their own are not competing with an inquiry. */
 #ifndef WMR_CFG_DISCOVERY_START_DELAY_MS
@@ -149,13 +165,14 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #endif
 /* Reserve the Classic radio for every discovery round that still has a hand missing: a
  * controller that already has an address is disconnected at the start of each such round
- * and its incoming link is refused until the round ends. The 2026-10-26 field logs show
- * why: every successful discovery of the missing hand happened while the other hand had no
- * link, while 18 consecutive inquiry rounds with the other hand streaming saw no answer at
- * all. A hand connected in an earlier round would otherwise block the remaining rounds, so
- * discovery can only pair one controller per run. The radio is shared; give each round that
- * is still looking a quiet radio. The held hand reconnects by itself afterwards. Set to 0 to
- * keep the old behaviour (an already-connected hand keeps streaming through discovery). */
+ * (its ACL, not just the HID channel) and every incoming link is refused until the round
+ * ends. The 2026-10-26 field logs show why: every successful discovery of the missing hand
+ * happened while the other hand had no link, while 18 consecutive inquiry rounds with the
+ * other hand streaming saw no answer at all. A hand connected in an earlier round would
+ * otherwise block the remaining rounds, so discovery can only pair one controller per run.
+ * The radio is shared; give each round that is still looking a quiet radio. The held hand
+ * reconnects by itself afterwards. Set to 0 to keep the old behaviour (an already-connected
+ * hand keeps streaming through discovery). */
 #ifndef WMR_CFG_DISCOVERY_RESERVE_RADIO
 #define WMR_CFG_DISCOVERY_RESERVE_RADIO  1
 #endif

@@ -162,13 +162,14 @@ void wmr_discovery_start_config(wmr_discovery_t *d, const bool known[WMR_NUM_CON
  * Call this after every inquiry completes, before the next one starts. */
 void wmr_discovery_begin_round(wmr_discovery_t *d);
 
-/* True while discovery reserves the Classic radio: an incoming link from a controller that
- * already has an address (`known_address`) is refused, so inquiry and remote name requests
- * do not compete with that controller's streaming link. `reserve` is true for every inquiry
- * round that still has a hand missing (WMR_CFG_DISCOVERY_RESERVE_RADIO). An unknown address
- * is never refused: a controller without a stored address may connect itself and be
- * identified. */
-bool wmr_discovery_reserve_radio(bool reserve, bool known_address);
+/* True while an inquiry round holds the Classic radio to itself: every incoming link,
+ * known or unknown, is refused until the round ends so inquiry and remote name requests are
+ * not competing with a controller's streaming link or with a self-initiated connection.
+ * `reserve` is true for every round of a run that still has a hand missing
+ * (WMR_CFG_DISCOVERY_RESERVE_RADIO); `inquiry_phase` is true for the inquiry and name
+ * phases of that round. A controller in pairing mode is still found by inquiry and paired
+ * in the connect phase; an unknown controller can identify itself outside a round. */
+bool wmr_discovery_round_holds_radio(bool reserve, bool inquiry_phase);
 
 /* True while some wanted hand has no candidate yet. */
 bool wmr_discovery_incomplete(const wmr_discovery_t *d);
