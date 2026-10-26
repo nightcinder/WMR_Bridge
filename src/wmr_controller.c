@@ -170,6 +170,7 @@ static bool disc_incoming_rejected;
 static bool disc_reserve_radio;         /* hold connected hands back while a hand is missing */
 static bool disc_hold_logged;           /* the radio-reservation message is logged once per run */
 static bool disc_release_wait;          /* an ACL drop is in flight before the inquiry starts */
+static bool disc_connect_release;       /* an ACL drop is in flight before the next page */
 #endif
 
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
@@ -883,6 +884,7 @@ static void disc_finish(void){
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
     disc_reserve_radio = false;
     disc_release_wait = false;
+    disc_connect_release = false;
 #endif
     btstack_run_loop_remove_timer(&disc_timer);
     bool missing = false;
@@ -942,6 +944,29 @@ static void disc_inquiry_begin(void){
     }
 }
 
+#if WMR_CFG_DISCOVERY_RESERVE_RADIO
+/* Drop a connected hand's ACL and report whether a link was asked to go. Closing the HID
+ * channel alone is not enough: the controller reopens it at once over the still-open ACL
+ * (2026-10-26 field log, 0.2.3), so the radio stays occupied and the next page fails with
+ * HCI 0x09. `why` completes "LEFT disconnects ...; it reconnects afterwards". */
+static bool disc_disconnect_hands(const char *why){
+    bool dropped = false;
+    for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
+        controller_t *c = &controllers[h];
+        if (!WMR_BRIDGE_HAND_ENABLED(h)) continue;
+        if (!c->cid && c->handle == HCI_CON_HANDLE_INVALID) continue;
+        WMR_LOGI("pair", "%s disconnects %s; it reconnects afterwards", c->name, why);
+        if (c->handle != HCI_CON_HANDLE_INVALID){
+            dropped = true;
+            gap_disconnect(c->handle);
+        } else {
+            hid_host_disconnect(c->cid);
+        }
+    }
+    return dropped;
+}
+#endif
+
 static void disc_inquiry_round(void){
     disc_round++;
     wmr_discovery_begin_round(&disc);
@@ -950,25 +975,14 @@ static void disc_inquiry_round(void){
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
     /* A hand that connected in an earlier round would otherwise stream through this one
      * and share the radio with the inquiry and its name requests, which is how the second
-     * controller stays unheard. Drop its ACL, not just the HID channel: the controller
-     * reopens the channel at once over the still-open link (2026-10-26 field log, 0.2.3),
-     * so the round would never be quiet. The inquiry starts once the link has gone; the
-     * connection filter refuses the controller meanwhile. It reconnects afterwards. */
+     * controller stays unheard. The inquiry starts once the link has gone; the connection
+     * filter refuses the controller meanwhile. It reconnects afterwards. */
     bool dropped = false;
     if (disc_reserve_radio){
-        for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
-            controller_t *c = &controllers[h];
-            if (!WMR_BRIDGE_HAND_ENABLED(h)) continue;
-            if (!c->cid && c->handle == HCI_CON_HANDLE_INVALID) continue;
-            WMR_LOGI("pair", "%s disconnects for inquiry round %u (radio reserved for pairing); "
-                     "it reconnects afterwards", c->name, disc_round);
-            if (c->handle != HCI_CON_HANDLE_INVALID){
-                dropped = true;
-                gap_disconnect(c->handle);
-            } else {
-                hid_host_disconnect(c->cid);
-            }
-        }
+        char why[64];
+        snprintf(why, sizeof(why), "for inquiry round %u (radio reserved for pairing)",
+                 disc_round);
+        dropped = disc_disconnect_hands(why);
     }
     if (dropped){
         disc_release_wait = true;
@@ -1027,6 +1041,22 @@ static void disc_connect_next(void){
             stagger_pending_connect = true;
             return;
         }
+#endif
+#if WMR_CFG_DISCOVERY_RESERVE_RADIO
+        /* The page for this hand needs the ACL slot. A hand that connected earlier in this
+         * connect phase still holds one (the field log shows RIGHT failing with HCI 0x09
+         * on every attempt while LEFT streamed). Drop it, wait for the link to go, then
+         * page; the connection filter keeps it out until the run ends. */
+        if (!disc_connect_release){
+            char why[64];
+            snprintf(why, sizeof(why), "before the radio pages %s", controllers[hand].name);
+            if (disc_disconnect_hands(why)){
+                disc_connect_release = true;
+                disc_arm_timer(WMR_CFG_DISCOVERY_RELEASE_MS);
+                return;                     /* the hand stays in disc_connect_mask */
+            }
+        }
+        disc_connect_release = false;
 #endif
         disc_connect_mask &= ~(1u << hand);
         if (controllers[hand].cid || controllers[hand].connected) continue;
@@ -1261,6 +1291,7 @@ wmr_discovery_start_result_t wmr_controller_discover(void){
     memset(disc_pair_attempts, 0, sizeof(disc_pair_attempts));
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
     disc_release_wait = false;
+    disc_connect_release = false;
     /* Discovery only starts while a hand is missing, so every round of this run gets a quiet
      * radio. A hand that connects in a later round is disconnected again at the start of the
      * next one (disc_inquiry_round): otherwise it streams through the remaining rounds and
@@ -1590,6 +1621,8 @@ static void handle_incoming_connection(const uint8_t *packet){
                      "controllers reconnect afterwards");
         }
         hid_host_decline_connection(cid);
+        hci_con_handle_t handle = hid_subevent_incoming_connection_get_handle(packet);
+        if (handle != HCI_CON_HANDLE_INVALID) gap_disconnect(handle);
         return;
     }
 #endif

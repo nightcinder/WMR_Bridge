@@ -116,6 +116,13 @@ unknown can identify itself after the run, when incoming connections are accepte
 Because a hand found in one round is not connected until after that round,
 the next round starts quiet again instead of streaming through it.
 
+The same slot rule applies inside the connect phase when both hands were found in one round.
+Before paging a hand, a hand that connected earlier in the phase is disconnected (ACL, not
+just HID) and the page waits `WMR_CFG_DISCOVERY_RELEASE_MS`, so the page starts with no other
+link holding a slot. The released hand reconnects when the run ends. This is the 0.2.3 log
+case where LEFT paired, then RIGHT got HCI `0x09` on all three attempts; a run where only
+RIGHT was paged (LEFT held off by the filter) paired on the first attempt.
+
 That is what the 2026-10-26 field logs show (firmware 0.2.2): the missing hand was found in
 the first round in all three runs where the other hand had no link yet, while 18 consecutive
 inquiry rounds (two automatic bursts) with the other hand streaming heard no answer from it.
