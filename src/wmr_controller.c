@@ -58,7 +58,7 @@ typedef struct {
     wmr_model_t model;                /* WMR until discovery/name says otherwise */
     bool        address_confirmed;    /* the address has been connected to (or has a link key) */
     uint16_t    cid;                  /* 0 = no connection tracked */
-    hci_con_handle_t handle;          /* 0 = no Classic link tracked */
+    hci_con_handle_t handle;          /* HCI_CON_HANDLE_INVALID = no Classic link tracked */
     bool        connected;
     bool        descriptor_available;
     bool        psvr2_wake_pending;   /* wake timer armed for this hand */
@@ -78,8 +78,10 @@ typedef struct {
 #endif
 
 static controller_t controllers[WMR_NUM_CONTROLLERS] = {
-    [WMR_HAND_LEFT]  = {.name = "LEFT",  .override = LEFT_OVERRIDE},
-    [WMR_HAND_RIGHT] = {.name = "RIGHT", .override = RIGHT_OVERRIDE},
+    [WMR_HAND_LEFT]  = {.name = "LEFT",  .override = LEFT_OVERRIDE,
+                        .handle = HCI_CON_HANDLE_INVALID},
+    [WMR_HAND_RIGHT] = {.name = "RIGHT", .override = RIGHT_OVERRIDE,
+                        .handle = HCI_CON_HANDLE_INVALID},
 };
 
 static uint8_t descriptor_storage[WMR_CFG_HID_DESCRIPTOR_STORAGE];
@@ -187,7 +189,8 @@ static controller_t *controller_for_address(const bd_addr_t address){
 }
 
 static controller_t *controller_for_handle(hci_con_handle_t handle){
-    if (!handle) return NULL;
+    /* 0x0000 is a valid ACL handle, so only 0xFFFF means "not tracked". */
+    if (handle == HCI_CON_HANDLE_INVALID) return NULL;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         if (controllers[i].handle == handle) return &controllers[i];
     }
@@ -225,6 +228,23 @@ static const char *pair_status_text(uint8_t status){
         case 0x3d: return "MIC failure (link key mismatch)";
         case 0x3e: return "connection failed to be established";
         default:   return "see HCI error code";
+    }
+}
+
+/* HID handshake results (HIDP) are not HCI error codes: GET_REPORT and
+ * SET_PROTOCOL responses use the values below, so keep them out of
+ * pair_status_text(). */
+static const char *hid_handshake_text(uint8_t status){
+    switch (status){
+        case HID_HANDSHAKE_PARAM_TYPE_SUCCESSFUL: return "success";
+        case HID_HANDSHAKE_PARAM_TYPE_NOT_READY: return "not ready";
+        case HID_HANDSHAKE_PARAM_TYPE_ERR_INVALID_REPORT_ID: return "invalid report ID";
+        case HID_HANDSHAKE_PARAM_TYPE_ERR_UNSUPPORTED_REQUEST: return "unsupported request";
+        case HID_HANDSHAKE_PARAM_TYPE_ERR_INVALID_PARAMETER: return "invalid parameter";
+        case HID_HANDSHAKE_PARAM_TYPE_ERR_UNKNOWN: return "unknown HID handshake error";
+        case HID_HANDSHAKE_PARAM_TYPE_ERR_FATAL: return "fatal HID error";
+        case HID_HANDSHAKE_PARAM_TYPE_ERR_DISCONNECT: return "link closed";
+        default: return "see HID handshake code";
     }
 }
 
@@ -1383,7 +1403,7 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
             WMR_LOGI("pair", "%s link closed: %s (status=0x%02x reason=0x%02x)",
                      name, pair_status_text(reason), status, reason);
             controller_t *c = controller_for_handle(handle);
-            if (c) c->handle = 0;
+            if (c) c->handle = HCI_CON_HANDLE_INVALID;
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
             policy_link_down(handle);
 #endif
@@ -1596,9 +1616,9 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             c = controller_for_cid(cid);
             uint16_t report_len = hid_subevent_get_report_response_get_report_len(packet);
             WMR_LOGI("ff13", "%s GET_REPORT response: %s (0x%02x), %u bytes",
-                     c ? c->name : "?", pair_status_text(status), status, report_len);
+                     c ? c->name : "?", hid_handshake_text(status), status, report_len);
 #if WMR_CFG_REPORT_HEXDUMP
-            if (status == ERROR_CODE_SUCCESS && report_len)
+            if (status == HID_HANDSHAKE_PARAM_TYPE_SUCCESSFUL && report_len)
                 printf_hexdump(hid_subevent_get_report_response_get_report(packet), report_len);
 #endif
             break;
@@ -1608,11 +1628,11 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             break;
         case HID_SUBEVENT_SET_PROTOCOL_RESPONSE:
             status = hid_subevent_set_protocol_response_get_handshake_status(packet);
-            if (status == ERROR_CODE_SUCCESS){
+            if (status == HID_HANDSHAKE_PARAM_TYPE_SUCCESSFUL){
                 WMR_LOGI("pair", "HID report protocol selected");
             } else {
                 WMR_LOGW("pair", "HID SET_PROTOCOL failed: %s (0x%02x)",
-                         pair_status_text(status), status);
+                         hid_handshake_text(status), status);
             }
             break;
         case HID_SUBEVENT_CONNECTION_CLOSED:
@@ -1648,7 +1668,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             wmr_cfgmgr_on_closed((unsigned) (c - controllers));
             if (!c->connected || !c->descriptor_available) connect_pending = false;
             c->cid = 0;
-            c->handle = 0;
+            c->handle = HCI_CON_HANDLE_INVALID;
             c->connected = false;
             c->descriptor_available = false;
             disc_connect_progress();
