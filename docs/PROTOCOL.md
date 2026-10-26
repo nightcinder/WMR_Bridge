@@ -109,7 +109,7 @@ Example (RIGHT, sequence `0x01020304`, 46-byte frame, notification capacity
 ## Receiver rules (reference: `wmr_reassembler_push`)
 
 A fragment is **valid** if `magic == 0x52`, `hand < 2`, `chunk_len ==
-notification_length - 12`, `chunk_len > 0`, `0 < total_len <= 64`,
+notification_length - 12`, `chunk_len > 0`, `0 < total_len <= 80`,
 `offset < total_len` and `offset + chunk_len <= total_len`.
 
 For a valid fragment of hand *h*:

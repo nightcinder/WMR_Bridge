@@ -3,7 +3,8 @@
 The Linux/Pi host bridge deliberately reuses the payloads defined in
 ``docs/PROTOCOL.md`` instead of inventing a new stream:
 
-* raw stream  - the 12-byte fragment header plus a chunk of one 46-byte HID report
+* raw stream  - the 12-byte fragment header plus a chunk of one HID input report
+  (46 bytes for WMR, 79 bytes for PSVR2)
 * decoded     - one 56-byte FF12 version 1 record
 * batched     - the 2-byte FF14 version 2 header plus 1..9 decoded records
 
@@ -22,7 +23,7 @@ from typing import Iterable, Sequence
 
 PROTO_MAGIC = 0x52
 PROTO_HEADER_SIZE = 12
-MAX_FRAME = 64
+MAX_FRAME = 80
 NUM_HANDS = 2
 
 DECODED_VERSION = 1
@@ -33,9 +34,10 @@ BATCH_HEADER_SIZE = 2
 BATCH_MAX_COUNT = 9
 
 # The firmware clamps a BLE notification value to 244 bytes. On Wi-Fi there is
-# no ATT MTU, so the host bridge defaults to the same 244-byte capacity; a
-# 46-byte frame therefore travels in one fragment. Keeping the ceiling means
-# the companion's reference reassembler sees a shape it already handles.
+# no ATT MTU, so the host bridge defaults to the same 244-byte capacity; both a
+# 46-byte WMR frame and a 79-byte PSVR2 frame therefore travel in one fragment.
+# Keeping the ceiling means the companion's reference reassembler sees a shape
+# it already handles.
 DEFAULT_FRAGMENT_CAPACITY = 244
 
 
