@@ -3,6 +3,29 @@
 wmr_bridge is a **test bridge**. It is not hardened and must not be treated as
 secure.
 
+## 0.2 decision (M13.3, owner)
+
+For 0.2 the owner chose to **keep the unauthenticated test bridge** and record
+its limits rather than add pairing and encryption before the release
+(`WMR_Bridge` #64, option A). This is an explicit temporary decision, not a
+claim that the bridge is secure.
+
+- **BLE:** no pairing, encryption or authentication is required, as described
+  below. Use it only in a trusted environment: any central in range can read the
+  stream, and an unwanted central that connects first blocks the intended phone.
+  Controllers are trusted by HID name, which is not authentication.
+- **Raspberry Pi:** the daemon keeps the plaintext WebSocket and the shared
+  bearer token. Loopback remains the default, a non-loopback bind requires a
+  token, and the stream is still unencrypted unless TLS is terminated externally
+  (reverse proxy or SSH tunnel) or the Pi sits on a trusted WPA2/WPA3 LAN. The
+  companion app warns about cleartext `ws://` in its Wi-Fi connect panel.
+- **Platform security:** ESP32 flash encryption and secure boot remain off.
+  **Raspberry Pi secure boot is out of scope for 0.2 and deferred to 0.3**; no
+  companion feature or pairing flow depends on it.
+- **After 0.2:** the work under [Before wider use](#before-wider-use) is the
+  post-0.2 hardening path. Pi TLS and Pi secure-boot coverage move with the 0.3
+  deferral.
+
 ## BLE side (phone)
 
 - The GATT service has **no authentication, pairing or encryption
@@ -24,8 +47,8 @@ concurrently as `WMR Bridge L` and `WMR Bridge R`. Each bridge keeps the same
 unauthenticated, unencrypted GATT service described above, so an unwanted
 central can hijack or block **one hand independently** while the other hand
 continues streaming. Splitting the hands across radios does not add any
-authentication or encryption. Whether BLE pairing/encryption is required at all
-is still open and awaits M12 bench evidence (M13.3).
+authentication or encryption. BLE pairing and encryption are **not required in
+0.2** (owner decision, M13.3); see [0.2 decision](#02-decision-m133-owner).
 
 ## Classic Bluetooth side (controllers)
 
@@ -88,4 +111,5 @@ Require LE Secure Connections pairing with encrypted/authenticated
 characteristic permissions, restrict the service to a bonded phone, replace
 the experimental UUIDs, only auto-confirm pairing during an explicit
 pairing window, require a console confirmation before a discovered controller is
-stored, and enable flash encryption and secure boot.
+stored, and enable flash encryption and secure boot. None of this ships in 0.2;
+it is the post-0.2 path recorded in [0.2 decision](#02-decision-m133-owner).
