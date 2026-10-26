@@ -46,14 +46,6 @@ jobs:
             python3 tools/firmware/build.py --variant "$variant" --out dist
           done
 
-      - name: Build PSVR2-enabled verification image
-        env:
-          IDF_PATH: /opt/esp/idf
-          EXTRA_CFLAGS: -DWMR_CFG_PSVR2_SUPPORT=1
-        run: |
-          . "$IDF_PATH/export.sh"
-          python3 tools/firmware/build.py --variant both --work .fw-build-psvr2 --out /tmp/dist-psvr2
-
       - name: List artifacts
         run: ls -lh dist
 

@@ -67,10 +67,8 @@ typedef struct {
 static const controller_name_t controller_names[] = {
     { WMR_DISCOVERY_NAME_LEFT,   WMR_HAND_LEFT,  WMR_MODEL_WMR   },
     { WMR_DISCOVERY_NAME_RIGHT,  WMR_HAND_RIGHT, WMR_MODEL_WMR   },
-#if WMR_CFG_PSVR2_SUPPORT
     { WMR_DISCOVERY_NAME_PSVR2_LEFT,  WMR_HAND_LEFT,  WMR_MODEL_PSVR2 },
     { WMR_DISCOVERY_NAME_PSVR2_RIGHT, WMR_HAND_RIGHT, WMR_MODEL_PSVR2 },
-#endif
 };
 
 #define CONTROLLER_NAME_COUNT (sizeof(controller_names) / sizeof(controller_names[0]))
@@ -78,9 +76,7 @@ static const controller_name_t controller_names[] = {
 const char *wmr_model_name(wmr_model_t model){
     switch (model){
         case WMR_MODEL_WMR:   return "WMR";
-#if WMR_CFG_PSVR2_SUPPORT
         case WMR_MODEL_PSVR2: return "PSVR2";
-#endif
         default:              return "?";
     }
 }
@@ -120,10 +116,8 @@ void wmr_addr_record_pack(const wmr_addr_record_t *r, uint8_t out[WMR_ADDR_RECOR
     out[0] = WMR_ADDR_RECORD_VERSION;
     for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
         if (!r->valid[h]) continue;             /* invalid slots stay all-zero, model bits included */
-#if WMR_CFG_PSVR2_SUPPORT
         unsigned model = (unsigned) r->model[h];
         out[14] = (uint8_t) (out[14] | ((model & 0x3u) << (2 * h)));
-#endif
         out[1] = (uint8_t) (out[1] | (1u << h));
         memcpy(&out[2 + 6 * h], r->address[h], 6);
     }
@@ -137,11 +131,6 @@ bool wmr_addr_record_unpack(const uint8_t *in, size_t size, wmr_addr_record_t *o
     memset(&r, 0, sizeof(r));
     for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
         unsigned model = (in[14] >> (2 * h)) & 0x3u;
-#if !WMR_CFG_PSVR2_SUPPORT
-        /* A record written by a PSVR2-enabled build must not disable the hand in a
-         * WMR-only build: keep the address and treat it as WMR. Pressing F is not needed. */
-        if (model == WMR_MODEL_PSVR2) model = WMR_MODEL_WMR;
-#endif
         if (model >= WMR_MODEL_COUNT) return false;
         r.model[h] = (wmr_model_t) model;
         if (!(in[1] & (1u << h))) continue;

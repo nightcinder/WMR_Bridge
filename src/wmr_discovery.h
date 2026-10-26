@@ -86,8 +86,7 @@ wmr_model_t wmr_discovery_model_for_name(const uint8_t *name, size_t len);
  * Version stays 1: firmware before PSVR2 support ignores byte 14, and a record written
  * by it reads back as WMR_MODEL_WMR for both hands. An unrecognised model value makes
  * the record invalid instead of silently treating the controller as a WMR one. Model
- * bits are written only for a valid hand; with PSVR2 support compiled out, a stored
- * PSVR2 model is read back as WMR so the address remains usable on a WMR-only image. */
+ * bits are written only for a valid hand. */
 #define WMR_ADDR_RECORD_VERSION  1
 #define WMR_ADDR_RECORD_SIZE     16   /* version, valid bits, 2 x 6-byte address, models, reserved */
 

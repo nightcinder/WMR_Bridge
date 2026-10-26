@@ -42,34 +42,26 @@ static void test_names(void){
     CHECK(hand("Xbox Wireless Controller") == -1);
     CHECK(hand("") == -1);
     CHECK(wmr_discovery_hand_for_name(NULL, 5) == -1);
-#if WMR_CFG_PSVR2_SUPPORT
     CHECK(hand("PlayStation VR2 Sense Controller (L)") == WMR_HAND_LEFT);
     CHECK(hand("PlayStation VR2 Sense Controller (R)") == WMR_HAND_RIGHT);
     CHECK(hand("PLAYSTATION VR2 SENSE CONTROLLER (L)") == WMR_HAND_LEFT);
     CHECK(hand("playstation vr2 sense controller (r)  ") == WMR_HAND_RIGHT);
     CHECK(hand("PlayStation VR2 Sense Controller") == -1);              /* hand suffix is required */
     CHECK(hand("PlayStation VR2 Sense Controller (X)") == -1);
-#endif
 }
 
 static void test_models(void){
     printf("Controller model by name\n");
     CHECK(wmr_model_name(WMR_MODEL_WMR)[0] == 'W');
     CHECK(strcmp(wmr_model_name(WMR_MODEL_WMR), "WMR") == 0);
-#if WMR_CFG_PSVR2_SUPPORT
     CHECK(strcmp(wmr_model_name(WMR_MODEL_PSVR2), "PSVR2") == 0);
-#else
-    CHECK(strcmp(wmr_model_name(WMR_MODEL_PSVR2), "?") == 0);   /* no PSVR2 string in a WMR-only build */
-#endif
     CHECK(strcmp(wmr_model_name(WMR_MODEL_COUNT), "?") == 0);
     CHECK(wmr_discovery_model_for_name(NAME("Motion controller - Left")) == WMR_MODEL_WMR);
     CHECK(wmr_discovery_model_for_name(NAME("Motion controller - Right")) == WMR_MODEL_WMR);
     CHECK(wmr_discovery_model_for_name(NAME("Keyboard")) == WMR_MODEL_COUNT);
     CHECK(wmr_discovery_model_for_name(NULL, 0) == WMR_MODEL_COUNT);
-#if WMR_CFG_PSVR2_SUPPORT
     CHECK(wmr_discovery_model_for_name(NAME("PlayStation VR2 Sense Controller (L)")) == WMR_MODEL_PSVR2);
     CHECK(wmr_discovery_model_for_name(NAME("PlayStation VR2 Sense Controller (R)")) == WMR_MODEL_PSVR2);
-#endif
 }
 
 static void test_record(void){
@@ -115,17 +107,12 @@ static void test_record(void){
     r.model[0] = WMR_MODEL_PSVR2;
     r.model[1] = WMR_MODEL_PSVR2;
     wmr_addr_record_pack(&r, out);
-#if WMR_CFG_PSVR2_SUPPORT
     CHECK(out[14] == 0x04);
-#else
-    CHECK(out[14] == 0x00);                 /* model storage compiled out */
-#endif
 
     r.valid[0] = r.valid[1] = true;
     r.model[0] = WMR_MODEL_WMR;
     r.model[1] = WMR_MODEL_PSVR2;
     wmr_addr_record_pack(&r, out);
-#if WMR_CFG_PSVR2_SUPPORT
     CHECK(out[14] == 0x04 && out[15] == 0x00);
     CHECK(wmr_addr_record_unpack(out, sizeof(out), &back));
     CHECK(back.model[0] == WMR_MODEL_WMR && back.model[1] == WMR_MODEL_PSVR2);
@@ -134,16 +121,6 @@ static void test_record(void){
     CHECK(out[14] == 0x05);
     CHECK(wmr_addr_record_unpack(out, sizeof(out), &back));
     CHECK(back.model[0] == WMR_MODEL_PSVR2 && back.model[1] == WMR_MODEL_PSVR2);
-#else
-    CHECK(out[14] == 0x00);
-    CHECK(wmr_addr_record_unpack(out, sizeof(out), &back));
-    CHECK(back.model[0] == WMR_MODEL_WMR && back.model[1] == WMR_MODEL_WMR);
-    /* A record written by an opt-in build must not disable the hand here. */
-    memcpy(bad, golden_both, sizeof(bad)); bad[14] = 0x04;
-    CHECK(wmr_addr_record_unpack(bad, sizeof(bad), &back));
-    CHECK(back.valid[0] && back.valid[1]);
-    CHECK(back.model[0] == WMR_MODEL_WMR && back.model[1] == WMR_MODEL_WMR);
-#endif
     /* Unknown model values make the record invalid rather than guessing WMR. */
     memcpy(bad, golden_both, sizeof(bad)); bad[14] = 0x02;
     CHECK(!wmr_addr_record_unpack(bad, sizeof(bad), &back));
@@ -204,7 +181,6 @@ static void test_run_names_in_inquiry(void){
 static void test_run_psvr2(void){
     const bool none[2] = {false, false};
     wmr_discovery_t d;
-#if WMR_CFG_PSVR2_SUPPORT
     printf("Discovery run: PSVR2 names and per-hand models\n");
     wmr_discovery_start_config(&d, none, 0);
     wmr_discovery_device_t l = dev(31), r = dev(32), l2 = dev(33);
@@ -232,14 +208,6 @@ static void test_run_psvr2(void){
     CHECK(wmr_discovery_incoming_hand_config(none, 0, NAME("PlayStation VR2 Sense Controller (L)"))
           == WMR_HAND_LEFT);
     CHECK(wmr_discovery_incoming_hand_config(none, 2, NAME("PlayStation VR2 Sense Controller (L)")) == -1);
-#else
-    printf("Discovery run: PSVR2 support compiled out\n");
-    wmr_discovery_start_config(&d, none, 0);
-    wmr_discovery_device_t l = dev(31);
-    CHECK(wmr_discovery_on_inquiry_result(&d, &l, NAME("PlayStation VR2 Sense Controller (L)"))
-          == WMR_DISC_IGNORED);
-    CHECK(wmr_discovery_incomplete(&d));
-#endif
 }
 
 static void test_run_name_requests(void){

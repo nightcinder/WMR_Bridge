@@ -32,7 +32,7 @@ printed rates and moved their baselines, which contradicted this paragraph; it n
 | `errors` | `att_server_notify` calls that returned an error (stream and FF15 echo) | Each failed attempt counts; the frame or echo answer is kept and retried, not lost |
 | `rx` | Reports received from that controller | Counts every report, including those never forwarded |
 | `tx` | FF11: frames whose last fragment was accepted by `att_server_notify`. FF12: records accepted by `att_server_notify`. FF14: valid records inside batches accepted by `att_server_notify` (records, not notifications) | **Handed to the BLE stack, not confirmed received by the phone** |
-| `drop` | Reports discarded because the queue was full, or the length was 0 or over `WMR_CFG_MAX_FRAME` (64) | Drop-newest: queued frames are kept |
+| `drop` | Reports discarded because the queue was full, or the length was 0 or over `WMR_CFG_MAX_FRAME` (80) | Drop-newest: queued frames are kept |
 | `offline` | Reports received while no phone was connected and subscribed | Intentional, not an error |
 | `purged` | Frames that were queued, then discarded by a queue reset | See [RECONNECT_AND_QUEUE.md](RECONNECT_AND_QUEUE.md) |
 | `mtu_skip` | FF12 and FF14: reports discarded because the ATT MTU was below the stream's minimum (59 for FF12, 61 for FF14) | Zero on FF11. Intentional, not a queue problem |

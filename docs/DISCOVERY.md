@@ -47,8 +47,7 @@ Per hand, in this order:
    (`wmr_addr_record_pack`, golden bytes in the test). Byte 14 carries two model bits per
    hand (00 = WMR, 01 = PSVR2); bytes 15 stay reserved. Model bits are written only for a
    valid hand. The version stays 1, so firmware from before PSVR2 support still reads the
-   record and treats both hands as WMR; a WMR-only build reads a stored PSVR2 model as WMR
-   so the address stays usable.
+   record and treats both hands as WMR.
 3. **None**: the hand is unknown until discovery finds it.
 
 The `s` command prints each hand's address, its source and its model.
