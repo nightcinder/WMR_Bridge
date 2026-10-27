@@ -17,8 +17,9 @@ ONY-428 investigation. Source of truth for the numbers: [`docs/PREDICTION.md`](P
   controlled antenna/position sweep). None has hardware evidence yet.
 - The tested set already bounds the possible gain: the no-phone baseline is 9–11 % per hand
   and RIGHT alone is ~10.8 %. Even if every remaining BLE/coexistence lever worked perfectly,
-  a single ESP32 cannot reach a 3–5 % VR bar by contention tuning alone; reaching sub-15 %
-  on *both* hands at once is not supported by the baselines.
+  a single ESP32 cannot reach a 3–5 % VR bar by contention tuning alone. With the phone link
+  active (FF14, MTU 517) both hands sit at 18–25 %, so sub-15 % on *both* hands at once is not
+  supported by the phone-active baselines; the 9–11 % no-phone figure is already below 15 %.
 - RIGHT's ~10.8 % is independent of the second controller and is not removed by multi-bridge
   or by Pi/Wi-Fi; it is the product blocker and may be controller hardware, RF geometry or
   the firmware hand path.
@@ -30,9 +31,10 @@ ONY-428 investigation. Source of truth for the numbers: [`docs/PREDICTION.md`](P
 | Condition | LEFT | RIGHT | Source |
 | --- | --- | --- | --- |
 | Both controllers + phone, FF14, MTU 517, 15 ms interval | 18–25 % | 18–25 % | PREDICTION §1 |
-| No phone subscribed (`stream=none`) | 8–18 % below 200/s | 8–18 % below 200/s | DECODING investigation notes |
+| No phone subscribed (`stream=none`) | 9–11 % loss (rate 8–18 % below 200/s) | 9–11 % loss (rate 8–18 % below 200/s) | PREDICTION §1; DECODING investigation notes |
 | One controller alone | ~0.5 % | ~10.8 % | STATUS §4 |
-| Phone idle, FF12 streaming at MTU 517, near | ~20 % | ~20 % | DECODING bench runs |
+| Phone idle (or stream held at MTU 23), near | ~10 % | ~10 % | DECODING bench runs |
+| FF12 streaming at MTU 517, near | ~20 % | ~20 % | DECODING bench runs |
 
 The no-phone baseline is the important qualifier: turning the phone link off, or moving it to
 Wi-Fi on the Pi bridge, cannot by itself make a Classic link lossless.
@@ -61,6 +63,7 @@ Wi-Fi on the Pi bridge, cannot by itself make a Classic link lossless.
 | Longer BLE interval request (30 ms) | B1 image; phone must grant and record the granted value |
 | FF14 two-interval hold (`WMR_CFG_BATCH_HOLD_INTERVALS=2`) | Knob added in ONY-176; default 1 unchanged |
 | Physical separation / antenna geometry | Right-asymmetry phases 1–2, no reflash |
+| Classic TX power (raise max above default P3) | Verify via `esp_bredr_tx_power_range_get`; ESP-IDF default BR/EDR max is `ESP_PWR_LVL_P3` (range N0..P3) and the enum extends higher; untested |
 | FF12 decimation re-run, interleaved | Same protocol at N=1/2/4 |
 | Three-state A/B/C at one fixed position | A (streaming) vs B (connected, idle) vs C (disconnected), both passes |
 
@@ -77,7 +80,7 @@ Wi-Fi on the Pi bridge, cannot by itself make a Classic link lossless.
 | 2M BLE PHY | Original ESP32 is BLE 4.2 only; ESP32-S3/C3/C6 lack Classic Bluetooth |
 | Classic-vs-BLE priority | `esp_coex_preference_set` arbitrates Wi-Fi vs Bluetooth, not BR/EDR vs BLE; no public API |
 | ESP32 controller scheduling | Closed firmware; not modifiable from this repo |
-| Classic TX power | `esp_bredr_tx_power_set` not called; default is already maximum |
+
 | Classic AFH | Controller-managed; not exposed by this firmware |
 
 ## Other levers not yet considered or tested
