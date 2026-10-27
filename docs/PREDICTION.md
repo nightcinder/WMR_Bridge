@@ -276,7 +276,10 @@ FF14 at MTU 517, the granted 15 ms interval and a one-interval batch hold, with
 - **Classic TX power and channel/frequency-hopping control.** `esp_bredr_tx_power_set`
   is not called; the ESP-IDF default BR/EDR range is N0..P3 (`ESP_PWR_LVL_P3`),
   and the power enum extends higher, so the default is not demonstrably the
-  hardware maximum (verify with `esp_bredr_tx_power_get`). Classic AFH is
+  hardware maximum (`esp_bredr_tx_power_get` returns the configured range, not
+  the supported max; probe by reading the current max, then calling
+  `esp_bredr_tx_power_set(ESP_PWR_LVL_N0, ESP_PWR_LVL_P6)` and P9, checking the
+  return and readback, and A/B whichever level is accepted). Classic AFH is
   controller-managed and not exposed by this firmware. There is no tested lever
   here, but raising TX power is run-ready, not closed.
 
