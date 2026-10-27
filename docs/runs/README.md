@@ -57,6 +57,7 @@ defaults and `docs/STATUS.md` in both repos written up. Until then, no sitting a
 | `closeout.md` | Checks still not run (MTU on the Connect screen, gamepad checks, settings persistence, HID, C7, round-trip rerun) | **not run** |
 | `robustness.md` | Remaining TESTING.md items in one sitting: still-required 2–6, 9, 11; FF12 5–7, 11, 12, 15; B4, B6–B8, B10, B11 | **not run** |
 | `pi-bridge.md` | Linux / Raspberry Pi Wi-Fi host bridge bring-up (P1–P10); upstream loss comparability against ESP32 | **not run** |
+| [`external-test-user.md`](sheets/external-test-user.md) | External tester intake, priority device order, and tiered capture bundle for the v0.2.4 pairing regression, glasses hosts and PSVR2 raw path | template, not run |
 
 ## Logs (`logs/`)
 
