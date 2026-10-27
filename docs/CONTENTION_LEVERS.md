@@ -63,7 +63,7 @@ Wi-Fi on the Pi bridge, cannot by itself make a Classic link lossless.
 | Longer BLE interval request (30 ms) | B1 image; phone must grant and record the granted value |
 | FF14 two-interval hold (`WMR_CFG_BATCH_HOLD_INTERVALS=2`) | Knob added in ONY-176; default 1 unchanged |
 | Physical separation / antenna geometry | Right-asymmetry phases 1–2, no reflash |
-| Classic TX power (raise max above default P3) | Verify via `esp_bredr_tx_power_range_get`; ESP-IDF default BR/EDR max is `ESP_PWR_LVL_P3` (range N0..P3) and the enum extends higher; untested |
+| Classic TX power (raise max above default P3) | Verify via `esp_bredr_tx_power_get`; ESP-IDF default BR/EDR max is `ESP_PWR_LVL_P3` (range N0..P3) and the enum extends higher; untested |
 | FF12 decimation re-run, interleaved | Same protocol at N=1/2/4 |
 | Three-state A/B/C at one fixed position | A (streaming) vs B (connected, idle) vs C (disconnected), both passes |
 
@@ -109,7 +109,7 @@ Run, in this order, before declaring the single-ESP32 search exhausted:
 2. RIGHT asymmetry phases 1–2 (no reflash; isolates controller vs position vs hand slot).
 3. Current-build DLE capture plus the 30 ms interval and two-interval hold A/B.
 4. Controlled antenna/position sweep with the three-state A/B/C protocol, interleaved.
-5. Classic TX power: call `esp_bredr_tx_power_range_get`; if a level above P3 is available,
+5. Classic TX power: call `esp_bredr_tx_power_get`; if a level above P3 is available,
    A/B it against the default.
 
 If those do not move loss below ~15 % on both hands, the result is the baseline, not a missed
