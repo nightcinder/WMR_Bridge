@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "wmr_batch.h"
+#include "wmr_levers.h"
 #include "wmr_decoded.h"
 #include "wmr_queue.h"
 #include "wmr_stream_mode.h"
@@ -185,6 +186,14 @@ static void test_flush_rule(void){
     CHECK(max_age == hold);                             /* with a 1 ms check it is exactly the hold time */
     CHECK(batches > 0 && sent / batches >= 2);
     CHECK(sent + queued == 400);                        /* nothing dropped by batching */
+#if WMR_CFG_TEST_LEVERS
+    /* The LEVERS `h` toggle doubles the hold at runtime; toggle back restores the default. */
+    CHECK(wmr_levers_hold_intervals() == 1u);
+    CHECK(wmr_levers_hold_toggle());
+    CHECK(wmr_batch_hold_us(15000) == 30000u);
+    CHECK(!wmr_levers_hold_toggle());
+    CHECK(wmr_batch_hold_us(15000) == 15000u);
+#endif
 }
 
 static void test_exclusion(void){

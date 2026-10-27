@@ -378,6 +378,21 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #error "WMR_CFG_CLASSIC_NO_SNIFF and WMR_CFG_CLASSIC_FORCE_MASTER are alternative variants; enable at most one"
 #endif
 
+/* ---- One-flash contention test image (ONY-430) --------------------------- */
+
+/* 0 = release behaviour: every lever below uses the compile-time value above and the
+ * console keys are absent. 1 = LEVERS image: V1 stagger, the 30 ms BLE interval request,
+ * the two-interval FF14 hold and Classic TX power P6/P9 become runtime toggles (`g`, `i`,
+ * `h`, `p`) with `x`/`t` state and readback. One image serves bench runs R1-R5; all
+ * defaults at boot are the release configuration. Build with
+ * -DWMR_CFG_TEST_LEVERS=1. */
+#ifndef WMR_CFG_TEST_LEVERS
+#define WMR_CFG_TEST_LEVERS                0
+#endif
+#if WMR_CFG_TEST_LEVERS < 0 || WMR_CFG_TEST_LEVERS > 1
+#error "WMR_CFG_TEST_LEVERS must be 0 (release) or 1 (LEVERS test image)"
+#endif
+
 /* ---- Diagnostic build option: FF12 decimation ---------------------------- */
 
 /* Default 1 = off (every decoded record is sent). With N > 1 only every Nth report of

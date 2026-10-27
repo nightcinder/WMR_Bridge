@@ -41,6 +41,7 @@
 
 #include <string.h>
 #include "wmr_batch.h"
+#include "wmr_levers.h"
 
 bool wmr_batch_mtu_ok(uint16_t att_mtu){
     return att_mtu >= WMR_BATCH_MIN_MTU;
@@ -82,7 +83,7 @@ bool wmr_batch_parse(const uint8_t *packet, uint16_t size, unsigned *count, cons
 
 uint32_t wmr_batch_hold_us(uint32_t conn_interval_us){
     uint32_t interval_us = conn_interval_us ? conn_interval_us : WMR_CFG_BATCH_HOLD_DEFAULT_US;
-    return interval_us * (uint32_t) WMR_CFG_BATCH_HOLD_INTERVALS;
+    return interval_us * (uint32_t) wmr_levers_hold_intervals();
 }
 
 wmr_batch_flush_t wmr_batch_flush_reason(unsigned queued, unsigned max_count,

@@ -28,12 +28,14 @@ if( EXAMPLE STREQUAL "wmr_bridge" )
         "${WMR_BRIDGE_DIR}/src/wmr_echo.c"
         "${WMR_BRIDGE_DIR}/src/wmr_link.c"
         "${WMR_BRIDGE_DIR}/src/wmr_linkdiag.c"
+        "${WMR_BRIDGE_DIR}/src/wmr_levers.c"
         "${WMR_BRIDGE_DIR}/src/wmr_log.c"
         "${WMR_BRIDGE_DIR}/src/wmr_protocol.c"
         "${WMR_BRIDGE_DIR}/src/wmr_queue.c"
         "${WMR_BRIDGE_DIR}/src/wmr_status_led.c"
         "${WMR_BRIDGE_DIR}/src/wmr_stream_mode.c"
-        "${WMR_BRIDGE_DIR}/src/wmr_transport.c")
+        "${WMR_BRIDGE_DIR}/src/wmr_transport.c"
+        "${WMR_BRIDGE_DIR}/src/wmr_txpower.c")
     set(GATT_PATH "${WMR_BRIDGE_DIR}/wmr_bridge.gatt")
 else()
     if( NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/${EXAMPLE}.c" )

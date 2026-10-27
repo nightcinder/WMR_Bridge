@@ -35,10 +35,15 @@ if ($LASTEXITCODE -ne 0) { throw "compile failed (stream mode)" }
 & $exeStream "$root\samples\controller_frames.txt"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $exeBatch = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_batch.exe"
-$batchSources = "$root\tests\test_batch.c", "$root\src\wmr_batch.c", "$root\src\wmr_stream_mode.c", "$root\src\wmr_queue.c", "$root\src\wmr_decoded.c", "$root\src\wmr_decode.c"
+$batchSources = "$root\tests\test_batch.c", "$root\src\wmr_batch.c", "$root\src\wmr_levers.c", "$root\src\wmr_stream_mode.c", "$root\src\wmr_queue.c", "$root\src\wmr_decoded.c", "$root\src\wmr_decode.c"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" $batchSources -o $exeBatch
 if ($LASTEXITCODE -ne 0) { throw "compile failed (batch)" }
 & $exeBatch
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeLevers = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_levers.exe"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_levers.c" "$root\src\wmr_levers.c" -o $exeLevers
+if ($LASTEXITCODE -ne 0) { throw "compile failed (levers)" }
+& $exeLevers
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $exeEcho = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_echo.exe"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_echo.c" "$root\src\wmr_echo.c" -o $exeEcho

@@ -76,6 +76,8 @@ void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t 
 
 const wmr_stats_t *wmr_transport_stats(void);
 void wmr_transport_get_info(wmr_transport_info_t *info);
+/* Print the last LE data-length-change values seen on the phone link (LEVERS `t`). */
+void wmr_transport_print_dle(void);
 /* FF15 echo counters and pending state. */
 const wmr_echo_state_t *wmr_transport_echo(void);
 

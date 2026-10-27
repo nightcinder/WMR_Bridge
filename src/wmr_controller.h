@@ -137,6 +137,10 @@ void wmr_controller_get_status(unsigned hand, wmr_controller_status_t *out);
 /* Raw HID cid (0 if none); for the console status line. */
 uint16_t wmr_controller_cid(unsigned hand);
 
+/* LEVERS `g`: drop the V1 gate/hold state after the runtime stagger mode changes. The
+ * caller must ensure both controllers are disconnected. No-op in the release build. */
+void wmr_controller_reset_stagger(void);
+
 /* Discovery state and round (for FF17 status). */
 uint8_t wmr_controller_discovery_phase(void);
 uint8_t wmr_controller_discovery_round(void);
