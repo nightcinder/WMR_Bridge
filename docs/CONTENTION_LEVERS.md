@@ -13,8 +13,8 @@ ONY-428 investigation. Source of truth for the numbers: [`docs/PREDICTION.md`](P
 **Not capped out on investigation, but capped out on single-ESP32 tuning for a sub-15 % dual-hand result.**
 
 - The single-ESP32 search still has run-ready levers (V1 stagger, right-asymmetry phases 1–2,
-  a current-build DLE capture, a 30 ms interval request, a two-interval FF14 hold, and a
-  controlled antenna/position sweep). None has hardware evidence yet.
+  a current-build DLE capture, a 30 ms interval request, a two-interval FF14 hold, a controlled
+  antenna/position sweep, and a Classic TX power check). None has hardware evidence yet.
 - The tested set already bounds the possible gain: the no-phone baseline is 9–11 % per hand
   and RIGHT alone is ~10.8 %. Even if every remaining BLE/coexistence lever worked perfectly,
   a single ESP32 cannot reach a 3–5 % VR bar by contention tuning alone. With the phone link
@@ -80,7 +80,6 @@ Wi-Fi on the Pi bridge, cannot by itself make a Classic link lossless.
 | 2M BLE PHY | Original ESP32 is BLE 4.2 only; ESP32-S3/C3/C6 lack Classic Bluetooth |
 | Classic-vs-BLE priority | `esp_coex_preference_set` arbitrates Wi-Fi vs Bluetooth, not BR/EDR vs BLE; no public API |
 | ESP32 controller scheduling | Closed firmware; not modifiable from this repo |
-
 | Classic AFH | Controller-managed; not exposed by this firmware |
 
 ## Other levers not yet considered or tested
@@ -110,6 +109,8 @@ Run, in this order, before declaring the single-ESP32 search exhausted:
 2. RIGHT asymmetry phases 1–2 (no reflash; isolates controller vs position vs hand slot).
 3. Current-build DLE capture plus the 30 ms interval and two-interval hold A/B.
 4. Controlled antenna/position sweep with the three-state A/B/C protocol, interleaved.
+5. Classic TX power: call `esp_bredr_tx_power_range_get`; if a level above P3 is available,
+   A/B it against the default.
 
 If those do not move loss below ~15 % on both hands, the result is the baseline, not a missed
 switch: proceed to multi-bridge and/or the Pi bridge, and treat RIGHT's ~10.8 % as a
