@@ -92,11 +92,11 @@ int wmr_txpower_apply(unsigned mode){
     esp_power_level_t max_level;
     switch (mode){
         case WMR_LEVERS_TX_P6:
-            min_level = ESP_PWR_LVL_N0;
+            min_level = boot_min;
             max_level = ESP_PWR_LVL_P6;
             break;
         case WMR_LEVERS_TX_P9:
-            min_level = ESP_PWR_LVL_N0;
+            min_level = boot_min;
             max_level = ESP_PWR_LVL_P9;
             break;
         default:

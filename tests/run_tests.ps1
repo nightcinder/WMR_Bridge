@@ -45,6 +45,16 @@ $exeLevers = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_levers.exe"
 if ($LASTEXITCODE -ne 0) { throw "compile failed (levers)" }
 & $exeLevers
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeLeversOn = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_levers_on.exe"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion -DWMR_CFG_TEST_LEVERS=1 "-I$root\src" "$root\tests\test_levers.c" "$root\src\wmr_levers.c" -o $exeLeversOn
+if ($LASTEXITCODE -ne 0) { throw "compile failed (levers image)" }
+& $exeLeversOn
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeBatchOn = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_batch_on.exe"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion -DWMR_CFG_TEST_LEVERS=1 "-I$root\src" $batchSources -o $exeBatchOn
+if ($LASTEXITCODE -ne 0) { throw "compile failed (batch image)" }
+& $exeBatchOn
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $exeEcho = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_echo.exe"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_echo.c" "$root\src\wmr_echo.c" -o $exeEcho
 if ($LASTEXITCODE -ne 0) { throw "compile failed (echo)" }
