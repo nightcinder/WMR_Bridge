@@ -5,8 +5,9 @@ PRIMARY_SERVICE, GATT_SERVICE
 CHARACTERISTIC, GATT_DATABASE_HASH, READ,
 
 // 0.3 security: every data characteristic is WRITE_ENCRYPTED (and therefore so is
-// its CCC descriptor); the readable ones are also READ_ENCRYPTED, while the
-// notify-only FF12/FF14/FF15 have no read permission. The bridge only accepts LE Secure Connections
+// its CCC descriptor); the readable ones are also READ_ENCRYPTED, while
+// notify-only FF12/FF14 and write+notify FF15 have no read permission. The
+// bridge only accepts LE Secure Connections
 // pairing with bonding, so "encrypted" means a bonded LESC link. GAP_DEVICE_NAME
 // and FF16 stay readable without a bond: a phone must be able to identify the
 // bridge and read its firmware version before it decides to pair.

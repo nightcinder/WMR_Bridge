@@ -64,24 +64,28 @@ static void test_reencryption(void){
 
 static void test_timeout(void){
     printf("pairing timeout refuses a central that never became secure\n");
-    wmr_secure_event_t e = event(WMR_SECURE_PAIR_TIMEOUT, 0x0040, false, false);
-    e.encrypted = false;
+    /* The transport builds this event from gap_encryption_key_size(): 0 means
+     * the link is still unencrypted. */
+    wmr_secure_event_t e = wmr_secure_timeout_event(0x0040, false, 0);
+    CHECK(e.type == WMR_SECURE_PAIR_TIMEOUT);
+    CHECK(e.handle == 0x0040 && e.phone_handle == 0x0040);
+    CHECK(e.encrypted == false);
     CHECK(wmr_secure_decide(&e) == WMR_SECURE_REFUSE);
 
     /* Bonded and already encrypted but the SM event was missed: serve it. */
-    e = event(WMR_SECURE_PAIR_TIMEOUT, 0x0040, false, true);
-    e.encrypted = true;
+    e = wmr_secure_timeout_event(0x0040, true, 16);
+    CHECK(e.encrypted == true);
     CHECK(wmr_secure_decide(&e) == WMR_SECURE_ACCEPT);
 
     /* A bond from an earlier session is not enough: the timer now reports the
      * link's real state, which is unencrypted until the phone re-encrypts. */
-    e = event(WMR_SECURE_PAIR_TIMEOUT, 0x0040, false, true);
-    e.encrypted = false;
+    e = wmr_secure_timeout_event(0x0040, true, 0);
+    CHECK(e.encrypted == false);
     CHECK(wmr_secure_decide(&e) == WMR_SECURE_REFUSE);
 
     /* Encrypted without a bond: refuse. Encryption alone is not the policy. */
-    e = event(WMR_SECURE_PAIR_TIMEOUT, 0x0040, false, false);
-    e.encrypted = true;
+    e = wmr_secure_timeout_event(0x0040, false, 16);
+    CHECK(e.encrypted == true);
     CHECK(wmr_secure_decide(&e) == WMR_SECURE_REFUSE);
 }
 

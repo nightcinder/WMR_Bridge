@@ -84,6 +84,12 @@ typedef struct {
  * so an event about a handle other than the phone's is ignored here. */
 wmr_secure_action_t wmr_secure_decide(const wmr_secure_event_t *event);
 
+/* Build the pairing-timeout event from the link state. encryption_key_size is
+ * the value gap_encryption_key_size() reports; 0 means the link is not
+ * encrypted. Keeping the "!= 0" mapping here makes it host-testable. */
+wmr_secure_event_t wmr_secure_timeout_event(uint16_t phone_handle, bool bonded,
+                                            uint8_t encryption_key_size);
+
 /* Only one phone is served at a time. Accept the first central, refuse the rest. */
 bool wmr_secure_may_connect(uint16_t phone_handle, uint16_t new_handle);
 

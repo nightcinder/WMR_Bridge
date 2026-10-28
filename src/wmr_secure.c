@@ -65,6 +65,19 @@ wmr_secure_action_t wmr_secure_decide(const wmr_secure_event_t *event){
     }
 }
 
+wmr_secure_event_t wmr_secure_timeout_event(uint16_t phone_handle, bool bonded,
+                                            uint8_t encryption_key_size){
+    wmr_secure_event_t event = {
+        .type = WMR_SECURE_PAIR_TIMEOUT,
+        .handle = phone_handle,
+        .phone_handle = phone_handle,
+        .success = false,
+        .bonded = bonded,
+        .encrypted = encryption_key_size != 0,
+    };
+    return event;
+}
+
 bool wmr_secure_may_connect(uint16_t phone_handle, uint16_t new_handle){
     if (phone_handle == WMR_SECURE_NO_HANDLE) return true;
     return phone_handle == new_handle;

@@ -878,14 +878,9 @@ static void secure_apply(const wmr_secure_event_t *event){
 static void pair_timer_fire(btstack_timer_source_t *timer){
     (void) timer;
     if (phone_handle == HCI_CON_HANDLE_INVALID) return;
-    wmr_secure_event_t event = {
-        .type = WMR_SECURE_PAIR_TIMEOUT,
-        .handle = phone_handle,
-        .phone_handle = phone_handle,
-        .success = false,
-        .bonded = sm_le_device_index(phone_handle) >= 0,
-        .encrypted = gap_encryption_key_size(phone_handle) != 0,
-    };
+    wmr_secure_event_t event = wmr_secure_timeout_event(
+        phone_handle, sm_le_device_index(phone_handle) >= 0,
+        gap_encryption_key_size(phone_handle));
     secure_apply(&event);
 }
 
