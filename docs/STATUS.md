@@ -29,6 +29,21 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: ~45–52 min dual-controller, ~58–65 min single-controller; not recommended for session VR |
 | Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 levers run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE; the 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers ([`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). No new hardware run beyond the latency runs |
 
+## Android verification campaign (ONY-439)
+
+Scope: phone + one ESP32 only. Sheet: [`docs/runs/sheets/ony-439-android-verification.md`](runs/sheets/ony-439-android-verification.md).
+Nothing in this table is a hardware result yet; a row moves off `not run` only when the sheet's
+paste-back block arrives, and each row then carries the device, build hash, command and figures.
+
+| Check | Result | Device / build | Where the procedure lives |
+|---|---|---|---|
+| FF16 live read | not run | — | sheet §1 |
+| FF17 scan/connect | not run | — | sheet §2 |
+| Stick dead zone | not run | — | sheet §3 |
+| Latency stream ladder | not run | — | `wmr-companion` `docs/runs/sheets/latency-2.md` §3–§5 |
+| App-vs-native probe decision | not run | — | `wmr-companion` `docs/runs/sheets/latency-2.md` §6 |
+| FF13 calibration applied in fusion | not run | — | `wmr-companion` `docs/PROTOCOL.md` "FF13 config block in the app" |
+
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 
 Full run sheet and figures: [`docs/runs/sheets/contention-2-results.md`](runs/sheets/contention-2-results.md).
