@@ -95,10 +95,23 @@ Local build evidence for this change:
 
 | Item | Value |
 |---|---|
-| Source commit | `99eb091` (`0.2.4-5-g99eb091`) |
+| Source commit | `ba1a8bb` (`0.2.4-8-gba1a8bb`; includes ONY-438) |
 | BTstack | `e38553977a25fb0b55b383c72c289be0975f422c` |
 | ESP-IDF | v6.1 |
-| Factory image SHA-256 | `25c94568f3076e98816665e34878365546ae3e2c3995e3c6578dcf2ccf2ee332` |
+| Factory image SHA-256 | `978ab0278527a6dc237c6b399e5e44fb43defbaf1c9ec713321ce6d05267689c` |
+
+The first phone attempt could not pair: it ran the pre-ONY-438 image
+(`0.2.4-7-g90c6c83`) and the bridge showed two names for one address. Both are
+fixed in the build above. A phone link now needs ONY-438's LE Secure
+Connections pairing with bonding; a build without it is not a valid test.
+
+### Device name on both transports
+
+The bridge stays Classically discoverable so the controllers can be paired, so
+a dual-mode phone sees the same address twice. `WMR_CFG_BLE_NAME` now sets the
+BR/EDR local name too (`gap_set_local_name`), not just the LE advertising name;
+before that the classic side kept BTstack's default `BTstack <bd_addr>` and the
+phone's entry flipped between the two names every few seconds.
 
 ## Verification STATUS (ONY-441 done-when)
 
@@ -152,6 +165,7 @@ notes:
 - **App HID output** (`BluetoothHidDevice`) must be turned off when the
   firmware HID device is used, otherwise Android sees two gamepads. That is
   app UI work and is out of scope here.
-- **Security.** Bonding behaviour is owned by ONY-438; re-test pairing after
-  that lands, as the task says.
+- **Security.** Bonding behaviour is ONY-438's and is now merged: LESC with
+  bonding, unbonded centrals refused. A HID build without it cannot pair on a
+  current Android phone, so test only images built after that merge.
 - **iOS and PC hosts** are out of scope.
