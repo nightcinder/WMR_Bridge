@@ -4,9 +4,8 @@ CHARACTERISTIC, GAP_DEVICE_NAME, READ, "WMR Bridge"
 PRIMARY_SERVICE, GATT_SERVICE
 CHARACTERISTIC, GATT_DATABASE_HASH, READ,
 
-// 0.3 security: every data characteristic is WRITE_ENCRYPTED (and therefore so is
-// its CCC descriptor); the readable ones are also READ_ENCRYPTED, while the
-// notify-only FF12/FF14/FF15 have no read permission. The bridge only accepts LE Secure Connections
+// 0.3 security: every data characteristic (and therefore its CCC descriptor) is
+// READ_ENCRYPTED | WRITE_ENCRYPTED. The bridge only accepts LE Secure Connections
 // pairing with bonding, so "encrypted" means a bonded LESC link. GAP_DEVICE_NAME
 // and FF16 stay readable without a bond: a phone must be able to identify the
 // bridge and read its firmware version before it decides to pair.

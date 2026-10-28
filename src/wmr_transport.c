@@ -872,9 +872,7 @@ static void secure_apply(const wmr_secure_event_t *event){
     }
 }
 
-/* No paired + bonded link within WMR_CFG_BLE_PAIR_TIMEOUT_MS: refuse the central.
- * The actual link encryption state is queried from the controller: a bonded phone
- * whose SM event was missed can still be served, while an encrypt-only link is not. */
+/* No paired + bonded link within WMR_CFG_BLE_PAIR_TIMEOUT_MS: refuse the central. */
 static void pair_timer_fire(btstack_timer_source_t *timer){
     (void) timer;
     if (phone_handle == HCI_CON_HANDLE_INVALID) return;
@@ -884,7 +882,7 @@ static void pair_timer_fire(btstack_timer_source_t *timer){
         .phone_handle = phone_handle,
         .success = false,
         .bonded = sm_le_device_index(phone_handle) >= 0,
-        .encrypted = gap_encryption_key_size(phone_handle) != 0,
+        .encrypted = phone_secure,
     };
     secure_apply(&event);
 }

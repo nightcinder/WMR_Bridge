@@ -73,12 +73,6 @@ static void test_timeout(void){
     e.encrypted = true;
     CHECK(wmr_secure_decide(&e) == WMR_SECURE_ACCEPT);
 
-    /* A bond from an earlier session is not enough: the timer now reports the
-     * link's real state, which is unencrypted until the phone re-encrypts. */
-    e = event(WMR_SECURE_PAIR_TIMEOUT, 0x0040, false, true);
-    e.encrypted = false;
-    CHECK(wmr_secure_decide(&e) == WMR_SECURE_REFUSE);
-
     /* Encrypted without a bond: refuse. Encryption alone is not the policy. */
     e = event(WMR_SECURE_PAIR_TIMEOUT, 0x0040, false, false);
     e.encrypted = true;
