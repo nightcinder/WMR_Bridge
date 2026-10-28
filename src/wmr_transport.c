@@ -1201,7 +1201,20 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     hid_subscribed = false;
                     hid_error_logged = false;
                     wmr_hid_reset(&hid);
-                    printf("BLE phone connected, handle=0x%04x\n", phone_handle);
+                    /* Address type matters for HOGP: Android may open the HID
+                     * connection from a pseudo (resolvable) address instead of
+                     * the public identity it bonded on. */
+                    bd_addr_t peer;
+                    uint8_t peer_type;
+                    if (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
+                        hci_subevent_le_connection_complete_get_peer_address(packet, peer);
+                        peer_type = hci_subevent_le_connection_complete_get_peer_address_type(packet);
+                    } else {
+                        hci_subevent_le_enhanced_connection_complete_v1_get_peer_addresss(packet, peer);
+                        peer_type = hci_subevent_le_enhanced_connection_complete_v1_get_peer_address_type(packet);
+                    }
+                    printf("BLE phone connected, handle=0x%04x peer=%s (%s)\n", phone_handle,
+                           bd_addr_to_str(peer), peer_type == 1 ? "random" : "public");
                     conn_update_pending = false;
                     if (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
                         conn_report("at connect",

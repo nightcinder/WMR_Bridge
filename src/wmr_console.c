@@ -173,9 +173,10 @@ static void print_stats(bool periodic){
 #if WMR_CFG_ATT_TRACE
     wmr_linkdiag_att_t att;
     wmr_linkdiag_att_get(&att);
-    printf("  ATT rx=%lu tx=%lu writes=%lu two_byte_writes=%lu\n",
+    printf("  ATT trace=on rx=%lu tx=%lu writes=%lu two_byte_writes=%lu smp=%lu le_sig=%lu\n",
            (unsigned long) att.rx, (unsigned long) att.tx,
-           (unsigned long) att.writes, (unsigned long) att.two_byte_writes);
+           (unsigned long) att.writes, (unsigned long) att.two_byte_writes,
+           (unsigned long) att.smp, (unsigned long) att.le_signal);
 #endif
 #if WMR_CFG_FF12_DECIMATE > 1
     printf("  DIAGNOSTIC BUILD: FF12 sends every %dth report per hand (WMR_CFG_FF12_DECIMATE)\n",

@@ -94,6 +94,8 @@ typedef struct {
     uint32_t tx;
     uint32_t writes;
     uint32_t two_byte_writes;
+    uint32_t smp;               /* LE security-manager PDUs (the link works without ATT) */
+    uint32_t le_signal;         /* LE L2CAP signalling PDUs */
 } wmr_linkdiag_att_t;
 
 void wmr_linkdiag_att_get(wmr_linkdiag_att_t *out);

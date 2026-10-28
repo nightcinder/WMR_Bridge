@@ -86,6 +86,7 @@ static btstack_timer_source_t pace_timer;
  * the map and stopped". HCI ACL layout: handle/flags (2), length (2), L2CAP
  * length (2), CID (2), PDU. */
 static uint32_t att_rx, att_tx, att_writes, att_short_writes;
+static uint32_t le_smp, le_signal;
 
 static const char *att_opcode_name(uint8_t opcode){
     switch (opcode){
@@ -116,11 +117,24 @@ static const char *att_opcode_name(uint8_t opcode){
 
 static void att_trace(uint8_t out, const uint8_t *packet, uint16_t len){
     if (len < 9) return;
-    if (little_endian_read_16(packet, 6) != 0x0004) return;     /* L2CAP CID: ATT */
+    const uint16_t cid = little_endian_read_16(packet, 6);
+    const char *dir = out ? "tx" : "rx";
+    if (cid != 0x0004){
+        /* LE-only fixed channels: SMP pairing and LE signalling. Their presence shows
+         * the phone link carries L2CAP traffic even when no ATT PDU arrives, which
+         * separates "Android never opened GATT" from "the trace is off". */
+        if (cid == 0x0006){
+            le_smp++;
+            if (len > 8) WMR_LOGI("att", "%s smp code=0x%02x len=%u", dir,
+                                  packet[8], (unsigned) (len - 8));
+        } else if (cid == 0x0005){
+            le_signal++;
+        }
+        return;
+    }
     const uint8_t *pdu = packet + 8;
     uint16_t plen = (uint16_t) (len - 8);
     uint8_t opcode = pdu[0];
-    const char *dir = out ? "tx" : "rx";
     if (out) att_tx++; else att_rx++;
 
     switch (opcode){
@@ -216,6 +230,8 @@ void wmr_linkdiag_att_get(wmr_linkdiag_att_t *out){
     out->tx              = att_tx;
     out->writes          = att_writes;
     out->two_byte_writes = att_short_writes;
+    out->smp             = le_smp;
+    out->le_signal       = le_signal;
 #endif
 }
 
@@ -322,6 +338,19 @@ void wmr_linkdiag_link_identified(unsigned hand, uint16_t con_handle){
 void wmr_linkdiag_on_hci_event(uint8_t *packet, uint16_t size){
     (void)size;
     switch (hci_event_packet_get_type(packet)){
+        case HCI_EVENT_CONNECTION_REQUEST: {
+#if WMR_CFG_ATT_TRACE
+            /* A phone that decides this is a Classic HID device pages the BR/EDR side.
+             * Log it: that attempt, not the LE link, is where such a phone stops. */
+            bd_addr_t address;
+            hci_event_connection_request_get_bd_addr(packet, address);
+            WMR_LOGI("att", "incoming %s link from %s",
+                     hci_event_connection_request_get_link_type(packet) == HCI_LINK_TYPE_ACL
+                         ? "ACL" : "SCO",
+                     bd_addr_to_str(address));
+#endif
+            break;
+        }
         case HCI_EVENT_CONNECTION_COMPLETE: {
             if (hci_event_connection_complete_get_status(packet) != ERROR_CODE_SUCCESS) break;
             bd_addr_t address;
@@ -398,6 +427,10 @@ void wmr_linkdiag_init(void){
 #if WMR_CFG_ATT_TRACE && !defined(CONFIG_BTSTACK_HCI_DUMP_STDOUT)
     /* The ATT PDU trace needs packet logging; dump_packet() keeps only the ATT CID. */
     hci_dump_enable_packet_log(true);
+    WMR_LOGI("att", "ATT trace on: one line per ATT/SMP PDU on the phone link");
+#elif WMR_CFG_ATT_TRACE
+    WMR_LOGI("att", "ATT trace compiled in but packet logging is disabled by "
+                    "CONFIG_BTSTACK_HCI_DUMP_STDOUT; expect no PDU lines");
 #endif
     cycle_timer.process = cycle_tick;
     btstack_run_loop_set_timer(&cycle_timer, WMR_CFG_LINKDIAG_INTERVAL_MS);

@@ -90,14 +90,18 @@ tester. See "Known gaps".
 ## ATT trace
 
 A build with `WMR_CFG_ATT_TRACE=1` (`EXTRA_CFLAGS=-DWMR_CFG_ATT_TRACE=1`
-`python3 tools/firmware/build.py ...`) prints one line per ATT PDU on the
-phone link and an `ATT rx= tx= writes= two_byte_writes=` row in the status
+`python3 tools/firmware/build.py ...`) logs `ATT trace on: ...` at start-up,
+prints one line per ATT or SMP PDU on the phone link, and adds
+`ATT trace=on rx= tx= writes= two_byte_writes= smp= le_sig=` to the status
 block. `rx` is phone→bridge and `tx` is bridge→phone. The trace shows how far
 a HOGP host gets: service discovery (`read-by-group`, `read-by-type`), the
 Report Map read (`read` 0x2A4B then `read-blob` at offset 22), the Protocol
 Mode write (0x2A4E), and the Report CCCD write (handle 0x000e, value
-`0x0001`). A connection with no ATT lines is a pairing-only link, not a HOGP
-host; a trace that stops before the CCCD write names the request that failed.
+`0x0001`). `smp` counts pairing PDUs; a connection with SMP traffic but no ATT
+lines is a pairing-only link, not a HOGP host. A trace that stops before the
+CCCD write names the request that failed. Incoming Classic ACL connections are
+logged too (`att incoming ACL link from <addr>`): a phone that decides the
+bridge is a BR/EDR HID device pages it there instead of opening GATT.
 Off by default because a HID host produces dozens of lines per connection.
 
 ## Tests
