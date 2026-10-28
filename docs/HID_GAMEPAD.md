@@ -149,10 +149,10 @@ Local build evidence for this change:
 
 | Item | Value |
 |---|---|
-| Source commit | `eab749b` (`0.2.4-16-geab749b`; includes ONY-438 and the LE-only phone transport) |
+| Source commit | `748e928` (`0.2.4-29-g748e928-att`, ATT trace on, UUID column) |
 | BTstack | `e38553977a25fb0b55b383c72c289be0975f422c` |
 | ESP-IDF | v6.1 |
-| Factory image SHA-256 | `29098236ffa8d9ac710e4b58e3e07a1930b11b69c6be04c8ebd54fc9667e5d3b` |
+| Factory image SHA-256 | `40fb1b1af30ee60a14baa325eaa057128a9da2b4ac7bcadd8f98a7d82838d204` |
 
 The first phone attempt could not pair: it ran the pre-ONY-438 image
 (`0.2.4-7-g90c6c83`) and the bridge showed two names for one address. Both are
@@ -240,7 +240,7 @@ what the console traces show so far.
 
 | Check | Result | Phone / Android | Build | Evidence |
 |---|---|---|---|---|
-| Stock phone pairs and shows an input device, no app | PARTIAL: pairs, bonds, generic discovery completes, then no ATT read/write and a 0x13 drop; missing DIS PnP ID fixed | Pixel 11 Pro / Android 17 | `0.2.4-25-gaeeb621-att`, `0.2.4-26-g70c922d` | ATT trace, above |
+| Stock phone pairs and shows an input device, no app | PARTIAL: pairs, bonds, generic discovery completes, then no ATT read/write and a 0x13 drop. DIS PnP added in `0.2.4-26`; that phone run still dropped before the Report CCCD write. UUID-printing trace build ready | Pixel 11 Pro / Android 17 | `0.2.4-25-gaeeb621-att`, `0.2.4-26-g70c922d`, `0.2.4-29-g748e928-att` | ATT trace, above |
 | Gamepad tester: A/B/X/Y, shoulders, stick clicks, menu, home | not run | — | — | — |
 | Gamepad tester: d-pad via left trackpad (8 sectors) | not run | — | — | — |
 | Gamepad tester: face buttons via right trackpad | not run | — | — | — |
