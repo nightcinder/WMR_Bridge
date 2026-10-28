@@ -146,8 +146,9 @@ static void print_stats(bool periodic){
     const wmr_stats_t *st = wmr_transport_stats();
     char conn[48] = "n/a";
     if (info.conn_known) wmr_conn_format(&info.conn, conn, sizeof(conn));
-    printf("STREAM phone=%u adv=%s sub=%u stream=%s mtu=%u conn=[%s]%s q=%u/%u high=%u notify=%lu errors=%lu bridge_hands=%d\n",
+    printf("STREAM phone=%u adv=%s hid=%s sub=%u stream=%s mtu=%u conn=[%s]%s q=%u/%u high=%u notify=%lu errors=%lu bridge_hands=%d\n",
            info.phone_connected, info.advertising ? "on" : "off",
+           info.hid_subscribed ? "on" : "off",
            info.subscribed, wmr_stream_mode_name(info.stream), info.mtu,
            conn, info.conn_update_pending ? " (update requested, not granted yet)" : "",
            info.queue_count, info.queue_capacity, info.queue_high_water,

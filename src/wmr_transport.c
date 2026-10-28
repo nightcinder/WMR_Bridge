@@ -88,6 +88,12 @@
 /* HID-over-GATT gamepad: report ID 1, 9 payload bytes, same descriptor as the
  * companion package. Notifications are independent of the FF10 stream modes. */
 static wmr_hid_state_t hid;
+/* HOGP hosts enable this CCCD after service discovery and bonding. A device
+ * must not send input reports before that, and Android drops a device that
+ * streams them during discovery. */
+static bool hid_subscribed;
+/* One line per connection for the first rejected HID notification. */
+static bool hid_error_logged;
 
 /* FF17: controller scan and status v2 (read + write + notify), independent of the
  * stream exclusion. */
@@ -265,7 +271,7 @@ static void pump_kick(void){
     /* A pending echo or HID report needs a send opportunity whatever the stream
      * is doing. */
     if (!echo.pending && !cfg_notify_owed() && !ctrl_notify_pending &&
-        !wmr_hid_report_due(&hid, now)){
+        !(hid_subscribed && wmr_hid_report_due(&hid, now))){
         if (stream_mode == WMR_STREAM_NONE || !queue.count) return;
         if (stream_mode == WMR_STREAM_BATCHED && !batch_due()) return;
     }
@@ -505,7 +511,8 @@ static void pump_send_one(void){
     const bool stream_ready = stream_mode != WMR_STREAM_NONE && queue.count > 0 &&
         (stream_mode != WMR_STREAM_BATCHED || batch_due());
     static bool last_send_hid;
-    if (wmr_hid_report_due(&hid, now) && (!stream_ready || !last_send_hid)){
+    if (hid_subscribed && wmr_hid_report_due(&hid, now) &&
+        (!stream_ready || !last_send_hid)){
         last_send_hid = pump_send_hid(now);
         return;
     }
@@ -546,6 +553,7 @@ static void pump_send_one(void){
  * Report characteristic; the report ID is in its Report Reference descriptor,
  * so the value is the 9-byte payload only. */
 static bool pump_send_hid(uint64_t now){
+    if (!hid_subscribed) return false;
     uint8_t payload[WMR_HID_REPORT_SIZE];
     if (!wmr_hid_take_report(&hid, now, payload)){
         pump_kick();
@@ -555,12 +563,60 @@ static bool pump_send_hid(uint64_t now){
                                                           payload, sizeof(payload));
     if (result != ERROR_CODE_SUCCESS){
         stats.hid_errors++;
+        if (!hid_error_logged){
+            hid_error_logged = true;
+            printf("HID input report send failed: 0x%02x (subscribed=%u)\n",
+                   result, hid_subscribed ? 1u : 0u);
+        }
         hid.force = true;        /* retry the same report on the next pump tick */
         return false;
     }
     stats.hid_reports++;
     pump_kick();
     return true;
+}
+
+/* HIDS events tell us when the host enables the input report. Until then the
+ * bridge sends nothing: Android's HID host is still discovering services, and
+ * input notifications in that window make it drop the link. */
+static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
+                               uint8_t *packet, uint16_t size){
+    (void) channel;
+    if (packet_type != HCI_EVENT_PACKET || size < 5) return;
+    if (hci_event_packet_get_type(packet) != HCI_EVENT_HIDS_META) return;
+    switch (hci_event_hids_meta_get_subevent_code(packet)){
+        case HIDS_SUBEVENT_INPUT_REPORT_ENABLE: {
+            hci_con_handle_t handle = hids_subevent_input_report_enable_get_con_handle(packet);
+            if (handle != phone_handle) break;
+            hid_subscribed = hids_subevent_input_report_enable_get_enable(packet) != 0;
+            hid_error_logged = false;
+            printf("HID input report %s (report id %u)\n",
+                   hid_subscribed ? "enabled" : "disabled",
+                   hids_subevent_input_report_enable_get_report_id(packet));
+            if (hid_subscribed){
+                wmr_hid_reset(&hid);    /* first notification is a neutral report */
+                pump_kick();
+            }
+            break;
+        }
+        case HIDS_SUBEVENT_PROTOCOL_MODE:
+            if (hids_subevent_protocol_mode_get_con_handle(packet) != phone_handle) break;
+            printf("HID protocol mode: %s\n",
+                   hids_subevent_protocol_mode_get_protocol_mode(packet) ? "report" : "boot");
+            break;
+        case HIDS_SUBEVENT_SUSPEND:
+        case HIDS_SUBEVENT_EXIT_SUSPEND: {
+            const uint8_t subevent = hci_event_hids_meta_get_subevent_code(packet);
+            hci_con_handle_t handle = (subevent == HIDS_SUBEVENT_SUSPEND)
+                ? hids_subevent_suspend_get_con_handle(packet)
+                : hids_subevent_exit_suspend_get_con_handle(packet);
+            if (handle != phone_handle) break;
+            printf("HID %s\n", subevent == HIDS_SUBEVENT_SUSPEND ? "suspended" : "resumed");
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 static void pump_retry_tick(btstack_timer_source_t *timer){
@@ -597,6 +653,7 @@ void wmr_transport_get_info(wmr_transport_info_t *info){
     info->phone_connected  = phone_handle != HCI_CON_HANDLE_INVALID;
     info->advertising      = advertising_active;
     info->subscribed       = stream_mode != WMR_STREAM_NONE;
+    info->hid_subscribed   = hid_subscribed;
     info->stream           = stream_mode;
     info->mtu              = info->phone_connected ? att_server_get_mtu(phone_handle) : 0;
     info->queue_count      = queue.count;
@@ -906,8 +963,15 @@ static int att_write(hci_con_handle_t handle, uint16_t attribute,
 static void att_packet_handler(uint8_t packet_type, uint16_t channel,
                                uint8_t *packet, uint16_t size){
     (void)channel;
-    if (packet_type == HCI_EVENT_PACKET && size >= 2 &&
-        hci_event_packet_get_type(packet) == ATT_EVENT_CAN_SEND_NOW){
+    if (packet_type != HCI_EVENT_PACKET || size < 2) return;
+    const uint8_t event = hci_event_packet_get_type(packet);
+    if (event == ATT_EVENT_MTU_EXCHANGE_COMPLETE){
+        printf("BLE ATT MTU: %u (handle=0x%04x)\n",
+               att_event_mtu_exchange_complete_get_MTU(packet),
+               att_event_mtu_exchange_complete_get_handle(packet));
+        return;
+    }
+    if (event == ATT_EVENT_CAN_SEND_NOW){
         pump_send_one();
     }
 }
@@ -1134,6 +1198,8 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     wmr_echo_cancel(&echo);
                     cfg_reset_connection();
                     ctrl_reset_connection();
+                    hid_subscribed = false;
+                    hid_error_logged = false;
                     wmr_hid_reset(&hid);
                     printf("BLE phone connected, handle=0x%04x\n", phone_handle);
                     conn_update_pending = false;
@@ -1182,6 +1248,8 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                 wmr_echo_cancel(&echo);
                 cfg_reset_connection();
                 ctrl_reset_connection();
+                hid_subscribed = false;
+                hid_error_logged = false;
                 wmr_hid_reset(&hid);
                 conn_known = false;
                 conn_update_pending = false;
@@ -1206,6 +1274,7 @@ void wmr_transport_init(void){
     unsigned descriptor_size = 0;
     const uint8_t *descriptor = wmr_hid_report_descriptor(&descriptor_size);
     hids_device_init(0, descriptor, (uint16_t) descriptor_size);
+    hids_device_register_packet_handler(hid_packet_handler);
     /* The bridge stays Classically discoverable for controller pairing, so a
      * dual-mode phone sees the same address twice. Give the BR/EDR side the
      * same name as the LE advertising data; otherwise BTstack's default

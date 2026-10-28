@@ -63,6 +63,12 @@ tester. See "Known gaps".
   adds Appearance `0x03C4` (Gamepad). `0x1812` belongs in the primary packet, not
   only in the scan response: a host that misses the scan response otherwise sees
   a plain vendor device and will not treat it as a HID gamepad.
+- **No input before subscribe:** the bridge sends HID input reports only after
+  the phone enables the Report characteristic's CCCD (`HID input report enabled`
+  in the console; `hid=on` in the status line). HOGP hosts do not expect
+  notifications while they are still discovering services, and Android drops
+  the link when a device streams through that window. A neutral report is sent
+  immediately after the subscription is enabled.
 - **Connectable state is logged:** every status line prints `adv=on` or
   `adv=off`, the HCI result of LE Set Advertising Enable is reported if the
   controller refuses it, and advertising is re-asserted after controller

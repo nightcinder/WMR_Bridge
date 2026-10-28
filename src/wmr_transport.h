@@ -55,6 +55,7 @@ typedef struct {
     bool     phone_connected;
     bool     advertising;      /* connectable LE advertising is on (HCI confirmed) */
     bool     subscribed;       /* phone enabled FF11 or FF12 notifications */
+    bool     hid_subscribed;   /* phone enabled HID input report notifications */
     wmr_stream_t stream;       /* which one (NONE, RAW or DECODED) */
     uint16_t mtu;              /* negotiated ATT MTU; 0 if no phone */
     unsigned queue_count;
