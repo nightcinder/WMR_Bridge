@@ -44,8 +44,8 @@ firmware build do not prove radio behavior.
 - `sm_set_request_security(true)`: the bridge sends a Security Request as soon as
   a central connects, so a fresh phone gets the pairing dialog without the app
   needing a special call.
-- Every characteristic except the GAP device name and FF16 is
-  `READ_ENCRYPTED | WRITE_ENCRYPTED` in `wmr_bridge.gatt`. The CCC descriptors
+- Every characteristic except the GAP device name, the GAP appearance and FF16
+  is `READ_ENCRYPTED | WRITE_ENCRYPTED` in `wmr_bridge.gatt`. The CCC descriptors
   inherit the write requirement, so notifications cannot be enabled on an
   unencrypted link either. FF16 (firmware version) stays readable so a client can
   check compatibility before pairing.
