@@ -148,6 +148,8 @@ int btstack_main(int argc, const char *argv[]){
     if (esp_read_mac(le_address, ESP_MAC_BT) == ESP_OK){
         le_address[0] |= 0xC0;   /* static random: two most significant bits set */
         gap_random_address_set(le_address);
+        printf("BLE LE address: %s (static random; separate from the BR/EDR identity)\n",
+               bd_addr_to_str(le_address));
     }
 
     setvbuf(stdout, NULL, _IONBF, 0);

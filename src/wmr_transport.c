@@ -981,6 +981,31 @@ static void att_packet_handler(uint8_t packet_type, uint16_t channel,
 
 /* ---- 0.3 phone-link security -------------------------------------------- */
 
+/* What the bond database holds for this link. A phone reconnects from a
+ * resolvable private address; the host has to resolve it to this entry, or the
+ * controller's LTK request fails with 0x06 and Android falls back to a fresh
+ * pairing. The identity address and the IRK presence are therefore the two
+ * facts needed to read a re-encryption failure from a field log. */
+static void log_bond_state(const char *what, uint16_t handle){
+    int index = sm_le_device_index(handle);
+    if (index < 0){
+        printf("BLE %s: no bond entry (handle=0x%04x)\n", what, handle);
+        return;
+    }
+    int addr_type = -1;
+    bd_addr_t addr;
+    sm_key_t irk;
+    le_device_db_info(index, &addr_type, addr, irk);
+    bool irk_present = false;
+    for (unsigned i = 0; i < sizeof(irk); i++){
+        if (irk[i]){ irk_present = true; break; }
+    }
+    printf("BLE %s: bond %d identity=%s type=%s irk=%s\n", what, index,
+           bd_addr_to_str(addr),
+           addr_type == BD_ADDR_TYPE_LE_PUBLIC ? "public" : "random",
+           irk_present ? "yes" : "no");
+}
+
 /* Act on the policy's verdict. ACCEPT keeps the phone; REFUSE disconnects it, so an
  * unbonded central cannot sit on the link and block the intended phone. */
 static void secure_apply(const wmr_secure_event_t *event){
@@ -1059,6 +1084,7 @@ void wmr_transport_on_sm_event(uint8_t *packet, uint16_t size){
             event.bonded = sm_le_device_index(event.handle) >= 0;
             if (event.success){
                 printf("BLE pairing complete: %s\n", event.bonded ? "bond stored" : "no bond stored");
+                if (event.bonded) log_bond_state("pairing complete", event.handle);
             } else {
                 printf("BLE pairing failed: status=0x%02x reason=0x%02x\n",
                        sm_event_pairing_complete_get_status(packet),
@@ -1077,6 +1103,7 @@ void wmr_transport_on_sm_event(uint8_t *packet, uint16_t size){
             if (!event.success){
                 printf("BLE re-encryption failed: status=0x%02x\n",
                        sm_event_reencryption_complete_get_status(packet));
+                log_bond_state("re-encryption failed", event.handle);
             }
             secure_apply(&event);
             break;

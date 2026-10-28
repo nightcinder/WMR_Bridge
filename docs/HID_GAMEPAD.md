@@ -338,6 +338,34 @@ The bond is keyed to the LE address, so this build needs one fresh pairing:
 forget every "WMR Bridge" entry on the phone (there may be an LE entry and an
 older Classic one), flash, then pair once.
 
+## 0.2.4-37 field run: CTKD makes a Classic bond for the LE identity (fixed in 0.2.4-38)
+
+The 2026-10-28 20:11 capture (`0.2.4-37-gb8e48a4-att`) shows the phone pairing
+three times and storing a bond each time, then closing the LE link about 5 s
+after connecting (`reason=0x13`) with `hid=off` and **no ATT PDU after
+encryption**. The first attempt reads the GAP Device Name, pairs, bonds, and
+stops; the next two reconnects fail re-encryption with `status=0x06` (the
+bridge cannot find the key), delete the bond and re-pair. No Classic ACL from
+the phone appears, so Android is not reaching the bridge's BR/EDR side at all.
+
+The ESP32 port compiles Cross-Transport Key Derivation (CTKD) in whenever
+Classic and LE are both enabled. During LE pairing the two sides therefore set
+the CT2 bit and derive a BR/EDR link key. Android stores that derived key as a
+**Classic bond for the LE identity address** — and since `0.2.4-36` that
+identity is a static random address that does not exist on BR/EDR. The phone
+then treats the device as dual-mode, `btif_hh_transport_select()` chooses the
+Classic HID transport, pages an address the bridge does not own, and the
+pairing UI returns to the scan list. The bridge never sees the page, which is
+why the log has a bond but no GATT client. With the public address this
+fallback was real HID over BR/EDR (the 19:06 Classic ACL).
+
+`tools/firmware/build.py` now removes `ENABLE_CROSS_TRANSPORT_KEY_DERIVATION`
+from the port's `btstack_config.h` before every build (verified there, like the
+ACL limit), so the bridge never offers CTKD. Controllers pair over Classic SSP
+and are unaffected; the bridge never uses a CTKD-derived key. The boot line
+`BLE LE address: … (static random…)` and the new `BLE pairing complete: bond …
+identity=… type=… irk=…` line make the next capture self-describing.
+
 ## Verification STATUS (ONY-441 done-when)
 
 Nothing in this table is a completed hardware result yet. A row moves off
@@ -346,7 +374,7 @@ what the console traces show so far.
 
 | Check | Result | Phone / Android | Build | Evidence |
 |---|---|---|---|---|
-| Stock phone pairs and shows an input device, no app | PARTIAL: pairs and bonds; GAP `0x2A04` reads successfully, but the phone never enables the Report CCCD (`hid=off sub=0`) and drops after 6-9 s. The 16:05 and 19:06 captures show its BR/EDR side (`B0:9C:B2…`, Google OUI) coming up at the drop; `0.2.4-36` gives LE a static random address and a non-HID Class of Device. Retest pending | Pixel 11 Pro / Android 17 | `0.2.4-33-gd298202` (diagnosis), `0.2.4-36` (fix) | ATT trace, 16:05/19:06 captures, above |
+| Stock phone pairs and shows an input device, no app | PARTIAL: pairs and bonds; GAP `0x2A04` reads successfully, but the phone never enables the Report CCCD (`hid=off sub=0`) and drops after 5-9 s. `0.2.4-36` gives LE a static random address; the 20:11 capture shows no ATT client after the bond, and CTKD explains the Classic bond for the LE identity. `0.2.4-38` disables CTKD; retest pending | Pixel 11 Pro / Android 17 | `0.2.4-33` (diagnosis), `0.2.4-36` (address), `0.2.4-38` (CTKD) | ATT traces, 16:05/19:06/20:11 captures, above |
 | Both controllers connect while the phone is connected | PASS (controllers): 19:06 has LEFT and RIGHT streaming (~180 reports/s each, both FF13 blocks `state=2`) before and during the phone connection; the phone side still drops | Pixel 11 Pro / Android 17 | `0.2.4-33-gd298202` | 19:06 capture, above |
 | Gamepad tester: A/B/X/Y, shoulders, stick clicks, menu, home | not run | — | — | — |
 | Gamepad tester: d-pad via left trackpad (8 sectors) | not run | — | — | — |
