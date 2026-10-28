@@ -49,6 +49,7 @@
 #include "wmr_devloss.h"
 #include "wmr_diag.h"
 #include "wmr_linkdiag.h"
+#include "wmr_log.h"
 
 typedef struct {
     bool              connected;
@@ -78,8 +79,153 @@ static btstack_timer_source_t pace_timer;
 
 /* ---- (d) log sink: count the silent VHCI receive drop --------------------- */
 
+#if WMR_CFG_ATT_TRACE
+/* Every ATT PDU on the phone link, decoded to one line. A HOGP host runs the
+ * whole HID handshake over ATT (discover, read report map, write the Report
+ * CCCD), so this is what separates "the phone never opened GATT" from "it read
+ * the map and stopped". HCI ACL layout: handle/flags (2), length (2), L2CAP
+ * length (2), CID (2), PDU. */
+static uint32_t att_rx, att_tx, att_writes, att_short_writes;
+static uint32_t le_smp, le_signal;
+
+static const char *att_opcode_name(uint8_t opcode){
+    switch (opcode){
+        case 0x01: return "error-rsp";
+        case 0x02: return "mtu-req";
+        case 0x03: return "mtu-rsp";
+        case 0x04: return "find-info";
+        case 0x05: return "find-info-rsp";
+        case 0x06: return "find-by-type";
+        case 0x07: return "find-by-type-rsp";
+        case 0x08: return "read-by-type";
+        case 0x09: return "read-by-type-rsp";
+        case 0x0a: return "read";
+        case 0x0b: return "read-rsp";
+        case 0x0c: return "read-blob";
+        case 0x0d: return "read-blob-rsp";
+        case 0x10: return "read-by-group";
+        case 0x11: return "read-by-group-rsp";
+        case 0x12: return "write";
+        case 0x13: return "write-rsp";
+        case 0x52: return "write-cmd";
+        case 0x1b: return "notify";
+        case 0x1d: return "indicate";
+        case 0xd2: return "signed-write-cmd";
+        default:   return "other";
+    }
+}
+
+static void att_trace(uint8_t out, const uint8_t *packet, uint16_t len){
+    if (len < 9) return;
+    const uint16_t cid = little_endian_read_16(packet, 6);
+    const char *dir = out ? "tx" : "rx";
+    if (cid != 0x0004){
+        /* LE-only fixed channels: SMP pairing and LE signalling. Their presence shows
+         * the phone link carries L2CAP traffic even when no ATT PDU arrives, which
+         * separates "Android never opened GATT" from "the trace is off". */
+        if (cid == 0x0006){
+            le_smp++;
+            if (len > 8) WMR_LOGI("att", "%s smp code=0x%02x len=%u", dir,
+                                  packet[8], (unsigned) (len - 8));
+        } else if (cid == 0x0005){
+            le_signal++;
+        }
+        return;
+    }
+    const uint8_t *pdu = packet + 8;
+    uint16_t plen = (uint16_t) (len - 8);
+    uint8_t opcode = pdu[0];
+    if (out) att_tx++; else att_rx++;
+
+    switch (opcode){
+        case 0x01:  /* Error Response: request opcode, handle, code */
+            if (plen >= 5){
+                WMR_LOGI("att", "%s error req=0x%02x handle=0x%04x code=0x%02x",
+                         dir, pdu[1], little_endian_read_16(pdu, 2), pdu[4]);
+            } else {
+                WMR_LOGI("att", "%s error len=%u", dir, plen);
+            }
+            break;
+        case 0x08: case 0x10:  /* Read By Type / Read By Group Type */
+        case 0x06: {           /* Find By Type Value */
+            /* The UUID is the whole point of a 0x08/0x06 request: it names the
+             * characteristic a HOGP host is looking for (Report Map, HID Info,
+             * PnP ID). Read By Group only ever asks for 0x2800/0x2801.
+             * The UUID can be 16 or 128 bits long; plen - 5 bytes follow the two
+             * handles. Do not assume the 16-bit form: the first capture matched
+             * no request at all because this print only accepted plen == 7. */
+            const uint16_t start = plen >= 5 ? little_endian_read_16(pdu, 1) : 0;
+            const uint16_t end   = plen >= 5 ? little_endian_read_16(pdu, 3) : 0;
+            if (opcode == 0x10){
+                WMR_LOGI("att", "%s read-by-group 0x%04x..0x%04x", dir, start, end);
+            } else if (plen >= 7){
+                const uint16_t uuid16 = little_endian_read_16(pdu, 5);
+                const unsigned uuid_len = opcode == 0x06 ? 2u : (unsigned) (plen - 5);
+                if (opcode == 0x06){
+                    WMR_LOGI("att", "%s find-by-type 0x%04x..0x%04x type=0x%04x value_len=%u",
+                             dir, start, end, uuid16, (unsigned) (plen - 7));
+                } else {
+                    WMR_LOGI("att", "%s read-by-type 0x%04x..0x%04x type=0x%04x uuid_len=%u",
+                             dir, start, end, uuid16, uuid_len);
+                }
+            } else {
+                WMR_LOGI("att", "%s %s len=%u", dir, att_opcode_name(opcode), plen);
+            }
+            break;
+        }
+        case 0x04:             /* Find Information */
+            if (plen >= 5){
+                WMR_LOGI("att", "%s find-info 0x%04x..0x%04x", dir,
+                         little_endian_read_16(pdu, 1), little_endian_read_16(pdu, 3));
+            }
+            break;
+        case 0x0a: case 0x0c:  /* Read / Read Blob */
+            if (plen >= 3){
+                if (opcode == 0x0c && plen >= 5){
+                    WMR_LOGI("att", "%s read-blob handle=0x%04x offset=%u", dir,
+                             little_endian_read_16(pdu, 1), little_endian_read_16(pdu, 3));
+                } else {
+                    WMR_LOGI("att", "%s read handle=0x%04x", dir,
+                             little_endian_read_16(pdu, 1));
+                }
+            }
+            break;
+        case 0x12: case 0x52: case 0xd2:  /* Write Request / Command / Signed */
+            if (plen >= 3){
+                uint16_t handle = little_endian_read_16(pdu, 1);
+                att_writes++;
+                if (plen == 4){
+                    att_short_writes++;
+                    WMR_LOGI("att", "%s write handle=0x%04x value=0x%02x%02x", dir,
+                             handle, pdu[2], pdu[3]);
+                } else {
+                    WMR_LOGI("att", "%s write handle=0x%04x len=%u", dir, handle,
+                             (unsigned) (plen - 3));
+                }
+            }
+            break;
+        case 0x1b: case 0x1d:  /* Handle Value Notification / Indication */
+            if (plen >= 3){
+                WMR_LOGI("att", "%s %s handle=0x%04x len=%u", dir,
+                         att_opcode_name(opcode), little_endian_read_16(pdu, 1),
+                         (unsigned) (plen - 3));
+            }
+            break;
+        default:
+            WMR_LOGI("att", "%s %s len=%u", dir, att_opcode_name(opcode), plen);
+            break;
+    }
+}
+#endif
+
 static void dump_reset(void){}
 static void dump_packet(uint8_t packet_type, uint8_t in, uint8_t *packet, uint16_t len){
+#if WMR_CFG_ATT_TRACE
+    if (packet_type == HCI_ACL_DATA_PACKET){
+        att_trace(in, packet, len);
+        return;
+    }
+#endif
     (void)packet_type; (void)in; (void)packet; (void)len;
 }
 static void dump_message(int log_level, const char *format, va_list argptr){
@@ -94,6 +240,18 @@ static const hci_dump_t dump_sink = { dump_reset, dump_packet, dump_message };
 
 uint32_t wmr_linkdiag_vhci_drops(void){ return __atomic_load_n(&vhci_drops, __ATOMIC_RELAXED); }
 uint32_t wmr_linkdiag_log_errors(void){ return __atomic_load_n(&log_errors, __ATOMIC_RELAXED); }
+
+void wmr_linkdiag_att_get(wmr_linkdiag_att_t *out){
+    memset(out, 0, sizeof(*out));
+#if WMR_CFG_ATT_TRACE
+    out->rx              = att_rx;
+    out->tx              = att_tx;
+    out->writes          = att_writes;
+    out->two_byte_writes = att_short_writes;
+    out->smp             = le_smp;
+    out->le_signal       = le_signal;
+#endif
+}
 
 /* ---- helpers --------------------------------------------------------------- */
 
@@ -198,6 +356,19 @@ void wmr_linkdiag_link_identified(unsigned hand, uint16_t con_handle){
 void wmr_linkdiag_on_hci_event(uint8_t *packet, uint16_t size){
     (void)size;
     switch (hci_event_packet_get_type(packet)){
+        case HCI_EVENT_CONNECTION_REQUEST: {
+#if WMR_CFG_ATT_TRACE
+            /* A phone that decides this is a Classic HID device pages the BR/EDR side.
+             * Log it: that attempt, not the LE link, is where such a phone stops. */
+            bd_addr_t address;
+            hci_event_connection_request_get_bd_addr(packet, address);
+            WMR_LOGI("att", "incoming %s link from %s",
+                     hci_event_connection_request_get_link_type(packet) == HCI_LINK_TYPE_ACL
+                         ? "ACL" : "SCO",
+                     bd_addr_to_str(address));
+#endif
+            break;
+        }
         case HCI_EVENT_CONNECTION_COMPLETE: {
             if (hci_event_connection_complete_get_status(packet) != ERROR_CODE_SUCCESS) break;
             bd_addr_t address;
@@ -270,6 +441,14 @@ void wmr_linkdiag_init(void){
     hci_dump_enable_log_level(HCI_DUMP_LOG_LEVEL_DEBUG, 0);
     hci_dump_enable_log_level(HCI_DUMP_LOG_LEVEL_INFO, 0);
     hci_dump_enable_log_level(HCI_DUMP_LOG_LEVEL_ERROR, 1);
+#endif
+#if WMR_CFG_ATT_TRACE && !defined(CONFIG_BTSTACK_HCI_DUMP_STDOUT)
+    /* The ATT PDU trace needs packet logging; dump_packet() keeps only the ATT CID. */
+    hci_dump_enable_packet_log(true);
+    WMR_LOGI("att", "ATT trace on: one line per ATT/SMP PDU on the phone link");
+#elif WMR_CFG_ATT_TRACE
+    WMR_LOGI("att", "ATT trace compiled in but packet logging is disabled by "
+                    "CONFIG_BTSTACK_HCI_DUMP_STDOUT; expect no PDU lines");
 #endif
     cycle_timer.process = cycle_tick;
     btstack_run_loop_set_timer(&cycle_timer, WMR_CFG_LINKDIAG_INTERVAL_MS);

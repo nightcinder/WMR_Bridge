@@ -94,6 +94,11 @@ typedef struct {
     uint32_t ticks;           /* 32-bit device timer, 100 ns per tick; wraps */
 } wmr_controller_state_t;
 
+/* True when the bytes carry a WMR input report (46 bytes, A1 01 ...). Frames
+ * from other devices share the transport, so callers that report a failure
+ * use this to tell "not ours" from "ours but undecodable". */
+bool wmr_decode_frame_is_wmr(const uint8_t *frame, uint16_t length);
+
 /* Decode one frame as delivered by the bridge (46 bytes, A1 01 ...).
  * Returns false (and leaves `out` untouched) if the length, transaction
  * header or report ID is wrong. */

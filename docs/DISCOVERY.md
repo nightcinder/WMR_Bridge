@@ -105,16 +105,25 @@ reports on that hand during discovery (not measured). Discovery is bounded for t
 
 ### Radio reservation while a hand is missing
 
-Every inquiry round that still has a hand missing gets the Classic radio to itself
-(`WMR_CFG_DISCOVERY_RESERVE_RADIO` = 1). If a hand is connected, its ACL is dropped at the
-start of the round (`HID`-channel disconnect alone is not enough: the controller reopens the
-channel over the still-open ACL at once, as the 0.2.3 field log shows), and every incoming
-link is refused until that round ends, known address or not. The inquiry starts
-`WMR_CFG_DISCOVERY_RELEASE_MS` (400 ms) after the disconnect so the ACL has gone. The held
-hand reconnects by itself (or with `l`/`r`) afterwards. A controller whose address is still
-unknown can identify itself after the run, when incoming connections are accepted again.
-Because a hand found in one round is not connected until after that round,
-the next round starts quiet again instead of streaming through it.
+The first `WMR_CFG_DISCOVERY_RESERVE_ROUNDS` (3) inquiry rounds of a run that still have a
+hand missing get the Classic radio to itself (`WMR_CFG_DISCOVERY_RESERVE_RADIO` = 1). If a
+hand is connected, its ACL is dropped at the start of the round (`HID`-channel disconnect
+alone is not enough: the controller reopens the channel over the still-open ACL at once, as
+the 0.2.3 field log shows), and every incoming link is refused until that round ends, known
+address or not. The inquiry starts `WMR_CFG_DISCOVERY_RELEASE_MS` (400 ms) after the
+disconnect so the ACL has gone. The held hand reconnects by itself (or with `l`/`r`)
+afterwards. A controller whose address is still unknown can identify itself after the run,
+when incoming connections are accepted again. Because a hand found in one round is not
+connected until after that round, the next round starts quiet again instead of streaming
+through it.
+
+The reservation is bounded because a hand that is off, asleep, or not in pairing mode never
+answers. The 2026-10-28 18:54 run (0.2.4-33) shows the unbounded behaviour: RIGHT paired and
+streamed, was disconnected at the start of round 4, then its reconnect attempts were refused
+for the rest of the captured run while the absent LEFT never answered, leaving no usable
+controller. After the bound a connected hand may stay or reconnect while the remaining rounds
+run; press `d` for a fresh run with a fresh reservation when the missing controller is in
+pairing mode.
 
 The same slot rule applies inside the connect phase when both hands were found in one round.
 Before paging a hand, a hand that connected earlier in the phase is disconnected (ACL, not
@@ -122,6 +131,14 @@ just HID) and the page waits `WMR_CFG_DISCOVERY_RELEASE_MS`, so the page starts 
 link holding a slot. The released hand reconnects when the run ends. This is the 0.2.3 log
 case where LEFT paired, then RIGHT got HCI `0x09` on all three attempts; a run where only
 RIGHT was paged (LEFT held off by the filter) paired on the first attempt.
+
+A page whose ACL comes up but which then produces neither encryption nor a HID channel is
+watched. After `WMR_CFG_PAIR_ENCRYPT_MS` (1.5 s) the bridge asks for encryption with the
+stored link key when the controller did not start it; after
+`WMR_CFG_PAIR_CONNECT_TIMEOUT_MS` (5 s) it drops the ACL and releases the waiting connect
+phase (no HID event would arrive to do that), so the attempt is retried instead of hanging
+the run. The 2026-10-28 18:54 log has LEFT's ACL up for 20 s in that state, which hung the
+single-hand connect phase until the board was reset.
 
 That is what the 2026-10-26 field logs show (firmware 0.2.2): the missing hand was found in
 the first round in all three runs where the other hand had no link yet, while 18 consecutive
@@ -208,9 +225,27 @@ What changes:
   that hand, and is paired with automatically (SSP is auto-confirmed for any device). The
   exposure is the discovery window, which runs only while a hand has no address and is bounded.
 - Once both hands have addresses, name matching is off: incoming devices with other addresses
-  are declined, and discovery has nothing to look for.
+  are declined and their ACL is disconnected, and discovery has nothing to look for.
 - A stored address is never replaced by discovery or by an incoming device; only `F` (local
   serial console) clears it.
+
+## Classic ACL slots
+
+The ESP32 controller is built with three BR/EDR ACL links
+(`CONFIG_BTDM_CTRL_BR_EDR_MAX_ACL_CONN=3`, set by `tools/firmware/build.py`; the
+ESP-IDF default is two). Two belong to the controllers; the third is headroom
+for a stray device, such as a phone's BR/EDR side or a nearby headset, that
+pages the bridge without ever opening a HID channel.
+
+An incoming ACL from an address that is not LEFT or RIGHT is now bounded. When
+both hands already have stored addresses the link is disconnected at once.
+While a hand is still unpaired the link gets `WMR_CFG_UNKNOWN_ACL_TIMEOUT_MS`
+(5 s) to open a HID channel and start the name check, then it is disconnected.
+Up to two such links are watched at once, each with its own deadline; a third
+is refused at once, and a link that cannot be watched is never left holding a
+slot. Declining the HID channel also disconnects the ACL. Before this, the
+2026-10-28 field log shows such a link sitting idle while `connecting LEFT` failed with
+HCI `0x09` (connection limit exceeded).
 
 See [SECURITY.md](SECURITY.md).
 

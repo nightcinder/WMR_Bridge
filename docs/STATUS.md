@@ -1,5 +1,5 @@
 # WMR Bridge: Firmware & Bridge Status
-Last updated: 2026-10-26 (current tagged release v0.2.4 — ONY-307 discovery/ACL-slot fixes and the ONY-313 logging cleanup; ESP32-over-BLE is the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the second supported first-class target; Pi is host-tests-only until the Pi sitting runs — see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md) and [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md)). Firmware and Pi hardware runs remain unverified unless a run sheet proves otherwise.
+Last updated: 2026-10-28 (current tagged release v0.2.4 — ONY-307 discovery/ACL-slot fixes and the ONY-313 logging cleanup; ESP32-over-BLE is the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the second supported first-class target; Pi is host-tests-only until the Pi sitting runs — see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md) and [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md)). Firmware and Pi hardware runs remain unverified unless a run sheet proves otherwise.
 
 This document tracks **firmware and host-bridge capabilities and empirical findings** in this repository. Two supported first-class bridge targets are maintained here:
 - **ESP32-over-BLE (`src/`, default):** BTstack Classic Bluetooth HID host forwarding over BLE GATT (`FF10` service; `FF11`–`FF16`). Bench-tested with two WMR controllers and an Android phone (user-reported figures below).
@@ -27,7 +27,90 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Host tests only, **not run on hardware** |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default) | Host tests and firmware build only, **never run on a PSVR2 controller**; no PSVR2 decoder (FF11 raw only) |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: ~45–52 min dual-controller, ~58–65 min single-controller; not recommended for session VR |
+| BLE HID-over-GATT gamepad (ONY-441, draft) | Implemented and passes the 2026-10-28 phone run: `0.2.4-38-g4bcf01c` pairs, bonds, raises ATT MTU to 517, enables the HID Report CCCD (`hid=on`) and streams HID reports (~68/s, `errors=0`) with both controllers connected; the phone reconnects to the bond after a bridge reboot without re-pairing. CTKD was the last blocker: `0.2.4-38` disables it, so Android keeps the LE HID transport and shows no second Classic entry | **PASS (phone + mapping):** Pixel 11 Pro / Android 17; gamepad appears and controls register in the tester. Controller power-cycle after the reboot was not re-captured. See [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
 | Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 levers run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE; the 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers ([`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). No new hardware run beyond the latency runs |
+
+## BLE HID gamepad (ONY-441)
+
+Scope: the same phone link also exposes one standard BLE HID-over-GATT
+gamepad, so Android sees the controllers with no app. The FF10 service is
+unchanged. Implementation and procedure: [`HID_GAMEPAD.md`](HID_GAMEPAD.md).
+
+| Check | Result | Phone / Android / build | Where |
+|---|---|---|---|
+| Stock phone pairs and shows a gamepad, no app | PASS: `0.2.4-38` pairs and bonds, ATT MTU 517, `hid=on`, HID reports ~68/s with `errors=0`, and the phone reconnects to the bond after a bridge reboot | Pixel 11 Pro / Android 17, `0.2.4-38-g4bcf01c` | `HID_GAMEPAD.md` §0.2.4-38 field run |
+| Both controllers connect while the phone is connected | PASS: both hands stream ~170-190 reports/s with both FF13 blocks `state=2` while the phone is bonded and receiving HID | Pixel 11 Pro / Android 17, `0.2.4-38-g4bcf01c` | same |
+| Every control in a gamepad tester (buttons, d-pad, face buttons, sticks, triggers) | PASS (user): gamepad appears and controls register; per-control values not itemised | Pixel 11 Pro / Android 17, `0.2.4-38-g4bcf01c` | same |
+| No stuck input after controller or BLE reconnect | PARTIAL: after the 16:44 bridge reboot the phone reconnected to the bond and received only the neutral report (`HID reports=1`); controller power-cycle after that reboot not captured | Pixel 11 Pro / Android 17, `0.2.4-38-g4bcf01c` | same |
+| FF12 rate unchanged while HID is active | PARTIAL: controller/source rate ~170-190 reports/s per hand, 0 drops, FF13 `state=2`, HID ~68/s; FF12 itself was not subscribed (`stream=none`), so the simultaneous FF12 + HID rate was not sampled | Pixel 11 Pro / Android 17, `0.2.4-38-g4bcf01c` | same |
+| Shared input→report vectors, firmware side | passing (host) | `tests/test_hid.c` | `tests/vectors/hid_gamepad.txt` |
+| Shared input→report vectors, companion side | passing (host) | `wmr_companion_hid_android` | companion PR |
+
+The firmware build (ESP-IDF v6.1, BTstack `e38553977`, both-hands variant)
+passes and the host vector tests pass. A Pixel 11 Pro / Android 17 retest on
+`0.2.4-8-gba1a8bb` paired after several bridge resets, but the phone showed a
+phone icon and stopped connecting after the entry was forgotten. The cause is
+BTstack's default Class of Device `0x007a020c` ("Smartphone"), which a dual-mode
+phone prefers over the LE appearance; `0.2.4-10-g084e2f3` set Peripheral /
+Gamepad (`0x000508`) and added the GAP Appearance characteristic (`0x03C4`).
+That made the icon right but left a Classic gamepad; `0.2.4-36` sets the Class
+of Device back to Miscellaneous (`0x000000`). The
+`0.2.4-10-g084e2f3` run then showed the gamepad icon but ended in
+`cannot communicate with <address>`; the bridge log had no phone link at all on
+either transport, and the phone still held a Classic bond from the earlier
+attempt. A Classically discoverable bridge is paired over BR/EDR by Android,
+where this HID host has no profile, so the bridge now keeps page scan but turns
+inquiry scan off and advertises `BR/EDR not supported` (flags `0x06`). That was
+not enough: the phone still had the public BR/EDR address and paged it at every
+LE drop. `0.2.4-36` advertises LE from a static random address derived from the
+BT MAC and sets the BR/EDR Class of Device to Miscellaneous (`0x000000`), so the
+phone has no Classic gamepad to fall back to; GAP Appearance `0x03C4` keeps the
+gamepad icon. Forgetting the old entry once is part of the retest.
+
+The `0.2.4-16` retest (CI merge build of this branch and `main`) still showed a
+gamepad entry that would not connect, and the attached bridge log again had
+`phone=0` with no LE connection and no Classic link from the phone for the whole
+capture. The attempt ran while controller discovery held the Classic radio
+(inquiry rounds 1-6) and before the phone retry that the instructions ask for
+after `discovery finished`; the log also shows the bridge refusing incoming
+Classic links in that phase. The HID service UUID `0x1812` now sits in the
+primary advertisement (not only in the scan response), advertising is re-asserted
+after discovery and after a phone disconnect, and every status line prints
+`adv=on`/`adv=off` so the next log says whether the phone could connect at that
+moment. Every row above that needs a phone stays `not run` until the paste-back
+block in `HID_GAMEPAD.md` is filled in.
+
+The `0.2.4-29-g748e928-att` trace shows where the phone stops. It paired,
+bonded, and discovered every service, characteristic and descriptor; then it
+sent **no ATT read and no ATT write at all**, and dropped the link (reason
+`0x13`) five seconds later. The last request was
+`read-by-type 0x0001..0xFFFF type=0x2A04`, a lookup of Peripheral Preferred
+Connection Parameters, which the bridge did not expose, so it was answered
+`attribute not found`. Android's GAP client reads `0x2A04` after
+discovery and disconnects the link when that read fails, which is why the HID
+profile never started. DIS `0x180A` with the PnP ID (`0.2.4-26`) was a correct
+addition but not the cause. `0.2.4-31-g13c7d9f` adds `0x2A04` (min/max 15 ms,
+latency 0, timeout 4 s); phone rows stay `not run` until the next paste.
+
+The 2026-10-28 16:05 run on `0.2.4-31` reports the phone connected and stayed,
+and the ATT trace shows the `0x2A04` read now returning 12 bytes. The same
+capture exposes the next failure on the Classic side: RIGHT streams, an unknown
+Classic link at `B0:9C:B2:CE:26:88` comes up and never opens a HID channel, and
+`connecting LEFT` then answers `connection limit exceeded (no spare ACL slot)
+(0x09)`. The ESP32 controller was configured for two BR/EDR ACL links, so the
+idle unknown link took the one LEFT needed. `tools/firmware/build.py` now sets
+`CONFIG_BTDM_CTRL_BR_EDR_MAX_ACL_CONN=3` and fails the build unless the generated
+header shows the effective value; `src/wmr_controller.c` drops a Classic ACL
+from an address that is not LEFT/RIGHT once both hands have stored addresses,
+and gives an unknown link 5 s to open a HID channel while a hand is still
+unpaired. Both controllers with the phone connected remain `not run`.
+
+The 2026-10-28 16:43 run on `0.2.4-38-g4bcf01c` closes that gap. Both
+controllers stream (~170-190 reports/s, FF13 `state=2`), the phone bonds, ATT
+MTU reaches 517, Android enables the Report CCCD (`hid=on`), and HID reports
+run at ~68/s with `errors=0`; the phone reconnects to the bond after a bridge
+reboot and no Classic entry appears. The user confirms the tester registers
+controls. Details in `HID_GAMEPAD.md` §0.2.4-38 field run.
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 

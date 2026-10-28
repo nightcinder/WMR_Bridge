@@ -58,6 +58,9 @@ typedef enum {
     WMR_SECURE_ACCEPT = 0,
     /* Disconnect the central: it did not produce a bonded LESC link. */
     WMR_SECURE_REFUSE,
+    /* The stored key is stale (the phone forgot the bridge): delete the bond,
+     * keep the link and let the central pair again. */
+    WMR_SECURE_REPAIR,
     /* Not about the phone link; leave the connection alone. */
     WMR_SECURE_IGNORE
 } wmr_secure_action_t;
@@ -78,6 +81,8 @@ typedef struct {
     bool success;           /* SM status was ERROR_CODE_SUCCESS */
     bool bonded;            /* a bond exists for this handle (sm_le_device_index >= 0) */
     bool encrypted;         /* link is currently encrypted (used by the timeout) */
+    bool stale_bond;        /* re-encryption failed because the peer has no key
+                             * for our stored bond (PIN_OR_KEY_MISSING) */
 } wmr_secure_event_t;
 
 /* Decide what to do with one connection. A second central is refused at connect,

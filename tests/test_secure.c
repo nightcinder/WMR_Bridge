@@ -47,18 +47,30 @@ static void test_pairing(void){
 }
 
 static void test_reencryption(void){
-    printf("re-encryption with stored keys decides accept/refuse\n");
+    printf("re-encryption with stored keys decides accept/refuse/repair\n");
     wmr_secure_event_t e = event(WMR_SECURE_REENCRYPTION_COMPLETE, 0x0040, true, true);
     CHECK(wmr_secure_decide(&e) == WMR_SECURE_ACCEPT);
 
     e = event(WMR_SECURE_REENCRYPTION_COMPLETE, 0x0040, false, false);
     CHECK(wmr_secure_decide(&e) == WMR_SECURE_REFUSE);
 
-    /* Stale key on one side: re-encryption fails, the phone has to pair again. */
+    /* Any other re-encryption failure, even with a bond still on our side. */
     e = event(WMR_SECURE_REENCRYPTION_COMPLETE, 0x0040, false, true);
     CHECK(wmr_secure_decide(&e) == WMR_SECURE_REFUSE);
 
     e = event(WMR_SECURE_REENCRYPTION_COMPLETE, 0x0040, true, false);
+    CHECK(wmr_secure_decide(&e) == WMR_SECURE_REFUSE);
+
+    /* The phone forgot the bridge: our stored key is stale (BTstack reports
+     * PIN_OR_KEY_MISSING). Delete it and let the phone pair again instead of
+     * disconnecting while its fresh pairing is under way. */
+    e = event(WMR_SECURE_REENCRYPTION_COMPLETE, 0x0040, false, true);
+    e.stale_bond = true;
+    CHECK(wmr_secure_decide(&e) == WMR_SECURE_REPAIR);
+
+    /* Repair needs the stale-key signal; a failed pairing never uses it. */
+    e = event(WMR_SECURE_PAIRING_COMPLETE, 0x0040, false, true);
+    e.stale_bond = true;
     CHECK(wmr_secure_decide(&e) == WMR_SECURE_REFUSE);
 }
 

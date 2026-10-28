@@ -345,6 +345,22 @@ static void test_rejects(void){
     fill(f); f[1] = 0x02; CHECK(!wmr_decode_frame(f, sizeof(f), &s));
 }
 
+static void test_is_wmr(void){
+    printf("WMR frame identification\n");
+    uint8_t f[WMR_DECODE_FRAME_LENGTH];
+    fill(f);
+    CHECK(wmr_decode_frame_is_wmr(f, sizeof(f)));
+    CHECK(!wmr_decode_frame_is_wmr(NULL, sizeof(f)));
+    CHECK(!wmr_decode_frame_is_wmr(f, WMR_DECODE_FRAME_LENGTH - 1));
+    /* A same-length frame from another device shares the transport but is not HID input,
+     * so it must not be reported as a HID decode failure (ONY-441 review). */
+    uint8_t other[WMR_DECODE_FRAME_LENGTH] = {0};
+    other[0] = 0xAA; other[1] = 0x02; other[2] = 0x01;
+    CHECK(!wmr_decode_frame_is_wmr(other, sizeof(other)));
+    wmr_controller_state_t s;
+    CHECK(!wmr_decode_frame(other, sizeof(other), &s));
+}
+
 static void test_ticks(void){
     printf("tick extension\n");
     uint64_t t = 0;
@@ -400,6 +416,7 @@ int main(int argc, char **argv){
     test_trigger_trackpad_ranges();
     test_thumbstick_and_buttons();
     test_rejects();
+    test_is_wmr();
     test_ticks();
     if (argc > 1) test_samples(argv[1]);
     printf("\n%d checks, %d failures\n", checks, failures);
