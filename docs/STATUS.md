@@ -27,7 +27,7 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Host tests only, **not run on hardware** |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default) | Host tests and firmware build only, **never run on a PSVR2 controller**; no PSVR2 decoder (FF11 raw only) |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: ~45–52 min dual-controller, ~58–65 min single-controller; not recommended for session VR |
-| BLE HID-over-GATT gamepad (ONY-441, draft) | Firmware build + host vector tests; phone shows a gamepad icon but reports `cannot communicate` (`0.2.4-10`) | **No completed phone run**; the phone was pairing over BR/EDR, so the build now hides the Classic side from phones (LE-only, flags `0x06`) and keeps page scan for controllers; see [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
+| BLE HID-over-GATT gamepad (ONY-441, draft) | Firmware build + host vector tests; phone shows a gamepad icon but still does not connect (`0.2.4-16`) | **No completed phone run**; LE-only advertising (flags `0x06`, Classic inquiry scan off, page scan kept for controllers) with the HID UUID in the primary advertisement and `adv=on/off` in the status line; see [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
 | Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 levers run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE; the 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers ([`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). No new hardware run beyond the latency runs |
 
 ## BLE HID gamepad (ONY-441)
@@ -58,8 +58,20 @@ either transport, and the phone still held a Classic bond from the earlier
 attempt. A Classically discoverable bridge is paired over BR/EDR by Android,
 where this HID host has no profile, so the bridge now keeps page scan but turns
 inquiry scan off and advertises `BR/EDR not supported` (flags `0x06`); the phone
-only sees the LE HID device. Every row above that needs a phone stays `not run`
-until the paste-back block in `HID_GAMEPAD.md` is filled in.
+only sees the LE HID device.
+
+The `0.2.4-16` retest (CI merge build of this branch and `main`) still showed a
+gamepad entry that would not connect, and the attached bridge log again had
+`phone=0` with no LE connection and no Classic link from the phone for the whole
+capture. The attempt ran while controller discovery held the Classic radio
+(inquiry rounds 1-6) and before the phone retry that the instructions ask for
+after `discovery finished`; the log also shows the bridge refusing incoming
+Classic links in that phase. The HID service UUID `0x1812` now sits in the
+primary advertisement (not only in the scan response), advertising is re-asserted
+after discovery and after a phone disconnect, and every status line prints
+`adv=on`/`adv=off` so the next log says whether the phone could connect at that
+moment. Every row above that needs a phone stays `not run` until the paste-back
+block in `HID_GAMEPAD.md` is filled in.
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 

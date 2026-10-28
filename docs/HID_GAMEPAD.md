@@ -57,10 +57,19 @@ tester. See "Known gaps".
   report is sent once. The report history and both hands are cleared on BLE
   connect and disconnect, so neither a controller reconnect nor a phone
   reconnect can inherit the previous state.
-- **Advertising:** the advertising data carries the FF10 UUID and the name, with
-  flags `0x06` (LE general discoverable, BR/EDR not supported). The scan
-  response adds Appearance `0x03C4` (Gamepad) and the HID service UUID
-  `0x1812`, which Android uses to classify the device as a gamepad.
+- **Advertising:** the primary advertising data carries the name, flags `0x06`
+  (LE general discoverable, BR/EDR not supported) and the complete 16-bit UUID
+  list with the HID service `0x1812` and the FF10 service. The scan response
+  adds Appearance `0x03C4` (Gamepad). `0x1812` belongs in the primary packet, not
+  only in the scan response: a host that misses the scan response otherwise sees
+  a plain vendor device and will not treat it as a HID gamepad.
+- **Connectable state is logged:** every status line prints `adv=on` or
+  `adv=off`, the HCI result of LE Set Advertising Enable is reported if the
+  controller refuses it, and advertising is re-asserted after controller
+  discovery (`BLE advertising: on (discovery finished)`) and after a phone
+  disconnect. A phone that cannot connect while `adv=off`, or a log with no
+  `BLE phone connected` line, separates "bridge not advertising" from "phone did
+  not try".
 - **Phone transport is LE only:** the bridge is not Classic-discoverable
   (`WMR_CFG_CLASSIC_DISCOVERABLE=0`), and page scan stays on for controller
   reconnects. Together with the advertising flag, that stops Android from
@@ -143,6 +152,19 @@ Classically in the second attempt, and the bridge had no HID-over-BR/EDR to
 serve; a dual-mode entry like that always ends in that error. That is why the
 Classic side is now hidden from phones.
 
+The fourth attempt (`0.2.4-16`, the CI merge build of this branch and `main`)
+still ended with a gamepad entry that would not connect, and the new bridge log
+again has `phone=0` for the whole capture: no LE connection, and no Classic link
+from the phone. The attempt fell inside controller discovery (inquiry rounds 1-6
+and the connect phase, which refuses incoming Classic links), before the "wait
+for `discovery finished`, then pair" step; after the manual reboot at 21 s the
+bridge had both addresses stored, ran no discovery and streamed both hands, but
+the log ends without another phone attempt. The build now logs `adv=on/off` in
+every status line, reports a controller refusal of LE advertising, re-asserts
+advertising when discovery finishes, and carries `0x1812` in the primary
+advertisement. Retest with the console open on this build and paste the lines
+around the attempt.
+
 ## Verification STATUS (ONY-441 done-when)
 
 Nothing in this table is a hardware result yet. A row moves off `not run` only
@@ -181,12 +203,13 @@ notes:
 
 ## Known gaps
 
-- **No completed phone run.** The Pixel 11 Pro / Android 17 passed pairing once
-  on `0.2.4-8-gba1a8bb` but stopped connecting after the entry was forgotten,
-  and the gamepad-tester block was not filled in. The table above is deliberately
-  empty until the retest on the LE-only build produces that block. The
-  `0.2.4-10-g084e2f3` run got a gamepad icon but `cannot communicate`; the
-  phone never linked to the bridge, so the entry was pairing over BR/EDR.
+- **No completed phone run.** The Pixel 11 Pro / Android 17 paired once on
+  `0.2.4-8-gba1a8bb` but stopped connecting after the entry was forgotten; the
+  gamepad-tester block was never filled in. `0.2.4-10` and `0.2.4-16` both showed
+  a gamepad entry and failed to connect, with no phone link of either transport
+  in the bridge log; in both runs the attempt fell inside controller discovery.
+  The 5th attempt needs the bridge console open, the phone entry forgotten first,
+  `discovery finished` (and `adv=on`) before pairing, and the paste-back block.
 - **Stick centre and dead zone.** The app's `StickNormalizer` (centre learning
   from calibration, radial dead zone) is not ported. A controller whose stick
   rests off-centre will show drift in a gamepad tester. This is the most

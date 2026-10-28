@@ -7,7 +7,7 @@ reconnect. They wrap after 2^32 events. They live in `wmr_stats_t`
 ## Periodic line (every 5 s) and the `s` command
 
 ```
-STREAM phone=1 sub=1 stream=decoded mtu=247 conn=[11.25ms lat=0 to=4000ms] q=0/256 high=3 notify=1234 errors=0
+STREAM phone=1 adv=off sub=1 stream=decoded mtu=247 conn=[11.25ms lat=0 to=4000ms] q=0/256 high=3 notify=1234 errors=0
   FF14 batches_tx=0 records_in_batches=0 mean=n/a max=0 batch_full_flushes=0
   HID reports=1200 errors=0 decode_errors=0
   FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
@@ -97,7 +97,7 @@ Added to the periodic line and the `s` command to help find where controller rep
 Background and caveats: [DECODING.md](DECODING.md), "Investigation notes: upstream report loss".
 
 ```
-STREAM phone=1 sub=1 stream=decoded mtu=517 conn=[15.00ms lat=1 to=5000ms] q=0/256 high=3 notify=1234 errors=0
+STREAM phone=1 adv=off sub=1 stream=decoded mtu=517 conn=[15.00ms lat=1 to=5000ms] q=0/256 high=3 notify=1234 errors=0
   vhci_drop=0 log_errors=0
   LEFT  rx=600 tx=600 ... rate_rx=147.0/s rate_tx=147.0/s
   LEFT link: rssi=0 fcc=0 lq=255 mode=active rate_rx=147.0/s dev_missing=312 last5s=26.5% cum=17.7% period=4.99ms discont=0

@@ -50,6 +50,7 @@
 #include "wmr_linkdiag.h"
 #include "wmr_log.h"
 #include "wmr_psvr2.h"
+#include "wmr_transport.h"
 
 typedef struct {
     const char *name;
@@ -938,6 +939,7 @@ static void disc_finish(void){
         missing = true;
     }
     WMR_LOGI("pair", "discovery finished");
+    wmr_transport_advertising_ready("discovery finished");
     disc_pair_summary();
 #if WMR_CFG_DISCOVERY_AUTOSTART
     if (missing){

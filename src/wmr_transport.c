@@ -97,16 +97,24 @@ static wmr_hid_state_t hid;
 #define STATUS_SIZE 16
 
 /* Legacy advertising data: flags (3 bytes), complete local name (2-byte AD header + the
- * characters) and 16-bit service UUID (4 bytes). The name is compile-time
+ * characters) and the complete 16-bit UUID list (2-byte AD header + HID 0x1812 and the
+ * FF10 service, 6 bytes). The HID service UUID belongs in the advertising data, not only
+ * in the scan response: a host that misses the scan response otherwise sees an unnamed
+ * vendor UUID and cannot classify the device as a HID gamepad. The name is compile-time
  * (WMR_CFG_BLE_NAME); the whole packet must fit in 31 bytes, which is why the name is
- * limited to 22 characters. Default `"WMR Bridge"` produces exactly the bytes the fixed
- * array used before. */
-#define ADVERTISING_SIZE  (8u + sizeof(WMR_CFG_BLE_NAME))
+ * limited to 20 characters. */
+#define ADVERTISING_SIZE  (10u + sizeof(WMR_CFG_BLE_NAME))
 static uint8_t advertising[ADVERTISING_SIZE];
 typedef char wmr_ble_name_fits_legacy_advertising[
-    (sizeof(WMR_CFG_BLE_NAME) >= 2 && sizeof(WMR_CFG_BLE_NAME) <= 23) ? 1 : -1];
+    (sizeof(WMR_CFG_BLE_NAME) >= 2 && sizeof(WMR_CFG_BLE_NAME) <= 21) ? 1 : -1];
 
 static hci_con_handle_t phone_handle = HCI_CON_HANDLE_INVALID;
+/* LE advertising state, tracked from the HCI command responses so `s` can say whether the
+ * phone could have connected at that moment. BTstack stops advertising when a central
+ * connects; the bridge re-asserts it after a disconnect, a failed connect attempt and
+ * after controller discovery. */
+static bool advertising_requested;
+static bool advertising_active;
 /* Active stream for the current phone connection; NONE until a CCC is enabled. */
 static wmr_stream_t stream_mode = WMR_STREAM_NONE;
 /* A CAN_SEND_NOW request is outstanding. */
@@ -587,6 +595,7 @@ const wmr_echo_state_t *wmr_transport_echo(void){
 
 void wmr_transport_get_info(wmr_transport_info_t *info){
     info->phone_connected  = phone_handle != HCI_CON_HANDLE_INVALID;
+    info->advertising      = advertising_active;
     info->subscribed       = stream_mode != WMR_STREAM_NONE;
     info->stream           = stream_mode;
     info->mtu              = info->phone_connected ? att_server_get_mtu(phone_handle) : 0;
@@ -1005,13 +1014,46 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel,
 
 /* ---- HCI events --------------------------------------------------------- */
 
+/* Ask for connectable advertising. Idempotent: BTstack ignores an enable while
+ * advertising is already enabled, so this only logs when it turns advertising back on.
+ * Called whenever a radio-heavy phase ends, because a phone that tries to connect while
+ * the bridge advertises nothing fails with no line in the bridge log at all. */
+static void advertising_enable(const char *reason){
+    bool was_requested = advertising_requested;
+    advertising_requested = true;
+    gap_advertisements_enable(1);
+    if (!was_requested){
+        printf("BLE advertising: on (%s)\n", reason);
+    }
+}
+
+void wmr_transport_advertising_ready(const char *reason){
+    advertising_enable(reason);
+}
+
 void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
     switch (hci_event_packet_get_type(packet)){
         case BTSTACK_EVENT_STATE:
             if (btstack_event_state_get_state(packet) == HCI_STATE_WORKING){
+                advertising_requested = true;
                 gap_advertisements_enable(1);
                 printf("BLE advertising: %s (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream, FF15 echo, FF13 config block, FF17 control)\n",
                        WMR_CFG_BLE_NAME);
+            }
+            break;
+        case HCI_EVENT_COMMAND_COMPLETE:
+            /* LE Set Advertising Enable: a controller-side rejection would leave the phone
+             * unable to connect while the device still looks advertised in a cached scan. */
+            if (size >= 6 &&
+                hci_event_command_complete_get_command_opcode(packet) ==
+                    HCI_OPCODE_HCI_LE_SET_ADVERTISE_ENABLE){
+                uint8_t status =
+                    hci_event_command_complete_get_return_parameters(packet)[0];
+                advertising_active = status == ERROR_CODE_SUCCESS;
+                if (!advertising_active){
+                    printf("BLE advertising: controller refused to enable (status=0x%02x)\n",
+                           status);
+                }
             }
             break;
         case HCI_EVENT_LE_META:
@@ -1063,6 +1105,9 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     }
                     phone_handle = new_handle;
                     phone_secure = false;
+                    /* The controller stops advertising for a connected central. */
+                    advertising_requested = false;
+                    advertising_active = false;
                     btstack_run_loop_remove_timer(&pair_timer);
                     data_length_seen = false;
                     data_length_valid = false;
@@ -1094,8 +1139,17 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     btstack_run_loop_set_timer(&pair_timer, WMR_CFG_BLE_PAIR_TIMEOUT_MS);
                     btstack_run_loop_add_timer(&pair_timer);
                 } else {
-                    printf("BLE connection failed: 0x%02x\n", packet[3]);
-                    gap_advertisements_enable(1);
+                    bd_addr_t peer;
+                    if (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
+                        hci_subevent_le_connection_complete_get_peer_address(packet, peer);
+                    } else {
+                        hci_subevent_le_enhanced_connection_complete_v1_get_peer_addresss(
+                            packet, peer);
+                    }
+                    printf("BLE connection failed: %s status=0x%02x\n",
+                           bd_addr_to_str(peer), packet[3]);
+                    advertising_requested = false;
+                    advertising_enable("connect attempt failed");
                 }
             }
             break;
@@ -1117,7 +1171,8 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                 conn_known = false;
                 conn_update_pending = false;
                 btstack_run_loop_remove_timer(&conn_request_timer);
-                gap_advertisements_enable(1);
+                advertising_requested = false;
+                advertising_enable("phone disconnected");
             }
             break;
         default:
@@ -1162,8 +1217,13 @@ void wmr_transport_init(void){
     *p++ = BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME;
     memcpy(p, WMR_CFG_BLE_NAME, sizeof(WMR_CFG_BLE_NAME) - 1);
     p += sizeof(WMR_CFG_BLE_NAME) - 1;
-    *p++ = 3;
-    *p++ = BLUETOOTH_DATA_TYPE_INCOMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS;
+    /* Complete list: HID service 0x1812 first, then the FF10 stream service. A HOGP host
+     * decides from the primary advertisement that this is a HID device; with 0x1812 only in
+     * the scan response, a phone that misses the scan response sees a plain vendor device. */
+    *p++ = 5;
+    *p++ = BLUETOOTH_DATA_TYPE_COMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS;
+    *p++ = 0x12;
+    *p++ = 0x18;
     *p++ = 0x10;
     *p++ = 0xff;
     bd_addr_t zero_address = {0};
@@ -1171,13 +1231,10 @@ void wmr_transport_init(void){
                                   0, 0, zero_address, WMR_CFG_ADV_CHANNEL_MAP, 0);
     gap_advertisements_set_data((uint8_t) (p - advertising), advertising);
 
-    /* Scan response: appearance Gamepad (0x03C4) plus the HID service UUID.
-     * Android's input stack looks for 0x1812 when deciding that a BLE device is
-     * a gamepad; the FF10 UUID in the advertising data stays as it was. */
+    /* Scan response: Appearance Gamepad (0x03C4). Android uses it for the scan-list icon;
+     * the HID service UUID is in the advertising data above. */
     static const uint8_t scan_response[] = {
         0x03, BLUETOOTH_DATA_TYPE_APPEARANCE, 0xC4, 0x03,
-        0x05, BLUETOOTH_DATA_TYPE_COMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS,
-        0x12, 0x18, 0x10, 0xFF,
     };
     gap_scan_response_set_data((uint8_t) sizeof(scan_response), (uint8_t *) scan_response);
 
