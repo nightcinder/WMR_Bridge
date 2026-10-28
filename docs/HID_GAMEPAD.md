@@ -95,10 +95,10 @@ Local build evidence for this change:
 
 | Item | Value |
 |---|---|
-| Source commit | _(filled after the commit)_ |
+| Source commit | `99eb091` (`0.2.4-5-g99eb091`) |
 | BTstack | `e38553977a25fb0b55b383c72c289be0975f422c` |
 | ESP-IDF | v6.1 |
-| Factory image SHA-256 | _(filled after the clean rebuild)_ |
+| Factory image SHA-256 | `25c94568f3076e98816665e34878365546ae3e2c3995e3c6578dcf2ccf2ee332` |
 
 ## Verification STATUS (ONY-441 done-when)
 
