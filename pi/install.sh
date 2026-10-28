@@ -63,6 +63,14 @@ if [ -f "${SCRIPT_DIR}/../docs/PI_BRIDGE.md" ]; then
     install -m 0644 "${SCRIPT_DIR}/../docs/PI_BRIDGE.md" "${DEST_PREFIX}/docs/PI_BRIDGE.md"
 fi
 
+# A replay capture makes the P2 no-hardware check runnable on the installed
+# tree (`cd /opt/wmr-bridge/pi && python3 -m wmr_bridge --replay ../samples/...`).
+if [ -f "${SCRIPT_DIR}/../samples/controller_frames.txt" ]; then
+    mkdir -p "${DEST_PREFIX}/samples"
+    install -m 0644 "${SCRIPT_DIR}/../samples/controller_frames.txt" \
+        "${DEST_PREFIX}/samples/controller_frames.txt"
+fi
+
 install -m 0644 "${SCRIPT_DIR}/udev/99-wmr-bridge.rules" "${DEST_UDEV}/99-wmr-bridge.rules"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.service" "${DEST_SYSTEMD}/wmr-bridge.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.env.example" "${DEST_ETC}/wmr-bridge.env.example"

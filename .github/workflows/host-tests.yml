@@ -76,5 +76,7 @@ jobs:
       - name: Run Linux/Pi host-bridge tests
         working-directory: pi
         run: python3 -m unittest discover -s tests -v
+      - name: Pi package and daemon dry run
+        run: ./pi/tools/dry_run.sh
       - name: Run firmware packaging tests
         run: python3 tests/test_firmware_package.py
