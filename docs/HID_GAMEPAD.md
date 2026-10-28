@@ -308,7 +308,7 @@ The fix has two parts:
 The phone is absent from the whole 18:54 capture (`phone=0`), so the phone row
 is unchanged by this run.
 
-## 0.2.4-36 field run: the phone's BR/EDR fallback
+## 0.2.4-33 field run: the phone's BR/EDR fallback (fixed in 0.2.4-36)
 
 The 2026-10-28 19:06 capture (`0.2.4-33`) shows the ACL fix working: LEFT and
 RIGHT stream at ~180 reports/s, both FF13 blocks read (`state=2`), and the phone
