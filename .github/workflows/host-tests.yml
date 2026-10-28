@@ -84,6 +84,8 @@ jobs:
         run: ./test_secure
       - name: Run capture/analysis script tests
         run: python3 tests/test_analyze_capture.py
+      - name: Run docs/GATT property tests
+        run: python3 tests/test_doc_gatt.py
       - name: Run Linux/Pi host-bridge tests
         working-directory: pi
         run: python3 -m unittest discover -s tests -v
