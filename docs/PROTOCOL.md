@@ -23,8 +23,10 @@ test (`tests/test_protocol.c`, "golden packet") pins the byte layout.
 | Client Characteristic Configuration (0x2902) | - | read/write |
 
 Advertising: flags `0x06` (LE general discoverable, BR/EDR not supported), complete local
-name `WMR Bridge`, incomplete list of 16-bit service UUIDs `0xFF10`. The scan response adds
-the gamepad appearance `0x03C4` and the HID service `0x1812` (see [HID_GAMEPAD.md](HID_GAMEPAD.md)).
+name `WMR Bridge`, complete list of 16-bit service UUIDs `0x1812` (HID) and `0xFF10`. The
+scan response adds only the gamepad appearance `0x03C4`; the HID service is in the primary
+advertisement so a HOGP host that skips the scan response still sees a HID device (see
+[HID_GAMEPAD.md](HID_GAMEPAD.md)).
 Interval 100-150 ms (`WMR_CFG_ADV_INTERVAL_MIN/MAX`), all three channels.
 
 The FF10/FF11 UUIDs are experimental and not assigned for production use

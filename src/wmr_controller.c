@@ -245,9 +245,19 @@ static hci_con_handle_t incoming_con_handle;
 
 /* An incoming Classic ACL from an address that is not LEFT or RIGHT. It is either a new
  * controller that will open a HID channel, or a stray device that would otherwise hold one
- * of the controller's few ACL slots forever. */
-static hci_con_handle_t unknown_acl_handle = HCI_CON_HANDLE_INVALID;
+ * of the controller's few ACL slots forever. More than one can arrive at once, so every
+ * link gets its own deadline in a slot: a second stray link must not replace the first
+ * one's watchdog and leave that ACL holding a slot. */
+#define UNKNOWN_ACL_SLOTS   2
+#define UNKNOWN_ACL_TICK_MS 250u
+typedef struct {
+    hci_con_handle_t handle;
+    uint32_t since_ms;
+    bool used;
+} unknown_acl_slot_t;
+static unknown_acl_slot_t unknown_acl_slots[UNKNOWN_ACL_SLOTS];
 static btstack_timer_source_t unknown_acl_timer;
+static bool unknown_acl_timer_armed;
 
 static controller_t *controller_for_cid(uint16_t cid){
     if (!cid) return NULL;
@@ -330,22 +340,63 @@ static void known_hands(bool known[WMR_NUM_CONTROLLERS]){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++) known[i] = controllers[i].source != WMR_ADDR_NONE;
 }
 
+static void unknown_acl_poll(btstack_timer_source_t *timer);
+static void unknown_acl_timer_arm(void);
+
 /* A Classic ACL from an address that is not LEFT or RIGHT must not keep a slot it cannot
  * use. Clear the watchdog when the link is accepted, rejected by name, or closed. */
-static void unknown_acl_clear(hci_con_handle_t handle){
-    if (unknown_acl_handle == HCI_CON_HANDLE_INVALID || unknown_acl_handle != handle) return;
-    unknown_acl_handle = HCI_CON_HANDLE_INVALID;
+static void unknown_acl_slot_remove(unsigned index){
+    for (unsigned i = index; i + 1 < UNKNOWN_ACL_SLOTS; i++){
+        unknown_acl_slots[i] = unknown_acl_slots[i + 1];
+    }
+    memset(&unknown_acl_slots[UNKNOWN_ACL_SLOTS - 1], 0,
+           sizeof(unknown_acl_slots[UNKNOWN_ACL_SLOTS - 1]));
+    for (unsigned i = 0; i < UNKNOWN_ACL_SLOTS; i++){
+        if (unknown_acl_slots[i].used) return;
+    }
+    if (!unknown_acl_timer_armed) return;
+    unknown_acl_timer_armed = false;
     btstack_run_loop_remove_timer(&unknown_acl_timer);
 }
 
-static void unknown_acl_timeout(btstack_timer_source_t *timer){
+static void unknown_acl_clear(hci_con_handle_t handle){
+    for (unsigned i = 0; i < UNKNOWN_ACL_SLOTS; i++){
+        if (!unknown_acl_slots[i].used || unknown_acl_slots[i].handle != handle) continue;
+        unknown_acl_slot_remove(i);
+        return;
+    }
+}
+
+static void unknown_acl_timer_arm(void){
+    if (unknown_acl_timer_armed) return;
+    unknown_acl_timer_armed = true;
+    btstack_run_loop_set_timer_handler(&unknown_acl_timer, unknown_acl_poll);
+    btstack_run_loop_set_timer(&unknown_acl_timer, UNKNOWN_ACL_TICK_MS);
+    btstack_run_loop_add_timer(&unknown_acl_timer);
+}
+
+/* One timer scans every slot, so links that arrive together each keep their own deadline. */
+static void unknown_acl_poll(btstack_timer_source_t *timer){
     (void) timer;
-    hci_con_handle_t handle = unknown_acl_handle;
-    unknown_acl_handle = HCI_CON_HANDLE_INVALID;
-    if (handle == HCI_CON_HANDLE_INVALID) return;
-    WMR_LOGW("pair", "unknown Classic link 0x%04x opened no HID channel; disconnecting so "
-             "it does not hold an ACL slot", handle);
-    gap_disconnect(handle);
+    unknown_acl_timer_armed = false;
+    uint32_t now = btstack_run_loop_get_time_ms();
+    for (unsigned i = 0; i < UNKNOWN_ACL_SLOTS; ){
+        if (!unknown_acl_slots[i].used) break;
+        hci_con_handle_t handle = unknown_acl_slots[i].handle;
+        if (now - unknown_acl_slots[i].since_ms < (uint32_t) WMR_CFG_UNKNOWN_ACL_TIMEOUT_MS){
+            i++;
+            continue;
+        }
+        unknown_acl_slot_remove(i);
+        WMR_LOGW("pair", "unknown Classic link 0x%04x opened no HID channel; disconnecting "
+                 "so it does not hold an ACL slot", handle);
+        gap_disconnect(handle);
+    }
+    for (unsigned i = 0; i < UNKNOWN_ACL_SLOTS; i++){
+        if (!unknown_acl_slots[i].used) continue;
+        unknown_acl_timer_arm();
+        break;
+    }
 }
 
 static void unknown_acl_track(hci_con_handle_t handle, const bd_addr_t address){
@@ -362,13 +413,25 @@ static void unknown_acl_track(hci_con_handle_t handle, const bd_addr_t address){
         gap_disconnect(handle);
         return;
     }
-    unknown_acl_handle = handle;
-    btstack_run_loop_remove_timer(&unknown_acl_timer);
-    btstack_run_loop_set_timer_handler(&unknown_acl_timer, unknown_acl_timeout);
-    btstack_run_loop_set_timer(&unknown_acl_timer, WMR_CFG_UNKNOWN_ACL_TIMEOUT_MS);
-    btstack_run_loop_add_timer(&unknown_acl_timer);
-    WMR_LOGI("pair", "unknown Classic link %s up (handle=0x%04x); waiting for a HID channel",
-             bd_addr_to_str(address), handle);
+    for (unsigned i = 0; i < UNKNOWN_ACL_SLOTS; i++){
+        if (!unknown_acl_slots[i].used || unknown_acl_slots[i].handle != handle) continue;
+        unknown_acl_slots[i].since_ms = btstack_run_loop_get_time_ms();
+        return;
+    }
+    for (unsigned i = 0; i < UNKNOWN_ACL_SLOTS; i++){
+        if (unknown_acl_slots[i].used) continue;
+        unknown_acl_slots[i].used = true;
+        unknown_acl_slots[i].handle = handle;
+        unknown_acl_slots[i].since_ms = btstack_run_loop_get_time_ms();
+        unknown_acl_timer_arm();
+        WMR_LOGI("pair", "unknown Classic link %s up (handle=0x%04x); waiting for a HID channel",
+                 bd_addr_to_str(address), handle);
+        return;
+    }
+    /* No free watch slot: an unwatched ACL is worse than a refused one. */
+    WMR_LOGW("pair", "unknown Classic link %s up (handle=0x%04x) with every watchdog slot "
+             "taken; disconnecting", bd_addr_to_str(address), handle);
+    gap_disconnect(handle);
 }
 
 /* ---- Connect watchdog ---------------------------------------------------- */

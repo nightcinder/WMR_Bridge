@@ -241,8 +241,10 @@ An incoming ACL from an address that is not LEFT or RIGHT is now bounded. When
 both hands already have stored addresses the link is disconnected at once.
 While a hand is still unpaired the link gets `WMR_CFG_UNKNOWN_ACL_TIMEOUT_MS`
 (5 s) to open a HID channel and start the name check, then it is disconnected.
-Declining the HID channel also disconnects the ACL. Before this, the 2026-10-28
-field log shows such a link sitting idle while `connecting LEFT` failed with
+Up to two such links are watched at once, each with its own deadline; a third
+is refused at once, and a link that cannot be watched is never left holding a
+slot. Declining the HID channel also disconnects the ACL. Before this, the
+2026-10-28 field log shows such a link sitting idle while `connecting LEFT` failed with
 HCI `0x09` (connection limit exceeded).
 
 See [SECURITY.md](SECURITY.md).

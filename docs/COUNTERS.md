@@ -34,7 +34,7 @@ printed rates and moved their baselines, which contradicted this paragraph; it n
 | `errors` | `att_server_notify` calls that returned an error (stream and FF15 echo) | Each failed attempt counts; the frame or echo answer is kept and retried, not lost |
 | `HID reports` | HID gamepad input reports accepted by the HID service | Coalesced and deduplicated; not the same as controller reports (`rx`) |
 | `HID errors` | HID input report sends that failed | The report is marked dirty and retried on the next pump tick |
-| `HID decode_errors` | Controller reports the HID path could not decode | Should stay 0; the FF10 stream has its own `dec_err` |
+| `HID decode_errors` | WMR-shaped controller reports the HID path could not decode | Should stay 0. Frames from other devices on the same link (PSVR2 and friends) are not HID input and are ignored rather than counted; the FF10 stream has its own `dec_err` |
 | `rx` | Reports received from that controller | Counts every report, including those never forwarded |
 | `tx` | FF11: frames whose last fragment was accepted by `att_server_notify`. FF12: records accepted by `att_server_notify`. FF14: valid records inside batches accepted by `att_server_notify` (records, not notifications) | **Handed to the BLE stack, not confirmed received by the phone** |
 | `drop` | Reports discarded because the queue was full, or the length was 0 or over `WMR_CFG_MAX_FRAME` (80) | Drop-newest: queued frames are kept |

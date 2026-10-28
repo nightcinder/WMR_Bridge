@@ -56,6 +56,7 @@
 #include "wmr_linkdiag.h"
 #include "wmr_link.h"
 #include "wmr_levers.h"
+#include "wmr_decode.h"
 #include "wmr_decoded.h"
 #include "wmr_protocol.h"
 #include "wmr_queue.h"
@@ -297,7 +298,11 @@ void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t 
     stats.rx[hand]++;
     /* HID is independent of the FF10 stream: it runs with no app subscribed,
      * which is the point of the no-app Android gamepad. */
+    /* Frames from other devices (PSVR2 and friends) share this transport. They are not
+     * HID input, so they must not show up as a decode failure; only a WMR-shaped report
+     * that the HID path rejects counts. */
     if (length && length <= WMR_CFG_MAX_FRAME &&
+        wmr_decode_frame_is_wmr(report, length) &&
         !wmr_hid_note_report(&hid, (uint8_t) hand, report, length,
                              (uint64_t) esp_timer_get_time())){
         stats.hid_decode_errors++;

@@ -407,7 +407,7 @@ Classic-entry questions rather than filling in every value.
 | Analog sticks: full range, centre, Y direction | PASS (user): sticks register; range/centre not itemised | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | user confirmation, 2026-10-28 |
 | Analog triggers: 0..255 and L2/R2 hysteresis | PASS (user): triggers register; values not itemised | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | user confirmation, 2026-10-28 |
 | No stuck input after controller disconnect/reconnect | PARTIAL: after the bridge reboot the phone received only the neutral report; controller power-cycle not re-captured | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | 16:44 capture, above |
-| No stuck input after BLE disconnect/reconnect | PASS: phone reconnected to the bond after a bridge reboot and got only the neutral report (`HID reports=1`) | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | 16:44 capture, above |
+| No stuck input after BLE disconnect/reconnect | PARTIAL: phone reconnected to the bond after a bridge reboot and got only the neutral report (`HID reports=1`); a controller power-cycle after that reboot was not captured, so the reconnect half of this row is unproven | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | 16:44 capture, above |
 | FF12 notification rate unchanged while HID is active | PARTIAL: controller/source rate unchanged (~170-190 reports/s per hand, 0 drops, FF13 `state=2`) with HID at ~68/s, but FF12 was not subscribed in this run (`stream=none`), so the simultaneous FF12 + HID notification rate was not sampled | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | 16:42-16:44 capture, above |
 | Shared vectors pass on the companion side | passing (host) | n/a | companion PR | `hid_gamepad_vectors_test.dart` |
 
