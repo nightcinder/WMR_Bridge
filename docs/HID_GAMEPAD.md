@@ -165,8 +165,8 @@ advertising when discovery finishes, and carries `0x1812` in the primary
 advertisement. Retest with the console open on this build and paste the lines
 around the attempt.
 
-The fifth attempt (`0.2.4-15`; the status lines in the pasted log have no
-`adv=` field, which `0.2.4-16` adds) got further: the phone offered WMR Bridge
+The fifth attempt (`0.2.4-16-g15b6805`, the CI merge build before `eab749b`;
+its status lines still lack `adv=`) got further: the phone offered WMR Bridge
 as a gamepad, paired and connected, and HID input flowed
 (`HID reports=520 errors=0`). After the phone entry was forgotten, the next
 connection failed in security, not in advertising: the bridge still held the
@@ -217,9 +217,9 @@ notes:
 ## Known gaps
 
 - **No completed phone run.** A Pixel 11 Pro / Android 17 paired and connected
-  on `0.2.4-15` (`HID reports=520`, `errors=0`) and re-pairing after Forget is
-  fixed by the stale-bond repair, but the gamepad-tester block was never filled
-  in. Earlier attempts on `0.2.4-8`/`-10`/`-16` stopped at the icon or the
+  on `0.2.4-16-g15b6805` (`HID reports=520`, `errors=0`) and re-pairing after
+  Forget is fixed by the stale-bond repair, but the gamepad-tester block was
+  never filled in. Earlier attempts on `0.2.4-8`/`-10`/`-16` stopped at the icon or the
   connection. The next attempt needs the bridge console open, the phone entry
   forgotten first, `discovery finished` (and `adv=on`) before pairing, then the
   paste-back block.
