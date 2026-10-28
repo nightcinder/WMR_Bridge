@@ -167,6 +167,14 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #ifndef WMR_CFG_PAIR_BUSY_RETRY_MS
 #define WMR_CFG_PAIR_BUSY_RETRY_MS      2500
 #endif
+/* How long an incoming Classic ACL from an address that is not LEFT or RIGHT may sit
+ * without being accepted as a controller before it is disconnected. A stray device (a
+ * phone's BR/EDR side, a nearby headset) otherwise holds one of the controller's few ACL
+ * slots: the 2026-10-28 log has such a link sitting idle while "connecting LEFT" failed
+ * with HCI 0x09. When both hands already have addresses the link is dropped at once. */
+#ifndef WMR_CFG_UNKNOWN_ACL_TIMEOUT_MS
+#define WMR_CFG_UNKNOWN_ACL_TIMEOUT_MS  5000
+#endif
 /* Pause after the last remote name request before the connect phase pages the hands, long
  * enough for the controller to release the link it used for the name request. */
 #ifndef WMR_CFG_DISCOVERY_CONNECT_DELAY_MS

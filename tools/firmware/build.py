@@ -163,6 +163,46 @@ def _copy_ignore(repo_root, work, out):
     return ignore
 
 
+# The ESP32 controller defaults to two BR/EDR ACL links. Two WMR hands need both,
+# so any third Classic device (a phone's BR/EDR side, a neighbour's headset) leaves
+# one hand failing with HCI 0x09 "connection limit exceeded". The 2026-10-28 field
+# log shows exactly that: RIGHT streaming, an unknown Classic link holding the
+# second slot, and "connecting LEFT ... 0x09". One spare link keeps a stray device
+# from starving a controller; the software side disconnects unknown links too.
+PORT_SDKCONFIG_ACL = "CONFIG_BTDM_CTRL_BR_EDR_MAX_ACL_CONN"
+PORT_SDKCONFIG_ACL_LINKS = 3
+
+
+def sync_port_sdkconfig(port_dir):
+    """Raise the controller's BR/EDR ACL limit in the BTstack port's sdkconfig."""
+    path = port_dir / "sdkconfig"
+    if not path.is_file():
+        fail("missing %s" % path)
+    lines = path.read_text().splitlines()
+    found = False
+    for i, line in enumerate(lines):
+        for key in (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL + "_EFF"):
+            if line.startswith(key + "="):
+                found = True
+                lines[i] = "%s=%d" % (key, PORT_SDKCONFIG_ACL_LINKS)
+    if not found:
+        fail("%s has no %s line; the port config changed" % (path, PORT_SDKCONFIG_ACL))
+    path.write_text("\n".join(lines) + "\n")
+    log("set %s=%d in %s" % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS, path))
+
+
+def verify_port_sdkconfig(build_dir):
+    """Fail the build unless the controller actually got the raised ACL limit."""
+    header = Path(build_dir) / "config" / "sdkconfig.h"
+    if not header.is_file():
+        fail("missing generated %s" % header)
+    expected = "#define %s_EFF %d" % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS)
+    text = header.read_text()
+    if expected not in text:
+        fail("%s does not contain %r; the BT/Bluedroid config changed" % (header, expected))
+    log("verified %s" % expected)
+
+
 def sync_source(btstack, work, out):
     """Copy the current working tree into <btstack>/wmr_bridge.
 
@@ -414,6 +454,7 @@ def main():
     sync_source(btstack, work, out)
 
     port_dir = btstack / "port" / "esp32"
+    sync_port_sdkconfig(port_dir)
     build_dir = build_dir_for(work, args.variant)
     env = build_env(args.variant, os.environ)
     env["EXAMPLE"] = "wmr_bridge"
@@ -426,6 +467,7 @@ def main():
     idf_ver = idf_version(port_dir, env)
     log("using %s" % idf_ver)
     run(build_argv(build_dir, version), cwd=port_dir, env=env)
+    verify_port_sdkconfig(build_dir)
 
     artifacts = fwpackage.collect_artifacts(build_dir)
     package_outputs(

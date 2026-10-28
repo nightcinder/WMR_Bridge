@@ -238,6 +238,12 @@ static bd_addr_t name_address;
 static uint16_t incoming_cid;
 static hci_con_handle_t incoming_con_handle;
 
+/* An incoming Classic ACL from an address that is not LEFT or RIGHT. It is either a new
+ * controller that will open a HID channel, or a stray device that would otherwise hold one
+ * of the controller's few ACL slots forever. */
+static hci_con_handle_t unknown_acl_handle = HCI_CON_HANDLE_INVALID;
+static btstack_timer_source_t unknown_acl_timer;
+
 static controller_t *controller_for_cid(uint16_t cid){
     if (!cid) return NULL;
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
@@ -317,6 +323,47 @@ static const char *hid_handshake_text(uint8_t status){
 
 static void known_hands(bool known[WMR_NUM_CONTROLLERS]){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++) known[i] = controllers[i].source != WMR_ADDR_NONE;
+}
+
+/* A Classic ACL from an address that is not LEFT or RIGHT must not keep a slot it cannot
+ * use. Clear the watchdog when the link is accepted, rejected by name, or closed. */
+static void unknown_acl_clear(hci_con_handle_t handle){
+    if (unknown_acl_handle == HCI_CON_HANDLE_INVALID || unknown_acl_handle != handle) return;
+    unknown_acl_handle = HCI_CON_HANDLE_INVALID;
+    btstack_run_loop_remove_timer(&unknown_acl_timer);
+}
+
+static void unknown_acl_timeout(btstack_timer_source_t *timer){
+    (void) timer;
+    hci_con_handle_t handle = unknown_acl_handle;
+    unknown_acl_handle = HCI_CON_HANDLE_INVALID;
+    if (handle == HCI_CON_HANDLE_INVALID) return;
+    WMR_LOGW("pair", "unknown Classic link 0x%04x opened no HID channel; disconnecting so "
+             "it does not hold an ACL slot", handle);
+    gap_disconnect(handle);
+}
+
+static void unknown_acl_track(hci_con_handle_t handle, const bd_addr_t address){
+    bool known[WMR_NUM_CONTROLLERS];
+    known_hands(known);
+    if (known[0] && known[1]){
+        /* Both served hands have addresses, so this cannot be a controller we still need
+         * to pair. It is usually a phone's BR/EDR side or another nearby device; the
+         * bridge is a HID host on Classic, so an ACL without a HID channel has no use and
+         * only takes a slot (2026-10-28: LEFT connect failed with HCI 0x09 while such a
+         * link sat idle). */
+        WMR_LOGW("pair", "incoming device %s is not LEFT or RIGHT; disconnecting",
+                 bd_addr_to_str(address));
+        gap_disconnect(handle);
+        return;
+    }
+    unknown_acl_handle = handle;
+    btstack_run_loop_remove_timer(&unknown_acl_timer);
+    btstack_run_loop_set_timer_handler(&unknown_acl_timer, unknown_acl_timeout);
+    btstack_run_loop_set_timer(&unknown_acl_timer, WMR_CFG_UNKNOWN_ACL_TIMEOUT_MS);
+    btstack_run_loop_add_timer(&unknown_acl_timer);
+    WMR_LOGI("pair", "unknown Classic link %s up (handle=0x%04x); waiting for a HID channel",
+             bd_addr_to_str(address), handle);
 }
 
 static const char *role_name(hci_role_t role){
@@ -1391,6 +1438,7 @@ static void accept_incoming(controller_t *c, uint16_t cid){
     c->descriptor_available = false;
     c->reports = 0;
     c->other_reports = 0;
+    unknown_acl_clear(c->handle);
     connect_pending = true;
     WMR_LOGI("pair", "%s accepts the controller's incoming HID connection (cid=%u)",
              c->name, cid);
@@ -1399,10 +1447,16 @@ static void accept_incoming(controller_t *c, uint16_t cid){
 
 static void incoming_resolved(const uint8_t *name, size_t len){
     uint16_t cid = incoming_cid;
+    hci_con_handle_t handle = incoming_con_handle;
     incoming_cid = 0;
     connect_pending = false;
+    unknown_acl_clear(handle);
     disc_connect_progress();                    /* a discovery connect may have been waiting */
-    if (!cid) return;                           /* closed while the name was requested */
+    if (!cid){
+        /* The channel closed while the name was requested; the ACL may still be there. */
+        if (handle != HCI_CON_HANDLE_INVALID) gap_disconnect(handle);
+        return;
+    }
     bool known[WMR_NUM_CONTROLLERS];
     known_hands(known);
     int hand = wmr_discovery_incoming_hand(known, name, len);
@@ -1411,6 +1465,7 @@ static void incoming_resolved(const uint8_t *name, size_t len){
                  "without an address; declining", bd_addr_to_str(name_address),
                  name ? (int) len : 0, name ? (const char *) name : "");
         hid_host_decline_connection(cid);
+        if (handle != HCI_CON_HANDLE_INVALID) gap_disconnect(handle);
         return;
     }
     controller_t *c = &controllers[hand];
@@ -1509,10 +1564,14 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
             controller_t *c = controller_for_address(address);
             if (status == ERROR_CODE_SUCCESS){
                 role = gap_get_role(handle);
-                if (c) c->handle = handle;
+                if (c){
+                    c->handle = handle;
+                    unknown_acl_clear(handle);
+                }
                 WMR_LOGI("pair", "%s link up at %s (handle=0x%04x, role=%s)",
                          c ? c->name : "unknown controller", bd_addr_to_str(address),
                          handle, role_name(role));
+                if (!c) unknown_acl_track(handle, address);
             } else {
                 WMR_LOGW("pair", "link to %s failed: %s (0x%02x)",
                          c ? c->name : bd_addr_to_str(address),
@@ -1611,6 +1670,7 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
                      name, pair_status_text(reason), status, reason);
             controller_t *c = controller_for_handle(handle);
             if (c) c->handle = HCI_CON_HANDLE_INVALID;
+            unknown_acl_clear(handle);
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
             policy_link_down(handle);
 #endif
@@ -1637,6 +1697,7 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
 static void handle_incoming_connection(const uint8_t *packet){
     uint16_t cid    = hid_subevent_incoming_connection_get_hid_cid(packet);
     uint8_t  status = hid_subevent_incoming_connection_get_status(packet);
+    hci_con_handle_t handle = hid_subevent_incoming_connection_get_handle(packet);
     bd_addr_t address;
     hid_subevent_incoming_connection_get_address(packet, address);
     WMR_LOGI("pair", "incoming HID connection from %s (cid=%u)",
@@ -1656,7 +1717,6 @@ static void handle_incoming_connection(const uint8_t *packet){
                      "controllers reconnect afterwards");
         }
         hid_host_decline_connection(cid);
-        hci_con_handle_t handle = hid_subevent_incoming_connection_get_handle(packet);
         if (handle != HCI_CON_HANDLE_INVALID) gap_disconnect(handle);
         return;
     }
@@ -1669,6 +1729,7 @@ static void handle_incoming_connection(const uint8_t *packet){
         WMR_LOGW("pair", "incoming %s is not served by this build (WMR_CFG_BRIDGE_HANDS=%d); declining",
                  c->name, WMR_CFG_BRIDGE_HANDS);
         hid_host_decline_connection(cid);
+        if (handle != HCI_CON_HANDLE_INVALID) gap_disconnect(handle);
         return;
     }
     if (!c){
@@ -1678,18 +1739,20 @@ static void handle_incoming_connection(const uint8_t *packet){
             WMR_LOGW("pair", "incoming device %s is not LEFT or RIGHT; declining",
                      bd_addr_to_str(address));
             hid_host_decline_connection(cid);
+            if (handle != HCI_CON_HANDLE_INVALID) gap_disconnect(handle);
             return;
         }
         if (name_purpose != NAME_NONE || connect_pending){
             WMR_LOGW("pair", "incoming unknown device %s arrived while another check "
                      "or connection is pending; declining", bd_addr_to_str(address));
             hid_host_decline_connection(cid);
+            if (handle != HCI_CON_HANDLE_INVALID) gap_disconnect(handle);
             return;
         }
         memcpy(name_address, address, 6);
         name_purpose = NAME_FOR_INCOMING;
         incoming_cid = cid;
-        incoming_con_handle = hid_subevent_incoming_connection_get_handle(packet);
+        incoming_con_handle = handle;
         connect_pending = true;
         WMR_LOGI("pair", "incoming unknown device %s; asking its name before accepting",
                  bd_addr_to_str(address));
@@ -1702,9 +1765,10 @@ static void handle_incoming_connection(const uint8_t *packet){
     if (c->cid != 0 && c->cid != cid){
         WMR_LOGW("pair", "%s is already tracked with cid=%u; not accepting cid=%u",
                  c->name, c->cid, cid);
+        if (handle != HCI_CON_HANDLE_INVALID) gap_disconnect(handle);
         return;
     }
-    c->handle = hid_subevent_incoming_connection_get_handle(packet);
+    c->handle = handle;
     accept_incoming(c, cid);
 }
 static void handle_report(const uint8_t *packet){
