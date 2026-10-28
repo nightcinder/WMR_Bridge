@@ -123,6 +123,20 @@ link holding a slot. The released hand reconnects when the run ends. This is the
 case where LEFT paired, then RIGHT got HCI `0x09` on all three attempts; a run where only
 RIGHT was paged (LEFT held off by the filter) paired on the first attempt.
 
+### ACL that comes up after the run
+
+A controller reconnecting on its own encrypts the ACL about 80 ms after it comes up and then
+opens its HID channel (`link encrypted`, then `incoming HID connection`). The 2026-10-28 log
+(ONY-446) shows the discovery handoff breaking that: LEFT had just paired, RIGHT's ACL came up
+2 s after `discovery finished`, and then neither link produced a report for 18 s — no
+`RIGHT link encrypted` and no HID channel — until the ESP32 was reset. The bridge therefore
+watches an ACL that the controller opened itself (no discovery connect or `l`/`r` attempt
+pending): after `WMR_LINKWAIT_ENCRYPT_MS` (750 ms) without encryption it sends
+`HCI_Set_Connection_Encryption` itself, using the stored link key; if the link still has no
+HID channel after `WMR_LINKWAIT_DROP_MS` (4 s) it drops the ACL and logs it, so the controller
+pages again. `src/wmr_linkwait.c` holds the timing and is host-tested. The watchdog is
+inactive during the discovery connect phase, so pairing retries are unchanged.
+
 That is what the 2026-10-26 field logs show (firmware 0.2.2): the missing hand was found in
 the first round in all three runs where the other hand had no link yet, while 18 consecutive
 inquiry rounds (two automatic bursts) with the other hand streaming heard no answer from it.
