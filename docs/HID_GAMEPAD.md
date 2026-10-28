@@ -165,6 +165,19 @@ advertising when discovery finishes, and carries `0x1812` in the primary
 advertisement. Retest with the console open on this build and paste the lines
 around the attempt.
 
+The fifth attempt (`0.2.4-15`; the status lines in the pasted log have no
+`adv=` field, which `0.2.4-16` adds) got further: the phone offered WMR Bridge
+as a gamepad, paired and connected, and HID input flowed
+(`HID reports=520 errors=0`). After the phone entry was forgotten, the next
+connection failed in security, not in advertising: the bridge still held the
+old key, so `BLE re-encryption failed: status=0x06` (PIN_OR_KEY_MISSING) was
+followed by `BLE phone refused: no bonded LE Secure Connections link;
+disconnecting`, which cut off the Just Works exchange the phone had already
+started (`BLE pairing failed: status=0x13`, then disconnect `reason=0x16`). The
+policy now deletes the stale bond and keeps the link up for that exchange; every
+other failed re-encryption still disconnects. The phone had connected before
+that, so the remaining work is the full tester paste-back.
+
 ## Verification STATUS (ONY-441 done-when)
 
 Nothing in this table is a hardware result yet. A row moves off `not run` only
@@ -203,13 +216,13 @@ notes:
 
 ## Known gaps
 
-- **No completed phone run.** The Pixel 11 Pro / Android 17 paired once on
-  `0.2.4-8-gba1a8bb` but stopped connecting after the entry was forgotten; the
-  gamepad-tester block was never filled in. `0.2.4-10` and `0.2.4-16` both showed
-  a gamepad entry and failed to connect, with no phone link of either transport
-  in the bridge log; in both runs the attempt fell inside controller discovery.
-  The 5th attempt needs the bridge console open, the phone entry forgotten first,
-  `discovery finished` (and `adv=on`) before pairing, and the paste-back block.
+- **No completed phone run.** A Pixel 11 Pro / Android 17 paired and connected
+  on `0.2.4-15` (`HID reports=520`, `errors=0`) and re-pairing after Forget is
+  fixed by the stale-bond repair, but the gamepad-tester block was never filled
+  in. Earlier attempts on `0.2.4-8`/`-10`/`-16` stopped at the icon or the
+  connection. The next attempt needs the bridge console open, the phone entry
+  forgotten first, `discovery finished` (and `adv=on`) before pairing, then the
+  paste-back block.
 - **Stick centre and dead zone.** The app's `StickNormalizer` (centre learning
   from calibration, radial dead zone) is not ported. A controller whose stick
   rests off-centre will show drift in a gamepad tester. This is the most

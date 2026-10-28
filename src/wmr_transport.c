@@ -931,6 +931,19 @@ static void secure_apply(const wmr_secure_event_t *event){
             if (phone_handle != HCI_CON_HANDLE_INVALID)
                 gap_disconnect(phone_handle);
             break;
+        case WMR_SECURE_REPAIR: {
+            /* Android forgot the bridge, so our stored key cannot re-encrypt the
+             * link. Drop it and stay connected: the phone's fresh pairing then
+             * completes instead of being cut off by our own disconnect. */
+            int index = sm_le_device_index(event->handle);
+            if (index >= 0) le_device_db_remove((uint8_t) index);
+            phone_secure = false;
+            printf("BLE phone bond stale: deleted the stored key, waiting for a new pairing\n");
+            btstack_run_loop_remove_timer(&pair_timer);
+            btstack_run_loop_set_timer(&pair_timer, WMR_CFG_BLE_PAIR_TIMEOUT_MS);
+            btstack_run_loop_add_timer(&pair_timer);
+            break;
+        }
         default:
             break;
     }
@@ -992,6 +1005,8 @@ void wmr_transport_on_sm_event(uint8_t *packet, uint16_t size){
             event.success =
                 sm_event_reencryption_complete_get_status(packet) == ERROR_CODE_SUCCESS;
             event.bonded = sm_le_device_index(event.handle) >= 0;
+            event.stale_bond = sm_event_reencryption_complete_get_status(packet) ==
+                               ERROR_CODE_PIN_OR_KEY_MISSING;
             if (!event.success){
                 printf("BLE re-encryption failed: status=0x%02x\n",
                        sm_event_reencryption_complete_get_status(packet));

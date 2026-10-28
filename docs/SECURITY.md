@@ -54,9 +54,12 @@ firmware build do not prove radio behavior.
   version) stays readable so a client can check compatibility before pairing.
 - After a pairing or re-encryption result, the bridge requires both success and a
   stored bond (`sm_le_device_index`). A central that pairs "encrypt only", fails
-  pairing, or whose bond is stale is disconnected, not served. A central that
-  produces no bonded link within `WMR_CFG_BLE_PAIR_TIMEOUT_MS` (30 s) is
-  disconnected too.
+  pairing, or fails re-encryption for any reason other than a stale key is
+  disconnected, not served. When re-encryption fails with `PIN_OR_KEY_MISSING`
+  (the phone forgot the bridge), the bridge deletes its stale bond, keeps the
+  link and lets the phone's fresh pairing complete; the same
+  `WMR_CFG_BLE_PAIR_TIMEOUT_MS` (30 s) bound applies, and a central that still
+  produces no bonded link is disconnected.
 - Only one phone is served at a time. A second central is disconnected on
   connect, so it cannot block the intended phone by subscribing first.
 - Bonds are stored in the LE device DB in NVS. `P` on the console deletes all

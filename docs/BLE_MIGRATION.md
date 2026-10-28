@@ -77,8 +77,9 @@ characteristic except the device name and FF16 is served:
 - A second central is disconnected as soon as it connects; there is still one
   phone at a time.
 - A bonded phone reconnecting re-encrypts with its stored keys and is served
-  without a dialog. If either side lost the bond, the link fails to encrypt, the
-  bridge disconnects, and the phone pairs again on the next connection.
+  without a dialog. If the phone forgot the bridge, re-encryption fails with
+  `PIN_OR_KEY_MISSING`; the bridge deletes its stale entry, stays connected and
+  lets the fresh pairing complete in the same connection.
 
 Apps need no UUID change for this step. A client that only reads FF11 must handle
 the initial `Insufficient Encryption` (ATT `0x0F`) / `Insufficient
@@ -95,5 +96,5 @@ surface a pairing failure instead of retrying forever.
 - `k`/`K`/`b` remain the controller (Classic) bond resets; they do not touch the
   phone bond.
 - Deleting a phone's bond on the phone side (`Forget`/`Unpair` in Android) is
-  enough; the bridge keeps its entry but the failed re-encryption makes it
-  disconnect instead of serving the link, and the next connection pairs again.
+  enough: the bridge deletes its stale entry on the failed re-encryption and the
+  same connection pairs again.
