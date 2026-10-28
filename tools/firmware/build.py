@@ -174,21 +174,35 @@ PORT_SDKCONFIG_ACL_LINKS = 3
 
 
 def sync_port_sdkconfig(port_dir):
-    """Raise the controller's BR/EDR ACL limit in the BTstack port's sdkconfig."""
+    """Raise the controller's BR/EDR ACL limit in the BTstack port config.
+
+    A reused build tree has a generated `sdkconfig`; a fresh clone has only
+    `sdkconfig.defaults`, which ESP-IDF uses to create it. Patch whichever is
+    present so the first CI build gets the same limit as a cached build.
+    """
     path = port_dir / "sdkconfig"
-    if not path.is_file():
-        fail("missing %s" % path)
-    lines = path.read_text().splitlines()
-    found = False
-    for i, line in enumerate(lines):
-        for key in (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL + "_EFF"):
-            if line.startswith(key + "="):
-                found = True
-                lines[i] = "%s=%d" % (key, PORT_SDKCONFIG_ACL_LINKS)
-    if not found:
-        fail("%s has no %s line; the port config changed" % (path, PORT_SDKCONFIG_ACL))
-    path.write_text("\n".join(lines) + "\n")
-    log("set %s=%d in %s" % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS, path))
+    if path.is_file():
+        lines = path.read_text().splitlines()
+        found = False
+        for i, line in enumerate(lines):
+            for key in (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL + "_EFF"):
+                if line.startswith(key + "="):
+                    found = True
+                    lines[i] = "%s=%d" % (key, PORT_SDKCONFIG_ACL_LINKS)
+        if not found:
+            fail("%s has no %s line; the port config changed" % (path, PORT_SDKCONFIG_ACL))
+        path.write_text("\n".join(lines) + "\n")
+        log("set %s=%d in %s" % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS, path))
+        return
+    defaults = port_dir / "sdkconfig.defaults"
+    if not defaults.is_file():
+        fail("missing %s and %s" % (path, defaults))
+    lines = [line for line in defaults.read_text().splitlines()
+             if not line.startswith(PORT_SDKCONFIG_ACL + "=")]
+    lines.append("%s=%d" % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS))
+    defaults.write_text("\n".join(lines) + "\n")
+    log("set %s=%d in %s (fresh clone)"
+        % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS, defaults))
 
 
 def verify_port_sdkconfig(build_dir):
