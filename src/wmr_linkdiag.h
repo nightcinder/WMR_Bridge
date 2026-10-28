@@ -86,4 +86,16 @@ void wmr_linkdiag_get_hand(unsigned hand, wmr_linkdiag_hand_t *out);
 uint32_t wmr_linkdiag_vhci_drops(void);
 uint32_t wmr_linkdiag_log_errors(void);
 
+/* ATT PDUs seen on the phone link (WMR_CFG_ATT_TRACE builds only; all zero otherwise).
+ * `writes` counts every ATT write, `two_byte_writes` the ones carrying exactly two bytes,
+ * which is what a CCCD write looks like. */
+typedef struct {
+    uint32_t rx;
+    uint32_t tx;
+    uint32_t writes;
+    uint32_t two_byte_writes;
+} wmr_linkdiag_att_t;
+
+void wmr_linkdiag_att_get(wmr_linkdiag_att_t *out);
+
 #endif /* WMR_LINKDIAG_H */

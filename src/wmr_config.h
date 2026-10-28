@@ -489,4 +489,11 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_REPORT_HEXDUMP     0
 #endif
 
+/* Decode every ATT PDU on the phone link (one line per request/response, plus a
+ * counters row in the status block). Diagnostic builds only: a HOGP host runs the
+ * whole HID handshake over ATT, and this shows where it stops. */
+#ifndef WMR_CFG_ATT_TRACE
+#define WMR_CFG_ATT_TRACE          0
+#endif
+
 #endif /* WMR_CONFIG_H */

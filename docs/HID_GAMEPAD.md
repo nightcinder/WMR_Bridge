@@ -65,10 +65,11 @@ tester. See "Known gaps".
   a plain vendor device and will not treat it as a HID gamepad.
 - **No input before subscribe:** the bridge sends HID input reports only after
   the phone enables the Report characteristic's CCCD (`HID input report enabled`
-  in the console; `hid=on` in the status line). HOGP hosts do not expect
-  notifications while they are still discovering services, and Android drops
-  the link when a device streams through that window. A neutral report is sent
-  immediately after the subscription is enabled.
+  in the console; `hid=on` in the status line). A neutral report is sent
+  immediately after the subscription is enabled. `0.2.4-24` logged
+  `HID reports=0` and the phone still dropped after nine seconds, so the
+  reports sent during discovery in earlier builds were not the cause of the
+  drop; the ATT trace below is how the next run locates it.
 - **Connectable state is logged:** every status line prints `adv=on` or
   `adv=off`, the HCI result of LE Set Advertising Enable is reported if the
   controller refuses it, and advertising is re-asserted after controller
@@ -85,6 +86,19 @@ tester. See "Known gaps".
   serves the Report Map, the input report (ID 1), HID Information, Protocol
   Mode and HID Control Point. Report characteristics require an encrypted
   link (`ENCRYPTION_KEY_SIZE_16`), so Android pairs before subscribing.
+
+## ATT trace
+
+A build with `WMR_CFG_ATT_TRACE=1` (`EXTRA_CFLAGS=-DWMR_CFG_ATT_TRACE=1`
+`python3 tools/firmware/build.py ...`) prints one line per ATT PDU on the
+phone link and an `ATT rx= tx= writes= two_byte_writes=` row in the status
+block. `rx` is phone→bridge and `tx` is bridge→phone. The trace shows how far
+a HOGP host gets: service discovery (`read-by-group`, `read-by-type`), the
+Report Map read (`read` 0x2A4B then `read-blob` at offset 22), the Protocol
+Mode write (0x2A4E), and the Report CCCD write (handle 0x000e, value
+`0x0001`). A connection with no ATT lines is a pairing-only link, not a HOGP
+host; a trace that stops before the CCCD write names the request that failed.
+Off by default because a HID host produces dozens of lines per connection.
 
 ## Tests
 

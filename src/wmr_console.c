@@ -170,6 +170,13 @@ static void print_stats(bool periodic){
     wmr_cfgmgr_print();
     printf("  vhci_drop=%lu log_errors=%lu\n",
            (unsigned long) wmr_linkdiag_vhci_drops(), (unsigned long) wmr_linkdiag_log_errors());
+#if WMR_CFG_ATT_TRACE
+    wmr_linkdiag_att_t att;
+    wmr_linkdiag_att_get(&att);
+    printf("  ATT rx=%lu tx=%lu writes=%lu two_byte_writes=%lu\n",
+           (unsigned long) att.rx, (unsigned long) att.tx,
+           (unsigned long) att.writes, (unsigned long) att.two_byte_writes);
+#endif
 #if WMR_CFG_FF12_DECIMATE > 1
     printf("  DIAGNOSTIC BUILD: FF12 sends every %dth report per hand (WMR_CFG_FF12_DECIMATE)\n",
            WMR_CFG_FF12_DECIMATE);
