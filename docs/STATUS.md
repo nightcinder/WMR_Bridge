@@ -27,7 +27,7 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Host tests only, **not run on hardware** |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default) | Host tests and firmware build only, **never run on a PSVR2 controller**; no PSVR2 decoder (FF11 raw only) |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: ~45–52 min dual-controller, ~58–65 min single-controller; not recommended for session VR |
-| BLE HID-over-GATT gamepad (ONY-441, draft) | Firmware build + host vector tests; phone pairs and bonds, then drops (0x13) before it enables the Report CCCD. The `0.2.4-29` UUID-printing trace named the last request: GAP `0x2A04` (peripheral preferred connection parameters) answered `attribute not found`, and Android's GAP client disconnects the link on that failed read. DIS (`0.2.4-26`) was not the drop. `0.2.4-31-g13c7d9f` adds `0x2A04`; retest pending | **No completed phone run** (no tester paste-back); `0.2.4-29` phone log: paired, bonded, `hid=off sub=0`, dropped 5 s after discovery. See [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
+| BLE HID-over-GATT gamepad (ONY-441, draft) | Firmware build + host vector tests; phone pairs and bonds. The `0.2.4-29` trace named the last failing read: GAP `0x2A04` (peripheral preferred connection parameters), answered `attribute not found`; Android's GAP client disconnects the link on that read. DIS (`0.2.4-26`) was not the drop. `0.2.4-31-g13c7d9f` adds `0x2A04` and the phone stayed connected in the 2026-10-28 16:05 run, but the second controller then failed with HCI `0x09` (no spare BR/EDR ACL slot): an unknown Classic link held the slot. `0.2.4-33` raises the controller to three BR/EDR ACL links and drops unknown Classic links; phone/controller retest pending | **Partial phone run** (user says it stayed; capture segment still ends with `hid=off sub=0` and no tester paste-back) plus controller ACL failure. See [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
 | Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 levers run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE; the 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers ([`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). No new hardware run beyond the latency runs |
 
 ## BLE HID gamepad (ONY-441)
@@ -84,6 +84,19 @@ discovery and disconnects the link when that read fails, which is why the HID
 profile never started. DIS `0x180A` with the PnP ID (`0.2.4-26`) was a correct
 addition but not the cause. `0.2.4-31-g13c7d9f` adds `0x2A04` (min/max 15 ms,
 latency 0, timeout 4 s); phone rows stay `not run` until the next paste.
+
+The 2026-10-28 16:05 run on `0.2.4-31` reports the phone connected and stayed,
+and the ATT trace shows the `0x2A04` read now returning 12 bytes. The same
+capture exposes the next failure on the Classic side: RIGHT streams, an unknown
+Classic link at `B0:9C:B2:CE:26:88` comes up and never opens a HID channel, and
+`connecting LEFT` then answers `connection limit exceeded (no spare ACL slot)
+(0x09)`. The ESP32 controller was configured for two BR/EDR ACL links, so the
+idle unknown link took the one LEFT needed. `tools/firmware/build.py` now sets
+`CONFIG_BTDM_CTRL_BR_EDR_MAX_ACL_CONN=3` and fails the build unless the generated
+header shows the effective value; `src/wmr_controller.c` drops a Classic ACL
+from an address that is not LEFT/RIGHT once both hands have stored addresses,
+and gives an unknown link 5 s to open a HID channel while a hand is still
+unpaired. Both controllers with the phone connected remain `not run`.
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 

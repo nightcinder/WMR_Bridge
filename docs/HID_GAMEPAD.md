@@ -151,10 +151,10 @@ Local build evidence for this change:
 
 | Item | Value |
 |---|---|
-| Source commit | `13c7d9f` (`0.2.4-31-g13c7d9f`, ATT trace on, GAP `0x2A04`) |
+| Source commit | `d298202` (`0.2.4-33-gd298202`, GAP `0x2A04` + BR/EDR ACL limit 3 + unknown-link drop) |
 | BTstack | `e38553977a25fb0b55b383c72c289be0975f422c` |
 | ESP-IDF | v6.1 |
-| Factory image SHA-256 | `cddb878e1c2ad27592533621b6c8e93df5fa5c934e7f4c5a8ce2736edd7a0735` |
+| Factory image SHA-256 | `c5da5eb9e8d24aad5e5531183551b47ea323e4a2d6daa9c06db82afb16972eef` |
 
 The first phone attempt could not pair: it ran the pre-ONY-438 image
 (`0.2.4-7-g90c6c83`) and the bridge showed two names for one address. Both are
@@ -235,6 +235,39 @@ could start. DIS (`0.2.4-26`) was a correct addition but not the drop.
 Information and Report Map reads and the Report CCCD write. The phone had
 connected before that, so the remaining work is the full tester paste-back.
 
+### 0.2.4-31 field run: phone connects, controllers hit the ACL limit
+
+The 2026-10-28 16:05 capture is the first one where the phone stays connected
+(user report). The ATT trace confirms the `0x2A04` fix: the
+`read-by-type 0x2A04` is answered with 12 bytes instead of `attribute not
+found`. The new failure is on the controller side:
+
+```
+connecting LEFT at 2C:4D:79:C8:C9:CC
+LEFT HID connection failed: connection limit exceeded (no spare ACL slot) (0x09)
+```
+
+RIGHT was streaming at the time, and the capture also has an unknown Classic
+link from `B0:9C:B2:CE:26:88` — not LEFT or RIGHT — that came up and never
+opened a HID channel. The ESP32 controller defaults to two BR/EDR ACL links, so
+the idle unknown link held the second slot and LEFT could never be paged.
+
+Two changes fix that:
+
+- `tools/firmware/build.py` sets `CONFIG_BTDM_CTRL_BR_EDR_MAX_ACL_CONN=3` in the
+  BTstack ESP32 port's `sdkconfig` and fails the build unless the generated
+  `sdkconfig.h` contains `CONFIG_BTDM_CTRL_BR_EDR_MAX_ACL_CONN_EFF 3`. The
+  spare link means one stray Classic device cannot starve a controller.
+- `src/wmr_controller.c` tracks an incoming Classic ACL from an address that is
+  not LEFT or RIGHT. When both hands have stored addresses it disconnects the
+  link immediately; while a hand is still unpaired it allows 5 s for a HID
+  channel and then disconnects it. Before this, such a link stayed up forever.
+  Declining an unknown HID channel also disconnects the underlying ACL.
+
+The firmware logs `unknown Classic link <addr> up ... waiting for a HID
+channel` or `incoming device <addr> is not LEFT or RIGHT; disconnecting`, so
+the next capture names the device that used to hold the slot.
+
 ## Verification STATUS (ONY-441 done-when)
 
 Nothing in this table is a completed hardware result yet. A row moves off
@@ -243,7 +276,8 @@ what the console traces show so far.
 
 | Check | Result | Phone / Android | Build | Evidence |
 |---|---|---|---|---|
-| Stock phone pairs and shows an input device, no app | PARTIAL: pairs and bonds; discovery completes, then the missing GAP `0x2A04` read makes Android's GAP client disconnect the link before the Report CCCD write. `0.2.4-31` adds `0x2A04`; retest pending | Pixel 11 Pro / Android 17 | `0.2.4-29-g748e928-att` (diagnosis), `0.2.4-31-g13c7d9f` (fix) | ATT trace, above |
+| Stock phone pairs and shows an input device, no app | PARTIAL: pairs and bonds; GAP `0x2A04` now reads successfully and the 2026-10-28 16:05 run reports the phone stayed connected. The capture segment still ends before a Report CCCD write (`hid=off sub=0`), so no gamepad tester result yet | Pixel 11 Pro / Android 17 | `0.2.4-29-g748e928-att` (diagnosis), `0.2.4-31-g13c7d9f` (GAP fix), `0.2.4-33` (ACL fix) | ATT trace, above |
+| Both controllers connect while the phone is connected | not run; 0.2.4-31 failed with HCI `0x09` (unknown Classic link held the second BR/EDR ACL slot). `0.2.4-33` raises the controller limit to 3 and drops unknown links; retest pending | Pixel 11 Pro / Android 17 | `0.2.4-31-g13c7d9f` (failure), `0.2.4-33` (fix) | 16:05 capture, above |
 | Gamepad tester: A/B/X/Y, shoulders, stick clicks, menu, home | not run | — | — | — |
 | Gamepad tester: d-pad via left trackpad (8 sectors) | not run | — | — | — |
 | Gamepad tester: face buttons via right trackpad | not run | — | — | — |

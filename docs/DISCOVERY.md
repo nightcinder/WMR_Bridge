@@ -208,9 +208,25 @@ What changes:
   that hand, and is paired with automatically (SSP is auto-confirmed for any device). The
   exposure is the discovery window, which runs only while a hand has no address and is bounded.
 - Once both hands have addresses, name matching is off: incoming devices with other addresses
-  are declined, and discovery has nothing to look for.
+  are declined and their ACL is disconnected, and discovery has nothing to look for.
 - A stored address is never replaced by discovery or by an incoming device; only `F` (local
   serial console) clears it.
+
+## Classic ACL slots
+
+The ESP32 controller is built with three BR/EDR ACL links
+(`CONFIG_BTDM_CTRL_BR_EDR_MAX_ACL_CONN=3`, set by `tools/firmware/build.py`; the
+ESP-IDF default is two). Two belong to the controllers; the third is headroom
+for a stray device, such as a phone's BR/EDR side or a nearby headset, that
+pages the bridge without ever opening a HID channel.
+
+An incoming ACL from an address that is not LEFT or RIGHT is now bounded. When
+both hands already have stored addresses the link is disconnected at once.
+While a hand is still unpaired the link gets `WMR_CFG_UNKNOWN_ACL_TIMEOUT_MS`
+(5 s) to open a HID channel and start the name check, then it is disconnected.
+Declining the HID channel also disconnects the ACL. Before this, the 2026-10-28
+field log shows such a link sitting idle while `connecting LEFT` failed with
+HCI `0x09` (connection limit exceeded).
 
 See [SECURITY.md](SECURITY.md).
 
