@@ -1,7 +1,10 @@
 name: host-tests
 
 on:
+  # Branch pushes stay on `main`: without this every branch push produced a
+  # second `host-tests` check alongside the pull_request one.
   push:
+    branches: [main]
   pull_request:
 
 jobs:
