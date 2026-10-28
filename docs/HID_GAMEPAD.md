@@ -57,10 +57,15 @@ tester. See "Known gaps".
   report is sent once. The report history and both hands are cleared on BLE
   connect and disconnect, so neither a controller reconnect nor a phone
   reconnect can inherit the previous state.
-- **Advertising:** the advertising data still carries the FF10 UUID and the
-  name. The scan response adds Appearance `0x03C4` (Gamepad) and the HID
-  service UUID `0x1812`, which Android uses to classify the device as a
-  gamepad.
+- **Advertising:** the advertising data carries the FF10 UUID and the name, with
+  flags `0x06` (LE general discoverable, BR/EDR not supported). The scan
+  response adds Appearance `0x03C4` (Gamepad) and the HID service UUID
+  `0x1812`, which Android uses to classify the device as a gamepad.
+- **Phone transport is LE only:** the bridge is not Classic-discoverable
+  (`WMR_CFG_CLASSIC_DISCOVERABLE=0`), and page scan stays on for controller
+  reconnects. Together with the advertising flag, that stops Android from
+  merging a Classic inquiry result into the entry and pairing over BR/EDR,
+  where the bridge is a HID host with no profile to serve.
 - **GATT:** `wmr_bridge.gatt` imports BTstack's `hids.gatt`; `hids_device`
   serves the Report Map, the input report (ID 1), HID Information, Protocol
   Mode and HID Control Point. Report characteristics require an encrypted
@@ -95,7 +100,7 @@ Local build evidence for this change:
 
 | Item | Value |
 |---|---|
-| Source commit | `084e2f3` (`0.2.4-10-g084e2f3`; includes ONY-438) |
+| Source commit | `084e2f3` (`0.2.4-10-g084e2f3`; includes ONY-438); LE-only phone transport in the current head |
 | BTstack | `e38553977a25fb0b55b383c72c289be0975f422c` |
 | ESP-IDF | v6.1 |
 | Factory image SHA-256 | `e7553bc097bea0a560b8a94a1c4f3d54b89972097ea1fb83b7bcfd2e1454b764` |
@@ -117,13 +122,26 @@ streams 46-byte report-protocol input, so it is not the pairing fault.
 
 ### Device name and class on both transports
 
-The bridge stays Classically discoverable so the controllers can be paired, so
-a dual-mode phone sees the same address twice. `WMR_CFG_BLE_NAME` now sets the
-BR/EDR local name too (`gap_set_local_name`), not just the LE advertising name;
-before that the classic side kept BTstack's default `BTstack <bd_addr>` and the
-phone's entry flipped between the two names every few seconds. The Class of
-Device is now a gamepad rather than BTstack's smartphone default, so both
-transports agree with the `0x03C4` appearance.
+The bridge still answers Classic pages for the controllers, so the same
+address exists on both transports. `WMR_CFG_BLE_NAME` sets the BR/EDR local
+name too (`gap_set_local_name`), not just the LE advertising name; before that
+the classic side kept BTstack's default `BTstack <bd_addr>` and the phone's
+entry flipped between the two names every few seconds. The Class of Device is a
+gamepad rather than BTstack's smartphone default, so it agrees with the
+`0x03C4` appearance.
+
+Inquiry scan is off, so a phone does not see the Classic side at all and pairs
+the LE HID device. `gap_connectable_control(1)` is explicit: controllers page
+the bridge on reconnect, and that needs page scan, not inquiry scan.
+
+The third attempt (`0.2.4-10-g084e2f3`) showed the gamepad icon but the phone
+reported `cannot communicate with <address>`; the attached bridge log shows no
+phone link on either transport during the attempt (`phone=0`, no LE connection,
+no Classic link from the phone), while the bridge was running controller
+discovery, which refuses incoming Classic links. The phone had been paired
+Classically in the second attempt, and the bridge had no HID-over-BR/EDR to
+serve; a dual-mode entry like that always ends in that error. That is why the
+Classic side is now hidden from phones.
 
 ## Verification STATUS (ONY-441 done-when)
 
@@ -166,7 +184,9 @@ notes:
 - **No completed phone run.** The Pixel 11 Pro / Android 17 passed pairing once
   on `0.2.4-8-gba1a8bb` but stopped connecting after the entry was forgotten,
   and the gamepad-tester block was not filled in. The table above is deliberately
-  empty until the retest on `0.2.4-10-g084e2f3` produces that block.
+  empty until the retest on the LE-only build produces that block. The
+  `0.2.4-10-g084e2f3` run got a gamepad icon but `cannot communicate`; the
+  phone never linked to the bridge, so the entry was pairing over BR/EDR.
 - **Stick centre and dead zone.** The app's `StickNormalizer` (centre learning
   from calibration, radial dead zone) is not ported. A controller whose stick
   rests off-centre will show drift in a gamepad tester. This is the most

@@ -132,7 +132,10 @@ int btstack_main(int argc, const char *argv[]){
     hci_set_master_slave_policy(HCI_ROLE_MASTER);
     hci_registration.callback = wmr_bridge_hci_handler;
     hci_add_event_handler(&hci_registration);
-    gap_discoverable_control(1);
+    /* Page scan stays on for controller reconnects; inquiry scan is off so a phone cannot
+     * see (and then Classic-pair) the BR/EDR side. See WMR_CFG_CLASSIC_DISCOVERABLE. */
+    gap_connectable_control(1);
+    gap_discoverable_control(WMR_CFG_CLASSIC_DISCOVERABLE);
 
     setvbuf(stdout, NULL, _IONBF, 0);
     wmr_status_led_init();                              /* red/green/blue = 0/1/2 controllers */

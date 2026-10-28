@@ -94,12 +94,23 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_BLE_NAME                     WMR_CFG_BLE_NAME_BOTH
 #endif
 
-/* BR/EDR Class of Device. The bridge is Classically discoverable so the controllers can
- * reach it, but BTstack's default is 0x007a020c ("Smartphone"): a dual-mode phone then
- * shows a phone icon and may try a Classic pairing this HID-host side cannot serve.
- * Peripheral / Gamepad matches the LE appearance (0x03C4) and the HID service. */
+/* BR/EDR Class of Device. BTstack's default is 0x007a020c ("Smartphone"): a dual-mode
+ * phone then shows a phone icon. Peripheral / Gamepad matches the LE appearance (0x03C4)
+ * and the HID service. */
 #ifndef WMR_CFG_CLASS_OF_DEVICE
 #define WMR_CFG_CLASS_OF_DEVICE              0x000508u
+#endif
+
+/* Classic inquiry scan (discoverability). Off by default: the bridge finds the controllers
+ * itself by inquiry and pages them, and controller reconnects are incoming pages, which
+ * need page scan (connectability), not inquiry scan. A Classically discoverable dual-mode
+ * device is a problem for the phone: Android merges the inquiry result with the LE
+ * advertisement, marks the device dual-mode and pairs it over BR/EDR, where this bridge is
+ * a HID *host* with no profile to offer, so pairing ends in "cannot communicate". With
+ * inquiry scan off and the BR/EDR-not-supported advertising flag set, the phone sees an
+ * LE-only HID device and pairs over LE. Set to 1 to restore the old behaviour. */
+#ifndef WMR_CFG_CLASSIC_DISCOVERABLE
+#define WMR_CFG_CLASSIC_DISCOVERABLE         0
 #endif
 
 /* Controllers are found by their Bluetooth names ("Motion controller - Left" / "- Right")

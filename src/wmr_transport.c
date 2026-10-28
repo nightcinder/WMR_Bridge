@@ -1147,12 +1147,17 @@ void wmr_transport_init(void){
      * HID-host side cannot serve. Use the same Peripheral/Gamepad class as the LE
      * appearance below. */
     gap_set_class_of_device(WMR_CFG_CLASS_OF_DEVICE);
-    /* General discoverable; do not claim BR/EDR is unsupported. Built from
-     * WMR_CFG_BLE_NAME so the three images need no source change. */
+    /* General discoverable, BR/EDR not supported: the bridge has a Classic radio for the
+     * controllers, but it is a HID host there, so the only thing a phone can pair with is
+     * the LE HID device. Without this bit Android merges the inquiry result (when the
+     * bridge is Classically discoverable) or the flag with the LE advertisement, marks the
+     * device dual-mode and pairs over BR/EDR, where there is no HID profile to serve and
+     * pairing fails with "cannot communicate". Built from WMR_CFG_BLE_NAME so the three
+     * images need no source change. */
     uint8_t *p = advertising;
     *p++ = 2;
     *p++ = BLUETOOTH_DATA_TYPE_FLAGS;
-    *p++ = 0x02;
+    *p++ = 0x06;
     *p++ = (uint8_t) sizeof(WMR_CFG_BLE_NAME);   /* AD length: type + name, NUL excluded */
     *p++ = BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME;
     memcpy(p, WMR_CFG_BLE_NAME, sizeof(WMR_CFG_BLE_NAME) - 1);
