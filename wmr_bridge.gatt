@@ -3,6 +3,14 @@ CHARACTERISTIC, GAP_DEVICE_NAME, READ, "WMR Bridge"
 // HID Gamepad (0x03C4), matching the BR/EDR Class of Device. HOGP hosts read
 // this to classify the device; the scan response carries the same value.
 CHARACTERISTIC, GAP_APPEARANCE, READ, C4 03
+// Peripheral Preferred Connection Parameters (0x2A04): min 15 ms, max 15 ms,
+// latency 0, supervision timeout 4 s (all values in 1.25 ms / 10 ms units).
+// Android's GAP client reads this after service discovery and, if the read
+// fails with "attribute not found", its client-complete path calls
+// GATT_Disconnect on the link. That is the five-second drop every phone run
+// showed after the 0x2A04 read-by-type; the HID profile never got a chance to
+// start. The 0.2.4-29 trace named the missing UUID.
+CHARACTERISTIC, GAP_PERIPHERAL_PREFERRED_CONNECTION_PARAMETERS, READ, 0C 00 0C 00 00 00 90 01
 
 PRIMARY_SERVICE, GATT_SERVICE
 CHARACTERISTIC, GATT_DATABASE_HASH, READ,
