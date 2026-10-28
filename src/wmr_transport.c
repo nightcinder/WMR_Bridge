@@ -84,6 +84,9 @@
 
 /* FF16: the firmware version (ESP-IDF PROJECT_VER), read-only. */
 #define VERSION_VALUE_HANDLE ATT_CHARACTERISTIC_0000FF16_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
+/* DIS 0x2A26: the same version string, so a HOGP host can show the firmware. */
+#define FW_REVISION_VALUE_HANDLE \
+    ATT_CHARACTERISTIC_ORG_BLUETOOTH_CHARACTERISTIC_FIRMWARE_REVISION_STRING_01_VALUE_HANDLE
 
 /* HID-over-GATT gamepad: report ID 1, 9 payload bytes, same descriptor as the
  * companion package. Notifications are independent of the FF10 stream modes. */
@@ -708,7 +711,7 @@ static bool ccc_stream(uint16_t attribute, wmr_stream_t *which){
 static uint16_t att_read(hci_con_handle_t handle, uint16_t attribute,
                          uint16_t offset, uint8_t *buffer, uint16_t buffer_size){
     (void)handle;
-    if (attribute == VERSION_VALUE_HANDLE){
+    if (attribute == VERSION_VALUE_HANDLE || attribute == FW_REVISION_VALUE_HANDLE){
         const esp_app_desc_t *app = esp_app_get_description();
         return att_read_callback_handle_blob((const uint8_t *) app->version,
                                              (uint16_t) strlen(app->version),
