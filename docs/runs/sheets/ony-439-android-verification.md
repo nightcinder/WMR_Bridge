@@ -113,12 +113,12 @@ check the owner declines is recorded as `declined`, not as a pass.
 
 | # | Check | Result | Device | Build | Command | Figures |
 |---|---|---|---|---|---|---|
-| 1 | FF16 live read | not run | | | §1 | |
+| 1 | FF16 live read | partial — app cannot show it (wmr-companion #107); console `v` not yet pasted | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f | §1 | see §7 |
 | 2 | FF17 scan/connect | not run | | | §2 | |
-| 3 | Stick dead zone | not run | | | §3 | |
+| 3 | Stick dead zone | partial — rest half only; no dead-zone-0 or end-stop reading | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §3 | see §7 |
 | 4 | Latency stream ladder | not run | | | latency-2 §3–§5 | |
 | 5 | App-vs-native probe decision | not run | | | latency-2 §6 | |
-| 6 | FF13 calibration in fusion | not run | | | companion PROTOCOL | |
+| 6 | FF13 calibration in fusion | partial — two pose recordings, switch state not labelled; no 90° error | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | companion PROTOCOL | see §7 |
 
 ## 6. Paste-back block
 
@@ -135,3 +135,68 @@ Defects filed: <issue ids or none>
 ```
 
 A check with no figures is `not run`, even if the phone "seemed fine".
+
+## 7. Evidence received (2026-10-28 sitting)
+
+Owner-supplied, not yet a verdict: the rows above stay `partial` until the missing half of each
+check arrives. Re-test from the same phone and bridge; no reflash.
+
+### Header (§0, settled)
+
+| Field | Value | Source |
+|---|---|---|
+| Bridge firmware | `0.2.4`, commit `41a9e5f`, variant `both`, built 2026-10-26 23:38Z | packaged image `build-info.json`, matched against the owner's `0.2.4` + `bridge_hands=0` stream banner |
+| Stream banner | `bridge_hands=0`, `stream=batched` (FF14), `mtu=517`, `sub=1` | serial log 19:10:32 |
+| App | `0.2.1` (versionCode 3) | `dumpsys package com.onyxlens.wmr_companion` |
+| Phone | Pixel 11 Pro (grizzly), Android 17 | `adb devices -l`, `ro.build.version.release` |
+
+FF13 blocks on the same sitting read to READY: LEFT 7147 bytes `8bc13223`, RIGHT 7148 bytes
+`75e8ab85`, `send_errors=0` both hands.
+
+### FF16 (§1) — app gap
+
+The library parses FF16 into `WmrProtocolVersion` and publishes it on the link snapshot
+(`packages/wmr_companion/lib/src/companion.dart`), but `apps/wmr_companion_app/lib` never reads
+`.protocol` and has no About page. §1 step 1 therefore cannot pass on this build. Filed as
+wmr-companion issue #107; the console half (§1 step 2) is still open.
+
+### Stick dead zone (§3) — step 1 half
+
+Debug screen at rest, both sticks untouched, FF14 stream: normalized `out` = `+0.0000, +0.0000`
+on both hands (screenshot). Persisted store (`app_flutter/stick_settings.json`):
+
+```
+deadZone 0.05, learn true
+centres[LEFT ] = (-0.022653, 0.008952)
+centres[RIGHT] = (-0.111924, 0.081852)
+```
+
+The screenshot sequence shows the RIGHT centre moving from about `-0.1112, +0.0835` toward the
+persisted value while its sample count rose 303 → 318, so learning was still converging during
+the run; LEFT moved from `-0.0239, +0.0092`. Still needed: dead zone 0 reading, end stops, held
+offset and learning-off steps.
+
+### FF13 in fusion (§6) — two pose recordings
+
+Pulled with `adb exec-out run-as com.onyxlens.wmr_companion cat app_flutter/<name>` (files live in
+the app documents directory, not on `/sdcard`). Both are `wmr-pose-recording` v1 files written by
+the Debug screen recorder, i.e. the fused poses the viewer shows; every sample is
+`source=orientationOnly`, `confidence=none` (no positional tracking in these takes). Yaw is the
+Y-axis heading of the recorded quaternion, unwrapped; drift is the endpoint difference over the
+recording.
+
+| Recording | Samples | Span | LEFT yaw drift | RIGHT yaw drift |
+|---|---|---|---|---|
+| `pose-20261028-191217.json` | 201 | 6.6 s | +0.00° (0.00 °/s) | −0.02° (−0.003 °/s) |
+| `pose-20261028-192352.json` | 437 | 14.4 s | +0.01° (0.00 °/s) | +3.50° (+0.243 °/s) |
+
+Both takes are short, and neither is labelled with the FF13 switch state (the switch is in-memory
+only), so they cannot yet be entered as the before/after pair. The 90° hand-turn error in §6 was
+not recorded.
+
+### Link figures that are not ladder results
+
+`dt p50 4.98 ms`, `last5s` loss 21.1 % LEFT / 17.3 % RIGHT, `cum` 19.4 % / 16.3 % are the
+firmware's link tick statistics, not the app's stream latency. Check 4 still needs the latency
+screen from `latency-2.md`.
+

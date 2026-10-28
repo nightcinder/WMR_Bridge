@@ -32,17 +32,18 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 ## Android verification campaign (ONY-439)
 
 Scope: phone + one ESP32 only. Sheet: [`docs/runs/sheets/ony-439-android-verification.md`](runs/sheets/ony-439-android-verification.md).
-Nothing in this table is a hardware result yet; a row moves off `not run` only when the sheet's
-paste-back block arrives, and each row then carries the device, build hash, command and figures.
+A row moves off `not run` only when the sheet's paste-back block supplies that check's figures;
+`partial` rows carry what has arrived so far and are not passes. Each row names the device and
+build hash.
 
 | Check | Result | Device / build | Where the procedure lives |
 |---|---|---|---|
-| FF16 live read | not run | — | sheet §1 |
+| FF16 live read | `partial` — app has no FF16 display (wmr-companion #107); console `v` not pasted | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | sheet §1, §7 |
 | FF17 scan/connect | not run | — | sheet §2 |
-| Stick dead zone | not run | — | sheet §3 |
+| Stick dead zone | `partial` — normalized rest `0.0000, 0.0000` both hands, dead zone 0.05, centres LEFT `-0.0227, 0.0090` / RIGHT `-0.1119, 0.0819`; dead-zone-0 and end stops missing | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | sheet §3, §7 |
 | Latency stream ladder | not run | — | `wmr-companion` `docs/runs/sheets/latency-2.md` §3–§5 |
 | App-vs-native probe decision | not run | — | `wmr-companion` `docs/runs/sheets/latency-2.md` §6 |
-| FF13 calibration applied in fusion | not run | — | `wmr-companion` `docs/PROTOCOL.md` "FF13 config block in the app" |
+| FF13 calibration applied in fusion | `partial` — two pose recordings: LEFT `0.00 °/s` in both, RIGHT `-0.003 °/s` (6.6 s) and `+0.243 °/s` (14.4 s); switch state unlabelled, no 90° error | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/PROTOCOL.md` "FF13 config block in the app"; sheet §7 |
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 
