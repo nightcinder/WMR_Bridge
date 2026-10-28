@@ -181,18 +181,43 @@ offset and learning-off steps.
 Pulled with `adb exec-out run-as com.onyxlens.wmr_companion cat app_flutter/<name>` (files live in
 the app documents directory, not on `/sdcard`). Both are `wmr-pose-recording` v1 files written by
 the Debug screen recorder, i.e. the fused poses the viewer shows; every sample is
-`source=orientationOnly`, `confidence=none` (no positional tracking in these takes). Yaw is the
-Y-axis heading of the recorded quaternion, unwrapped; drift is the endpoint difference over the
-recording.
+`source=orientationOnly`, `confidence=none` (no positional tracking in these takes).
 
-| Recording | Samples | Span | LEFT yaw drift | RIGHT yaw drift |
-|---|---|---|---|---|
-| `pose-20261028-191217.json` | 201 | 6.6 s | +0.00° (0.00 °/s) | −0.02° (−0.003 °/s) |
-| `pose-20261028-192352.json` | 437 | 14.4 s | +0.01° (0.00 °/s) | +3.50° (+0.243 °/s) |
+Yaw is measured as the heading change about world Y: the relative rotation from the first sample,
+projected onto the Y axis (swing-twist). The Debug screen's own Euler yaw is **not** usable at rest
+on a face-down controller: in the 6.6 s take the RIGHT hand sits at pitch `+88.8°` (gimbal lock)
+and its Euler yaw wanders `-6.4°` then `+4.4°` while the actual heading changes by `-0.03°`.
 
-Both takes are short, and neither is labelled with the FF13 switch state (the switch is in-memory
-only), so they cannot yet be entered as the before/after pair. The 90° hand-turn error in §6 was
-not recorded.
+| Recording | Samples | Span | Attitude | LEFT heading | RIGHT heading |
+|---|---|---|---|---|---|
+| `pose-20261028-191217.json` | 201 | 6.6 s | both hands still | +0.00° | −0.03° (pitch +88.8°, face down) |
+| `pose-20261028-192352.json` | 437 | 14.4 s | RIGHT hand held at pitch +24.8° and turned | −0.01° | −25.33° (−1.74 °/s) |
+
+Only the first take is a rest measurement, and 6.6 s is short. The second is a hand-held turn, not
+drift. Neither take is labelled with the FF13 switch state (the switch is in-memory only), so there
+is no before/after pair yet, and the 90° hand-turn error in §6 was not recorded. What check 6 needs
+is two 60 s recordings with both controllers face down and untouched, switch off then on.
+
+### Latency (§4, §5) — one native probe run
+
+The owner attached the GATT probe's export from 2026-10-28 19:25:45–19:27:46 local:
+`latency-20261028-192746.json` (`wmr-latency` v2, `source` `wmr-gatt-probe (native Android)`),
+`-echo.csv` (473 pings) and `-samples.csv` (39 642 frames, not needed for the verdict).
+
+| Field | Value |
+|---|---|
+| Run | 120.4 s, FF14 `batched`, ping interval 250 ms, MTU 517, RSSI −67 → −66 dBm |
+| Round trip | 473 sent / 473 answered, 0 timeouts, 0 failed writes; min 18.6 / p50 **35.6** / p95 90.6 / max 129.8 ms (echo CSV agrees: p50 35.609 ms) |
+| End-to-end / turnaround | p50 35.9 ms / p50 0.343 ms (p99 8.3 ms) |
+| Max queue depth | 28 |
+| Stalls > 50 ms | LEFT 274, RIGHT 365; sequence gaps 0 / 0; tick loss 15.1 % / 20.6 % |
+| Missing | the bridge `STREAM` line for the run (interval, `lat`), so the `conn=`/`lat` gate in `latency-2` §4 is unrecorded |
+
+That is the probe half of one FF14 pair. There is no app run from the same session and position to
+compare it with, and no app ladder across `none`/`FF11`/`FF12`/`FF14`, so checks 4 and 5 stay
+`not run`: the rule in `latency-2` §6 is applied to paired cells from the same session, at least
+three runs each, repeated in a second session.
+
 
 ### Link figures that are not ladder results
 

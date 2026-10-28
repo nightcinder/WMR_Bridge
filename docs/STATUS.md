@@ -43,7 +43,11 @@ build hash.
 | Stick dead zone | `partial` — normalized rest `0.0000, 0.0000` both hands, dead zone 0.05, centres LEFT `-0.0227, 0.0090` / RIGHT `-0.1119, 0.0819`; dead-zone-0 and end stops missing | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | sheet §3, §7 |
 | Latency stream ladder | not run | — | `wmr-companion` `docs/runs/sheets/latency-2.md` §3–§5 |
 | App-vs-native probe decision | not run | — | `wmr-companion` `docs/runs/sheets/latency-2.md` §6 |
-| FF13 calibration applied in fusion | `partial` — two pose recordings: LEFT `0.00 °/s` in both, RIGHT `-0.003 °/s` (6.6 s) and `+0.243 °/s` (14.4 s); switch state unlabelled, no 90° error | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/PROTOCOL.md` "FF13 config block in the app"; sheet §7 |
+| FF13 calibration applied in fusion | `partial` — pose recordings: 6.6 s face-down rest LEFT `+0.00°`, RIGHT `−0.03°`; a 14.4 s hand-held take turned RIGHT `−25.3°`. Switch state unlabelled, no 90° error | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/PROTOCOL.md` "FF13 config block in the app"; sheet §7 |
+
+In hand but not a verdict: one native GATT-probe FF14 run (2026-10-28 19:27:46, 120 s, 473/473
+answered, RTT p50 35.6 ms, stalls LEFT 274 / RIGHT 365) with no app run paired against it, and no
+app ladder across the four stream modes. Details in sheet §7; checks 4 and 5 stay `not run`.
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 
