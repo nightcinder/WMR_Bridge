@@ -50,8 +50,16 @@ void wmr_linkwait_finish(wmr_linkwait_t *wait){
     wait->link_up_ms = 0;
 }
 
-wmr_linkwait_action_t wmr_linkwait_poll(wmr_linkwait_t *wait, bool encrypted, uint32_t now_ms){
+wmr_linkwait_action_t wmr_linkwait_poll(wmr_linkwait_t *wait, bool encrypted, bool hid_open,
+                                        uint32_t now_ms){
     if (!wait->armed) return WMR_LINKWAIT_NONE;
+    /* Only an opened HID channel ends the wait. An accepted incoming connection is not
+     * enough: its cid is known before HID_SUBEVENT_CONNECTION_OPENED, and an open that
+     * never completes would otherwise leave the ACL up with no watchdog. */
+    if (hid_open){
+        wmr_linkwait_finish(wait);
+        return WMR_LINKWAIT_NONE;
+    }
     /* Unsigned subtraction keeps the elapsed time correct across the 32-bit wrap. */
     uint32_t elapsed = now_ms - wait->link_up_ms;
     if (!encrypted && !wait->encrypt_sent && elapsed >= WMR_LINKWAIT_ENCRYPT_MS){

@@ -151,9 +151,12 @@ watches an ACL that the controller opened itself (no discovery connect or `l`/`r
 pending): after `WMR_LINKWAIT_ENCRYPT_MS` (750 ms) without encryption it sends
 `HCI_Set_Connection_Encryption` itself, using the stored link key; if the link still has no
 HID channel after `WMR_LINKWAIT_DROP_MS` (4 s) it drops the ACL and logs it, so the controller
-pages again. `src/wmr_linkwait.c` holds the timing and is host-tested. The watchdog is
-inactive during the discovery connect phase, where the connect watchdog above owns the
-attempt, so pairing retries are unchanged.
+pages again. Only `HID_SUBEVENT_CONNECTION_OPENED` ends the wait: accepting the controller's
+incoming HID connection records the cid earlier, and an accepted channel that never opens is
+dropped at the same deadline (its cid is released there, since no
+`HID_SUBEVENT_CONNECTION_CLOSED` follows). `src/wmr_linkwait.c` holds the timing and is
+host-tested. The watchdog is inactive during the discovery connect phase, where the connect
+watchdog above owns the attempt, so pairing retries are unchanged.
 
 That is what the 2026-10-26 field logs show (firmware 0.2.2): the missing hand was found in
 the first round in all three runs where the other hand had no link yet, while 18 consecutive

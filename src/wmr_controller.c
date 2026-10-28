@@ -858,11 +858,13 @@ static void linkwait_timer_fire(btstack_timer_source_t *timer){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         controller_t *c = &controllers[i];
         if (!linkwait[i].armed) continue;
-        if (c->handle == HCI_CON_HANDLE_INVALID || c->cid){
+        if (c->handle == HCI_CON_HANDLE_INVALID){
             wmr_linkwait_finish(&linkwait[i]);
             continue;
         }
-        switch (wmr_linkwait_poll(&linkwait[i], c->encrypted, now)){
+        /* c->cid is set as soon as an incoming connection is accepted; the link only
+         * counts as up when the HID channel opened (c->connected). */
+        switch (wmr_linkwait_poll(&linkwait[i], c->encrypted, c->connected, now)){
             case WMR_LINKWAIT_ENCRYPT: {
                 /* The controller normally starts encryption itself. When it does not,
                  * the host is the Classic master and can enable it with the stored key;
@@ -882,12 +884,27 @@ static void linkwait_timer_fire(btstack_timer_source_t *timer){
                 hci_send_cmd(&hci_set_connection_encryption, c->handle, 1);
                 break;
             }
-            case WMR_LINKWAIT_DROP:
+            case WMR_LINKWAIT_DROP: {
+                /* An incoming HID connection may have been accepted and then never opened.
+                 * No HID_SUBEVENT_CONNECTION_CLOSED follows for that, so the cid and the
+                 * connect wait have to be released here or the next attempt hangs. */
+                bool accepted = c->cid != 0 && !c->connected;
+                unsigned hand = (unsigned) (c - controllers);
                 WMR_LOGW("pair", "%s ACL stayed up without a HID channel for %u ms; "
                          "dropping it so the controller can reconnect", c->name,
                          (unsigned) WMR_LINKWAIT_DROP_MS);
+                if (accepted){
+                    c->cid = 0;
+                    c->descriptor_available = false;
+                    if (connect_pending){
+                        connect_pending = false;
+                        disc_pair_failed(hand, 0);
+                    }
+                }
                 gap_disconnect(c->handle);
+                if (accepted) disc_connect_progress();
                 break;
+            }
             default:
                 break;
         }

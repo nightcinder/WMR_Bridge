@@ -78,8 +78,11 @@ void wmr_linkwait_start(wmr_linkwait_t *wait, uint32_t now_ms);
 /* Stop waiting: the HID channel opened, or the link is gone. */
 void wmr_linkwait_finish(wmr_linkwait_t *wait);
 
-/* What the host should do next for this ACL. `encrypted` is the current link state.
+/* What the host should do next for this ACL. `encrypted` and `hid_open` are the current
+ * link state; `hid_open` is true only once the HID channel is open, not while an incoming
+ * connection is merely accepted. A wait whose channel opened is finished here.
  * WMR_LINKWAIT_ENCRYPT is returned once per wait; WMR_LINKWAIT_DROP disarms the wait. */
-wmr_linkwait_action_t wmr_linkwait_poll(wmr_linkwait_t *wait, bool encrypted, uint32_t now_ms);
+wmr_linkwait_action_t wmr_linkwait_poll(wmr_linkwait_t *wait, bool encrypted, bool hid_open,
+                                        uint32_t now_ms);
 
 #endif
