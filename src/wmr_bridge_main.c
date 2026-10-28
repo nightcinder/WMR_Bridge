@@ -102,6 +102,15 @@ int btstack_main(int argc, const char *argv[]){
     l2cap_init();
 #ifdef ENABLE_BLE
     sm_init();
+    /* 0.3 phone-link security: LE Secure Connections with bonding only. Legacy
+     * pairing is refused, a bond is required before any protected attribute is
+     * served, and the peripheral asks for security as soon as a central connects.
+     * There is no display and no keypad, so LESC uses Just Works (encrypted, not
+     * MITM-protected); docs/SECURITY.md records that residual risk. */
+    sm_set_io_capabilities(IO_CAPABILITY_NO_INPUT_NO_OUTPUT);
+    sm_set_authentication_requirements(SM_AUTHREQ_SECURE_CONNECTION | SM_AUTHREQ_BONDING);
+    sm_set_secure_connections_only_mode(true);
+    sm_set_request_security(true);
 #endif
     wmr_controller_init(wmr_transport_submit_report);   /* HID host + handler */
     wmr_transport_init();                               /* ATT server + handler */

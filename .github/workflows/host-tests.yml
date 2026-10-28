@@ -41,6 +41,8 @@ jobs:
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_hid.c src/wmr_hid.c src/wmr_decoded.c src/wmr_decode.c -lm -o test_hid
       - name: Build FF17 controller-status tests
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_ctrl.c src/wmr_ctrl.c -o test_ctrl
+      - name: Build phone-link security tests
+        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_secure.c src/wmr_secure.c -o test_secure
       - name: Run protocol and queue tests
         run: ./test_protocol samples/controller_frames.txt
       - name: Run decoder tests
@@ -75,6 +77,8 @@ jobs:
         run: ./test_hid tests/vectors/hid_gamepad.txt tests/vectors/hid_report_descriptor.txt
       - name: Run FF17 controller-status tests
         run: ./test_ctrl
+      - name: Run phone-link security tests
+        run: ./test_secure
       - name: Run capture/analysis script tests
         run: python3 tests/test_analyze_capture.py
       - name: Run Linux/Pi host-bridge tests
