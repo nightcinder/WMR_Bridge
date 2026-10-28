@@ -1,0 +1,3 @@
+# HID report descriptor, byte for byte the companion hidReportDescriptor.
+# Generated from wmr_companion_hid_android/lib/src/hid_report.dart.
+05 01 09 05 a1 01 85 01 05 09 19 01 29 10 15 00 25 01 75 01 95 10 81 02 05 01 09 39 15 00 25 07 35 00 46 3b 01 65 14 75 04 95 01 81 42 65 00 75 04 95 01 81 03 05 01 09 30 09 31 09 32 09 35 15 81 25 7f 75 08 95 04 81 02 05 02 09 c5 09 c4 15 00 26 ff 00 75 08 95 02 81 02 c0
