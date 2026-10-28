@@ -100,4 +100,9 @@ $exeSecure = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_secure.exe"
 if ($LASTEXITCODE -ne 0) { throw "compile failed (secure)" }
 & $exeSecure
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeLinkwait = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_linkwait.exe"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_linkwait.c" "$root\src\wmr_linkwait.c" -o $exeLinkwait
+if ($LASTEXITCODE -ne 0) { throw "compile failed (link wait)" }
+& $exeLinkwait
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 exit $protocolStatus

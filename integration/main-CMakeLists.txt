@@ -29,6 +29,7 @@ if( EXAMPLE STREQUAL "wmr_bridge" )
         "${WMR_BRIDGE_DIR}/src/wmr_hid.c"
         "${WMR_BRIDGE_DIR}/src/wmr_link.c"
         "${WMR_BRIDGE_DIR}/src/wmr_linkdiag.c"
+        "${WMR_BRIDGE_DIR}/src/wmr_linkwait.c"
         "${WMR_BRIDGE_DIR}/src/wmr_levers.c"
         "${WMR_BRIDGE_DIR}/src/wmr_log.c"
         "${WMR_BRIDGE_DIR}/src/wmr_protocol.c"
