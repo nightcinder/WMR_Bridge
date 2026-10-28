@@ -504,10 +504,11 @@ safeguards below are enforced by the daemon; the transport is still plaintext.
   a web page cannot open a socket to the daemon.
 - **Bounded handshake.** An HTTP upgrade that does not complete within 5 seconds
   is closed, so half-open connections cannot accumulate.
-- The WebSocket is plaintext. The token prevents unauthorised clients, but it
-  does not encrypt controller data and does not resist an on-path attacker. Use
-  WPA2/WPA3, a dedicated/trusted network, or an SSH tunnel until TLS is
-  implemented.
+- The WebSocket is plaintext by itself. The token prevents unauthorised
+  clients, but it does not encrypt controller data and does not resist an
+  on-path attacker. Terminate TLS in front of the daemon (see
+  [TLS termination](#tls-termination)) or use WPA2/WPA3, a dedicated/trusted
+  network, or an SSH tunnel.
 - Never port-forward 8765 from the internet. Bind only the interface you
   intend, and keep the firewall closed except for the LAN clients you expect.
 - Store the token in a mode-600 file **owned by the service user** (`wmr`) and
@@ -521,7 +522,75 @@ safeguards below are enforced by the daemon; the transport is still plaintext.
 - Controller motion data can be personal data. Captures and logs should be
   handled accordingly. The repository samples contain no Bluetooth address.
 - There is no rate limiting, no per-client authorisation beyond the token, and
-  no TLS yet. Treat it as bench equipment with a small, local attack surface.
+  no TLS in the daemon itself. Treat it as bench equipment with a small, local
+  attack surface.
+
+### TLS termination
+
+The daemon deliberately has no TLS stack of its own. Put a TLS terminator on the
+Pi and point the companion at `wss://<pi>:8443/` instead of `ws://<pi>:8765/`:
+
+```
+phone (wss://) --TLS--> stunnel or nginx on the Pi --ws://127.0.0.1--> wmr_bridge
+```
+
+Keep the daemon on loopback (`--bind 127.0.0.1`) so only the terminator can reach
+it, and keep the bearer token: TLS protects data in transit, the token still
+authorises the client. Do not add `--insecure-no-token` because the listener is
+TLS-wrapped.
+
+**stunnel (simplest).** `/etc/stunnel/wmr-bridge.conf`:
+
+```
+[wmr-bridge]
+accept  = 0.0.0.0:8443
+connect = 127.0.0.1:8765
+cert    = /etc/wmr-bridge/tls/fullchain.pem
+key     = /etc/wmr-bridge/tls/privkey.pem
+```
+
+`systemctl enable --now stunnel4`. stunnel forwards the TLS payload unchanged,
+so the WebSocket upgrade, token and origin checks all run in the daemon as
+before.
+
+**nginx (if it is already on the Pi).** The upgrade headers are required:
+
+```nginx
+server {
+    listen 8443 ssl;
+    server_name wmr-bridge.local;
+    ssl_certificate     /etc/wmr-bridge/tls/fullchain.pem;
+    ssl_certificate_key /etc/wmr-bridge/tls/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8765;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+}
+```
+
+**Certificates.** A phone trusts a public CA, not a name on the LAN. Use either:
+
+- a real hostname with a Let's Encrypt certificate (DNS-01, so the Pi does not
+  need to be reachable from the internet), and connect to that hostname; or
+- a local CA/self-signed certificate and install that CA on the phone's user
+  trust store, then connect to the name in the certificate's SAN. Self-signed
+  certificates are rejected by a phone that has not been told to trust them, and
+  the companion app cannot bypass that.
+
+Do **not** use `--allow-origin '*'` to make a browser work through the
+terminator: the companion and probe do not send an `Origin` header, and a
+browser page that can reach the terminator should not be allowed to open the
+stream.
+
+Firewall port 8443 to the LAN clients you expect, and keep 8765 closed. TLS
+termination does not change the Classic Bluetooth posture: the Pi still trusts
+whatever BlueZ paired, and assigns hands by HID name.
 
 ## Performance expectations and limits
 
@@ -622,7 +691,8 @@ INFO/WARNING:
 
 - Hardware validation of P1-P10 using the bring-up run sheet [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md).
 - Companion app Wi-Fi transport (`wmr_ws` and connect UI in `wmr-companion`).
-- TLS or a pinned-key handshake for non-LAN use.
+- Native TLS in the daemon itself (external termination is documented in
+  [TLS termination](#tls-termination)).
 - FF13 calibration-blob forwarding.
 - Native packaging (`pip install`, `.deb`) and udev rules shipped as files.
 - Bench-validate `--hand` single-hand mode and `--advertise-mdns` discovery on real hardware.

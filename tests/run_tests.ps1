@@ -90,4 +90,9 @@ $exeCtrl = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_ctrl.exe"
 if ($LASTEXITCODE -ne 0) { throw "compile failed (ctrl)" }
 & $exeCtrl
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeSecure = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_secure.exe"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_secure.c" "$root\src\wmr_secure.c" -o $exeSecure
+if ($LASTEXITCODE -ne 0) { throw "compile failed (secure)" }
+& $exeSecure
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 exit $protocolStatus

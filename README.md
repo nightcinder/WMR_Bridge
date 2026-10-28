@@ -61,11 +61,13 @@ implemented; see [docs/PROTOCOL.md](docs/PROTOCOL.md).
   79 bytes; these are forwarded raw only for now ([docs/PSVR2.md](docs/PSVR2.md)).
 - **Queue.** Frames from both hands go into one bounded FIFO (256 frames). If it
   fills, the newest frame is dropped and counted.
-- **BLE.** The ESP32 advertises as `WMR Bridge`. When the phone subscribes to FF11,
-  frames are sent as BLE notifications, fragmented to fit the negotiated ATT MTU
-  (one notification per frame when the MTU is large). When it subscribes to FF12
-  instead (MTU 59 or more), each report is decoded and sent as one 56-byte record.
-  Only one of the two can be enabled at a time.
+- **BLE.** The ESP32 advertises as `WMR Bridge`. The phone must pair and bond
+  (LE Secure Connections); every data characteristic refuses an unbonded central.
+  When the phone subscribes to FF11, frames are sent as BLE notifications,
+  fragmented to fit the negotiated ATT MTU (one notification per frame when the
+  MTU is large). When it subscribes to FF12 instead (MTU 59 or more), each report
+  is decoded and sent as one 56-byte record. Only one of the two can be enabled at
+  a time.
 - **Sequence numbers.** Every frame gets a per-hand sequence number *when it
   arrives*, whether or not it is delivered, so the phone can detect loss by
   looking for gaps.
@@ -82,12 +84,12 @@ The default firmware build operates in the dual-controller topology described ab
 | --- | --- |
 | `src/` | The firmware: controller handling, BLE transport, protocol, queue, console, init |
 | `wmr_bridge.gatt` | GATT database |
-| `tests/`, `samples/` | Host unit tests (protocol, queue, decoder, FF14 batching, FF15 echo, FF13 config, discovery, diagnostics, status LED); sample frames |
+| `tests/`, `samples/` | Host unit tests (protocol, queue, decoder, FF14 batching, FF15 echo, FF13 config, discovery, diagnostics, status LED, phone-link security); sample frames |
 | `tools/` | PC-side capture (`capture_ble.py`, needs hardware and `bleak`) and rotation analysis (`analyze_capture.py`); see [docs/DECODING.md](docs/DECODING.md) |
 | `tools/firmware/` | One-command build, packaging and flash (`build.py`) plus the browser-flasher manifest logic; see [docs/FLASHING.md](docs/FLASHING.md) |
 | `pi/` | Linux / Raspberry Pi host bridge over Wi-Fi: BlueZ hidraw source, WebSocket transport, decoder and host tests; see [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) |
 | `integration/` | The one BTstack file that must be replaced to build this (`main-CMakeLists.txt`, plus a diff) |
-| `docs/` | Build, flashing, protocol, Android, counters, security, reconnect/queue, controller discovery, PSVR2, battery life and packet-loss/prediction investigations, testing, refactor notes |
+| `docs/` | Build, flashing, protocol, Android, counters, security, BLE UUID migration, reconnect/queue, controller discovery, PSVR2, battery life and packet-loss/prediction investigations, testing, refactor notes |
 
 Module responsibilities, in brief: `wmr_controller` (HID side), `wmr_transport`
 (BLE side, queue pump), `wmr_protocol` and `wmr_queue` (pure C, no BTstack,
@@ -169,9 +171,12 @@ supplied CMake file already does this.
    them by name, stores their addresses and pairs ([docs/DISCOVERY.md](docs/DISCOVERY.md)).
    Later: `d` runs discovery again for a hand without an address, `F` forgets the stored
    addresses, `l`/`r` reconnect a known controller.
-3. On the Android phone: connect to `WMR Bridge`, request the MTU **517** (the app does;
-   the smallest MTU FF14 batching accepts is 61), request High connection priority, enable
-   notifications on one of `FF11`, `FF12` or `FF14` (only one at a time).
+3. On the Android phone: connect to `WMR Bridge` and accept the **pairing** dialog
+   (the bridge requires LE Secure Connections and bonding; it appears once per
+   phone, then the phone re-encrypts on later connections). Then request the MTU
+   **517** (the app does; the smallest MTU FF14 batching accepts is 61), request
+   High connection priority, enable notifications on one of `FF11`, `FF12` or
+   `FF14` (only one at a time).
    **Repeat all of this after every reconnect.** See [docs/ANDROID.md](docs/ANDROID.md).
 4. Read the statistics lines: `rate_tx` should match `rate_rx`, `drop` should stay
    flat, `q` should stay near zero.
@@ -179,7 +184,8 @@ supplied CMake file already does this.
 Console keys: `l`/`c` connect LEFT, `r` connect RIGHT, `L`/`R` disconnect, `s` status
 and counters, `v` firmware version, `?` help, `d` discovery, `F` **forget** stored controller addresses,
 `k`/`K` **bond reset** LEFT/RIGHT (deletes the ESP32's stored link key for that controller
-only; manual, refused while connected).
+only; manual, refused while connected), `P` **phone bond reset** (deletes all bonded BLE
+phones; refused while a phone is connected), `b` all controller link keys.
 
 ### Reading the monitor
 
@@ -278,9 +284,12 @@ Full list and details: [docs/TESTING.md](docs/TESTING.md).
 
 ## Limitations and security
 
-- The BLE service has **no pairing, authentication or encryption**. Anyone in range can
-  connect, read, and receive the raw controller data; one unwanted connection also blocks
-  the real phone.
+- The BLE service requires **LE Secure Connections pairing with bonding**. An
+  unbonded central is refused (disconnected) and only one phone is served at a
+  time. Because the ESP32 has no display or keypad, pairing is Just Works: the
+  link is encrypted but not MITM-protected, and a device that pairs first can
+  take the phone slot. The FF10 UUIDs are still experimental; the 128-bit
+  cutover is [docs/BLE_MIGRATION.md](docs/BLE_MIGRATION.md).
 - Classic pairing confirmations (Secure Simple Pairing) are **accepted automatically** for
   any device; legacy PIN requests are rejected.
 - No flash encryption or secure boot. The serial console is unauthenticated.
@@ -306,7 +315,8 @@ Open:
 - Explaining and reducing controller-to-ESP32 report loss (issue [#18](../../issues/18)); coexistence options tested so far showed no effect ([docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md), [docs/runs/](docs/runs/README.md)). Why the measured loss is too much for a single ESP32 to be the final VR-grade radio, whether a capped pose predictor should hide the remaining sample-age jitter, and why it belongs in the shared library rather than the firmware or app: [docs/PREDICTION.md](docs/PREDICTION.md).
 - The remaining unknowns in [docs/DECODING.md](docs/DECODING.md) (accel scale, temperature, battery, input ranges).
 - Where the roughly 40 ms phone round trip goes (median, user-reported first run).
-- BLE security (no pairing or encryption today), see [docs/SECURITY.md](docs/SECURITY.md).
+- BLE UUID cutover to the project-owned 128-bit set, and the owner decision that
+  ends FF10 support, see [docs/BLE_MIGRATION.md](docs/BLE_MIGRATION.md).
 - Hardware validation of the supported Linux/Raspberry Pi Wi-Fi host bridge
   (P1-P10 in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) and [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md)); it is host-tested only.
 
