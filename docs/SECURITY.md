@@ -44,11 +44,14 @@ firmware build do not prove radio behavior.
 - `sm_set_request_security(true)`: the bridge sends a Security Request as soon as
   a central connects, so a fresh phone gets the pairing dialog without the app
   needing a special call.
-- Every characteristic except the GAP device name and FF16 is
-  `READ_ENCRYPTED | WRITE_ENCRYPTED` in `wmr_bridge.gatt`. The CCC descriptors
-  inherit the write requirement, so notifications cannot be enabled on an
-  unencrypted link either. FF16 (firmware version) stays readable so a client can
-  check compatibility before pairing.
+- Every data characteristic except FF16 is `WRITE_ENCRYPTED` in
+  `wmr_bridge.gatt`; the readable ones (FF11, FF13, FF17) are also
+  `READ_ENCRYPTED`. FF12 and FF14 are notify-only and FF15 is
+  write-without-response plus notify (the phone writes the 4-byte ping), so none
+  of them has a read permission. The CCC descriptors inherit the write
+  requirement, so notifications cannot be enabled on an unencrypted link either.
+  FF16 (firmware
+  version) stays readable so a client can check compatibility before pairing.
 - After a pairing or re-encryption result, the bridge requires both success and a
   stored bond (`sm_le_device_index`). A central that pairs "encrypt only", fails
   pairing, or whose bond is stale is disconnected, not served. A central that
