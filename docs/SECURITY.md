@@ -46,8 +46,9 @@ firmware build do not prove radio behavior.
   needing a special call.
 - Every data characteristic except FF16 is `WRITE_ENCRYPTED` in
   `wmr_bridge.gatt`; the readable ones (FF11, FF13, FF17) are also
-  `READ_ENCRYPTED`. FF12, FF14 and FF15 are notify-only, so they have no read
-  permission at all. The CCC descriptors inherit the write requirement, so
+  `READ_ENCRYPTED`. FF12 and FF14 are notify-only, and FF15 is
+  write-without-response plus notify; none of the three has a read permission at
+  all. The CCC descriptors inherit the write requirement, so
   notifications cannot be enabled on an unencrypted link either. FF16 (firmware
   version) stays readable so a client can check compatibility before pairing.
 - After a pairing or re-encryption result, the bridge requires both success and a
