@@ -4,15 +4,11 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  # No paths filter: `Build firmware` is a required check on every PR, and a
+  # required check that is filtered out can never report, so the PR can never
+  # merge. A docs-only PR costs one firmware build and Actions minutes are free
+  # on a public repo.
   pull_request:
-    paths:
-      - "src/**"
-      - "integration/**"
-      - "wmr_bridge.gatt"
-      - "tools/firmware/**"
-      - "docs/flasher/**"
-      - "tests/test_firmware_package.py"
-      - ".github/workflows/firmware.yml"
   workflow_dispatch:
 
 permissions:
