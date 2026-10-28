@@ -70,6 +70,9 @@ void wmr_transport_init(void);
 /* HCI events: advertising start, LE connect/disconnect of the phone. */
 void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size);
 
+/* SM events: pairing/re-encryption results and the Just Works confirmation. */
+void wmr_transport_on_sm_event(uint8_t *packet, uint16_t size);
+
 /* Report sink for the controller module. Assigns the per-hand sequence
  * number, then queues the frame or counts why it was not queued. */
 void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t length);

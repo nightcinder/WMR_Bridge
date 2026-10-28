@@ -4,25 +4,34 @@ CHARACTERISTIC, GAP_DEVICE_NAME, READ, "WMR Bridge"
 PRIMARY_SERVICE, GATT_SERVICE
 CHARACTERISTIC, GATT_DATABASE_HASH, READ,
 
-// Experimental service UUIDs; not assigned for production use.
+// 0.3 security: every data characteristic (and therefore its CCC descriptor) is
+// READ_ENCRYPTED | WRITE_ENCRYPTED. The bridge only accepts LE Secure Connections
+// pairing with bonding, so "encrypted" means a bonded LESC link. GAP_DEVICE_NAME
+// and FF16 stay readable without a bond: a phone must be able to identify the
+// bridge and read its firmware version before it decides to pair.
+// See docs/SECURITY.md and docs/BLE_MIGRATION.md.
+
+// Experimental service UUIDs; not assigned for production use. The migration to
+// a project-owned 128-bit UUID set is specified in docs/BLE_MIGRATION.md.
 PRIMARY_SERVICE, 0000FF10-0000-1000-8000-00805F9B34FB
-CHARACTERISTIC, 0000FF11-0000-1000-8000-00805F9B34FB, READ | NOTIFY | DYNAMIC,
+CHARACTERISTIC, 0000FF11-0000-1000-8000-00805F9B34FB, READ | NOTIFY | DYNAMIC | READ_ENCRYPTED | WRITE_ENCRYPTED,
 // FF12: decoded 56-byte records, notify only. Mutually exclusive with FF11 notifications.
-CHARACTERISTIC, 0000FF12-0000-1000-8000-00805F9B34FB, NOTIFY | DYNAMIC,
+CHARACTERISTIC, 0000FF12-0000-1000-8000-00805F9B34FB, NOTIFY | DYNAMIC | WRITE_ENCRYPTED,
 // FF14: batched decoded records (2-byte header + 1..9 FF12 records), notify only. Mutually
 // exclusive with FF11 and FF12 notifications.
-CHARACTERISTIC, 0000FF14-0000-1000-8000-00805F9B34FB, NOTIFY | DYNAMIC,
+CHARACTERISTIC, 0000FF14-0000-1000-8000-00805F9B34FB, NOTIFY | DYNAMIC | WRITE_ENCRYPTED,
 // FF15: echo. The phone writes a 4-byte ping, the ESP32 notifies a 20-byte answer ahead of
 // any queued stream data. Independent of the FF11/FF12/FF14 exclusion.
-CHARACTERISTIC, 0000FF15-0000-1000-8000-00805F9B34FB, WRITE_WITHOUT_RESPONSE | NOTIFY | DYNAMIC,
+CHARACTERISTIC, 0000FF15-0000-1000-8000-00805F9B34FB, WRITE_WITHOUT_RESPONSE | NOTIFY | DYNAMIC | WRITE_ENCRYPTED,
 // FF13: controller config block (docs/PROTOCOL.md). Write a 5-byte cursor (hand, offset), read a
 // 16-byte header plus up to 496 data bytes; notify carries the header when a hand's state changes.
 // Independent of the FF11/FF12/FF14 exclusion.
-CHARACTERISTIC, 0000FF13-0000-1000-8000-00805F9B34FB, READ | WRITE | NOTIFY | DYNAMIC,
+CHARACTERISTIC, 0000FF13-0000-1000-8000-00805F9B34FB, READ | WRITE | NOTIFY | DYNAMIC | READ_ENCRYPTED | WRITE_ENCRYPTED,
 // FF16: firmware version, a read-only UTF-8 string with no terminator. It is the same
 // PROJECT_VER value that tools/firmware/build.py writes to manifest.json and build-info.json.
+// Deliberately readable without a bond, so a client can check compatibility first.
 CHARACTERISTIC, 0000FF16-0000-1000-8000-00805F9B34FB, READ | DYNAMIC,
 // FF17: controller scan and status v2 control characteristic (docs/PROTOCOL.md).
 // Write 1-2 bytes (opcode + hand), read or notify 20-byte status v2.
 // Independent of the FF11/FF12/FF14 exclusion.
-CHARACTERISTIC, 0000FF17-0000-1000-8000-00805F9B34FB, READ | WRITE | NOTIFY | DYNAMIC,
+CHARACTERISTIC, 0000FF17-0000-1000-8000-00805F9B34FB, READ | WRITE | NOTIFY | DYNAMIC | READ_ENCRYPTED | WRITE_ENCRYPTED,

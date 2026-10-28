@@ -27,7 +27,46 @@ Advertising: flags `0x02` (LE general discoverable), complete local name
 Interval 100-150 ms (`WMR_CFG_ADV_INTERVAL_MIN/MAX`), all three channels.
 
 The FF10/FF11 UUIDs are experimental and not assigned for production use
-(see `wmr_bridge.gatt`).
+(see `wmr_bridge.gatt`). The staged replacement with project-owned 128-bit UUIDs
+is in [BLE_MIGRATION.md](BLE_MIGRATION.md).
+
+## Security and pairing (0.3 firmware)
+
+Security is part of the wire contract from 0.3.0, not an app-side option.
+
+| Item | Access without a bond |
+| --- | --- |
+| GAP device name (0x2A00) | readable |
+| FF16 firmware version | readable |
+| FF11, FF12, FF13, FF14, FF15, FF17 values | **refused** |
+| CCC descriptor of every stream/echo/config/control characteristic | **refused** |
+
+A read or CCC write before pairing fails with ATT `Insufficient Encryption`
+(`0x0F`) or `Insufficient Authentication` (`0x05`) and triggers the OS pairing
+flow. A client should wait for pairing to finish and retry once; a failed
+pairing is reported to the user rather than retried forever.
+
+The bridge:
+
+- accepts only **LE Secure Connections** pairing (legacy pairing is refused by
+  the peripheral) and requires **bonding**. There is no display or keypad, so
+  the association model is Just Works: the link is encrypted but not
+  MITM-protected.
+- sends a Security Request as soon as a central connects, so the pairing dialog
+  appears without an app-specific call.
+- serves only a central that is both encrypted and bonded. A failed pairing, a
+  pairing that stored no bond, or no bonded link within 30 s
+  (`WMR_CFG_BLE_PAIR_TIMEOUT_MS`) results in a disconnect.
+- serves one phone at a time; a second central is disconnected as soon as it
+  connects.
+- stores the bond in NVS. The serial console's `P` key deletes all phone bonds
+  (refused while a phone is connected); `k`/`K`/`b` are controller-only resets.
+
+Fragmentation, sequence numbers and all payload layouts are unchanged by
+pairing: the encrypted link carries exactly the bytes described below. See
+[SECURITY.md](SECURITY.md) for the threat model and
+[BLE_MIGRATION.md](BLE_MIGRATION.md) for the UUID cutover and the app rollout.
+
 
 ## Two uses of FF11
 
