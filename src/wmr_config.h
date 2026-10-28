@@ -94,6 +94,14 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_BLE_NAME                     WMR_CFG_BLE_NAME_BOTH
 #endif
 
+/* BR/EDR Class of Device. The bridge is Classically discoverable so the controllers can
+ * reach it, but BTstack's default is 0x007a020c ("Smartphone"): a dual-mode phone then
+ * shows a phone icon and may try a Classic pairing this HID-host side cannot serve.
+ * Peripheral / Gamepad matches the LE appearance (0x03C4) and the HID service. */
+#ifndef WMR_CFG_CLASS_OF_DEVICE
+#define WMR_CFG_CLASS_OF_DEVICE              0x000508u
+#endif
+
 /* Controllers are found by their Bluetooth names ("Motion controller - Left" / "- Right")
  * and the addresses are stored in NVS; see docs/DISCOVERY.md. There are no default
  * addresses. Optional fixed override for one or both hands, which skips discovery for that

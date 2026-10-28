@@ -1145,6 +1145,11 @@ void wmr_transport_init(void){
      * "BTstack <bd_addr>" shows up beside it and the phone's settings entry
      * flips between the two names. */
     gap_set_local_name(WMR_CFG_BLE_NAME);
+    /* BTstack defaults the Class of Device to 0x007a020c ("Smartphone"), which made the
+     * phone's entry show a phone icon and could send it down a Classic pairing path this
+     * HID-host side cannot serve. Use the same Peripheral/Gamepad class as the LE
+     * appearance below. */
+    gap_set_class_of_device(WMR_CFG_CLASS_OF_DEVICE);
     /* General discoverable; do not claim BR/EDR is unsupported. Built from
      * WMR_CFG_BLE_NAME so the three images need no source change. */
     uint8_t *p = advertising;
