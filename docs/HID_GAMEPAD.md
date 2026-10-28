@@ -109,10 +109,10 @@ Local build evidence for this change:
 
 | Item | Value |
 |---|---|
-| Source commit | `084e2f3` (`0.2.4-10-g084e2f3`; includes ONY-438); LE-only phone transport in the current head |
+| Source commit | `eab749b` (`0.2.4-16-geab749b`; includes ONY-438 and the LE-only phone transport) |
 | BTstack | `e38553977a25fb0b55b383c72c289be0975f422c` |
 | ESP-IDF | v6.1 |
-| Factory image SHA-256 | `e7553bc097bea0a560b8a94a1c4f3d54b89972097ea1fb83b7bcfd2e1454b764` |
+| Factory image SHA-256 | `29098236ffa8d9ac710e4b58e3e07a1930b11b69c6be04c8ebd54fc9667e5d3b` |
 
 The first phone attempt could not pair: it ran the pre-ONY-438 image
 (`0.2.4-7-g90c6c83`) and the bridge showed two names for one address. Both are
