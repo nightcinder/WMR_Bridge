@@ -41,6 +41,7 @@
 #include <string.h>
 #include "btstack_config.h"
 #include "btstack.h"
+#include "hids_device.h"
 #include "esp_app_desc.h"
 #include "esp_timer.h"
 #include "wmr_bridge.h"        /* generated from wmr_bridge.gatt: profile_data, ATT_*_HANDLE */
@@ -51,6 +52,7 @@
 #include "wmr_ctrl.h"
 #include "wmr_diag.h"
 #include "wmr_echo.h"
+#include "wmr_hid.h"
 #include "wmr_linkdiag.h"
 #include "wmr_link.h"
 #include "wmr_levers.h"
@@ -81,6 +83,10 @@
 
 /* FF16: the firmware version (ESP-IDF PROJECT_VER), read-only. */
 #define VERSION_VALUE_HANDLE ATT_CHARACTERISTIC_0000FF16_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
+
+/* HID-over-GATT gamepad: report ID 1, 9 payload bytes, same descriptor as the
+ * companion package. Notifications are independent of the FF10 stream modes. */
+static wmr_hid_state_t hid;
 
 /* FF17: controller scan and status v2 (read + write + notify), independent of the
  * stream exclusion. */
@@ -238,10 +244,16 @@ static bool batch_due(void){
 }
 
 static void pump_kick(void){
+    const uint64_t now = (uint64_t) esp_timer_get_time();
+    /* Time out a controller that stopped reporting before looking at the link,
+     * so a release does not depend on a stream being subscribed. */
+    wmr_hid_expire(&hid, now);
     wmr_episode_note_queue(&drop_episode, queue.count);
     if (phone_handle == HCI_CON_HANDLE_INVALID || send_pending) return;
-    /* A pending echo needs a send opportunity whatever the stream is doing. */
-    if (!echo.pending && !cfg_notify_owed() && !ctrl_notify_pending){
+    /* A pending echo or HID report needs a send opportunity whatever the stream
+     * is doing. */
+    if (!echo.pending && !cfg_notify_owed() && !ctrl_notify_pending &&
+        !wmr_hid_report_due(&hid, now)){
         if (stream_mode == WMR_STREAM_NONE || !queue.count) return;
         if (stream_mode == WMR_STREAM_BATCHED && !batch_due()) return;
     }
@@ -262,8 +274,16 @@ void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t 
     wmr_linkdiag_note_report(hand, report, length);       /* reads 4 bytes, see wmr_linkdiag.h */
     uint32_t sequence = ++stats.sequence[hand];
     stats.rx[hand]++;
+    /* HID is independent of the FF10 stream: it runs with no app subscribed,
+     * which is the point of the no-app Android gamepad. */
+    if (length && length <= WMR_CFG_MAX_FRAME &&
+        !wmr_hid_note_report(&hid, (uint8_t) hand, report, length,
+                             (uint64_t) esp_timer_get_time())){
+        stats.hid_decode_errors++;
+    }
     if (stream_mode == WMR_STREAM_NONE || phone_handle == HCI_CON_HANDLE_INVALID){
         stats.offline[hand]++;
+        pump_kick();
         return;
     }
     /* FF12 needs room for a whole record (FF14 for a header and one record); below that
@@ -447,6 +467,8 @@ static void pump_send_ctrl(void){
     pump_kick();
 }
 
+static bool pump_send_hid(uint64_t now);
+
 /* Send the pending echo (FF15) if there is one, otherwise one fragment (FF11), one record
  * (FF12) or one batch (FF14) from the head of the queue. Runs on ATT_EVENT_CAN_SEND_NOW. */
 static void pump_send_one(void){
@@ -464,7 +486,19 @@ static void pump_send_one(void){
         pump_send_cfg();
         return;
     }
-    if (stream_mode == WMR_STREAM_NONE) return;
+    const uint64_t now = (uint64_t) esp_timer_get_time();
+    /* Alternate with the GATT stream when both are ready: HID never takes two
+     * send opportunities in a row while a stream frame waits, so FF11-FF14
+     * keep their share of the link. */
+    const bool stream_ready = stream_mode != WMR_STREAM_NONE && queue.count > 0 &&
+        (stream_mode != WMR_STREAM_BATCHED || batch_due());
+    static bool last_send_hid;
+    if (wmr_hid_report_due(&hid, now) && (!stream_ready || !last_send_hid)){
+        last_send_hid = pump_send_hid(now);
+        return;
+    }
+    if (!stream_ready) return;
+    last_send_hid = false;
     const wmr_frame_t *frame = wmr_queue_peek(&queue);
     if (!frame) return;
     if (stream_mode == WMR_STREAM_DECODED){
@@ -494,6 +528,27 @@ static void pump_send_one(void){
         wmr_queue_pop(&queue);
     }
     pump_kick();
+}
+
+/* HID-over-GATT: one input report per can-send-now. hids_device writes the
+ * Report characteristic; the report ID is in its Report Reference descriptor,
+ * so the value is the 9-byte payload only. */
+static bool pump_send_hid(uint64_t now){
+    uint8_t payload[WMR_HID_REPORT_SIZE];
+    if (!wmr_hid_take_report(&hid, now, payload)){
+        pump_kick();
+        return false;
+    }
+    uint8_t result = hids_device_send_input_report_for_id(phone_handle, WMR_HID_REPORT_ID,
+                                                          payload, sizeof(payload));
+    if (result != ERROR_CODE_SUCCESS){
+        stats.hid_errors++;
+        hid.force = true;        /* retry the same report on the next pump tick */
+        return false;
+    }
+    stats.hid_reports++;
+    pump_kick();
+    return true;
 }
 
 static void pump_retry_tick(btstack_timer_source_t *timer){
@@ -903,6 +958,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     wmr_echo_cancel(&echo);
                     cfg_reset_connection();
                     ctrl_reset_connection();
+                    wmr_hid_reset(&hid);
                     printf("BLE phone connected, handle=0x%04x\n", phone_handle);
                     conn_update_pending = false;
                     if (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
@@ -937,6 +993,7 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                 wmr_echo_cancel(&echo);
                 cfg_reset_connection();
                 ctrl_reset_connection();
+                wmr_hid_reset(&hid);
                 conn_known = false;
                 conn_update_pending = false;
                 btstack_run_loop_remove_timer(&conn_request_timer);
@@ -954,7 +1011,11 @@ void wmr_transport_init(void){
     wmr_queue_init(&queue);
     wmr_echo_init(&echo);
     wmr_cfgmgr_init(cfg_state_changed);
+    wmr_hid_reset(&hid);
     att_server_init(profile_data, att_read, att_write);
+    unsigned descriptor_size = 0;
+    const uint8_t *descriptor = wmr_hid_report_descriptor(&descriptor_size);
+    hids_device_init(0, descriptor, (uint16_t) descriptor_size);
     /* General discoverable; do not claim BR/EDR is unsupported. Built from
      * WMR_CFG_BLE_NAME so the three images need no source change. */
     uint8_t *p = advertising;
@@ -973,6 +1034,16 @@ void wmr_transport_init(void){
     gap_advertisements_set_params(WMR_CFG_ADV_INTERVAL_MIN, WMR_CFG_ADV_INTERVAL_MAX,
                                   0, 0, zero_address, WMR_CFG_ADV_CHANNEL_MAP, 0);
     gap_advertisements_set_data((uint8_t) (p - advertising), advertising);
+
+    /* Scan response: appearance Gamepad (0x03C4) plus the HID service UUID.
+     * Android's input stack looks for 0x1812 when deciding that a BLE device is
+     * a gamepad; the FF10 UUID in the advertising data stays as it was. */
+    static const uint8_t scan_response[] = {
+        0x03, BLUETOOTH_DATA_TYPE_APPEARANCE, 0xC4, 0x03,
+        0x05, BLUETOOTH_DATA_TYPE_COMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS,
+        0x12, 0x18, 0x10, 0xFF,
+    };
+    gap_scan_response_set_data((uint8_t) sizeof(scan_response), (uint8_t *) scan_response);
 
     pump_timer.process = pump_retry_tick;
     btstack_run_loop_set_timer(&pump_timer, WMR_CFG_PUMP_RETRY_MS);

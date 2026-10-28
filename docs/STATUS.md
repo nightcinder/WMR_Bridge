@@ -27,7 +27,28 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Host tests only, **not run on hardware** |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default) | Host tests and firmware build only, **never run on a PSVR2 controller**; no PSVR2 decoder (FF11 raw only) |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: ~45–52 min dual-controller, ~58–65 min single-controller; not recommended for session VR |
+| BLE HID-over-GATT gamepad (ONY-441, draft) | Firmware build + host vector tests | **No phone run**; see [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
 | Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 levers run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE; the 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers ([`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). No new hardware run beyond the latency runs |
+
+## BLE HID gamepad (ONY-441)
+
+Scope: the same phone link also exposes one standard BLE HID-over-GATT
+gamepad, so Android sees the controllers with no app. The FF10 service is
+unchanged. Implementation and procedure: [`HID_GAMEPAD.md`](HID_GAMEPAD.md).
+
+| Check | Result | Phone / Android / build | Where |
+|---|---|---|---|
+| Stock phone pairs and shows a gamepad, no app | not run | — | `HID_GAMEPAD.md` §Verification |
+| Every control in a gamepad tester (buttons, d-pad, face buttons, sticks, triggers) | not run | — | same |
+| No stuck input after controller or BLE reconnect | not run | — | same |
+| FF12 rate unchanged while HID is active | not run | — | same |
+| Shared input→report vectors, firmware side | passing (host) | `tests/test_hid.c` | `tests/vectors/hid_gamepad.txt` |
+| Shared input→report vectors, companion side | passing (host) | `wmr_companion_hid_android` | companion PR |
+
+The firmware build (ESP-IDF v6.1, BTstack `e38553977`, both-hands variant)
+passes and the host vector tests pass. **No phone or controller hardware was
+exercised**; every row above that needs a phone stays `not run` until the
+paste-back block in `HID_GAMEPAD.md` is filled in.
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 

@@ -85,6 +85,11 @@ $exeLed = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_status_led.exe"
 if ($LASTEXITCODE -ne 0) { throw "compile failed (status led)" }
 & $exeLed
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeHid = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_hid.exe"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_hid.c" "$root\src\wmr_hid.c" "$root\src\wmr_decoded.c" "$root\src\wmr_decode.c" -lm -o $exeHid
+if ($LASTEXITCODE -ne 0) { throw "compile failed (hid)" }
+& $exeHid "$root\tests\vectors\hid_gamepad.txt" "$root\tests\vectors\hid_report_descriptor.txt"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $exeCtrl = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_ctrl.exe"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_ctrl.c" "$root\src\wmr_ctrl.c" -o $exeCtrl
 if ($LASTEXITCODE -ne 0) { throw "compile failed (ctrl)" }

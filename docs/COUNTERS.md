@@ -9,6 +9,7 @@ reconnect. They wrap after 2^32 events. They live in `wmr_stats_t`
 ```
 STREAM phone=1 sub=1 stream=decoded mtu=247 conn=[11.25ms lat=0 to=4000ms] q=0/256 high=3 notify=1234 errors=0
   FF14 batches_tx=0 records_in_batches=0 mean=n/a max=0 batch_full_flushes=0
+  HID reports=1200 errors=0 decode_errors=0
   FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
   LEFT  rx=600 tx=600 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=60.0/s rate_tx=60.0/s
   RIGHT rx=600 tx=600 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=60.0/s rate_tx=60.0/s
@@ -30,10 +31,13 @@ printed rates and moved their baselines, which contradicted this paragraph; it n
 | `high` | Peak queue depth since boot | Never decreases |
 | `notify` | BLE notifications accepted by `att_server_notify` | FF11: fragments, not frames. FF12: one per record. FF14: one per **batch** (so it equals `batches_tx` while FF14 streams) |
 | `errors` | `att_server_notify` calls that returned an error (stream and FF15 echo) | Each failed attempt counts; the frame or echo answer is kept and retried, not lost |
+| `HID reports` | HID gamepad input reports accepted by the HID service | Coalesced and deduplicated; not the same as controller reports (`rx`) |
+| `HID errors` | HID input report sends that failed | The report is marked dirty and retried on the next pump tick |
+| `HID decode_errors` | Controller reports the HID path could not decode | Should stay 0; the FF10 stream has its own `dec_err` |
 | `rx` | Reports received from that controller | Counts every report, including those never forwarded |
 | `tx` | FF11: frames whose last fragment was accepted by `att_server_notify`. FF12: records accepted by `att_server_notify`. FF14: valid records inside batches accepted by `att_server_notify` (records, not notifications) | **Handed to the BLE stack, not confirmed received by the phone** |
 | `drop` | Reports discarded because the queue was full, or the length was 0 or over `WMR_CFG_MAX_FRAME` (80) | Drop-newest: queued frames are kept |
-| `offline` | Reports received while no phone was connected and subscribed | Intentional, not an error |
+| `offline` | Reports received while no FF11/FF12/FF14 stream was active | Intentional, not an error. Since ONY-441 these reports may still have been sent through the HID gamepad |
 | `purged` | Frames that were queued, then discarded by a queue reset | See [RECONNECT_AND_QUEUE.md](RECONNECT_AND_QUEUE.md) |
 | `mtu_skip` | FF12 and FF14: reports discarded because the ATT MTU was below the stream's minimum (59 for FF12, 61 for FF14) | Zero on FF11. Intentional, not a queue problem |
 | `dec_err` | FF12 and FF14: queued frames that were not a valid 46-byte input report, discarded | Should stay 0 |

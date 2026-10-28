@@ -157,6 +157,9 @@ static void print_stats(bool periodic){
            batch_mean[0] ? batch_mean : "n/a", (unsigned long) st->batch_max,
            (unsigned long) st->batch_full_flushes);
     const wmr_echo_state_t *echo = wmr_transport_echo();
+    printf("  HID reports=%lu errors=%lu decode_errors=%lu\n",
+           (unsigned long) st->hid_reports, (unsigned long) st->hid_errors,
+           (unsigned long) st->hid_decode_errors);
     printf("  FF15 echo accepted=%lu sent=%lu pending=%u busy=%lu bad=%lu unsubscribed=%lu cancelled=%lu\n",
            (unsigned long) echo->accepted, (unsigned long) echo->sent, echo->pending ? 1u : 0u,
            (unsigned long) echo->busy, (unsigned long) echo->bad,

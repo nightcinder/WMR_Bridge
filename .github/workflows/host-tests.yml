@@ -37,6 +37,8 @@ jobs:
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_diag.c src/wmr_devloss.c src/wmr_diag.c -o test_diag
       - name: Build status-LED tests
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_status_led.c src/wmr_status_led.c -o test_status_led
+      - name: Build HID gamepad tests
+        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_hid.c src/wmr_hid.c src/wmr_decoded.c src/wmr_decode.c -lm -o test_hid
       - name: Build FF17 controller-status tests
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_ctrl.c src/wmr_ctrl.c -o test_ctrl
       - name: Run protocol and queue tests
@@ -69,6 +71,8 @@ jobs:
         run: ./test_diag
       - name: Run status-LED tests
         run: ./test_status_led
+      - name: Run HID gamepad tests
+        run: ./test_hid tests/vectors/hid_gamepad.txt tests/vectors/hid_report_descriptor.txt
       - name: Run FF17 controller-status tests
         run: ./test_ctrl
       - name: Run capture/analysis script tests
