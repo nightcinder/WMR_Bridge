@@ -79,9 +79,17 @@ tester. See "Known gaps".
   not try".
 - **Phone transport is LE only:** the bridge is not Classic-discoverable
   (`WMR_CFG_CLASSIC_DISCOVERABLE=0`), and page scan stays on for controller
-  reconnects. Together with the advertising flag, that stops Android from
-  merging a Classic inquiry result into the entry and pairing over BR/EDR,
-  where the bridge is a HID host with no profile to serve.
+  reconnects. Advertising uses a **static random LE address** derived from the
+  BT MAC (`0.2.4-36`), not the public BR/EDR address. A phone that knows the
+  BR/EDR address can otherwise merge the two and open Classic HID, where the
+  bridge is a HID host with no profile to serve. The 2026-10-28 captures show
+  exactly that: `B0:9C:B2:CE:26:88`, a Google OUI and the Pixel's BR/EDR
+  address, came up within a second of the LE drop in both the 16:05 and 19:06
+  runs. The static random address is stable across reboots, so the phone bond
+  survives; it does change once from the public-address build, so forget the
+  old entry before pairing. The BR/EDR Class of Device is Miscellaneous
+  (`0x000000`, `WMR_CFG_CLASS_OF_DEVICE`) for the same reason; the LE
+  Appearance `0x03C4` still gives the gamepad icon.
 - **GATT:** `wmr_bridge.gatt` imports BTstack's `hids.gatt`; `hids_device`
   serves the Report Map, the input report (ID 1), HID Information, Protocol
   Mode and HID Control Point. Report characteristics require an encrypted
@@ -165,11 +173,14 @@ The second attempt (`0.2.4-8-gba1a8bb`) paired after several resets but showed
 a phone icon and then would not connect once the phone entry was forgotten.
 BTstack's default Class of Device is `0x007a020c` ("Smartphone"), and a
 dual-mode phone uses the BR/EDR class instead of the LE appearance for that
-icon and connect path. The bridge now sets `0x000508` (Peripheral / Gamepad)
-and exposes the GAP Appearance characteristic `0x03C4`, matching the scan
-response. The controller log's `HID SET_PROTOCOL failed: unsupported request`
-line is the controller declining the optional report-protocol request; it still
-streams 46-byte report-protocol input, so it is not the pairing fault.
+icon and connect path. `0.2.4-10` set `0x000508` (Peripheral / Gamepad) and
+exposed the GAP Appearance characteristic `0x03C4`, matching the scan response.
+That made the icon right but still left a Classic gamepad for Android to open;
+`0.2.4-36` returns the Class of Device to Miscellaneous (`0x000000`) and keeps
+only the LE appearance. The controller log's `HID SET_PROTOCOL failed:
+unsupported request` line is the controller declining the optional
+report-protocol request; it still streams 46-byte report-protocol input, so it
+is not the pairing fault.
 
 ### Device name and class on both transports
 
@@ -177,9 +188,10 @@ The bridge still answers Classic pages for the controllers, so the same
 address exists on both transports. `WMR_CFG_BLE_NAME` sets the BR/EDR local
 name too (`gap_set_local_name`), not just the LE advertising name; before that
 the classic side kept BTstack's default `BTstack <bd_addr>` and the phone's
-entry flipped between the two names every few seconds. The Class of Device is a
-gamepad rather than BTstack's smartphone default, so it agrees with the
-`0x03C4` appearance.
+entry flipped between the two names every few seconds. Since `0.2.4-36` the LE
+advertisement uses a separate static random address, so the LE HID device and
+the BR/EDR side are different identities; the BR/EDR Class of Device no longer
+claims a HID device.
 
 Inquiry scan is off, so a phone does not see the Classic side at all and pairs
 the LE HID device. `gap_connectable_control(1)` is explicit: controllers page
@@ -268,6 +280,64 @@ The firmware logs `unknown Classic link <addr> up ... waiting for a HID
 channel` or `incoming device <addr> is not LEFT or RIGHT; disconnecting`, so
 the next capture names the device that used to hold the slot.
 
+## 0.2.4-33 field run: connect stall and the reserved-radio hold
+
+The 2026-10-28 18:54 capture (user: "worse than before") has no HCI `0x09`:
+the third ACL slot removed that failure. It shows two boot-time problems
+instead.
+
+1. `connecting LEFT` completed its ACL (`LEFT link up ...`) and then sat for
+   20 s with no encryption, no SSP confirmation, and no HID channel. The
+   discovery connect phase waited for HID events that never came, so the
+   single-hand connect never finished; the board was reset.
+2. After the reset, RIGHT paired, encrypted, received its descriptor and
+   streamed. At the start of inquiry round 4 the radio reservation
+   disconnected it "for inquiry round 4", and its reconnect attempts were
+   refused for the rest of the capture while the absent LEFT never answered.
+
+The fix has two parts:
+
+- A connect watchdog (`WMR_CFG_PAIR_ENCRYPT_MS`, `WMR_CFG_PAIR_CONNECT_TIMEOUT_MS`):
+  an ACL that does not encrypt within 1.5 s gets an explicit encryption request
+  when it has a stored key, and an ACL that produces no HID channel within 5 s
+  is dropped so the attempt is retried.
+- The radio reservation is bounded to `WMR_CFG_DISCOVERY_RESERVE_ROUNDS` (3)
+  rounds per run. After that a connected hand may stay or reconnect while the
+  remaining rounds look for the missing one.
+
+The phone is absent from the whole 18:54 capture (`phone=0`), so the phone row
+is unchanged by this run.
+
+## 0.2.4-36 field run: the phone's BR/EDR fallback
+
+The 2026-10-28 19:06 capture (`0.2.4-33`) shows the ACL fix working: LEFT and
+RIGHT stream at ~180 reports/s, both FF13 blocks read (`state=2`), and the phone
+connects, bonds and runs the full GATT discovery. It still never enables the
+Report CCCD (`hid=off sub=0`, `HID reports=0`) and drops nine seconds after
+connecting (`reason=0x13`).
+
+The drop is preceded by an incoming Classic ACL from `B0:9C:B2:CE:26:88`. That
+address is a **Google OUI**, i.e. the Pixel's BR/EDR side, not another gadget.
+The 16:05 capture (`0.2.4-31`) has the same address at the same point: the LE
+link closes with `reason=0x13` at 12:04:34 and the Classic ACL comes up at
+12:04:35. There the bridge kept the unknown ACL (the drop-on-unknown rule came
+later), and the phone showed "Connected" for the rest of the run: Android was
+connected over BR/EDR, where the bridge has no HID device profile. That is also
+the earlier "cannot communicate with <mac>" error.
+
+`0.2.4-36` removes the Classic address from the phone's view of the device:
+
+- LE advertising uses a static random address derived from the BT MAC
+  (`esp_read_mac(ESP_MAC_BT)`, top two bits set), so the LE HID device and the
+  bridge's BR/EDR address are no longer the same identity. Controller links are
+  unaffected (they use the BR/EDR address).
+- The BR/EDR Class of Device is `0x000000` (Miscellaneous), so the bridge is
+  not a Classic gamepad; the LE Appearance still shows the gamepad icon.
+
+The bond is keyed to the LE address, so this build needs one fresh pairing:
+forget every "WMR Bridge" entry on the phone (there may be an LE entry and an
+older Classic one), flash, then pair once.
+
 ## Verification STATUS (ONY-441 done-when)
 
 Nothing in this table is a completed hardware result yet. A row moves off
@@ -276,8 +346,8 @@ what the console traces show so far.
 
 | Check | Result | Phone / Android | Build | Evidence |
 |---|---|---|---|---|
-| Stock phone pairs and shows an input device, no app | PARTIAL: pairs and bonds; GAP `0x2A04` now reads successfully and the 2026-10-28 16:05 run reports the phone stayed connected. The capture segment still ends before a Report CCCD write (`hid=off sub=0`), so no gamepad tester result yet | Pixel 11 Pro / Android 17 | `0.2.4-29-g748e928-att` (diagnosis), `0.2.4-31-g13c7d9f` (GAP fix), `0.2.4-33` (ACL fix) | ATT trace, above |
-| Both controllers connect while the phone is connected | not run; 0.2.4-31 failed with HCI `0x09` (unknown Classic link held the second BR/EDR ACL slot). `0.2.4-33` raises the controller limit to 3 and drops unknown links; retest pending | Pixel 11 Pro / Android 17 | `0.2.4-31-g13c7d9f` (failure), `0.2.4-33` (fix) | 16:05 capture, above |
+| Stock phone pairs and shows an input device, no app | PARTIAL: pairs and bonds; GAP `0x2A04` reads successfully, but the phone never enables the Report CCCD (`hid=off sub=0`) and drops after 6-9 s. The 16:05 and 19:06 captures show its BR/EDR side (`B0:9C:B2…`, Google OUI) coming up at the drop; `0.2.4-36` gives LE a static random address and a non-HID Class of Device. Retest pending | Pixel 11 Pro / Android 17 | `0.2.4-33-gd298202` (diagnosis), `0.2.4-36` (fix) | ATT trace, 16:05/19:06 captures, above |
+| Both controllers connect while the phone is connected | PASS (controllers): 19:06 has LEFT and RIGHT streaming (~180 reports/s each, both FF13 blocks `state=2`) before and during the phone connection; the phone side still drops | Pixel 11 Pro / Android 17 | `0.2.4-33-gd298202` | 19:06 capture, above |
 | Gamepad tester: A/B/X/Y, shoulders, stick clicks, menu, home | not run | — | — | — |
 | Gamepad tester: d-pad via left trackpad (8 sectors) | not run | — | — | — |
 | Gamepad tester: face buttons via right trackpad | not run | — | — | — |

@@ -185,15 +185,20 @@ static bool disc_incoming_rejected;
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
 static bool disc_reserve_radio;         /* hold connected hands back while a hand is missing */
 static bool disc_hold_logged;           /* the radio-reservation message is logged once per run */
+static bool disc_reserve_limit_logged;  /* the end of the bounded reservation is logged once */
 static bool disc_release_wait;          /* an ACL drop is in flight before the inquiry starts */
 static bool disc_connect_release;       /* an ACL drop is in flight before the next page */
 #endif
 
 #if WMR_CFG_DISCOVERY_RESERVE_RADIO
 /* An inquiry round with a hand still missing owns the Classic radio: the inquiry and its
- * remote name requests must not share it with a streaming or self-connecting controller. */
+ * remote name requests must not share it with a streaming or self-connecting controller.
+ * The reservation is bounded (WMR_CFG_DISCOVERY_RESERVE_ROUNDS): an absent controller never
+ * answers, and holding the working hand off for every remaining round leaves the bridge
+ * with no usable controller (2026-10-28 18:54 log). */
 static bool disc_radio_reserved(void){
-    return wmr_discovery_round_holds_radio(disc_reserve_radio,
+    if (!disc_reserve_radio || disc_round > WMR_CFG_DISCOVERY_RESERVE_ROUNDS) return false;
+    return wmr_discovery_round_holds_radio(true,
               disc_phase == DISC_INQUIRY || disc_phase == DISC_NAMES);
 }
 #endif
@@ -364,6 +369,92 @@ static void unknown_acl_track(hci_con_handle_t handle, const bd_addr_t address){
     btstack_run_loop_add_timer(&unknown_acl_timer);
     WMR_LOGI("pair", "unknown Classic link %s up (handle=0x%04x); waiting for a HID channel",
              bd_addr_to_str(address), handle);
+}
+
+/* ---- Connect watchdog ---------------------------------------------------- */
+
+/* A discovery page can complete its ACL and then stall: the 2026-10-28 18:54 log has LEFT's
+ * ACL up for 20 s with no encryption, no HID channel and no progress, because
+ * connect_pending only waits for HID events. A normal reconnect encrypts ~0.7 s after
+ * link-up. Ask for encryption with the stored key when the controller does not, and drop a
+ * link that never opens a HID channel so the attempt is retried (or the run moves on). */
+#define CONNECT_WATCH_POLL_MS 250u
+
+static void disc_connect_progress(void);
+static void disc_pair_failed(unsigned hand, uint8_t status);
+
+static hci_con_handle_t connect_watch_handle = HCI_CON_HANDLE_INVALID;
+static controller_t *connect_watch_owner;      /* the hand this connect attempt is for */
+static uint32_t connect_watch_link_up_ms;
+static bool connect_watch_encrypt_sent;
+static bool connect_watch_armed;
+static btstack_timer_source_t connect_watch_timer;
+
+static void connect_watch_stop(void){
+    connect_watch_handle = HCI_CON_HANDLE_INVALID;
+    connect_watch_owner = NULL;
+    connect_watch_encrypt_sent = false;
+    if (!connect_watch_armed) return;
+    connect_watch_armed = false;
+    btstack_run_loop_remove_timer(&connect_watch_timer);
+}
+
+static void connect_watch_fire(btstack_timer_source_t *timer){
+    (void) timer;
+    connect_watch_armed = false;
+    if (connect_watch_handle == HCI_CON_HANDLE_INVALID) return;
+    controller_t *c = controller_for_handle(connect_watch_handle);
+    if (!c || !connect_pending || c->connected){
+        connect_watch_stop();
+        return;
+    }
+    uint32_t elapsed = btstack_run_loop_get_time_ms() - connect_watch_link_up_ms;
+    if (!connect_watch_encrypt_sent && elapsed >= WMR_CFG_PAIR_ENCRYPT_MS){
+        connect_watch_encrypt_sent = true;
+        link_key_t key;
+        link_key_type_t type;
+        if (gap_get_link_key_for_bd_addr(c->address, key, &type)){
+            WMR_LOGI("pair", "%s ACL is not encrypted after %u ms; requesting encryption",
+                     c->name, (unsigned) WMR_CFG_PAIR_ENCRYPT_MS);
+            hci_send_cmd(&hci_set_connection_encryption, connect_watch_handle, 1);
+        } else {
+            WMR_LOGI("pair", "%s ACL is not encrypted after %u ms and has no stored key; "
+                     "waiting for pairing", c->name, (unsigned) WMR_CFG_PAIR_ENCRYPT_MS);
+        }
+    }
+    if (elapsed >= WMR_CFG_PAIR_CONNECT_TIMEOUT_MS){
+        WMR_LOGW("pair", "%s ACL stayed up without a HID channel for %u ms; dropping it "
+                 "so the attempt can retry", c->name,
+                 (unsigned) WMR_CFG_PAIR_CONNECT_TIMEOUT_MS);
+        /* No HID channel ever opened, so no HID_SUBEVENT_CONNECTION_CLOSED will follow to
+         * clear the wait. Release the connect phase here or the run hangs on this hand. */
+        unsigned hand = (unsigned) (c - controllers);
+        connect_pending = false;
+        gap_disconnect(connect_watch_handle);
+        connect_watch_stop();
+        disc_pair_failed(hand, 0);
+        disc_connect_progress();
+        return;
+    }
+    connect_watch_armed = true;
+    btstack_run_loop_remove_timer(&connect_watch_timer);
+    btstack_run_loop_set_timer(&connect_watch_timer, CONNECT_WATCH_POLL_MS);
+    btstack_run_loop_add_timer(&connect_watch_timer);
+}
+
+static void connect_watch_start(controller_t *c, hci_con_handle_t handle){
+    if (!c || c != connect_watch_owner) return;
+    connect_watch_stop();
+    connect_watch_owner = c;
+    connect_watch_handle = handle;
+    connect_watch_link_up_ms = btstack_run_loop_get_time_ms();
+    connect_watch_encrypt_sent = false;
+    connect_watch_armed = true;
+    btstack_run_loop_set_timer_handler(&connect_watch_timer, connect_watch_fire);
+    btstack_run_loop_set_timer(&connect_watch_timer, CONNECT_WATCH_POLL_MS);
+    btstack_run_loop_add_timer(&connect_watch_timer);
+    WMR_LOGI("pair", "%s ACL is up; waiting up to %u ms for encryption and the HID channel",
+             c->name, (unsigned) WMR_CFG_PAIR_CONNECT_TIMEOUT_MS);
 }
 
 static const char *role_name(hci_role_t role){
@@ -772,6 +863,7 @@ void wmr_controller_init(wmr_report_sink_t sink){
         }
     }
     disc_timer.process = disc_timer_fire;
+    connect_watch_timer.process = connect_watch_fire;
 #if WMR_CFG_PSVR2_WAKE
     psvr2_wake_timer.process = psvr2_wake_timer_fire;
 #endif
@@ -858,6 +950,8 @@ static wmr_connect_result_t connect_hand_impl(unsigned hand){
     c->reports = 0;
     c->other_reports = 0;
     c->descriptor_available = false;
+    connect_watch_stop();
+    connect_watch_owner = c;
     connect_pending = true;
     WMR_LOGI("pair", "connecting %s at %s", c->name, bd_addr_to_str(c->address));
     uint8_t status = hid_host_connect(c->address, HID_PROTOCOL_MODE_REPORT, &c->cid);
@@ -866,8 +960,10 @@ static wmr_connect_result_t connect_hand_impl(unsigned hand){
                  c->name, pair_status_text(status), status);
         c->cid = 0;
         connect_pending = false;
+        connect_watch_stop();
         return WMR_CONNECT_BUSY;
     }
+    if (c->handle != HCI_CON_HANDLE_INVALID) connect_watch_start(c, c->handle);
     return WMR_CONNECT_OK;
 }
 
@@ -1057,13 +1153,20 @@ static void disc_inquiry_round(void){
     /* A hand that connected in an earlier round would otherwise stream through this one
      * and share the radio with the inquiry and its name requests, which is how the second
      * controller stays unheard. The inquiry starts once the link has gone; the connection
-     * filter refuses the controller meanwhile. It reconnects afterwards. */
+     * filter refuses the controller meanwhile. It reconnects afterwards, unless the bound
+     * is reached: after WMR_CFG_DISCOVERY_RESERVE_ROUNDS the working hand is allowed back
+     * while the remaining rounds look for the missing one. */
     bool dropped = false;
-    if (disc_reserve_radio){
+    if (disc_reserve_radio && disc_round <= WMR_CFG_DISCOVERY_RESERVE_ROUNDS){
         char why[64];
         snprintf(why, sizeof(why), "for inquiry round %u (radio reserved for pairing)",
                  disc_round);
         dropped = disc_disconnect_hands(why);
+    } else if (disc_reserve_radio && !disc_reserve_limit_logged){
+        disc_reserve_limit_logged = true;
+        WMR_LOGI("pair", "radio reservation ended after %u round(s); a connected hand may "
+                 "stay while the remaining rounds look for the missing one",
+                 (unsigned) WMR_CFG_DISCOVERY_RESERVE_ROUNDS);
     }
     if (dropped){
         disc_release_wait = true;
@@ -1381,6 +1484,7 @@ wmr_discovery_start_result_t wmr_controller_discover(void){
      * `l`/`r`) once the run ends. */
     disc_reserve_radio = true;
     disc_hold_logged = false;
+    disc_reserve_limit_logged = false;
 #endif
     disc_inquiry_round();
     return WMR_DISCOVERY_STARTED;
@@ -1438,6 +1542,7 @@ static void accept_incoming(controller_t *c, uint16_t cid){
     c->descriptor_available = false;
     c->reports = 0;
     c->other_reports = 0;
+    connect_watch_stop();
     unknown_acl_clear(c->handle);
     connect_pending = true;
     WMR_LOGI("pair", "%s accepts the controller's incoming HID connection (cid=%u)",
@@ -1567,6 +1672,8 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
                 if (c){
                     c->handle = handle;
                     unknown_acl_clear(handle);
+                    if (connect_pending && c == connect_watch_owner && !c->connected)
+                        connect_watch_start(c, handle);
                 }
                 WMR_LOGI("pair", "%s link up at %s (handle=0x%04x, role=%s)",
                          c ? c->name : "unknown controller", bd_addr_to_str(address),
@@ -1669,7 +1776,17 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
             WMR_LOGI("pair", "%s link closed: %s (status=0x%02x reason=0x%02x)",
                      name, pair_status_text(reason), status, reason);
             controller_t *c = controller_for_handle(handle);
+            /* A page can complete its ACL and then drop before the HID channel opens; no
+             * HID event follows, so release the connect phase here too. */
+            bool pending = connect_pending && c && c == connect_watch_owner && !c->connected;
+            unsigned pending_hand = c ? (unsigned) (c - controllers) : 0;
             if (c) c->handle = HCI_CON_HANDLE_INVALID;
+            if (handle == connect_watch_handle) connect_watch_stop();
+            if (pending){
+                connect_pending = false;
+                disc_pair_failed(pending_hand, reason);
+                disc_connect_progress();
+            }
             unknown_acl_clear(handle);
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
             policy_link_down(handle);
@@ -1835,6 +1952,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             handle_incoming_connection(packet);
             break;
         case HID_SUBEVENT_CONNECTION_OPENED:
+            connect_watch_stop();
             cid = hid_subevent_connection_opened_get_hid_cid(packet);
             status = hid_subevent_connection_opened_get_status(packet);
             c = controller_for_cid(cid);
@@ -1922,6 +2040,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             }
             break;
         case HID_SUBEVENT_CONNECTION_CLOSED:
+            connect_watch_stop();
             cid = hid_subevent_connection_closed_get_hid_cid(packet);
 #if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
             if (stagger_active() && cid && cid == stagger_pending_incoming_cid){

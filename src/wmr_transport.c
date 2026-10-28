@@ -1295,24 +1295,20 @@ void wmr_transport_init(void){
     const uint8_t *descriptor = wmr_hid_report_descriptor(&descriptor_size);
     hids_device_init(0, descriptor, (uint16_t) descriptor_size);
     hids_device_register_packet_handler(hid_packet_handler);
-    /* The bridge stays Classically discoverable for controller pairing, so a
-     * dual-mode phone sees the same address twice. Give the BR/EDR side the
-     * same name as the LE advertising data; otherwise BTstack's default
-     * "BTstack <bd_addr>" shows up beside it and the phone's settings entry
-     * flips between the two names. */
+    /* The bridge's BR/EDR side is page-scan connectable for controller reconnects; give
+     * it the same name as the LE advertising data so a scan that does see both does not
+     * show BTstack's default "BTstack <bd_addr>" beside it. */
     gap_set_local_name(WMR_CFG_BLE_NAME);
-    /* BTstack defaults the Class of Device to 0x007a020c ("Smartphone"), which made the
-     * phone's entry show a phone icon and could send it down a Classic pairing path this
-     * HID-host side cannot serve. Use the same Peripheral/Gamepad class as the LE
-     * appearance below. */
+    /* BTstack defaults the Class of Device to 0x007a020c ("Smartphone"). The bridge is a
+     * Classic HID *host*, not a HID device, so it must not look like a Classic gamepad:
+     * use Miscellaneous. The LE appearance below still gives the gamepad icon. */
     gap_set_class_of_device(WMR_CFG_CLASS_OF_DEVICE);
     /* General discoverable, BR/EDR not supported: the bridge has a Classic radio for the
      * controllers, but it is a HID host there, so the only thing a phone can pair with is
-     * the LE HID device. Without this bit Android merges the inquiry result (when the
-     * bridge is Classically discoverable) or the flag with the LE advertisement, marks the
-     * device dual-mode and pairs over BR/EDR, where there is no HID profile to serve and
-     * pairing fails with "cannot communicate". Built from WMR_CFG_BLE_NAME so the three
-     * images need no source change. */
+     * the LE HID device. The flag is not enough on its own: a phone that has the bridge's
+     * BR/EDR address still pages it (2026-10-28 logs), which is why the LE address is a
+     * separate static random address (wmr_bridge_main.c). Built from WMR_CFG_BLE_NAME so
+     * the three images need no source change. */
     uint8_t *p = advertising;
     *p++ = 2;
     *p++ = BLUETOOTH_DATA_TYPE_FLAGS;

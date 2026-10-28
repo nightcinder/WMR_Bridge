@@ -94,11 +94,14 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_BLE_NAME                     WMR_CFG_BLE_NAME_BOTH
 #endif
 
-/* BR/EDR Class of Device. BTstack's default is 0x007a020c ("Smartphone"): a dual-mode
- * phone then shows a phone icon. Peripheral / Gamepad matches the LE appearance (0x03C4)
- * and the HID service. */
+/* BR/EDR Class of Device. The bridge is a Classic HID *host* for the controllers, not a
+ * HID device, so it must not look like a Classic gamepad: a phone that knows the bridge's
+ * public BR/EDR address otherwise opens Classic HID (which this side cannot serve) and
+ * drops the LE link. The 2026-10-28 logs show it: B0:9C:B2:CE:26:88 (Google OUI, the
+ * Pixel's BR/EDR address) comes up within a second of every LE drop. Miscellaneous (0)
+ * leaves only the LE HID service; GAP Appearance 0x03C4 still gives the gamepad icon. */
 #ifndef WMR_CFG_CLASS_OF_DEVICE
-#define WMR_CFG_CLASS_OF_DEVICE              0x000508u
+#define WMR_CFG_CLASS_OF_DEVICE              0x000000u
 #endif
 
 /* Classic inquiry scan (discoverability). Off by default: the bridge finds the controllers
@@ -167,6 +170,19 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #ifndef WMR_CFG_PAIR_BUSY_RETRY_MS
 #define WMR_CFG_PAIR_BUSY_RETRY_MS      2500
 #endif
+/* A discovery page can complete its ACL while the controller then neither starts
+ * encryption nor opens its HID channel. The 2026-10-28 18:54 log has LEFT's ACL up for
+ * 20 s in that state and the connect phase waited forever. When the hand has a stored
+ * link key, ask for encryption after this long (a normal pairing/encryption completes
+ * in about 0.7 s); a hand without a key is left to its own Secure Simple Pairing. */
+#ifndef WMR_CFG_PAIR_ENCRYPT_MS
+#define WMR_CFG_PAIR_ENCRYPT_MS         1500
+#endif
+/* Give up on a connect whose ACL is up but which has not produced a HID channel by this
+ * long: drop the ACL so the attempt is retried instead of hanging the discovery run. */
+#ifndef WMR_CFG_PAIR_CONNECT_TIMEOUT_MS
+#define WMR_CFG_PAIR_CONNECT_TIMEOUT_MS 5000
+#endif
 /* How long an incoming Classic ACL from an address that is not LEFT or RIGHT may sit
  * without being accepted as a controller before it is disconnected. A stray device (a
  * phone's BR/EDR side, a nearby headset) otherwise holds one of the controller's few ACL
@@ -202,6 +218,15 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
  * hand keeps streaming through discovery). */
 #ifndef WMR_CFG_DISCOVERY_RESERVE_RADIO
 #define WMR_CFG_DISCOVERY_RESERVE_RADIO  1
+#endif
+/* Stop reserving the radio after this many rounds of one run. A hand that is off or not in
+ * pairing mode never answers, and the 2026-10-28 18:54 run shows the cost of holding the
+ * other hand off for every round: RIGHT paired and streamed, then was disconnected for
+ * round 4 and refused for the rest of the log. The quiet rounds the field logs need to
+ * pair the missing hand happen early; after this bound a connected hand may stay while the
+ * remaining rounds run, and `d` starts a fresh run with a fresh reservation. */
+#ifndef WMR_CFG_DISCOVERY_RESERVE_ROUNDS
+#define WMR_CFG_DISCOVERY_RESERVE_ROUNDS 3
 #endif
 /* BTstack TLV (NVS) tag holding the discovered addresses ('WMRA'). */
 #ifndef WMR_CFG_ADDR_TLV_TAG

@@ -50,6 +50,7 @@
 #include <stdio.h>
 #include "btstack_config.h"
 #include "btstack.h"
+#include "esp_mac.h"
 #include "wmr_config.h"
 #include "wmr_console.h"
 #include "wmr_controller.h"
@@ -136,6 +137,18 @@ int btstack_main(int argc, const char *argv[]){
      * see (and then Classic-pair) the BR/EDR side. See WMR_CFG_CLASSIC_DISCOVERABLE. */
     gap_connectable_control(1);
     gap_discoverable_control(WMR_CFG_CLASSIC_DISCOVERABLE);
+
+    /* Advertise LE with a static random address instead of the public BR/EDR address.
+     * A phone that knows the bridge's BR/EDR address (or infers it from a public LE
+     * address) can merge the two and open Classic HID, which this bridge cannot serve;
+     * the 2026-10-28 logs show the Pixel's BR/EDR side (B0:9C:B2:CE:26:88) coming up
+     * within a second of every LE drop. The address is derived from the BT MAC, so it is
+     * stable across reboots and the phone bond survives. See docs/HID_GAMEPAD.md. */
+    uint8_t le_address[6];
+    if (esp_read_mac(le_address, ESP_MAC_BT) == ESP_OK){
+        le_address[0] |= 0xC0;   /* static random: two most significant bits set */
+        gap_random_address_set(le_address);
+    }
 
     setvbuf(stdout, NULL, _IONBF, 0);
     wmr_status_led_init();                              /* red/green/blue = 0/1/2 controllers */

@@ -27,7 +27,7 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Host tests only, **not run on hardware** |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default) | Host tests and firmware build only, **never run on a PSVR2 controller**; no PSVR2 decoder (FF11 raw only) |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: ~45–52 min dual-controller, ~58–65 min single-controller; not recommended for session VR |
-| BLE HID-over-GATT gamepad (ONY-441, draft) | Firmware build + host vector tests; phone pairs and bonds. The `0.2.4-29` trace named the last failing read: GAP `0x2A04` (peripheral preferred connection parameters), answered `attribute not found`; Android's GAP client disconnects the link on that read. DIS (`0.2.4-26`) was not the drop. `0.2.4-31-g13c7d9f` adds `0x2A04` and the phone stayed connected in the 2026-10-28 16:05 run, but the second controller then failed with HCI `0x09` (no spare BR/EDR ACL slot): an unknown Classic link held the slot. `0.2.4-33` raises the controller to three BR/EDR ACL links and drops unknown Classic links; phone/controller retest pending | **Partial phone run** (user says it stayed; capture segment still ends with `hid=off sub=0` and no tester paste-back) plus controller ACL failure. See [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
+| BLE HID-over-GATT gamepad (ONY-441, draft) | Firmware build + host vector tests; phone pairs and bonds but never enables the HID Report CCCD. `0.2.4-29` named the last failing read, GAP `0x2A04` (fixed in `0.2.4-31`); the phone still dropped ~6-9 s after bonding. The 16:05 and 19:06 captures show its BR/EDR side (`B0:9C:B2…`, Google OUI) coming up at each drop, i.e. Android falls back to Classic HID, which this bridge does not serve. `0.2.4-33` fixes the controller ACL slot (both hands stream in the 19:06 run); `0.2.4-36` gives LE a static random address and a non-HID Class of Device so the phone cannot page the BR/EDR side. Phone retest pending | **Partial:** both controllers pass; phone still `hid=off sub=0`. See [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
 | Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 levers run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE; the 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers ([`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). No new hardware run beyond the latency runs |
 
 ## BLE HID gamepad (ONY-441)
@@ -38,7 +38,8 @@ unchanged. Implementation and procedure: [`HID_GAMEPAD.md`](HID_GAMEPAD.md).
 
 | Check | Result | Phone / Android / build | Where |
 |---|---|---|---|
-| Stock phone pairs and shows a gamepad, no app | PARTIAL: pairs and bonds; the GATT discovery completes, then the failed GAP `0x2A04` read makes Android's GAP client disconnect the link before the Report CCCD write. `0.2.4-31` adds `0x2A04`; retest pending | Pixel 11 Pro / Android 17, `0.2.4-29-g748e928-att` (diagnosis), `0.2.4-31-g13c7d9f` (fix) | `HID_GAMEPAD.md` §Verification |
+| Stock phone pairs and shows a gamepad, no app | PARTIAL: pairs and bonds; GATT discovery completes and GAP `0x2A04` reads, but the Report CCCD is never enabled (`hid=off sub=0`) and the phone drops after 6-9 s. 16:05/19:06 show its BR/EDR side at the drop; `0.2.4-36` separates the LE address and uses a non-HID Class of Device. Retest pending | Pixel 11 Pro / Android 17, `0.2.4-29-g748e928-att` (diagnosis), `0.2.4-33-gd298202` (controllers pass), `0.2.4-36` (BR/EDR fallback) | `HID_GAMEPAD.md` §Verification |
+| Both controllers connect while the phone is connected | PASS (controllers): the 19:06 run has LEFT and RIGHT streaming at ~180 reports/s, both FF13 blocks `state=2`, before and during the phone link | Pixel 11 Pro / Android 17, `0.2.4-33-gd298202` | `HID_GAMEPAD.md` §Verification |
 | Every control in a gamepad tester (buttons, d-pad, face buttons, sticks, triggers) | not run | — | same |
 | No stuck input after controller or BLE reconnect | not run | — | same |
 | FF12 rate unchanged while HID is active | not run | — | same |
@@ -50,15 +51,21 @@ passes and the host vector tests pass. A Pixel 11 Pro / Android 17 retest on
 `0.2.4-8-gba1a8bb` paired after several bridge resets, but the phone showed a
 phone icon and stopped connecting after the entry was forgotten. The cause is
 BTstack's default Class of Device `0x007a020c` ("Smartphone"), which a dual-mode
-phone prefers over the LE appearance; `0.2.4-10-g084e2f3` sets Peripheral /
-Gamepad (`0x000508`) and adds the GAP Appearance characteristic (`0x03C4`). The
+phone prefers over the LE appearance; `0.2.4-10-g084e2f3` set Peripheral /
+Gamepad (`0x000508`) and added the GAP Appearance characteristic (`0x03C4`).
+That made the icon right but left a Classic gamepad; `0.2.4-36` sets the Class
+of Device back to Miscellaneous (`0x000000`). The
 `0.2.4-10-g084e2f3` run then showed the gamepad icon but ended in
 `cannot communicate with <address>`; the bridge log had no phone link at all on
 either transport, and the phone still held a Classic bond from the earlier
 attempt. A Classically discoverable bridge is paired over BR/EDR by Android,
 where this HID host has no profile, so the bridge now keeps page scan but turns
-inquiry scan off and advertises `BR/EDR not supported` (flags `0x06`); the phone
-only sees the LE HID device.
+inquiry scan off and advertises `BR/EDR not supported` (flags `0x06`). That was
+not enough: the phone still had the public BR/EDR address and paged it at every
+LE drop. `0.2.4-36` advertises LE from a static random address derived from the
+BT MAC and sets the BR/EDR Class of Device to Miscellaneous (`0x000000`), so the
+phone has no Classic gamepad to fall back to; GAP Appearance `0x03C4` keeps the
+gamepad icon. Forgetting the old entry once is part of the retest.
 
 The `0.2.4-16` retest (CI merge build of this branch and `main`) still showed a
 gamepad entry that would not connect, and the attached bridge log again had
