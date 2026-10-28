@@ -69,7 +69,7 @@ tester. See "Known gaps".
   immediately after the subscription is enabled. `0.2.4-24` logged
   `HID reports=0` and the phone still dropped after nine seconds, so the
   reports sent during discovery in earlier builds were not the cause of the
-  drop; the ATT trace below is how the next run locates it.
+  drop; the ATT trace below located it in the GAP service.
 - **Connectable state is logged:** every status line prints `adv=on` or
   `adv=off`, the HCI result of LE Set Advertising Enable is reported if the
   controller refuses it, and advertising is re-asserted after controller
@@ -86,17 +86,20 @@ tester. See "Known gaps".
   serves the Report Map, the input report (ID 1), HID Information, Protocol
   Mode and HID Control Point. Report characteristics require an encrypted
   link (`ENCRYPTION_KEY_SIZE_16`), so Android pairs before subscribing.
-- **Device Information Service:** Android's HOGP host reads the DIS PnP ID
-  (`0x2A50`) while it opens the connection and starts the HID service discovery
-  only after that read completes. The `0.2.4-25` capture ended with a
-  read-by-type over `0x0001..0xFFFF`, the form `DIS_ReadDISInfo` uses for that
-  lookup; the bridge had no DIS, so the request ended in `attribute not found`
-  and the phone never read the report map or enabled the Report CCCD. That
-  match is inferred from the request shape, not from a logged UUID: the
-  `0.2.4-25` trace did not print it yet. `wmr_bridge.gatt` now exposes DIS
-  `0x180A` with manufacturer, model, firmware revision (the `PROJECT_VER`
-  string) and a 7-byte PnP ID. A `0.2.4-26` phone run still dropped, so the
-  next capture carries the trace and names the UUID that fails.
+- **Device Information Service:** `wmr_bridge.gatt` exposes DIS `0x180A` with
+  manufacturer, model, firmware revision (the `PROJECT_VER` string) and a
+  7-byte PnP ID. Android reads the PnP ID while it opens a HOGP device. The
+  `0.2.4-25` trace's last read-by-type was first taken for that lookup, but the
+  UUID-printing `0.2.4-29` trace showed it was `0x2A04`, not `0x2A50`. DIS is
+  harmless metadata; it was not the cause of the drop.
+- **Peripheral preferred connection parameters:** the `0.2.4-29` trace ends
+  with `read-by-type 0x0001..0xffff type=0x2a04 uuid_len=2`, answered
+  `attribute not found`. Android's GAP client reads `0x2A04` after service
+  discovery; a failed read takes its client-complete path to
+  `GATT_Disconnect()` on the link. That is the five-second drop every phone run
+  showed: discovery completed, no HID read or Report CCCD write happened, and
+  the phone closed the ACL itself (`reason=0x13`). `wmr_bridge.gatt` now
+  exposes `0x2A04` (min/max 15 ms, latency 0, timeout 4 s).
 
 ## ATT trace
 
@@ -110,8 +113,7 @@ characteristic UUID the host is looking for and its encoded width (2 or 16
 bytes). The trace shows how far a
 HOGP host gets: service discovery (`read-by-group`, `read-by-type`), the
 Report Map read (`read` 0x2A4B then `read-blob` at offset 22), the Protocol
-Mode write (0x2A4E), and the Report CCCD write (handle 0x0017, value
-`0x0001`). `smp` counts pairing PDUs; a connection with SMP traffic but no ATT
+Mode write (0x2A4E), and the Report CCCD write (value `0x0001`). `smp` counts pairing PDUs; a connection with SMP traffic but no ATT
 lines is a pairing-only link, not a HOGP host. A trace that stops before the
 CCCD write names the request that failed. Incoming Classic ACL connections are
 logged too (`att incoming ACL link from <addr>`): a phone that decides the
@@ -149,10 +151,10 @@ Local build evidence for this change:
 
 | Item | Value |
 |---|---|
-| Source commit | `748e928` (`0.2.4-29-g748e928-att`, ATT trace on, UUID column) |
+| Source commit | `13c7d9f` (`0.2.4-31-g13c7d9f`, ATT trace on, GAP `0x2A04`) |
 | BTstack | `e38553977a25fb0b55b383c72c289be0975f422c` |
 | ESP-IDF | v6.1 |
-| Factory image SHA-256 | `40fb1b1af30ee60a14baa325eaa057128a9da2b4ac7bcadd8f98a7d82838d204` |
+| Factory image SHA-256 | `cddb878e1c2ad27592533621b6c8e93df5fa5c934e7f4c5a8ce2736edd7a0735` |
 
 The first phone attempt could not pair: it ran the pre-ONY-438 image
 (`0.2.4-7-g90c6c83`) and the bridge showed two names for one address. Both are
@@ -220,17 +222,18 @@ failed: status=0x13`, then disconnect `reason=0x16`). The policy now deletes the
 stale bond and keeps the link up for that exchange; every other failed
 re-encryption still disconnects.
 
-The `0.2.4-25-gaeeb621-att` trace (`ATT trace=on`, one line per ATT PDU) shows
-the phone pairing, bonding and discovering every service, characteristic and
-descriptor. It then sent **no read and no write at all**, and dropped the link
-(reason `0x13`) five seconds later. The last request was a read-by-type over
-`0x0001..0xFFFF` for `0x2A50` (PnP ID) answered `attribute not found`: the
-bridge had no Device Information Service, and Android's HOGP host reads the DIS
-PnP ID while it opens the connection, before it starts the HID service
-discovery. `0.2.4-26-g70c922d` adds DIS `0x180A` with manufacturer, model,
-firmware revision and a 7-byte PnP ID; the next trace should show the Report
-Map read and the Report CCCD write. The phone had connected before
-that, so the remaining work is the full tester paste-back.
+The `0.2.4-29-g748e928-att` trace (`ATT trace=on`, one line per ATT PDU, UUID
+column) shows the phone pairing, bonding and discovering every service,
+characteristic and descriptor. It then sent **no read and no write at all**, and
+dropped the link (reason `0x13`) five seconds later. The last request was
+`read-by-type 0x0001..0xffff type=0x2a04` (Peripheral Preferred Connection
+Parameters), answered `attribute not found`. Android's GAP client reads that
+characteristic after discovery; the failed read takes its client-complete path
+to `GATT_Disconnect()`, so the phone closed the ACL before the HID profile
+could start. DIS (`0.2.4-26`) was a correct addition but not the drop.
+`0.2.4-31-g13c7d9f` adds GAP `0x2A04`; the next trace should show the HID
+Information and Report Map reads and the Report CCCD write. The phone had
+connected before that, so the remaining work is the full tester paste-back.
 
 ## Verification STATUS (ONY-441 done-when)
 
@@ -240,7 +243,7 @@ what the console traces show so far.
 
 | Check | Result | Phone / Android | Build | Evidence |
 |---|---|---|---|---|
-| Stock phone pairs and shows an input device, no app | PARTIAL: pairs, bonds, generic discovery completes, then no ATT read/write and a 0x13 drop. DIS PnP added in `0.2.4-26`; that phone run still dropped before the Report CCCD write. UUID-printing trace build ready | Pixel 11 Pro / Android 17 | `0.2.4-25-gaeeb621-att`, `0.2.4-26-g70c922d`, `0.2.4-29-g748e928-att` | ATT trace, above |
+| Stock phone pairs and shows an input device, no app | PARTIAL: pairs and bonds; discovery completes, then the missing GAP `0x2A04` read makes Android's GAP client disconnect the link before the Report CCCD write. `0.2.4-31` adds `0x2A04`; retest pending | Pixel 11 Pro / Android 17 | `0.2.4-29-g748e928-att` (diagnosis), `0.2.4-31-g13c7d9f` (fix) | ATT trace, above |
 | Gamepad tester: A/B/X/Y, shoulders, stick clicks, menu, home | not run | — | — | — |
 | Gamepad tester: d-pad via left trackpad (8 sectors) | not run | — | — | — |
 | Gamepad tester: face buttons via right trackpad | not run | — | — | — |
