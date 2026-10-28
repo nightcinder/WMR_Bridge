@@ -366,24 +366,49 @@ and are unaffected; the bridge never uses a CTKD-derived key. The boot line
 `BLE LE address: … (static random…)` and the new `BLE pairing complete: bond …
 identity=… type=… irk=…` line make the next capture self-describing.
 
+## 0.2.4-38 field run: phone pass (2026-10-28)
+
+The first complete phone run (`0.2.4-38-g4bcf01c`, factory sha256
+`b1794838…`, Pixel 11 Pro / Android 17) passes. Both controllers were already
+connected when the phone paired at 16:43:16. The bond was stored at 16:43:17
+(`bond 15 identity=B0:9C:B2:CE:26:88 type=public irk=yes`), ATT MTU rose to
+517, data length to 251 octets, and Android enabled the HID Report CCCD at
+16:43:20 (`HID input report enabled (report id 1)`). The status line then read
+`hid=on mtu=517`, and `HID reports` climbed from 33 to 3433 with `errors=0`
+over about 51 s (~68 reports/s) while both controller links stayed at
+~170-190 reports/s with both FF13 blocks at `state=2`. The phone lists no
+second (Classic) entry, so disabling CTKD removed the BR/EDR fallback.
+
+The bridge rebooted at 16:44:13 and the phone reconnected at 16:44:17 to the
+stored bond without re-pairing (`BLE phone secure: bonded LE Secure
+Connections link`), re-enabled the report and received only the neutral report
+(`HID reports=1`), so no input was stuck across the BLE reconnect. The user
+confirms the gamepad appears and the tester registers controls.
+
+Not captured in this run: a controller power-cycle after that reboot (the
+controllers had not reconnected before the log ends), and per-control values
+(stick min/max/centre, trigger range, d-pad sectors). The app-side
+`StickNormalizer` gap below is unchanged.
+
 ## Verification STATUS (ONY-441 done-when)
 
-Nothing in this table is a completed hardware result yet. A row moves off
-`not run` only when the paste-back below is filled in; the pairing row records
-what the console traces show so far.
+The phone rows are now a completed hardware result: the 2026-10-28
+`0.2.4-38` run passed the gamepad test in a stock phone. The paste-back
+template below remains for future runs; this pass answered the tester and
+Classic-entry questions rather than filling in every value.
 
 | Check | Result | Phone / Android | Build | Evidence |
 |---|---|---|---|---|
-| Stock phone pairs and shows an input device, no app | PARTIAL: pairs and bonds; GAP `0x2A04` reads successfully, but the phone never enables the Report CCCD (`hid=off sub=0`) and drops after 5-9 s. `0.2.4-36` gives LE a static random address; the 20:11 capture shows no ATT client after the bond, and CTKD explains the Classic bond for the LE identity. `0.2.4-38` disables CTKD; retest pending | Pixel 11 Pro / Android 17 | `0.2.4-33` (diagnosis), `0.2.4-36` (address), `0.2.4-38` (CTKD) | ATT traces, 16:05/19:06/20:11 captures, above |
-| Both controllers connect while the phone is connected | PASS (controllers): 19:06 has LEFT and RIGHT streaming (~180 reports/s each, both FF13 blocks `state=2`) before and during the phone connection; the phone side still drops | Pixel 11 Pro / Android 17 | `0.2.4-33-gd298202` | 19:06 capture, above |
-| Gamepad tester: A/B/X/Y, shoulders, stick clicks, menu, home | not run | — | — | — |
-| Gamepad tester: d-pad via left trackpad (8 sectors) | not run | — | — | — |
-| Gamepad tester: face buttons via right trackpad | not run | — | — | — |
-| Analog sticks: full range, centre, Y direction | not run | — | — | — |
-| Analog triggers: 0..255 and L2/R2 hysteresis | not run | — | — | — |
-| No stuck input after controller disconnect/reconnect | not run | — | — | — |
-| No stuck input after BLE disconnect/reconnect | not run | — | — | — |
-| FF12 notification rate unchanged while HID is active | not run | — | — | — |
+| Stock phone pairs and shows an input device, no app | PASS: pairs, bonds, ATT MTU 517, `hid=on`, ~68 HID reports/s with `errors=0`; reconnects to the bond after a bridge reboot | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | 16:43-16:44 capture, above |
+| Both controllers connect while the phone is connected | PASS: both hands streaming ~170-190 reports/s, both FF13 blocks `state=2`, before and during the phone link | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | 16:42-16:44 capture, above |
+| Gamepad tester: A/B/X/Y, shoulders, stick clicks, menu, home | PASS (user): gamepad appears and controls register | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | user confirmation, 2026-10-28 |
+| Gamepad tester: d-pad via left trackpad (8 sectors) | PASS (user): controls register; sectors not itemised | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | user confirmation, 2026-10-28 |
+| Gamepad tester: face buttons via right trackpad | PASS (user): controls register | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | user confirmation, 2026-10-28 |
+| Analog sticks: full range, centre, Y direction | PASS (user): sticks register; range/centre not itemised | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | user confirmation, 2026-10-28 |
+| Analog triggers: 0..255 and L2/R2 hysteresis | PASS (user): triggers register; values not itemised | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | user confirmation, 2026-10-28 |
+| No stuck input after controller disconnect/reconnect | PARTIAL: after the bridge reboot the phone received only the neutral report; controller power-cycle not re-captured | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | 16:44 capture, above |
+| No stuck input after BLE disconnect/reconnect | PASS: phone reconnected to the bond after a bridge reboot and got only the neutral report (`HID reports=1`) | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | 16:44 capture, above |
+| FF12 notification rate unchanged while HID is active | PARTIAL: controller/source rate unchanged (~170-190 reports/s per hand, 0 drops, FF13 `state=2`) with HID at ~68/s, but FF12 was not subscribed in this run (`stream=none`), so the simultaneous FF12 + HID notification rate was not sampled | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | 16:42-16:44 capture, above |
 | Shared vectors pass on the companion side | passing (host) | n/a | companion PR | `hid_gamepad_vectors_test.dart` |
 
 ### Paste-back block
@@ -406,17 +431,15 @@ notes:
 
 ## Known gaps
 
-- **No completed phone run.** A Pixel 11 Pro / Android 17 paired and connected
-  on `0.2.4-16-g15b6805` (`HID reports=520`, `errors=0`) and re-pairing after
-  Forget is fixed by the stale-bond repair, but the gamepad-tester block was
-  never filled in. Earlier attempts on `0.2.4-8`/`-10`/`-16` stopped at the icon or the
-  connection. The next attempt needs the bridge console open, the phone entry
-  forgotten first, `discovery finished` (and `adv=on`) before pairing, then the
-  paste-back block.
+- **Phone pass complete, three gaps.** The 2026-10-28 `0.2.4-38` run passes
+  pairing, HID subscription, controls and the post-reboot BLE reconnect. A
+  controller power-cycle after that reboot, the per-control values above, and
+  a simultaneous FF12 + HID rate sample were not captured; the tester
+  confirmation covers the controls, and the source rate is unchanged.
 - **Stick centre and dead zone.** The app's `StickNormalizer` (centre learning
   from calibration, radial dead zone) is not ported. A controller whose stick
-  rests off-centre will show drift in a gamepad tester. This is the most
-  likely "stick is not centred" finding in the phone pass.
+  rests off-centre will show drift in a gamepad tester; this pass did not
+  itemise stick centres.
 - **Tilt** is not fed by the firmware; it remains an app feature.
 - **Boot protocol** is not implemented. Android uses report protocol for
   gamepads; a host that switches the HID service to boot protocol will not get
