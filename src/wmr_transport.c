@@ -57,6 +57,7 @@
 #include "wmr_decoded.h"
 #include "wmr_protocol.h"
 #include "wmr_queue.h"
+#include "wmr_secure.h"
 #include "wmr_stream_mode.h"
 #include "wmr_transport.h"
 
@@ -138,6 +139,9 @@ static btstack_timer_source_t pump_timer;
 /* FF14: fires when the oldest queued record has waited long enough to send a partial batch. */
 static btstack_timer_source_t batch_timer;
 static btstack_timer_source_t status_timer;
+/* 0.3 security: disconnect a central that has not produced a bonded LESC link. */
+static bool phone_secure;
+static btstack_timer_source_t pair_timer;
 
 /* ---- Connection parameters ---------------------------------------------- */
 
@@ -844,6 +848,109 @@ static void att_packet_handler(uint8_t packet_type, uint16_t channel,
     }
 }
 
+/* ---- 0.3 phone-link security -------------------------------------------- */
+
+/* Act on the policy's verdict. ACCEPT keeps the phone; REFUSE disconnects it, so an
+ * unbonded central cannot sit on the link and block the intended phone. */
+static void secure_apply(const wmr_secure_event_t *event){
+    switch (wmr_secure_decide(event)){
+        case WMR_SECURE_ACCEPT:
+            if (phone_secure) return;
+            phone_secure = true;
+            btstack_run_loop_remove_timer(&pair_timer);
+            printf("BLE phone secure: bonded LE Secure Connections link\n");
+            break;
+        case WMR_SECURE_REFUSE:
+            phone_secure = false;
+            btstack_run_loop_remove_timer(&pair_timer);
+            printf("BLE phone refused: no bonded LE Secure Connections link; disconnecting\n");
+            if (phone_handle != HCI_CON_HANDLE_INVALID)
+                gap_disconnect(phone_handle);
+            break;
+        default:
+            break;
+    }
+}
+
+/* No paired + bonded link within WMR_CFG_BLE_PAIR_TIMEOUT_MS: refuse the central. */
+static void pair_timer_fire(btstack_timer_source_t *timer){
+    (void) timer;
+    if (phone_handle == HCI_CON_HANDLE_INVALID) return;
+    wmr_secure_event_t event = {
+        .type = WMR_SECURE_PAIR_TIMEOUT,
+        .handle = phone_handle,
+        .phone_handle = phone_handle,
+        .success = false,
+        .bonded = sm_le_device_index(phone_handle) >= 0,
+        .encrypted = phone_secure,
+    };
+    secure_apply(&event);
+}
+
+void wmr_transport_on_sm_event(uint8_t *packet, uint16_t size){
+    if (size < 2) return;
+    wmr_secure_event_t event = {
+        .type = WMR_SECURE_PAIRING_COMPLETE,
+        .handle = WMR_SECURE_NO_HANDLE,
+        .phone_handle = (phone_handle == HCI_CON_HANDLE_INVALID)
+                            ? WMR_SECURE_NO_HANDLE : phone_handle,
+        .success = false,
+        .bonded = false,
+        .encrypted = false,
+    };
+    switch (hci_event_packet_get_type(packet)){
+        case SM_EVENT_JUST_WORKS_REQUEST: {
+            /* The bridge has no display and no keypad, so LESC uses Just Works.
+             * Only the current phone may pair; anyone else is declined. */
+            hci_con_handle_t handle = sm_event_just_works_request_get_handle(packet);
+            if (handle != phone_handle){
+                sm_bonding_decline(handle);
+                break;
+            }
+            printf("BLE pairing: Just Works confirmed (no MITM protection)\n");
+            sm_just_works_confirm(handle);
+            break;
+        }
+        case SM_EVENT_PAIRING_COMPLETE:
+            event.type = WMR_SECURE_PAIRING_COMPLETE;
+            event.handle = sm_event_pairing_complete_get_handle(packet);
+            event.success = sm_event_pairing_complete_get_status(packet) == ERROR_CODE_SUCCESS;
+            event.bonded = sm_le_device_index(event.handle) >= 0;
+            if (event.success){
+                printf("BLE pairing complete: %s\n", event.bonded ? "bond stored" : "no bond stored");
+            } else {
+                printf("BLE pairing failed: status=0x%02x reason=0x%02x\n",
+                       sm_event_pairing_complete_get_status(packet),
+                       sm_event_pairing_complete_get_reason(packet));
+            }
+            secure_apply(&event);
+            break;
+        case SM_EVENT_REENCRYPTION_COMPLETE:
+            event.type = WMR_SECURE_REENCRYPTION_COMPLETE;
+            event.handle = sm_event_reencryption_complete_get_handle(packet);
+            event.success =
+                sm_event_reencryption_complete_get_status(packet) == ERROR_CODE_SUCCESS;
+            event.bonded = sm_le_device_index(event.handle) >= 0;
+            if (!event.success){
+                printf("BLE re-encryption failed: status=0x%02x\n",
+                       sm_event_reencryption_complete_get_status(packet));
+            }
+            secure_apply(&event);
+            break;
+        default:
+            break;
+    }
+}
+
+static btstack_packet_callback_registration_t sm_registration;
+
+static void sm_packet_handler(uint8_t packet_type, uint16_t channel,
+                              uint8_t *packet, uint16_t size){
+    (void) channel;
+    if (packet_type != HCI_EVENT_PACKET) return;
+    wmr_transport_on_sm_event(packet, size);
+}
+
 /* ---- HCI events --------------------------------------------------------- */
 
 void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
@@ -892,7 +999,19 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
             if (size >= 7 && (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE ||
                               packet[2] == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1)){
                 if (packet[3] == ERROR_CODE_SUCCESS){
-                    phone_handle = little_endian_read_16(packet, 4);
+                    hci_con_handle_t new_handle = little_endian_read_16(packet, 4);
+                    if (!wmr_secure_may_connect(
+                            phone_handle == HCI_CON_HANDLE_INVALID
+                                ? WMR_SECURE_NO_HANDLE : phone_handle,
+                            new_handle)){
+                        printf("BLE connection refused: phone already connected, handle=0x%04x\n",
+                               new_handle);
+                        gap_disconnect(new_handle);
+                        break;
+                    }
+                    phone_handle = new_handle;
+                    phone_secure = false;
+                    btstack_run_loop_remove_timer(&pair_timer);
                     data_length_seen = false;
                     data_length_valid = false;
                     conn_wanted_refresh();
@@ -919,6 +1038,8 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     btstack_run_loop_remove_timer(&conn_request_timer);
                     btstack_run_loop_set_timer(&conn_request_timer, WMR_CFG_CONN_REQUEST_DELAY_MS);
                     btstack_run_loop_add_timer(&conn_request_timer);
+                    btstack_run_loop_set_timer(&pair_timer, WMR_CFG_BLE_PAIR_TIMEOUT_MS);
+                    btstack_run_loop_add_timer(&pair_timer);
                 } else {
                     printf("BLE connection failed: 0x%02x\n", packet[3]);
                     gap_advertisements_enable(1);
@@ -929,6 +1050,8 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
             if (size >= 6 && little_endian_read_16(packet, 3) == phone_handle){
                 printf("BLE phone disconnected, reason=0x%02x\n", packet[5]);
                 phone_handle = HCI_CON_HANDLE_INVALID;
+                phone_secure = false;
+                btstack_run_loop_remove_timer(&pair_timer);
                 data_length_seen = false;
                 data_length_valid = false;
                 stream_mode = WMR_STREAM_NONE;
@@ -979,9 +1102,12 @@ void wmr_transport_init(void){
     btstack_run_loop_add_timer(&pump_timer);
     batch_timer.process = batch_timer_fire;
     conn_request_timer.process = conn_request_fire;
+    pair_timer.process = pair_timer_fire;
     status_timer.process = status_tick_handler;
     btstack_run_loop_set_timer(&status_timer, WMR_CFG_STATUS_TICK_MS);
     btstack_run_loop_add_timer(&status_timer);
 
     att_server_register_packet_handler(att_packet_handler);
+    sm_registration.callback = sm_packet_handler;
+    sm_add_event_handler(&sm_registration);
 }

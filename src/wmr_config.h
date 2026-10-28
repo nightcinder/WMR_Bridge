@@ -288,6 +288,13 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #ifndef WMR_CFG_CONN_REQUEST_DELAY_MS
 #define WMR_CFG_CONN_REQUEST_DELAY_MS 500
 #endif
+/* How long a central may stay connected without a bonded LESC link before the
+ * bridge disconnects it. It has to cover the phone's pairing dialog on a first
+ * connection; after that the phone re-encrypts with stored keys immediately.
+ * See docs/SECURITY.md. */
+#ifndef WMR_CFG_BLE_PAIR_TIMEOUT_MS
+#define WMR_CFG_BLE_PAIR_TIMEOUT_MS 30000
+#endif
 
 /* ---- Timers ------------------------------------------------------------ */
 
