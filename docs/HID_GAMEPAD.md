@@ -95,23 +95,35 @@ Local build evidence for this change:
 
 | Item | Value |
 |---|---|
-| Source commit | `ba1a8bb` (`0.2.4-8-gba1a8bb`; includes ONY-438) |
+| Source commit | `084e2f3` (`0.2.4-10-g084e2f3`; includes ONY-438) |
 | BTstack | `e38553977a25fb0b55b383c72c289be0975f422c` |
 | ESP-IDF | v6.1 |
-| Factory image SHA-256 | `978ab0278527a6dc237c6b399e5e44fb43defbaf1c9ec713321ce6d05267689c` |
+| Factory image SHA-256 | `e7553bc097bea0a560b8a94a1c4f3d54b89972097ea1fb83b7bcfd2e1454b764` |
 
 The first phone attempt could not pair: it ran the pre-ONY-438 image
 (`0.2.4-7-g90c6c83`) and the bridge showed two names for one address. Both are
-fixed in the build above. A phone link now needs ONY-438's LE Secure
+fixed in the builds above. A phone link now needs ONY-438's LE Secure
 Connections pairing with bonding; a build without it is not a valid test.
 
-### Device name on both transports
+The second attempt (`0.2.4-8-gba1a8bb`) paired after several resets but showed
+a phone icon and then would not connect once the phone entry was forgotten.
+BTstack's default Class of Device is `0x007a020c` ("Smartphone"), and a
+dual-mode phone uses the BR/EDR class instead of the LE appearance for that
+icon and connect path. The bridge now sets `0x000508` (Peripheral / Gamepad)
+and exposes the GAP Appearance characteristic `0x03C4`, matching the scan
+response. The controller log's `HID SET_PROTOCOL failed: unsupported request`
+line is the controller declining the optional report-protocol request; it still
+streams 46-byte report-protocol input, so it is not the pairing fault.
+
+### Device name and class on both transports
 
 The bridge stays Classically discoverable so the controllers can be paired, so
 a dual-mode phone sees the same address twice. `WMR_CFG_BLE_NAME` now sets the
 BR/EDR local name too (`gap_set_local_name`), not just the LE advertising name;
 before that the classic side kept BTstack's default `BTstack <bd_addr>` and the
-phone's entry flipped between the two names every few seconds.
+phone's entry flipped between the two names every few seconds. The Class of
+Device is now a gamepad rather than BTstack's smartphone default, so both
+transports agree with the `0x03C4` appearance.
 
 ## Verification STATUS (ONY-441 done-when)
 
@@ -151,9 +163,10 @@ notes:
 
 ## Known gaps
 
-- **No phone run.** No stock Android phone was available for this change; the
-  table above is deliberately empty. The firmware build and shared vectors are
-  the only evidence.
+- **No completed phone run.** The Pixel 11 Pro / Android 17 passed pairing once
+  on `0.2.4-8-gba1a8bb` but stopped connecting after the entry was forgotten,
+  and the gamepad-tester block was not filled in. The table above is deliberately
+  empty until the retest on `0.2.4-10-g084e2f3` produces that block.
 - **Stick centre and dead zone.** The app's `StickNormalizer` (centre learning
   from calibration, radial dead zone) is not ported. A controller whose stick
   rests off-centre will show drift in a gamepad tester. This is the most

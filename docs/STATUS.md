@@ -27,7 +27,7 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Host tests only, **not run on hardware** |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default) | Host tests and firmware build only, **never run on a PSVR2 controller**; no PSVR2 decoder (FF11 raw only) |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: ~45–52 min dual-controller, ~58–65 min single-controller; not recommended for session VR |
-| BLE HID-over-GATT gamepad (ONY-441, draft) | Firmware build + host vector tests; first phone attempt could not pair (pre-ONY-438 image, mixed device name) | **No completed phone run**; retest on `0.2.4-8-gba1a8bb`; see [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
+| BLE HID-over-GATT gamepad (ONY-441, draft) | Firmware build + host vector tests; phone paired after several resets but showed a phone icon and would not reconnect (`0.2.4-8`) | **No completed phone run**; retest on `0.2.4-10-g084e2f3` (gamepad class + appearance); see [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
 | Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 levers run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE; the 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers ([`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). No new hardware run beyond the latency runs |
 
 ## BLE HID gamepad (ONY-441)
@@ -46,11 +46,14 @@ unchanged. Implementation and procedure: [`HID_GAMEPAD.md`](HID_GAMEPAD.md).
 | Shared input→report vectors, companion side | passing (host) | `wmr_companion_hid_android` | companion PR |
 
 The firmware build (ESP-IDF v6.1, BTstack `e38553977`, both-hands variant)
-passes and the host vector tests pass. A first Pixel 11 Pro / Android 17
-attempt on the pre-ONY-438 image could not pair and showed the bridge under
-two names; `0.2.4-8-gba1a8bb` includes ONY-438's LESC bonding and names both
-transports `WMR Bridge`. Every row above that needs a phone stays `not run`
-until the paste-back block in `HID_GAMEPAD.md` is filled in.
+passes and the host vector tests pass. A Pixel 11 Pro / Android 17 retest on
+`0.2.4-8-gba1a8bb` paired after several bridge resets, but the phone showed a
+phone icon and stopped connecting after the entry was forgotten. The cause is
+BTstack's default Class of Device `0x007a020c` ("Smartphone"), which a dual-mode
+phone prefers over the LE appearance; `0.2.4-10-g084e2f3` sets Peripheral /
+Gamepad (`0x000508`) and adds the GAP Appearance characteristic (`0x03C4`).
+Every row above that needs a phone stays `not run` until the paste-back block
+in `HID_GAMEPAD.md` is filled in.
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 
