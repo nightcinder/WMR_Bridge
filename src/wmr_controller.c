@@ -46,6 +46,7 @@
 #include "wmr_cfgmgr.h"
 #include "wmr_controller.h"
 #include "wmr_discovery.h"
+#include "wmr_levers.h"
 #include "wmr_linkdiag.h"
 #include "wmr_log.h"
 #include "wmr_psvr2.h"
@@ -95,11 +96,25 @@ static bool connect_pending;
 
 /* ---- Contention-2 V1: staggered start (docs/runs/sheets/contention-2.md) - */
 
-#if WMR_CFG_STAGGER_FIRST_HAND
-#define STAGGER_FIRST_HAND   ((unsigned) (WMR_CFG_STAGGER_FIRST_HAND - 1))
-#define STAGGER_SECOND_HAND  (1u - STAGGER_FIRST_HAND)
+#if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
 #define STAGGER_GATE_MS      30000u
 #define STAGGER_RETRY_MS     500u
+
+/* V1 mode: 0 = off, 1 = LEFT first, 2 = RIGHT first. In the release build this is the
+ * compile-time WMR_CFG_STAGGER_FIRST_HAND; in the LEVERS image wmr_levers owns it so
+ * the console can cycle it without a reflash. */
+static unsigned stagger_mode(void){
+    return wmr_levers_stagger();
+}
+static bool stagger_active(void){
+    return stagger_mode() != 0;
+}
+static unsigned stagger_first(void){
+    return stagger_mode() - 1u;
+}
+static unsigned stagger_second(void){
+    return 1u - stagger_first();
+}
 
 /* The gate opens 30 s after the first input report of the first hand. It is latched:
  * once open, a later disconnect does not close it again. */
@@ -598,22 +613,23 @@ static void disc_connect_progress(void);
 static void disc_pair_failed(unsigned hand, uint8_t status);
 static void accept_incoming(controller_t *c, uint16_t cid);
 
-#if WMR_CFG_STAGGER_FIRST_HAND
+#if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
 /* True once the first hand has been streaming long enough, or forever after release. */
 static bool stagger_gate_open(void){
+    if (!stagger_active()) return true;
     if (stagger_released) return true;
     if (!stagger_first_reported) return false;
     if ((uint32_t) (btstack_run_loop_get_time_ms() - stagger_first_report_ms) < STAGGER_GATE_MS)
         return false;
     stagger_released = true;
     WMR_LOGI("stagger", "%s released at t=%lu s",
-             controllers[STAGGER_SECOND_HAND].name,
+             controllers[stagger_second()].name,
              (unsigned long) (btstack_run_loop_get_time_ms() / 1000u));
     return true;
 }
 
 static bool stagger_blocks(unsigned hand){
-    return hand == STAGGER_SECOND_HAND && !stagger_gate_open();
+    return stagger_active() && hand == stagger_second() && !stagger_gate_open();
 }
 
 static void stagger_arm(void){
@@ -629,46 +645,48 @@ static void stagger_hold(unsigned hand){
     if (!stagger_hold_logged[hand]){
         stagger_hold_logged[hand] = true;
         WMR_LOGI("stagger", "%s held until %s reports; first hand reports=%lu",
-                 controllers[hand].name, controllers[STAGGER_FIRST_HAND].name,
-                 controllers[STAGGER_FIRST_HAND].reports);
+                 controllers[hand].name, controllers[stagger_first()].name,
+                 controllers[stagger_first()].reports);
     }
     stagger_arm();
 }
 
 static bool stagger_pending(void){
+    if (!stagger_active()) return false;
     if (stagger_pending_connect || stagger_pending_incoming_cid) return true;
     return disc_phase == DISC_CONNECT &&
-           (disc_connect_mask & (1u << STAGGER_SECOND_HAND)) != 0;
+           (disc_connect_mask & (1u << stagger_second())) != 0;
 }
 
 /* Called after the gate opens (or on every retry tick): resume the request that was
  * held. Incoming is preferred because the controller is already waiting. */
 static void stagger_retry_pending(void){
-    if (!stagger_gate_open()) return;
+    if (!stagger_active() || !stagger_gate_open()) return;
     if (stagger_pending_incoming_cid){
         if (connect_pending) return;
         uint16_t cid = stagger_pending_incoming_cid;
         stagger_pending_incoming_cid = 0;
-        controller_t *c = &controllers[STAGGER_SECOND_HAND];
+        controller_t *c = &controllers[stagger_second()];
         if (c->cid == 0) accept_incoming(c, cid);
         else hid_host_decline_connection(cid);
         return;
     }
     if (disc_phase == DISC_CONNECT &&
-        (disc_connect_mask & (1u << STAGGER_SECOND_HAND)) != 0){
+        (disc_connect_mask & (1u << stagger_second())) != 0){
         disc_connect_next();
         return;
     }
     if (stagger_pending_connect){
         if (connect_pending) return;
         stagger_pending_connect = false;
-        (void) connect_hand_impl(STAGGER_SECOND_HAND);
+        (void) connect_hand_impl(stagger_second());
     }
 }
 
 static void stagger_timer_fire(btstack_timer_source_t *timer){
     (void) timer;
     stagger_timer_armed = false;
+    if (!stagger_active()) return;
     if (!stagger_gate_open()){
         stagger_arm();
         return;
@@ -677,6 +695,20 @@ static void stagger_timer_fire(btstack_timer_source_t *timer){
     if (stagger_pending()) stagger_arm();
 }
 #endif
+
+void wmr_controller_reset_stagger(void){
+#if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
+    stagger_released = false;
+    stagger_first_reported = false;
+    stagger_first_report_ms = 0;
+    stagger_pending_connect = false;
+    stagger_pending_incoming_cid = 0;
+    for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++) stagger_hold_logged[i] = false;
+    btstack_run_loop_remove_timer(&stagger_timer);
+    stagger_timer_armed = false;
+    WMR_LOGI("stagger", "runtime stagger=%u; gate state reset", stagger_mode());
+#endif
+}
 
 void wmr_controller_init(wmr_report_sink_t sink){
     report_sink = sink;
@@ -695,7 +727,7 @@ void wmr_controller_init(wmr_report_sink_t sink){
 #if WMR_CFG_PSVR2_WAKE
     psvr2_wake_timer.process = psvr2_wake_timer_fire;
 #endif
-#if WMR_CFG_STAGGER_FIRST_HAND
+#if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
     stagger_timer.process = stagger_timer_fire;
 #endif
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
@@ -767,13 +799,13 @@ static wmr_connect_result_t connect_hand_impl(unsigned hand){
         WMR_LOGW("pair", "%s is already open or opening (cid=%u)", c->name, c->cid);
         return WMR_CONNECT_BUSY;
     }
-#if WMR_CFG_STAGGER_FIRST_HAND
+#if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
     if (stagger_blocks(hand)){
         stagger_hold(hand);
         stagger_pending_connect = true;
         return WMR_CONNECT_BUSY;
     }
-    if (hand == STAGGER_SECOND_HAND) stagger_pending_connect = false;
+    if (stagger_active() && hand == stagger_second()) stagger_pending_connect = false;
 #endif
     c->reports = 0;
     c->other_reports = 0;
@@ -1017,11 +1049,12 @@ static void disc_connect_next(void){
     disc_pair_wait = false;
     while (disc_connect_mask){
         unsigned hand;
-#if WMR_CFG_STAGGER_FIRST_HAND
+#if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
         /* With the gate closed, connect the first hand even when it is RIGHT and the
          * normal round order would have picked LEFT (the held hand) first. */
-        if (!stagger_released && (disc_connect_mask & (1u << STAGGER_FIRST_HAND)) != 0){
-            hand = STAGGER_FIRST_HAND;
+        if (stagger_active() && !stagger_released &&
+            (disc_connect_mask & (1u << stagger_first())) != 0){
+            hand = stagger_first();
         } else {
             hand = disc_connect_mask & 1u ? 0u : 1u;
         }
@@ -1034,7 +1067,7 @@ static void disc_connect_next(void){
             disc_connect_mask &= ~(1u << hand);
             continue;
         }
-#if WMR_CFG_STAGGER_FIRST_HAND
+#if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
         if (stagger_blocks(hand)){
             /* Leave the bit in the mask; the stagger timer resumes this round. */
             stagger_hold(hand);
@@ -1338,7 +1371,7 @@ static void accept_incoming(controller_t *c, uint16_t cid){
         hid_host_decline_connection(cid);
         return;
     }
-#if WMR_CFG_STAGGER_FIRST_HAND
+#if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
     if (stagger_blocks(hand)){
         /* Keep the HID channel queued, but do not call hid_host_accept_connection():
          * the controller must not start its report/reconnect sequence before the gate. */
@@ -1346,7 +1379,7 @@ static void accept_incoming(controller_t *c, uint16_t cid){
         stagger_pending_incoming_cid = cid;
         return;
     }
-    if (hand == STAGGER_SECOND_HAND){
+    if (stagger_active() && hand == stagger_second()){
         stagger_pending_incoming_cid = 0;
         stagger_pending_connect = false;
     }
@@ -1706,8 +1739,8 @@ static void handle_report(const uint8_t *packet){
      * valid during this callback; the sink copies what it keeps. */
     if (report_sink) report_sink((unsigned) (c - controllers), report, length);
     if (c->reports == 1){
-#if WMR_CFG_STAGGER_FIRST_HAND
-        if ((unsigned) (c - controllers) == STAGGER_FIRST_HAND){
+#if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
+        if (stagger_active() && (unsigned) (c - controllers) == stagger_first()){
             /* The gate is timed from report flow, not from ACL setup. */
             stagger_first_reported = true;
             stagger_first_report_ms = btstack_run_loop_get_time_ms();
@@ -1824,11 +1857,11 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             break;
         case HID_SUBEVENT_CONNECTION_CLOSED:
             cid = hid_subevent_connection_closed_get_hid_cid(packet);
-#if WMR_CFG_STAGGER_FIRST_HAND
-            if (cid && cid == stagger_pending_incoming_cid){
+#if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
+            if (stagger_active() && cid && cid == stagger_pending_incoming_cid){
                 /* The held incoming HID channel went away before the gate opened. */
                 stagger_pending_incoming_cid = 0;
-                stagger_hold_logged[STAGGER_SECOND_HAND] = false;
+                stagger_hold_logged[stagger_second()] = false;
                 break;
             }
 #endif
@@ -1841,14 +1874,14 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             if (!c) break;
             c->psvr2_wake_pending = false;
             if (!c->connected) disc_pair_failed((unsigned) (c - controllers), 0);
-#if WMR_CFG_STAGGER_FIRST_HAND
-            if ((unsigned) (c - controllers) == STAGGER_FIRST_HAND && !stagger_released){
+#if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
+            if (stagger_active() && (unsigned) (c - controllers) == stagger_first() && !stagger_released){
                 /* Start the 30 s again after the first hand reconnects. */
                 stagger_first_reported = false;
                 stagger_first_report_ms = 0;
             }
-            if ((unsigned) (c - controllers) == STAGGER_SECOND_HAND)
-                stagger_hold_logged[STAGGER_SECOND_HAND] = false;
+            if (stagger_active() && (unsigned) (c - controllers) == stagger_second())
+                stagger_hold_logged[stagger_second()] = false;
 #endif
             WMR_LOGI("pair", "%s disconnected after %lu input report(s) and %lu other report(s)",
                      c->name, c->reports, c->other_reports);

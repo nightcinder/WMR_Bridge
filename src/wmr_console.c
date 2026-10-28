@@ -47,10 +47,12 @@
 #include "wmr_console.h"
 #include "wmr_controller.h"
 #include "wmr_diag.h"
+#include "wmr_levers.h"
 #include "wmr_linkdiag.h"
 #include "wmr_link.h"
 #include "wmr_log.h"
 #include "wmr_transport.h"
+#include "wmr_txpower.h"
 
 static btstack_timer_source_t stats_timer;
 static uint32_t last_rx[WMR_NUM_CONTROLLERS];
@@ -69,13 +71,40 @@ void wmr_console_show_usage(void){
     printf("K: BOND RESET RIGHT - delete the ESP32's stored link key for RIGHT only\n");
     printf("b: BOND RESET ALL   - delete all stored link keys from the ESP32\n");
     printf("   (manual; controller must be disconnected. Put it in pairing mode afterwards.)\n");
+#if WMR_CFG_TEST_LEVERS
+    printf("LEVERS test image:\n");
+    printf("x: show lever state             t: TX power and DLE readback\n");
+    printf("g: cycle V1 stagger 0/1/2       i: toggle 30 ms BLE interval request\n");
+    printf("h: toggle FF14 hold 1/2         p: cycle Classic TX default/P6/P9\n");
+#endif
     printf("Connect one controller at a time; wait for descriptor result.\n");
 }
+
+#if WMR_CFG_TEST_LEVERS
+/* One line the bench runbook can read before every run. */
+static void print_levers_state(void){
+    printf("LEVERS: stagger=%u interval=%s hold=%u tx=%s\n",
+           wmr_levers_stagger(), wmr_levers_interval_name(),
+           wmr_levers_hold_intervals(), wmr_levers_tx_name(wmr_levers_tx()));
+}
+
+static bool controllers_idle(void){
+    for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
+        wmr_controller_status_t s;
+        wmr_controller_get_status(i, &s);
+        if (s.connected || s.connecting) return false;
+    }
+    return true;
+}
+#endif
 
 void wmr_console_on_hci_event(uint8_t *packet, uint16_t size){
     (void)size;
     if (hci_event_packet_get_type(packet) == BTSTACK_EVENT_STATE &&
         btstack_event_state_get_state(packet) == HCI_STATE_WORKING){
+#if WMR_CFG_TEST_LEVERS
+        wmr_txpower_init();
+#endif
         wmr_console_show_usage();
     }
 }
@@ -256,6 +285,33 @@ static void stdin_process(char cmd){
         case 'F': forget_addresses(); break;
         case 'k': bond_reset(WMR_HAND_LEFT); break;
         case 'K': bond_reset(WMR_HAND_RIGHT); break;
+#if WMR_CFG_TEST_LEVERS
+        case 'x': print_levers_state(); break;
+        case 't': wmr_txpower_print(); wmr_transport_print_dle(); break;
+        case 'g':
+            if (!controllers_idle()){
+                printf("LEVERS: disconnect both controllers before changing stagger\n");
+                break;
+            }
+            printf("LEVERS: stagger=%u (takes effect on the next controller connection)\n",
+                   wmr_levers_stagger_cycle());
+            wmr_controller_reset_stagger();
+            break;
+        case 'i':
+            printf("LEVERS: interval=%s (takes effect on the next phone connection)\n",
+                   wmr_levers_interval_toggle() ? "30ms" : "15ms");
+            break;
+        case 'h':
+            wmr_levers_hold_toggle();
+            printf("LEVERS: hold=%u\n", wmr_levers_hold_intervals());
+            break;
+        case 'p': {
+            unsigned mode = wmr_levers_tx_cycle();
+            printf("LEVERS: tx=%s\n", wmr_levers_tx_name(mode));
+            (void) wmr_txpower_apply(mode);
+            break;
+        }
+#endif
         case 'b':
             gap_delete_all_link_keys();
             printf("BOND RESET ALL: deleted all stored link keys from ESP32 link key DB\n");
@@ -271,6 +327,9 @@ void wmr_console_init(void){
     btstack_stdin_setup(stdin_process);
 #endif
     print_firmware_version();
+#if WMR_CFG_TEST_LEVERS
+    print_levers_state();
+#endif
     stats_timer.process = stats_tick;
     btstack_run_loop_set_timer(&stats_timer, WMR_CFG_STATS_INTERVAL_MS);
     btstack_run_loop_add_timer(&stats_timer);

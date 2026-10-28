@@ -53,6 +53,7 @@
 #include "wmr_echo.h"
 #include "wmr_linkdiag.h"
 #include "wmr_link.h"
+#include "wmr_levers.h"
 #include "wmr_decoded.h"
 #include "wmr_protocol.h"
 #include "wmr_queue.h"
@@ -111,6 +112,11 @@ static wmr_queue_t queue;
 static wmr_episode_t drop_episode;
 /* An LE data-length-change event has been seen on the current phone connection. */
 static bool data_length_seen;
+static bool data_length_valid;
+static uint16_t data_length_tx_octets;
+static uint16_t data_length_tx_time_us;
+static uint16_t data_length_rx_octets;
+static uint16_t data_length_rx_time_us;
 static uint16_t send_offset;       /* bytes of the head frame already sent */
 static wmr_stats_t stats;
 /* FF15: one outstanding echo; sent before any stream data. */
@@ -135,10 +141,19 @@ static btstack_timer_source_t status_timer;
 
 /* ---- Connection parameters ---------------------------------------------- */
 
-static const wmr_conn_request_t conn_wanted = {
+static wmr_conn_request_t conn_wanted = {
     WMR_CFG_CONN_INTERVAL_MIN, WMR_CFG_CONN_INTERVAL_MAX,
     WMR_CFG_CONN_LATENCY, WMR_CFG_CONN_TIMEOUT
 };
+
+/* LEVERS `i`: the request is rebuilt before each phone connection, so a toggle takes
+ * effect on the next connection. The release build keeps the compile-time constants. */
+static void conn_wanted_refresh(void){
+#if WMR_CFG_TEST_LEVERS
+    conn_wanted.interval_min = (uint16_t) wmr_levers_interval_min();
+    conn_wanted.interval_max = (uint16_t) wmr_levers_interval_max();
+#endif
+}
 static bool conn_known;
 static wmr_conn_params_t conn_now;
 static bool conn_update_pending;
@@ -162,6 +177,7 @@ static void conn_report(const char *what, uint16_t interval, uint16_t latency, u
 static void conn_request_fire(btstack_timer_source_t *timer){
     (void)timer;
     if (phone_handle == HCI_CON_HANDLE_INVALID) return;
+    conn_wanted_refresh();
     if (!data_length_seen) printf("BLE data length: no change event seen since connect\n");
     int rc = gap_request_connection_parameter_update(phone_handle,
         conn_wanted.interval_min, conn_wanted.interval_max, conn_wanted.latency, conn_wanted.timeout);
@@ -523,6 +539,16 @@ void wmr_transport_get_info(wmr_transport_info_t *info){
     info->conn_update_pending = conn_update_pending;
 }
 
+void wmr_transport_print_dle(void){
+    if (!data_length_valid){
+        printf("DLE: no data-length change seen since connect\n");
+        return;
+    }
+    printf("DLE: tx %u octets / %u us, rx %u octets / %u us\n",
+           (unsigned) data_length_tx_octets, (unsigned) data_length_tx_time_us,
+           (unsigned) data_length_rx_octets, (unsigned) data_length_rx_time_us);
+}
+
 /* ---- ATT callbacks ------------------------------------------------------ */
 
 /* 16-byte status value returned when the phone reads FF11:
@@ -836,11 +862,14 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                 if (hci_subevent_le_data_length_change_get_connection_handle(packet) == phone_handle){
                     char line[100];
                     data_length_seen = true;
+                    data_length_valid = true;
+                    data_length_tx_octets = hci_subevent_le_data_length_change_get_max_tx_octets(packet);
+                    data_length_tx_time_us = hci_subevent_le_data_length_change_get_max_tx_time(packet);
+                    data_length_rx_octets = hci_subevent_le_data_length_change_get_max_rx_octets(packet);
+                    data_length_rx_time_us = hci_subevent_le_data_length_change_get_max_rx_time(packet);
                     wmr_diag_format_data_length(line, sizeof(line),
-                        hci_subevent_le_data_length_change_get_max_tx_octets(packet),
-                        hci_subevent_le_data_length_change_get_max_tx_time(packet),
-                        hci_subevent_le_data_length_change_get_max_rx_octets(packet),
-                        hci_subevent_le_data_length_change_get_max_rx_time(packet));
+                        data_length_tx_octets, data_length_tx_time_us,
+                        data_length_rx_octets, data_length_rx_time_us);
                     printf("%s\n", line);
                 }
                 break;
@@ -865,6 +894,8 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                 if (packet[3] == ERROR_CODE_SUCCESS){
                     phone_handle = little_endian_read_16(packet, 4);
                     data_length_seen = false;
+                    data_length_valid = false;
+                    conn_wanted_refresh();
                     queue_reset();
                     stream_mode = WMR_STREAM_NONE;
                     send_pending = false;
@@ -898,6 +929,8 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
             if (size >= 6 && little_endian_read_16(packet, 3) == phone_handle){
                 printf("BLE phone disconnected, reason=0x%02x\n", packet[5]);
                 phone_handle = HCI_CON_HANDLE_INVALID;
+                data_length_seen = false;
+                data_length_valid = false;
                 stream_mode = WMR_STREAM_NONE;
                 send_pending = false;
                 echo_subscribed = false;
