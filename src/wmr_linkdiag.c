@@ -147,23 +147,32 @@ static void att_trace(uint8_t out, const uint8_t *packet, uint16_t len){
             }
             break;
         case 0x08: case 0x10:  /* Read By Type / Read By Group Type */
-        case 0x06:             /* Find By Type Value */
-            if (plen >= 7){
-                /* The UUID is the whole point of a 0x08/0x06 request: it names the
-                 * characteristic a HOGP host is looking for (Report Map, HID Info,
-                 * PnP ID). Read By Group only ever asks for 0x2800/0x2801. */
-                if (opcode == 0x10 || plen != 7){
-                    WMR_LOGI("att", "%s %s 0x%04x..0x%04x", dir, att_opcode_name(opcode),
-                             little_endian_read_16(pdu, 1), little_endian_read_16(pdu, 3));
+        case 0x06: {           /* Find By Type Value */
+            /* The UUID is the whole point of a 0x08/0x06 request: it names the
+             * characteristic a HOGP host is looking for (Report Map, HID Info,
+             * PnP ID). Read By Group only ever asks for 0x2800/0x2801.
+             * The UUID can be 16 or 128 bits long; plen - 5 bytes follow the two
+             * handles. Do not assume the 16-bit form: the first capture matched
+             * no request at all because this print only accepted plen == 7. */
+            const uint16_t start = plen >= 5 ? little_endian_read_16(pdu, 1) : 0;
+            const uint16_t end   = plen >= 5 ? little_endian_read_16(pdu, 3) : 0;
+            if (opcode == 0x10){
+                WMR_LOGI("att", "%s read-by-group 0x%04x..0x%04x", dir, start, end);
+            } else if (plen >= 7){
+                const uint16_t uuid16 = little_endian_read_16(pdu, 5);
+                const unsigned uuid_len = opcode == 0x06 ? 2u : (unsigned) (plen - 5);
+                if (opcode == 0x06){
+                    WMR_LOGI("att", "%s find-by-type 0x%04x..0x%04x type=0x%04x value_len=%u",
+                             dir, start, end, uuid16, (unsigned) (plen - 7));
                 } else {
-                    WMR_LOGI("att", "%s %s 0x%04x..0x%04x type=0x%04x", dir,
-                             att_opcode_name(opcode), little_endian_read_16(pdu, 1),
-                             little_endian_read_16(pdu, 3), little_endian_read_16(pdu, 5));
+                    WMR_LOGI("att", "%s read-by-type 0x%04x..0x%04x type=0x%04x uuid_len=%u",
+                             dir, start, end, uuid16, uuid_len);
                 }
             } else {
                 WMR_LOGI("att", "%s %s len=%u", dir, att_opcode_name(opcode), plen);
             }
             break;
+        }
         case 0x04:             /* Find Information */
             if (plen >= 5){
                 WMR_LOGI("att", "%s find-info 0x%04x..0x%04x", dir,

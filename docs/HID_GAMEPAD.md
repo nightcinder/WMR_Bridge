@@ -88,12 +88,15 @@ tester. See "Known gaps".
   link (`ENCRYPTION_KEY_SIZE_16`), so Android pairs before subscribing.
 - **Device Information Service:** Android's HOGP host reads the DIS PnP ID
   (`0x2A50`) while it opens the connection and starts the HID service discovery
-  only after that read completes. The bridge had no DIS, so the read ended in
-  `attribute not found`; the phone finished the generic discovery, never read
-  the report map or enabled the Report CCCD, and dropped the link (reason
-  `0x13`) a few seconds later. `wmr_bridge.gatt` now exposes DIS `0x180A` with
-  manufacturer, model, firmware revision (the `PROJECT_VER` string) and a
-  7-byte PnP ID.
+  only after that read completes. The `0.2.4-25` capture ended with a
+  read-by-type over `0x0001..0xFFFF`, the form `DIS_ReadDISInfo` uses for that
+  lookup; the bridge had no DIS, so the request ended in `attribute not found`
+  and the phone never read the report map or enabled the Report CCCD. That
+  match is inferred from the request shape, not from a logged UUID: the
+  `0.2.4-25` trace did not print it yet. `wmr_bridge.gatt` now exposes DIS
+  `0x180A` with manufacturer, model, firmware revision (the `PROJECT_VER`
+  string) and a 7-byte PnP ID. A `0.2.4-26` phone run still dropped, so the
+  next capture carries the trace and names the UUID that fails.
 
 ## ATT trace
 
@@ -102,8 +105,9 @@ A build with `WMR_CFG_ATT_TRACE=1` (`EXTRA_CFLAGS=-DWMR_CFG_ATT_TRACE=1`
 prints one line per ATT or SMP PDU on the phone link, and adds
 `ATT trace=on rx= tx= writes= two_byte_writes= smp= le_sig=` to the status
 block. `tx` is phone→bridge (requests) and `rx` is bridge→phone (responses).
-Read By Type and Find By Type lines carry `type=0x…`, the characteristic UUID
-the host is looking for; that is how the missing `0x2A50` showed up. The trace shows how far a
+Read By Type and Find By Type lines carry `type=0x…` and `uuid_len=`, the
+characteristic UUID the host is looking for and its encoded width (2 or 16
+bytes). The trace shows how far a
 HOGP host gets: service discovery (`read-by-group`, `read-by-type`), the
 Report Map read (`read` 0x2A4B then `read-blob` at offset 22), the Protocol
 Mode write (0x2A4E), and the Report CCCD write (handle 0x0017, value
@@ -112,7 +116,9 @@ lines is a pairing-only link, not a HOGP host. A trace that stops before the
 CCCD write names the request that failed. Incoming Classic ACL connections are
 logged too (`att incoming ACL link from <addr>`): a phone that decides the
 bridge is a BR/EDR HID device pages it there instead of opening GATT.
-Off by default because a HID host produces dozens of lines per connection.
+The `BLE phone connected` line carries `fw=<version>`, so a capture that starts
+mid-run still identifies the image. Off by default because a HID host produces
+dozens of lines per connection.
 
 ## Tests
 

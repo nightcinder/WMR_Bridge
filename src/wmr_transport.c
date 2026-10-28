@@ -1216,8 +1216,12 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                         hci_subevent_le_enhanced_connection_complete_v1_get_peer_addresss(packet, peer);
                         peer_type = hci_subevent_le_enhanced_connection_complete_v1_get_peer_address_type(packet);
                     }
-                    printf("BLE phone connected, handle=0x%04x peer=%s (%s)\n", phone_handle,
-                           bd_addr_to_str(peer), peer_type == 1 ? "random" : "public");
+                    /* The version is in this line on purpose: a phone capture
+                     * that starts here cannot otherwise be tied to the image
+                     * that produced it. */
+                    printf("BLE phone connected, handle=0x%04x peer=%s (%s) fw=%s\n", phone_handle,
+                           bd_addr_to_str(peer), peer_type == 1 ? "random" : "public",
+                           esp_app_get_description()->version);
                     conn_update_pending = false;
                     if (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
                         conn_report("at connect",
