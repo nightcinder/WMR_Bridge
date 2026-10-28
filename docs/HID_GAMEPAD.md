@@ -101,9 +101,9 @@ A build with `WMR_CFG_ATT_TRACE=1` (`EXTRA_CFLAGS=-DWMR_CFG_ATT_TRACE=1`
 `python3 tools/firmware/build.py ...`) logs `ATT trace on: ...` at start-up,
 prints one line per ATT or SMP PDU on the phone link, and adds
 `ATT trace=on rx= tx= writes= two_byte_writes= smp= le_sig=` to the status
-block. `rx` is phone→bridge and `tx` is bridge→phone. Read By Type and Find
-By Type lines carry `type=0x…`, the characteristic UUID the host is looking
-for; that is how the missing `0x2A50` showed up. The trace shows how far a
+block. `tx` is phone→bridge (requests) and `rx` is bridge→phone (responses).
+Read By Type and Find By Type lines carry `type=0x…`, the characteristic UUID
+the host is looking for; that is how the missing `0x2A50` showed up. The trace shows how far a
 HOGP host gets: service discovery (`read-by-group`, `read-by-type`), the
 Report Map read (`read` 0x2A4B then `read-blob` at offset 22), the Protocol
 Mode write (0x2A4E), and the Report CCCD write (handle 0x0017, value
