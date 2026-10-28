@@ -201,25 +201,40 @@ around the attempt.
 
 The fifth attempt (`0.2.4-16-g15b6805`, the CI merge build before `eab749b`;
 its status lines still lack `adv=`) got further: the phone offered WMR Bridge
-as a gamepad, paired and connected, and HID input flowed
-(`HID reports=520 errors=0`). After the phone entry was forgotten, the next
-connection failed in security, not in advertising: the bridge still held the
-old key, so `BLE re-encryption failed: status=0x06` (PIN_OR_KEY_MISSING) was
-followed by `BLE phone refused: no bonded LE Secure Connections link;
-disconnecting`, which cut off the Just Works exchange the phone had already
-started (`BLE pairing failed: status=0x13`, then disconnect `reason=0x16`). The
-policy now deletes the stale bond and keeps the link up for that exchange; every
-other failed re-encryption still disconnects. The phone had connected before
+as a gamepad, paired and connected, and the bridge counted HID reports
+(`HID reports=520 errors=0`). That count came from the unconditional send path,
+not from a phone subscription: `0.2.4-24` gated sends on the Report CCCD and
+logged `hid=off sub=0` with `HID reports=0`, so the phone had not subscribed in
+that build either. After the phone entry was forgotten, the next connection
+failed in security, not in advertising: the bridge still held the old key, so
+`BLE re-encryption failed: status=0x06` (PIN_OR_KEY_MISSING) was followed by
+`BLE phone refused: no bonded LE Secure Connections link; disconnecting`, which
+cut off the Just Works exchange the phone had already started (`BLE pairing
+failed: status=0x13`, then disconnect `reason=0x16`). The policy now deletes the
+stale bond and keeps the link up for that exchange; every other failed
+re-encryption still disconnects.
+
+The `0.2.4-25-gaeeb621-att` trace (`ATT trace=on`, one line per ATT PDU) shows
+the phone pairing, bonding and discovering every service, characteristic and
+descriptor. It then sent **no read and no write at all**, and dropped the link
+(reason `0x13`) five seconds later. The last request was a read-by-type over
+`0x0001..0xFFFF` for `0x2A50` (PnP ID) answered `attribute not found`: the
+bridge had no Device Information Service, and Android's HOGP host reads the DIS
+PnP ID while it opens the connection, before it starts the HID service
+discovery. `0.2.4-26-g70c922d` adds DIS `0x180A` with manufacturer, model,
+firmware revision and a 7-byte PnP ID; the next trace should show the Report
+Map read and the Report CCCD write. The phone had connected before
 that, so the remaining work is the full tester paste-back.
 
 ## Verification STATUS (ONY-441 done-when)
 
-Nothing in this table is a hardware result yet. A row moves off `not run` only
-when the paste-back below is filled in.
+Nothing in this table is a completed hardware result yet. A row moves off
+`not run` only when the paste-back below is filled in; the pairing row records
+what the console traces show so far.
 
 | Check | Result | Phone / Android | Build | Evidence |
 |---|---|---|---|---|
-| Stock phone pairs and shows an input device, no app | not run | — | — | — |
+| Stock phone pairs and shows an input device, no app | PARTIAL: pairs, bonds, generic discovery completes, then no ATT read/write and a 0x13 drop; missing DIS PnP ID fixed | Pixel 11 Pro / Android 17 | `0.2.4-25-gaeeb621-att`, `0.2.4-26-g70c922d` | ATT trace, above |
 | Gamepad tester: A/B/X/Y, shoulders, stick clicks, menu, home | not run | — | — | — |
 | Gamepad tester: d-pad via left trackpad (8 sectors) | not run | — | — | — |
 | Gamepad tester: face buttons via right trackpad | not run | — | — | — |

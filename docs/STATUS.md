@@ -27,7 +27,7 @@ The overall project status, milestones, roadmap, and companion Flutter app state
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Host tests only, **not run on hardware** |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default) | Host tests and firmware build only, **never run on a PSVR2 controller**; no PSVR2 decoder (FF11 raw only) |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: ~45–52 min dual-controller, ~58–65 min single-controller; not recommended for session VR |
-| BLE HID-over-GATT gamepad (ONY-441, draft) | Firmware build + host vector tests; phone offers a gamepad, pairs and receives HID input on `0.2.4-16-g15b6805`; re-pair after Forget fixed by the stale-bond repair | **No completed phone run** (no tester paste-back); HID UUID in the primary advertisement, `adv=on/off` in the status line, and a stale phone bond is deleted on `PIN_OR_KEY_MISSING` so the same connection re-pairs; see [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
+| BLE HID-over-GATT gamepad (ONY-441, draft) | Firmware build + host vector tests; phone pairs, bonds and completes the generic GATT discovery, then the HID handshake stops because the DIS PnP ID was missing; DIS added in `0.2.4-26-g70c922d`, retest pending | **No completed phone run** (no tester paste-back); the `0.2.4-25-gaeeb621-att` trace shows no ATT read or write after discovery and a disconnect (0x13) five seconds later; see [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
 | Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 levers run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE; the 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers ([`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). No new hardware run beyond the latency runs |
 
 ## BLE HID gamepad (ONY-441)
@@ -38,7 +38,7 @@ unchanged. Implementation and procedure: [`HID_GAMEPAD.md`](HID_GAMEPAD.md).
 
 | Check | Result | Phone / Android / build | Where |
 |---|---|---|---|
-| Stock phone pairs and shows a gamepad, no app | PARTIAL: gamepad offered, paired and connected, `HID reports=520 errors=0`; tester not opened | Pixel 11 Pro / Android 17, `0.2.4-16-g15b6805` | `HID_GAMEPAD.md` §Verification |
+| Stock phone pairs and shows a gamepad, no app | PARTIAL: pairs and bonds; the generic GATT discovery completes, then no ATT read/write and the phone drops (0x13). DIS PnP ID added; retest pending | Pixel 11 Pro / Android 17, `0.2.4-25-gaeeb621-att` (trace) → `0.2.4-26-g70c922d` (fix) | `HID_GAMEPAD.md` §Verification |
 | Every control in a gamepad tester (buttons, d-pad, face buttons, sticks, triggers) | not run | — | same |
 | No stuck input after controller or BLE reconnect | not run | — | same |
 | FF12 rate unchanged while HID is active | not run | — | same |
@@ -72,6 +72,18 @@ after discovery and after a phone disconnect, and every status line prints
 `adv=on`/`adv=off` so the next log says whether the phone could connect at that
 moment. Every row above that needs a phone stays `not run` until the paste-back
 block in `HID_GAMEPAD.md` is filled in.
+
+The `0.2.4-25-gaeeb621-att` trace finally shows where the phone stops. It
+paired, bonded, and discovered every service, characteristic and descriptor;
+then it sent **no ATT read and no ATT write at all**, and dropped the link
+(reason `0x13`) five seconds later. The last request was a read-by-type over
+`0x0001..0xFFFF` for `0x2A50` (PnP ID), answered `attribute not found`, because
+the bridge had no Device Information Service. Android's HOGP host reads the DIS
+PnP ID while it opens the connection and starts the HID service discovery only
+after that read; without it the Report Map was never read and the Report CCCD
+was never enabled. `0.2.4-26-g70c922d` adds DIS `0x180A` with manufacturer,
+model, firmware revision and a 7-byte PnP ID, and the ATT trace now prints the
+requested UUID. Phone rows stay `not run` until the DIS image is retested.
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 
