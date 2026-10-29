@@ -1,0 +1,49 @@
+# Pose filter capture — internal procedure
+
+Internal procedure for the optional **Capture 6DoF pose** step offered by the
+guided bench wizard. Tester-facing summary lives in
+[`external-test-user.md`](external-test-user.md) §6.
+
+Source of truth for segments, durations and acceptance: **filter-spec rev 4,
+section 8**. This sheet restates them for operators; if they disagree, the spec
+wins.
+
+## When the step appears
+
+- Only when the active tracking source reports hand joints (VITURE / XREAL /
+  Android XR).
+- Otherwise the wizard records `unavailable: no 6DoF hand-tracking source`,
+  marks the step skipped, and continues. It never blocks bundle export.
+
+## Segments (per hand, one screen each)
+
+Plain-language prompt plus countdown. Durations and motions are fixed by the
+spec; do not improvise.
+
+1. **Still** — 10 s. Controller rested in the hand, arm braced.
+2. **Held, drifting** — 10 s. Hold as if aiming and let it wander slowly.
+3. **Slow pan** — 30 cm sideways over 3 s, back and forth, 3 times.
+4. **Medium pan** — 50 cm sideways in 1 s, back and forth, 10 s.
+5. **Fast flick** — 45 cm flick in 0.3 s, pause, return; 10 reps.
+
+## Output
+
+- One ONY-249 `PoseRecording` JSON per hand per segment, written into the same
+  bundle zip.
+- Filename: `pose_capture_<runtime>_<hand>_<segment>.json`.
+- Manifest records runtime, segment, app commit and firmware SHA for each file.
+- Reuses the existing recorder and storage; no new format.
+
+## Skip / fail handling
+
+- Skipped or failed segments are recorded as skipped with the reason.
+- Skipping all five still produces a complete bundle.
+
+## Notes
+
+- Tester language only in the external sheet: "five short movements -- still,
+  drifting, slow pan, medium pan, fast flick"; ~2 min per hand; files already
+  in the bundle; safe to skip.
+- No device SDK detail, no filter jargon, no mention of One Euro in the
+  tester-facing copy.
+- Filter parameters and tuning are out of scope here; see filter-spec rev 4.
