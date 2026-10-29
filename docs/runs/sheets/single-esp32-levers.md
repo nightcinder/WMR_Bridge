@@ -61,6 +61,25 @@ Every timed run:
   difference **< 3 points** is "no effect shown"; anything else is
   "inconclusive". A verdict needs the REF repeats to span ≤ 3 points.
 
+### One-flash LEVERS bench image (ONY-476)
+
+Every lever run below uses one image with the runtime keys compiled in, so no
+reflash is needed between levers. Build it from the task branch, which is
+current `main` (ONY-438/441/446) plus the ONY-430 toggles:
+
+```bash
+EXTRA_CFLAGS="-DWMR_CFG_TEST_LEVERS=1" \
+  python3 tools/firmware/build.py --out dist
+```
+
+Flash `dist/wmr-bridge-factory.bin` at offset 0 (browser flasher, or
+`esptool.py --chip esp32 write_flash 0x0 dist/wmr-bridge-factory.bin`). On the
+console, `x` shows the defaults (stagger 0, 30 ms interval request off, FF14
+hold 1, Classic TX default); `g` cycles stagger 0/1/2, `i` toggles the 30 ms
+interval request, `h` toggles FF14 hold 1/2, `p` cycles TX default/P6/P9, and
+`t` reads the TX power and DLE values. These keys do not exist in a default
+build, and `WMR_CFG_TEST_LEVERS=0` leaves runtime behaviour unchanged.
+
 ## 2. Lever 1 — V1 staggered connect
 
 The code exists in `src/wmr_controller.c`; it defaults off and does not change
