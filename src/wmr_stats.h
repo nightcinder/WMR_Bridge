@@ -64,6 +64,9 @@ typedef struct {
     uint32_t batch_max;                     /* FF14 only: most records in one batch so far */
     uint32_t batch_full_flushes;            /* FF14 only: batches sent because a full one was queued */
     uint32_t errors;                        /* att_server_notify failures */
+    uint32_t hid_reports;                   /* HID gamepad input reports accepted */
+    uint32_t hid_errors;                    /* HID input report send failures */
+    uint32_t hid_decode_errors;             /* frames HID could not decode */
 } wmr_stats_t;
 
 #endif /* WMR_STATS_H */

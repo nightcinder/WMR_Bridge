@@ -68,9 +68,13 @@ static float clamp_max1(float v){
     return v > 1.0f ? 1.0f : v;
 }
 
+bool wmr_decode_frame_is_wmr(const uint8_t *frame, uint16_t length){
+    if (!frame || length != WMR_DECODE_FRAME_LENGTH) return false;
+    return frame[0] == 0xA1 && frame[1] == WMR_DECODE_REPORT_ID;
+}
+
 bool wmr_decode_frame(const uint8_t *frame, uint16_t length, wmr_controller_state_t *out){
-    if (!frame || !out || length != WMR_DECODE_FRAME_LENGTH) return false;
-    if (frame[0] != 0xA1 || frame[1] != WMR_DECODE_REPORT_ID) return false;
+    if (!out || !wmr_decode_frame_is_wmr(frame, length)) return false;
 
     const uint8_t *p = frame + 2;
     wmr_controller_state_t s;

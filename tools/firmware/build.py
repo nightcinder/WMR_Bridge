@@ -163,6 +163,90 @@ def _copy_ignore(repo_root, work, out):
     return ignore
 
 
+# The ESP32 controller defaults to two BR/EDR ACL links. Two WMR hands need both,
+# so any third Classic device (a phone's BR/EDR side, a neighbour's headset) leaves
+# one hand failing with HCI 0x09 "connection limit exceeded". The 2026-10-28 field
+# log shows exactly that: RIGHT streaming, an unknown Classic link holding the
+# second slot, and "connecting LEFT ... 0x09". One spare link keeps a stray device
+# from starving a controller; the software side disconnects unknown links too.
+PORT_SDKCONFIG_ACL = "CONFIG_BTDM_CTRL_BR_EDR_MAX_ACL_CONN"
+PORT_SDKCONFIG_ACL_LINKS = 3
+
+# With Classic HID (controllers) and LE HID (phone) in one image, the ESP32
+# port compiles Cross-Transport Key Derivation in by default. LE pairing then
+# derives a BR/EDR link key, and Android stores a Classic bond for the LE
+# identity address. After 0.2.4-36 that identity is a static random address,
+# so Android marks the device dual-mode, picks the Classic HID transport, and
+# pages an address the bridge does not own. The phone shows "pairing", then
+# goes back to the scan list; the bridge sees a bond and no GATT client.
+# The bridge never uses a CTKD-derived key (controllers pair over Classic
+# SSP), so turn it off. See docs/HID_GAMEPAD.md.
+PORT_BTSTACK_CONFIG = "port/esp32/components/btstack_config/include/btstack_config.h"
+CTKD_DEFINE = "#define ENABLE_CROSS_TRANSPORT_KEY_DERIVATION"
+CTKD_DISABLED = ("// ENABLE_CROSS_TRANSPORT_KEY_DERIVATION disabled by WMR_Bridge; "
+                 "see docs/HID_GAMEPAD.md")
+
+
+def disable_port_ctkd(btstack):
+    """Remove CTKD from the ESP32 port's btstack_config.h before a build."""
+    path = btstack / PORT_BTSTACK_CONFIG
+    if not path.is_file():
+        fail("missing %s" % path)
+    text = path.read_text()
+    if CTKD_DISABLED in text:
+        log("Cross-Transport Key Derivation already disabled in %s" % path)
+        return
+    if CTKD_DEFINE not in text:
+        fail("cannot find %r in %s; the BTstack port config changed"
+             % (CTKD_DEFINE, path))
+    path.write_text(text.replace(CTKD_DEFINE, CTKD_DISABLED))
+    log("disabled Cross-Transport Key Derivation in %s" % path)
+
+
+def sync_port_sdkconfig(port_dir):
+    """Raise the controller's BR/EDR ACL limit in the BTstack port config.
+
+    A reused build tree has a generated `sdkconfig`; a fresh clone has only
+    `sdkconfig.defaults`, which ESP-IDF uses to create it. Patch whichever is
+    present so the first CI build gets the same limit as a cached build.
+    """
+    path = port_dir / "sdkconfig"
+    if path.is_file():
+        lines = path.read_text().splitlines()
+        found = False
+        for i, line in enumerate(lines):
+            for key in (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL + "_EFF"):
+                if line.startswith(key + "="):
+                    found = True
+                    lines[i] = "%s=%d" % (key, PORT_SDKCONFIG_ACL_LINKS)
+        if not found:
+            fail("%s has no %s line; the port config changed" % (path, PORT_SDKCONFIG_ACL))
+        path.write_text("\n".join(lines) + "\n")
+        log("set %s=%d in %s" % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS, path))
+        return
+    defaults = port_dir / "sdkconfig.defaults"
+    if not defaults.is_file():
+        fail("missing %s and %s" % (path, defaults))
+    lines = [line for line in defaults.read_text().splitlines()
+             if not line.startswith(PORT_SDKCONFIG_ACL + "=")]
+    lines.append("%s=%d" % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS))
+    defaults.write_text("\n".join(lines) + "\n")
+    log("set %s=%d in %s (fresh clone)"
+        % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS, defaults))
+
+
+def verify_port_sdkconfig(build_dir):
+    """Fail the build unless the controller actually got the raised ACL limit."""
+    header = Path(build_dir) / "config" / "sdkconfig.h"
+    if not header.is_file():
+        fail("missing generated %s" % header)
+    expected = "#define %s_EFF %d" % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS)
+    text = header.read_text()
+    if expected not in text:
+        fail("%s does not contain %r; the BT/Bluedroid config changed" % (header, expected))
+    log("verified %s" % expected)
+
+
 def sync_source(btstack, work, out):
     """Copy the current working tree into <btstack>/wmr_bridge.
 
@@ -414,6 +498,8 @@ def main():
     sync_source(btstack, work, out)
 
     port_dir = btstack / "port" / "esp32"
+    sync_port_sdkconfig(port_dir)
+    disable_port_ctkd(btstack)
     build_dir = build_dir_for(work, args.variant)
     env = build_env(args.variant, os.environ)
     env["EXAMPLE"] = "wmr_bridge"
@@ -426,6 +512,7 @@ def main():
     idf_ver = idf_version(port_dir, env)
     log("using %s" % idf_ver)
     run(build_argv(build_dir, version), cwd=port_dir, env=env)
+    verify_port_sdkconfig(build_dir)
 
     artifacts = fwpackage.collect_artifacts(build_dir)
     package_outputs(

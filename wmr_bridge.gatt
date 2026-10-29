@@ -1,11 +1,47 @@
 PRIMARY_SERVICE, GAP_SERVICE
 CHARACTERISTIC, GAP_DEVICE_NAME, READ, "WMR Bridge"
+// HID Gamepad (0x03C4). This is the icon Android uses for the LE entry; the
+// BR/EDR Class of Device is deliberately not HID (see WMR_CFG_CLASS_OF_DEVICE),
+// so a phone cannot fall back to Classic HID, which this bridge does not serve.
+// HOGP hosts also read Appearance to classify the device; the scan response
+// carries the same value.
+CHARACTERISTIC, GAP_APPEARANCE, READ, C4 03
+// Peripheral Preferred Connection Parameters (0x2A04): min 15 ms, max 15 ms,
+// latency 0, supervision timeout 4 s (all values in 1.25 ms / 10 ms units).
+// Android's GAP client reads this after service discovery and, if the read
+// fails with "attribute not found", its client-complete path calls
+// GATT_Disconnect on the link. That is the five-second drop every phone run
+// showed after the 0x2A04 read-by-type; the HID profile never got a chance to
+// start. The 0.2.4-29 trace named the missing UUID.
+CHARACTERISTIC, GAP_PERIPHERAL_PREFERRED_CONNECTION_PARAMETERS, READ, 0C 00 0C 00 00 00 90 01
 
 PRIMARY_SERVICE, GATT_SERVICE
 CHARACTERISTIC, GATT_DATABASE_HASH, READ,
 
-// 0.3 security: every data characteristic (and therefore its CCC descriptor) is
-// READ_ENCRYPTED | WRITE_ENCRYPTED. The bridge only accepts LE Secure Connections
+// Device Information Service. Android's HOGP host reads the PnP ID (0x2A50)
+// before it starts the HID service discovery and does not open the HID service
+// until that read completes. With no DIS on the bridge the read failed with
+// "attribute not found", the phone did the generic discovery, never read the
+// report map or wrote the Report CCCD, and dropped the link (reason 0x13).
+// The PnP ID identifies the radio SoC (Espressif, SIG company 0x02E5); the
+// product 0x0001 is this bridge. Firmware Revision is served from PROJECT_VER
+// in wmr_transport.c, like FF16.
+PRIMARY_SERVICE, ORG_BLUETOOTH_SERVICE_DEVICE_INFORMATION
+CHARACTERISTIC, ORG_BLUETOOTH_CHARACTERISTIC_MANUFACTURER_NAME_STRING, READ, "WMR Bridge"
+CHARACTERISTIC, ORG_BLUETOOTH_CHARACTERISTIC_MODEL_NUMBER_STRING, READ, "WMR Bridge"
+CHARACTERISTIC, ORG_BLUETOOTH_CHARACTERISTIC_FIRMWARE_REVISION_STRING, DYNAMIC | READ,
+CHARACTERISTIC, ORG_BLUETOOTH_CHARACTERISTIC_PNP_ID, READ, 01 E5 02 01 00 00 01
+
+// HID-over-GATT gamepad (Android sees a controller with no app). hids_device
+// serves the Report Map, the 9-byte input report (ID 1), HID Information,
+// Protocol Mode and HID Control Point. The descriptor and report are shared
+// with wmr_companion_hid_android; docs/HID_GAMEPAD.md.
+#import <hids.gatt>
+
+// 0.3 security: every data characteristic is WRITE_ENCRYPTED (and therefore so is
+// its CCC descriptor); the readable ones are also READ_ENCRYPTED, while
+// notify-only FF12/FF14 and write+notify FF15 have no read permission. The
+// bridge only accepts LE Secure Connections
 // pairing with bonding, so "encrypted" means a bonded LESC link. GAP_DEVICE_NAME
 // and FF16 stay readable without a bond: a phone must be able to identify the
 // bridge and read its firmware version before it decides to pair.

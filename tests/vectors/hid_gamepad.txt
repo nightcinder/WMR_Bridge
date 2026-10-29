@@ -1,0 +1,30 @@
+# Shared HID gamepad vectors, format v1.
+# name l_conn l_buttons l_sx l_sy l_trigger l_tx l_ty r_conn r_buttons r_sx r_sy r_trigger r_tx r_ty prev_l2 prev_r2 invert_stick_y invert_trackpad_y left_role right_role b0 b1 b2 b3 b4 b5 b6 b7 b8
+neutral 1 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 1 2 0 0 15 0 0 0 0 0 0
+left_squeeze 1 8 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 2 16 0 15 0 0 0 0 0 0
+left_trigger_partial 1 0 0 0 100 0 0 0 0 0 0 0 0 0 0 0 0 0 1 2 0 0 15 0 0 0 0 92 0
+left_trigger_full 1 0 0 0 255 0 0 0 0 0 0 0 0 0 0 0 0 0 1 2 64 0 15 0 0 0 0 255 0
+right_trigger_press 0 0 0 0 0 0 0 1 0 0 0 200 0 0 0 0 0 0 1 2 128 0 15 0 0 0 0 0 197
+right_trigger_dead_zone 0 0 0 0 0 0 0 1 0 0 0 10 0 0 0 0 0 0 1 2 0 0 15 0 0 0 0 0 0
+buttons 1 7 0 0 0 0 0 1 14 0 0 0 0 0 0 0 0 0 1 2 32 29 15 0 0 0 0 0 0
+sticks_full 1 0 1 1 0 0 0 1 0 -1 -1 0 0 0 0 0 0 0 1 2 0 0 15 127 129 129 127 0 0
+sticks_half 1 0 0.5 -0.5 0 0 0 1 0 -0.5 0.5 0 0 0 0 0 0 0 1 2 0 0 15 64 64 192 192 0 0
+stick_y_inverted 1 0 0.25 0.75 0 0 0 0 0 0 0 0 0 0 0 0 1 0 1 2 0 0 15 32 95 0 0 0 0
+left_trackpad_right 1 80 0 0 0 0.9 0.1 0 0 0 0 0 0 0 0 0 0 0 1 2 0 0 2 0 0 0 0 0 0
+left_trackpad_up_right 1 80 0 0 0 0.7 0.7 0 0 0 0 0 0 0 0 0 0 0 1 2 0 0 1 0 0 0 0 0 0
+left_trackpad_down 1 80 0 0 0 -0.1 -0.9 0 0 0 0 0 0 0 0 0 0 0 1 2 0 0 4 0 0 0 0 0 0
+left_trackpad_click_only 1 16 0 0 0 0.9 0.1 0 0 0 0 0 0 0 0 0 0 0 1 2 0 0 15 0 0 0 0 0 0
+left_trackpad_centre 1 80 0 0 0 0.1 0.1 0 0 0 0 0 0 0 0 0 0 0 1 2 0 0 15 0 0 0 0 0 0
+left_trackpad_y_inverted 1 80 0 0 0 -0.1 0.9 0 0 0 0 0 0 0 0 0 0 1 1 2 0 0 4 0 0 0 0 0 0
+right_face_b 0 0 0 0 0 0 0 1 80 0 0 0 0.9 -0.1 0 0 0 0 1 2 2 0 15 0 0 0 0 0 0
+right_face_x 0 0 0 0 0 0 0 1 80 0 0 0 -0.9 0.1 0 0 0 0 1 2 4 0 15 0 0 0 0 0 0
+right_face_y 0 0 0 0 0 0 0 1 80 0 0 0 0.1 0.9 0 0 0 0 1 2 8 0 15 0 0 0 0 0 0
+right_face_a 0 0 0 0 0 0 0 1 80 0 0 0 0.1 -0.9 0 0 0 0 1 2 1 0 15 0 0 0 0 0 0
+left_none_role 1 80 0 0 0 0.9 0.1 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 15 0 0 0 0 0 0
+right_dpad_role 0 0 0 0 0 0 0 1 80 0 0 0 0.9 0.1 0 0 0 0 1 1 0 0 2 0 0 0 0 0 0
+opposite_dpad_cancel 1 80 0 0 0 0 0.9 1 80 0 0 0 0 -0.9 0 0 0 0 1 1 0 0 15 0 0 0 0 0 0
+l2_hysteresis_hold 1 0 0 0 130 0 0 0 0 0 0 0 0 0 1 0 0 0 1 2 64 0 15 0 0 0 0 123 0
+l2_hysteresis_release 1 0 0 0 120 0 0 0 0 0 0 0 0 0 1 0 0 0 1 2 0 0 15 0 0 0 0 113 0
+l2_below_press 1 0 0 0 130 0 0 0 0 0 0 0 0 0 0 0 0 0 1 2 0 0 15 0 0 0 0 123 0
+only_left 1 8 0 0 128 0 0 0 0 0 0 0 0 0 0 0 0 0 1 2 16 0 15 0 0 0 0 121 0
+none_connected 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 2 0 0 15 0 0 0 0 0 0

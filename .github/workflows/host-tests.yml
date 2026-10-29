@@ -1,7 +1,10 @@
 name: host-tests
 
 on:
+  # Branch pushes stay on `main`: without this every branch push produced a
+  # second `host-tests` check alongside the pull_request one.
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -35,8 +38,12 @@ jobs:
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_log.c -o test_log
       - name: Build link-diagnostics tests
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_diag.c src/wmr_devloss.c src/wmr_diag.c -o test_diag
+      - name: Build reconnect-handoff tests
+        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_linkwait.c src/wmr_linkwait.c -o test_linkwait
       - name: Build status-LED tests
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_status_led.c src/wmr_status_led.c -o test_status_led
+      - name: Build HID gamepad tests
+        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_hid.c src/wmr_hid.c src/wmr_decoded.c src/wmr_decode.c -lm -o test_hid
       - name: Build FF17 controller-status tests
         run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_ctrl.c src/wmr_ctrl.c -o test_ctrl
       - name: Build phone-link security tests
@@ -69,16 +76,24 @@ jobs:
           gcc -std=c99 -Wall -Wextra -Wconversion -Werror -DWMR_CFG_BRIDGE_HANDS=2 -Isrc tests/test_discovery.c src/wmr_discovery.c -o test_discovery_h2 && ./test_discovery_h2
       - name: Run link-diagnostics tests
         run: ./test_diag
+      - name: Run reconnect-handoff tests
+        run: ./test_linkwait
       - name: Run status-LED tests
         run: ./test_status_led
+      - name: Run HID gamepad tests
+        run: ./test_hid tests/vectors/hid_gamepad.txt tests/vectors/hid_report_descriptor.txt
       - name: Run FF17 controller-status tests
         run: ./test_ctrl
       - name: Run phone-link security tests
         run: ./test_secure
       - name: Run capture/analysis script tests
         run: python3 tests/test_analyze_capture.py
+      - name: Run docs/GATT property tests
+        run: python3 tests/test_doc_gatt.py
       - name: Run Linux/Pi host-bridge tests
         working-directory: pi
         run: python3 -m unittest discover -s tests -v
+      - name: Pi package and daemon dry run
+        run: ./pi/tools/dry_run.sh
       - name: Run firmware packaging tests
         run: python3 tests/test_firmware_package.py

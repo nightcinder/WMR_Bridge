@@ -22,19 +22,34 @@ sheet is [`docs/runs/sheets/pi-bridge.md`](../docs/runs/sheets/pi-bridge.md).
 
 ```bash
 cd pi
-python3 -m unittest discover -s tests -v          # 113 host tests
+python3 -m unittest discover -s tests -v          # 116 host tests
 python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 
 # in a second terminal
 python3 tools/wifi_probe.py --stream batched --duration 10
 ```
 
-`--bind` defaults to `127.0.0.1`, so the quick start needs no token and is not
-reachable from the LAN. `decoded` can trail `reports` by the time the daemon ran
-before the client subscribed; that is not loss (see `docs/PI_BRIDGE.md`).
-
 The replay path is a complete smoke test of the WebSocket transport, the
-decoder and the three stream formats.
+decoder and the three stream formats. `--bind` defaults to `127.0.0.1`, so the
+quick start needs no token and is not reachable from the LAN. `decoded` can
+trail `reports` by the time the daemon ran before the client subscribed; that is
+not loss (see `docs/PI_BRIDGE.md`). To prove the installable package end to
+end on the desk (no Pi, no controller, no root):
+
+```bash
+pi/tools/dry_run.sh
+```
+
+## Installable package
+
+```bash
+pi/build_package.sh                          # dist/wmr-bridge-<version>.tar.gz
+pi/tools/verify_package.sh dist/wmr-bridge-<version>.tar.gz
+```
+
+Copy the tarball to a Raspberry Pi OS Bookworm 64-bit host, extract it, and run
+`sudo wmr-bridge-<version>/pi/install.sh`. See
+[`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md#pre-flight-kit-no-hardware).
 
 ## Live bridge
 
@@ -74,6 +89,9 @@ the probe do not send one.
 | `wmr_bridge/server.py` | asyncio server wrapper |
 | `wmr_bridge/__main__.py` | `python3 -m wmr_bridge` CLI |
 | `tools/wifi_probe.py` | bench client: throughput, gaps, tick-based missing reports, RTT, status |
+| `build_package.sh` | builds `dist/wmr-bridge-<version>.tar.gz` and its `.sha256` |
+| `tools/verify_package.sh` | checks package layout, version and checksum |
+| `tools/dry_run.sh` | package install + replay dry run, no hardware |
 | `install.sh` | unattended installer (`/opt/wmr-bridge`, udev rule, token, systemd unit & env) |
 | `systemd/wmr-bridge.service` | unit file for an unattended bridge (`WMR_BRIDGE_ARGS` via `/etc/wmr-bridge/wmr-bridge.env`) |
 | `udev/99-wmr-bridge.rules` | udev rule granting `input` group access to `/dev/hidraw*` |

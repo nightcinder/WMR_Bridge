@@ -54,8 +54,13 @@ wmr_secure_action_t wmr_secure_decide(const wmr_secure_event_t *event){
 
     switch (event->type){
         case WMR_SECURE_PAIRING_COMPLETE:
-        case WMR_SECURE_REENCRYPTION_COMPLETE:
             return link_is_secure(event) ? WMR_SECURE_ACCEPT : WMR_SECURE_REFUSE;
+        case WMR_SECURE_REENCRYPTION_COMPLETE:
+            if (link_is_secure(event)) return WMR_SECURE_ACCEPT;
+            /* PIN_OR_KEY_MISSING: our stored key is stale because the phone
+             * forgot the bridge. Delete it and let the phone pair again, instead
+             * of disconnecting in the middle of the pairing exchange. */
+            return event->stale_bond ? WMR_SECURE_REPAIR : WMR_SECURE_REFUSE;
         case WMR_SECURE_PAIR_TIMEOUT:
             /* A bonded phone may have been encrypted without an SM event we saw;
              * accept only if the link says it is encrypted. */
@@ -63,6 +68,19 @@ wmr_secure_action_t wmr_secure_decide(const wmr_secure_event_t *event){
         default:
             return WMR_SECURE_IGNORE;
     }
+}
+
+wmr_secure_event_t wmr_secure_timeout_event(uint16_t phone_handle, bool bonded,
+                                            uint8_t encryption_key_size){
+    wmr_secure_event_t event = {
+        .type = WMR_SECURE_PAIR_TIMEOUT,
+        .handle = phone_handle,
+        .phone_handle = phone_handle,
+        .success = false,
+        .bonded = bonded,
+        .encrypted = encryption_key_size != 0,
+    };
+    return event;
 }
 
 bool wmr_secure_may_connect(uint16_t phone_handle, uint16_t new_handle){

@@ -104,6 +104,22 @@ As established in ONY-116:
   chmod 600 token
   ```
 
+### 1.6 Pre-flight kit (desk-only, already run 2026-10-28)
+
+The package and the daemon can be validated before the Pi exists. These are
+**host-side results**, not Pi results; keep them out of the P1–P10 table.
+
+| Check | Command | Result |
+|---|---|---|
+| Package build + layout + sha256 | `pi/build_package.sh && pi/tools/verify_package.sh dist/wmr-bridge-0.2.1.tar.gz` | pass (`wmr-bridge-0.2.1.tar.gz`: daemon/probe/unit/udev/docs/replay present, no bytecode). The tarball's exact byte count and sha256 depend on the gzip/toolchain, so record them per build instead of comparing them here |
+| Installer staging | `DESTDIR=<tmp> WMR_SKIP_PRIVILEGED=1 pi/install.sh` | pass (`/opt/wmr-bridge`, systemd unit, udev rule, token mode `0600`) |
+| Replay end to end from the installed tree | `pi/tools/dry_run.sh` | pass (480 records, 300 LEFT / 180 RIGHT, `gaps=(0,0)`, `missing=(0,0)`, `dropped=0`, `clients=1`, `errors=0`) |
+
+The image is Raspberry Pi OS Bookworm 64-bit from Raspberry Pi Imager plus this
+package; there is no custom image. Re-run `pi/tools/dry_run.sh` after any change
+to `pi/` before a hardware sitting. Hardware-only checks (BlueZ input plugin,
+`hidp`, hidraw permissions, 5 GHz, radio loss) remain P1–P10 below.
+
 ---
 
 ## 2. Go / No-Go Gates Before Timing
@@ -129,21 +145,30 @@ Do not start any timing window until all checks in this table pass:
 
 ### P1 — Daemon Clean Start & Device Discovery
 
-1. Ensure both controllers are paired and trusted in BlueZ:
+1. Install the pre-flight package (§1.6) if this is a fresh image:
+   ```bash
+   tar -xzf wmr-bridge-0.2.1.tar.gz
+   sudo wmr-bridge-0.2.1/pi/install.sh
+   ```
+2. Ensure both controllers are paired and trusted in BlueZ:
    ```bash
    bluetoothctl devices | grep "Motion controller"
    ```
-2. Run discovery from the repository root:
+3. Run discovery from the installed tree (or the checkout):
    ```bash
-   cd pi
+   cd /opt/wmr-bridge/pi
    python3 -m wmr_bridge --list
    ```
-3. **Pass Criterion:** Exactly two hidraw nodes are listed, one matching `LEFT` and one `RIGHT`, with valid Bluetooth MAC addresses and permissions readable. Exit code is 0.
+4. **Pass Criterion:** Exactly two hidraw nodes are listed, one matching `LEFT` and one `RIGHT`, with valid Bluetooth MAC addresses and permissions readable. Exit code is 0.
 
 ### P2 — Replay Mode End-to-End Smoke Test
 
+The same check already runs on the desk via `pi/tools/dry_run.sh` (§1.6); on the
+Pi it proves the installed tree, not just the checkout.
+
 1. Start the daemon in replay mode on loopback:
    ```bash
+   cd /opt/wmr-bridge/pi
    python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1 --port 8765
    ```
 2. In a second terminal, run the bench client:

@@ -58,6 +58,9 @@ typedef enum {
     WMR_SECURE_ACCEPT = 0,
     /* Disconnect the central: it did not produce a bonded LESC link. */
     WMR_SECURE_REFUSE,
+    /* The stored key is stale (the phone forgot the bridge): delete the bond,
+     * keep the link and let the central pair again. */
+    WMR_SECURE_REPAIR,
     /* Not about the phone link; leave the connection alone. */
     WMR_SECURE_IGNORE
 } wmr_secure_action_t;
@@ -78,11 +81,19 @@ typedef struct {
     bool success;           /* SM status was ERROR_CODE_SUCCESS */
     bool bonded;            /* a bond exists for this handle (sm_le_device_index >= 0) */
     bool encrypted;         /* link is currently encrypted (used by the timeout) */
+    bool stale_bond;        /* re-encryption failed because the peer has no key
+                             * for our stored bond (PIN_OR_KEY_MISSING) */
 } wmr_secure_event_t;
 
 /* Decide what to do with one connection. A second central is refused at connect,
  * so an event about a handle other than the phone's is ignored here. */
 wmr_secure_action_t wmr_secure_decide(const wmr_secure_event_t *event);
+
+/* Build the pairing-timeout event from the link state. encryption_key_size is
+ * the value gap_encryption_key_size() reports; 0 means the link is not
+ * encrypted. Keeping the "!= 0" mapping here makes it host-testable. */
+wmr_secure_event_t wmr_secure_timeout_event(uint16_t phone_handle, bool bonded,
+                                            uint8_t encryption_key_size);
 
 /* Only one phone is served at a time. Accept the first central, refuse the rest. */
 bool wmr_secure_may_connect(uint16_t phone_handle, uint16_t new_handle);

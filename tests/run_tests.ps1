@@ -85,6 +85,11 @@ $exeLed = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_status_led.exe"
 if ($LASTEXITCODE -ne 0) { throw "compile failed (status led)" }
 & $exeLed
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeHid = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_hid.exe"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_hid.c" "$root\src\wmr_hid.c" "$root\src\wmr_decoded.c" "$root\src\wmr_decode.c" -lm -o $exeHid
+if ($LASTEXITCODE -ne 0) { throw "compile failed (hid)" }
+& $exeHid "$root\tests\vectors\hid_gamepad.txt" "$root\tests\vectors\hid_report_descriptor.txt"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $exeCtrl = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_ctrl.exe"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_ctrl.c" "$root\src\wmr_ctrl.c" -o $exeCtrl
 if ($LASTEXITCODE -ne 0) { throw "compile failed (ctrl)" }
@@ -94,5 +99,10 @@ $exeSecure = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_secure.exe"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_secure.c" "$root\src\wmr_secure.c" -o $exeSecure
 if ($LASTEXITCODE -ne 0) { throw "compile failed (secure)" }
 & $exeSecure
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$exeLinkwait = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_linkwait.exe"
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_linkwait.c" "$root\src\wmr_linkwait.c" -o $exeLinkwait
+if ($LASTEXITCODE -ne 0) { throw "compile failed (link wait)" }
+& $exeLinkwait
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 exit $protocolStatus

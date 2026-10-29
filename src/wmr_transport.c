@@ -41,6 +41,7 @@
 #include <string.h>
 #include "btstack_config.h"
 #include "btstack.h"
+#include "hids_device.h"
 #include "esp_app_desc.h"
 #include "esp_timer.h"
 #include "wmr_bridge.h"        /* generated from wmr_bridge.gatt: profile_data, ATT_*_HANDLE */
@@ -51,9 +52,11 @@
 #include "wmr_ctrl.h"
 #include "wmr_diag.h"
 #include "wmr_echo.h"
+#include "wmr_hid.h"
 #include "wmr_linkdiag.h"
 #include "wmr_link.h"
 #include "wmr_levers.h"
+#include "wmr_decode.h"
 #include "wmr_decoded.h"
 #include "wmr_protocol.h"
 #include "wmr_queue.h"
@@ -82,6 +85,19 @@
 
 /* FF16: the firmware version (ESP-IDF PROJECT_VER), read-only. */
 #define VERSION_VALUE_HANDLE ATT_CHARACTERISTIC_0000FF16_0000_1000_8000_00805F9B34FB_01_VALUE_HANDLE
+/* DIS 0x2A26: the same version string, so a HOGP host can show the firmware. */
+#define FW_REVISION_VALUE_HANDLE \
+    ATT_CHARACTERISTIC_ORG_BLUETOOTH_CHARACTERISTIC_FIRMWARE_REVISION_STRING_01_VALUE_HANDLE
+
+/* HID-over-GATT gamepad: report ID 1, 9 payload bytes, same descriptor as the
+ * companion package. Notifications are independent of the FF10 stream modes. */
+static wmr_hid_state_t hid;
+/* HOGP hosts enable this CCCD after service discovery and bonding. A device
+ * must not send input reports before that, and Android drops a device that
+ * streams them during discovery. */
+static bool hid_subscribed;
+/* One line per connection for the first rejected HID notification. */
+static bool hid_error_logged;
 
 /* FF17: controller scan and status v2 (read + write + notify), independent of the
  * stream exclusion. */
@@ -91,16 +107,24 @@
 #define STATUS_SIZE 16
 
 /* Legacy advertising data: flags (3 bytes), complete local name (2-byte AD header + the
- * characters) and 16-bit service UUID (4 bytes). The name is compile-time
+ * characters) and the complete 16-bit UUID list (2-byte AD header + HID 0x1812 and the
+ * FF10 service, 6 bytes). The HID service UUID belongs in the advertising data, not only
+ * in the scan response: a host that misses the scan response otherwise sees an unnamed
+ * vendor UUID and cannot classify the device as a HID gamepad. The name is compile-time
  * (WMR_CFG_BLE_NAME); the whole packet must fit in 31 bytes, which is why the name is
- * limited to 22 characters. Default `"WMR Bridge"` produces exactly the bytes the fixed
- * array used before. */
-#define ADVERTISING_SIZE  (8u + sizeof(WMR_CFG_BLE_NAME))
+ * limited to 20 characters. */
+#define ADVERTISING_SIZE  (10u + sizeof(WMR_CFG_BLE_NAME))
 static uint8_t advertising[ADVERTISING_SIZE];
 typedef char wmr_ble_name_fits_legacy_advertising[
-    (sizeof(WMR_CFG_BLE_NAME) >= 2 && sizeof(WMR_CFG_BLE_NAME) <= 23) ? 1 : -1];
+    (sizeof(WMR_CFG_BLE_NAME) >= 2 && sizeof(WMR_CFG_BLE_NAME) <= 21) ? 1 : -1];
 
 static hci_con_handle_t phone_handle = HCI_CON_HANDLE_INVALID;
+/* LE advertising state, tracked from the HCI command responses so `s` can say whether the
+ * phone could have connected at that moment. BTstack stops advertising when a central
+ * connects; the bridge re-asserts it after a disconnect, a failed connect attempt and
+ * after controller discovery. */
+static bool advertising_requested;
+static bool advertising_active;
 /* Active stream for the current phone connection; NONE until a CCC is enabled. */
 static wmr_stream_t stream_mode = WMR_STREAM_NONE;
 /* A CAN_SEND_NOW request is outstanding. */
@@ -242,10 +266,16 @@ static bool batch_due(void){
 }
 
 static void pump_kick(void){
+    const uint64_t now = (uint64_t) esp_timer_get_time();
+    /* Time out a controller that stopped reporting before looking at the link,
+     * so a release does not depend on a stream being subscribed. */
+    wmr_hid_expire(&hid, now);
     wmr_episode_note_queue(&drop_episode, queue.count);
     if (phone_handle == HCI_CON_HANDLE_INVALID || send_pending) return;
-    /* A pending echo needs a send opportunity whatever the stream is doing. */
-    if (!echo.pending && !cfg_notify_owed() && !ctrl_notify_pending){
+    /* A pending echo or HID report needs a send opportunity whatever the stream
+     * is doing. */
+    if (!echo.pending && !cfg_notify_owed() && !ctrl_notify_pending &&
+        !(hid_subscribed && wmr_hid_report_due(&hid, now))){
         if (stream_mode == WMR_STREAM_NONE || !queue.count) return;
         if (stream_mode == WMR_STREAM_BATCHED && !batch_due()) return;
     }
@@ -266,8 +296,20 @@ void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t 
     wmr_linkdiag_note_report(hand, report, length);       /* reads 4 bytes, see wmr_linkdiag.h */
     uint32_t sequence = ++stats.sequence[hand];
     stats.rx[hand]++;
+    /* HID is independent of the FF10 stream: it runs with no app subscribed,
+     * which is the point of the no-app Android gamepad. */
+    /* Frames from other devices (PSVR2 and friends) share this transport. They are not
+     * HID input, so they must not show up as a decode failure; only a WMR-shaped report
+     * that the HID path rejects counts. */
+    if (length && length <= WMR_CFG_MAX_FRAME &&
+        wmr_decode_frame_is_wmr(report, length) &&
+        !wmr_hid_note_report(&hid, (uint8_t) hand, report, length,
+                             (uint64_t) esp_timer_get_time())){
+        stats.hid_decode_errors++;
+    }
     if (stream_mode == WMR_STREAM_NONE || phone_handle == HCI_CON_HANDLE_INVALID){
         stats.offline[hand]++;
+        pump_kick();
         return;
     }
     /* FF12 needs room for a whole record (FF14 for a header and one record); below that
@@ -451,6 +493,8 @@ static void pump_send_ctrl(void){
     pump_kick();
 }
 
+static bool pump_send_hid(uint64_t now);
+
 /* Send the pending echo (FF15) if there is one, otherwise one fragment (FF11), one record
  * (FF12) or one batch (FF14) from the head of the queue. Runs on ATT_EVENT_CAN_SEND_NOW. */
 static void pump_send_one(void){
@@ -468,7 +512,20 @@ static void pump_send_one(void){
         pump_send_cfg();
         return;
     }
-    if (stream_mode == WMR_STREAM_NONE) return;
+    const uint64_t now = (uint64_t) esp_timer_get_time();
+    /* Alternate with the GATT stream when both are ready: HID never takes two
+     * send opportunities in a row while a stream frame waits, so FF11-FF14
+     * keep their share of the link. */
+    const bool stream_ready = stream_mode != WMR_STREAM_NONE && queue.count > 0 &&
+        (stream_mode != WMR_STREAM_BATCHED || batch_due());
+    static bool last_send_hid;
+    if (hid_subscribed && wmr_hid_report_due(&hid, now) &&
+        (!stream_ready || !last_send_hid)){
+        last_send_hid = pump_send_hid(now);
+        return;
+    }
+    if (!stream_ready) return;
+    last_send_hid = false;
     const wmr_frame_t *frame = wmr_queue_peek(&queue);
     if (!frame) return;
     if (stream_mode == WMR_STREAM_DECODED){
@@ -498,6 +555,76 @@ static void pump_send_one(void){
         wmr_queue_pop(&queue);
     }
     pump_kick();
+}
+
+/* HID-over-GATT: one input report per can-send-now. hids_device writes the
+ * Report characteristic; the report ID is in its Report Reference descriptor,
+ * so the value is the 9-byte payload only. */
+static bool pump_send_hid(uint64_t now){
+    if (!hid_subscribed) return false;
+    uint8_t payload[WMR_HID_REPORT_SIZE];
+    if (!wmr_hid_take_report(&hid, now, payload)){
+        pump_kick();
+        return false;
+    }
+    uint8_t result = hids_device_send_input_report_for_id(phone_handle, WMR_HID_REPORT_ID,
+                                                          payload, sizeof(payload));
+    if (result != ERROR_CODE_SUCCESS){
+        stats.hid_errors++;
+        if (!hid_error_logged){
+            hid_error_logged = true;
+            printf("HID input report send failed: 0x%02x (subscribed=%u)\n",
+                   result, hid_subscribed ? 1u : 0u);
+        }
+        hid.force = true;        /* retry the same report on the next pump tick */
+        return false;
+    }
+    stats.hid_reports++;
+    pump_kick();
+    return true;
+}
+
+/* HIDS events tell us when the host enables the input report. Until then the
+ * bridge sends nothing: Android's HID host is still discovering services, and
+ * input notifications in that window make it drop the link. */
+static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
+                               uint8_t *packet, uint16_t size){
+    (void) channel;
+    if (packet_type != HCI_EVENT_PACKET || size < 5) return;
+    if (hci_event_packet_get_type(packet) != HCI_EVENT_HIDS_META) return;
+    switch (hci_event_hids_meta_get_subevent_code(packet)){
+        case HIDS_SUBEVENT_INPUT_REPORT_ENABLE: {
+            hci_con_handle_t handle = hids_subevent_input_report_enable_get_con_handle(packet);
+            if (handle != phone_handle) break;
+            hid_subscribed = hids_subevent_input_report_enable_get_enable(packet) != 0;
+            hid_error_logged = false;
+            printf("HID input report %s (report id %u)\n",
+                   hid_subscribed ? "enabled" : "disabled",
+                   hids_subevent_input_report_enable_get_report_id(packet));
+            if (hid_subscribed){
+                wmr_hid_reset(&hid);    /* first notification is a neutral report */
+                pump_kick();
+            }
+            break;
+        }
+        case HIDS_SUBEVENT_PROTOCOL_MODE:
+            if (hids_subevent_protocol_mode_get_con_handle(packet) != phone_handle) break;
+            printf("HID protocol mode: %s\n",
+                   hids_subevent_protocol_mode_get_protocol_mode(packet) ? "report" : "boot");
+            break;
+        case HIDS_SUBEVENT_SUSPEND:
+        case HIDS_SUBEVENT_EXIT_SUSPEND: {
+            const uint8_t subevent = hci_event_hids_meta_get_subevent_code(packet);
+            hci_con_handle_t handle = (subevent == HIDS_SUBEVENT_SUSPEND)
+                ? hids_subevent_suspend_get_con_handle(packet)
+                : hids_subevent_exit_suspend_get_con_handle(packet);
+            if (handle != phone_handle) break;
+            printf("HID %s\n", subevent == HIDS_SUBEVENT_SUSPEND ? "suspended" : "resumed");
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 static void pump_retry_tick(btstack_timer_source_t *timer){
@@ -532,7 +659,9 @@ const wmr_echo_state_t *wmr_transport_echo(void){
 
 void wmr_transport_get_info(wmr_transport_info_t *info){
     info->phone_connected  = phone_handle != HCI_CON_HANDLE_INVALID;
+    info->advertising      = advertising_active;
     info->subscribed       = stream_mode != WMR_STREAM_NONE;
+    info->hid_subscribed   = hid_subscribed;
     info->stream           = stream_mode;
     info->mtu              = info->phone_connected ? att_server_get_mtu(phone_handle) : 0;
     info->queue_count      = queue.count;
@@ -587,7 +716,7 @@ static bool ccc_stream(uint16_t attribute, wmr_stream_t *which){
 static uint16_t att_read(hci_con_handle_t handle, uint16_t attribute,
                          uint16_t offset, uint8_t *buffer, uint16_t buffer_size){
     (void)handle;
-    if (attribute == VERSION_VALUE_HANDLE){
+    if (attribute == VERSION_VALUE_HANDLE || attribute == FW_REVISION_VALUE_HANDLE){
         const esp_app_desc_t *app = esp_app_get_description();
         return att_read_callback_handle_blob((const uint8_t *) app->version,
                                              (uint16_t) strlen(app->version),
@@ -842,13 +971,45 @@ static int att_write(hci_con_handle_t handle, uint16_t attribute,
 static void att_packet_handler(uint8_t packet_type, uint16_t channel,
                                uint8_t *packet, uint16_t size){
     (void)channel;
-    if (packet_type == HCI_EVENT_PACKET && size >= 2 &&
-        hci_event_packet_get_type(packet) == ATT_EVENT_CAN_SEND_NOW){
+    if (packet_type != HCI_EVENT_PACKET || size < 2) return;
+    const uint8_t event = hci_event_packet_get_type(packet);
+    if (event == ATT_EVENT_MTU_EXCHANGE_COMPLETE){
+        printf("BLE ATT MTU: %u (handle=0x%04x)\n",
+               att_event_mtu_exchange_complete_get_MTU(packet),
+               att_event_mtu_exchange_complete_get_handle(packet));
+        return;
+    }
+    if (event == ATT_EVENT_CAN_SEND_NOW){
         pump_send_one();
     }
 }
 
 /* ---- 0.3 phone-link security -------------------------------------------- */
+
+/* What the bond database holds for this link. A phone reconnects from a
+ * resolvable private address; the host has to resolve it to this entry, or the
+ * controller's LTK request fails with 0x06 and Android falls back to a fresh
+ * pairing. The identity address and the IRK presence are therefore the two
+ * facts needed to read a re-encryption failure from a field log. */
+static void log_bond_state(const char *what, uint16_t handle){
+    int index = sm_le_device_index(handle);
+    if (index < 0){
+        printf("BLE %s: no bond entry (handle=0x%04x)\n", what, handle);
+        return;
+    }
+    int addr_type = -1;
+    bd_addr_t addr;
+    sm_key_t irk;
+    le_device_db_info(index, &addr_type, addr, irk);
+    bool irk_present = false;
+    for (unsigned i = 0; i < sizeof(irk); i++){
+        if (irk[i]){ irk_present = true; break; }
+    }
+    printf("BLE %s: bond %d identity=%s type=%s irk=%s\n", what, index,
+           bd_addr_to_str(addr),
+           addr_type == BD_ADDR_TYPE_LE_PUBLIC ? "public" : "random",
+           irk_present ? "yes" : "no");
+}
 
 /* Act on the policy's verdict. ACCEPT keeps the phone; REFUSE disconnects it, so an
  * unbonded central cannot sit on the link and block the intended phone. */
@@ -867,23 +1028,33 @@ static void secure_apply(const wmr_secure_event_t *event){
             if (phone_handle != HCI_CON_HANDLE_INVALID)
                 gap_disconnect(phone_handle);
             break;
+        case WMR_SECURE_REPAIR: {
+            /* Android forgot the bridge, so our stored key cannot re-encrypt the
+             * link. Drop it and stay connected: the phone's fresh pairing then
+             * completes instead of being cut off by our own disconnect. */
+            int index = sm_le_device_index(event->handle);
+            if (index >= 0) le_device_db_remove((uint8_t) index);
+            phone_secure = false;
+            printf("BLE phone bond stale: deleted the stored key, waiting for a new pairing\n");
+            btstack_run_loop_remove_timer(&pair_timer);
+            btstack_run_loop_set_timer(&pair_timer, WMR_CFG_BLE_PAIR_TIMEOUT_MS);
+            btstack_run_loop_add_timer(&pair_timer);
+            break;
+        }
         default:
             break;
     }
 }
 
-/* No paired + bonded link within WMR_CFG_BLE_PAIR_TIMEOUT_MS: refuse the central. */
+/* No paired + bonded link within WMR_CFG_BLE_PAIR_TIMEOUT_MS: refuse the central.
+ * The actual link encryption state is queried from the controller: a bonded phone
+ * whose SM event was missed can still be served, while an encrypt-only link is not. */
 static void pair_timer_fire(btstack_timer_source_t *timer){
     (void) timer;
     if (phone_handle == HCI_CON_HANDLE_INVALID) return;
-    wmr_secure_event_t event = {
-        .type = WMR_SECURE_PAIR_TIMEOUT,
-        .handle = phone_handle,
-        .phone_handle = phone_handle,
-        .success = false,
-        .bonded = sm_le_device_index(phone_handle) >= 0,
-        .encrypted = phone_secure,
-    };
+    wmr_secure_event_t event = wmr_secure_timeout_event(
+        phone_handle, sm_le_device_index(phone_handle) >= 0,
+        gap_encryption_key_size(phone_handle));
     secure_apply(&event);
 }
 
@@ -918,6 +1089,7 @@ void wmr_transport_on_sm_event(uint8_t *packet, uint16_t size){
             event.bonded = sm_le_device_index(event.handle) >= 0;
             if (event.success){
                 printf("BLE pairing complete: %s\n", event.bonded ? "bond stored" : "no bond stored");
+                if (event.bonded) log_bond_state("pairing complete", event.handle);
             } else {
                 printf("BLE pairing failed: status=0x%02x reason=0x%02x\n",
                        sm_event_pairing_complete_get_status(packet),
@@ -931,9 +1103,12 @@ void wmr_transport_on_sm_event(uint8_t *packet, uint16_t size){
             event.success =
                 sm_event_reencryption_complete_get_status(packet) == ERROR_CODE_SUCCESS;
             event.bonded = sm_le_device_index(event.handle) >= 0;
+            event.stale_bond = sm_event_reencryption_complete_get_status(packet) ==
+                               ERROR_CODE_PIN_OR_KEY_MISSING;
             if (!event.success){
                 printf("BLE re-encryption failed: status=0x%02x\n",
                        sm_event_reencryption_complete_get_status(packet));
+                log_bond_state("re-encryption failed", event.handle);
             }
             secure_apply(&event);
             break;
@@ -953,13 +1128,46 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel,
 
 /* ---- HCI events --------------------------------------------------------- */
 
+/* Ask for connectable advertising. Idempotent: BTstack ignores an enable while
+ * advertising is already enabled, so this only logs when it turns advertising back on.
+ * Called whenever a radio-heavy phase ends, because a phone that tries to connect while
+ * the bridge advertises nothing fails with no line in the bridge log at all. */
+static void advertising_enable(const char *reason){
+    bool was_requested = advertising_requested;
+    advertising_requested = true;
+    gap_advertisements_enable(1);
+    if (!was_requested){
+        printf("BLE advertising: on (%s)\n", reason);
+    }
+}
+
+void wmr_transport_advertising_ready(const char *reason){
+    advertising_enable(reason);
+}
+
 void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
     switch (hci_event_packet_get_type(packet)){
         case BTSTACK_EVENT_STATE:
             if (btstack_event_state_get_state(packet) == HCI_STATE_WORKING){
+                advertising_requested = true;
                 gap_advertisements_enable(1);
                 printf("BLE advertising: %s (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream, FF15 echo, FF13 config block, FF17 control)\n",
                        WMR_CFG_BLE_NAME);
+            }
+            break;
+        case HCI_EVENT_COMMAND_COMPLETE:
+            /* LE Set Advertising Enable: a controller-side rejection would leave the phone
+             * unable to connect while the device still looks advertised in a cached scan. */
+            if (size >= 6 &&
+                hci_event_command_complete_get_command_opcode(packet) ==
+                    HCI_OPCODE_HCI_LE_SET_ADVERTISE_ENABLE){
+                uint8_t status =
+                    hci_event_command_complete_get_return_parameters(packet)[0];
+                advertising_active = status == ERROR_CODE_SUCCESS;
+                if (!advertising_active){
+                    printf("BLE advertising: controller refused to enable (status=0x%02x)\n",
+                           status);
+                }
             }
             break;
         case HCI_EVENT_LE_META:
@@ -1011,6 +1219,9 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     }
                     phone_handle = new_handle;
                     phone_secure = false;
+                    /* The controller stops advertising for a connected central. */
+                    advertising_requested = false;
+                    advertising_active = false;
                     btstack_run_loop_remove_timer(&pair_timer);
                     data_length_seen = false;
                     data_length_valid = false;
@@ -1022,7 +1233,27 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     wmr_echo_cancel(&echo);
                     cfg_reset_connection();
                     ctrl_reset_connection();
-                    printf("BLE phone connected, handle=0x%04x\n", phone_handle);
+                    hid_subscribed = false;
+                    hid_error_logged = false;
+                    wmr_hid_reset(&hid);
+                    /* Address type matters for HOGP: Android may open the HID
+                     * connection from a pseudo (resolvable) address instead of
+                     * the public identity it bonded on. */
+                    bd_addr_t peer;
+                    uint8_t peer_type;
+                    if (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
+                        hci_subevent_le_connection_complete_get_peer_address(packet, peer);
+                        peer_type = hci_subevent_le_connection_complete_get_peer_address_type(packet);
+                    } else {
+                        hci_subevent_le_enhanced_connection_complete_v1_get_peer_addresss(packet, peer);
+                        peer_type = hci_subevent_le_enhanced_connection_complete_v1_get_peer_address_type(packet);
+                    }
+                    /* The version is in this line on purpose: a phone capture
+                     * that starts here cannot otherwise be tied to the image
+                     * that produced it. */
+                    printf("BLE phone connected, handle=0x%04x peer=%s (%s) fw=%s\n", phone_handle,
+                           bd_addr_to_str(peer), peer_type == 1 ? "random" : "public",
+                           esp_app_get_description()->version);
                     conn_update_pending = false;
                     if (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
                         conn_report("at connect",
@@ -1041,8 +1272,17 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                     btstack_run_loop_set_timer(&pair_timer, WMR_CFG_BLE_PAIR_TIMEOUT_MS);
                     btstack_run_loop_add_timer(&pair_timer);
                 } else {
-                    printf("BLE connection failed: 0x%02x\n", packet[3]);
-                    gap_advertisements_enable(1);
+                    bd_addr_t peer;
+                    if (packet[2] == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
+                        hci_subevent_le_connection_complete_get_peer_address(packet, peer);
+                    } else {
+                        hci_subevent_le_enhanced_connection_complete_v1_get_peer_addresss(
+                            packet, peer);
+                    }
+                    printf("BLE connection failed: %s status=0x%02x\n",
+                           bd_addr_to_str(peer), packet[3]);
+                    advertising_requested = false;
+                    advertising_enable("connect attempt failed");
                 }
             }
             break;
@@ -1060,10 +1300,14 @@ void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size){
                 wmr_echo_cancel(&echo);
                 cfg_reset_connection();
                 ctrl_reset_connection();
+                hid_subscribed = false;
+                hid_error_logged = false;
+                wmr_hid_reset(&hid);
                 conn_known = false;
                 conn_update_pending = false;
                 btstack_run_loop_remove_timer(&conn_request_timer);
-                gap_advertisements_enable(1);
+                advertising_requested = false;
+                advertising_enable("phone disconnected");
             }
             break;
         default:
@@ -1077,25 +1321,54 @@ void wmr_transport_init(void){
     wmr_queue_init(&queue);
     wmr_echo_init(&echo);
     wmr_cfgmgr_init(cfg_state_changed);
+    wmr_hid_reset(&hid);
     att_server_init(profile_data, att_read, att_write);
-    /* General discoverable; do not claim BR/EDR is unsupported. Built from
-     * WMR_CFG_BLE_NAME so the three images need no source change. */
+    unsigned descriptor_size = 0;
+    const uint8_t *descriptor = wmr_hid_report_descriptor(&descriptor_size);
+    hids_device_init(0, descriptor, (uint16_t) descriptor_size);
+    hids_device_register_packet_handler(hid_packet_handler);
+    /* The bridge's BR/EDR side is page-scan connectable for controller reconnects; give
+     * it the same name as the LE advertising data so a scan that does see both does not
+     * show BTstack's default "BTstack <bd_addr>" beside it. */
+    gap_set_local_name(WMR_CFG_BLE_NAME);
+    /* BTstack defaults the Class of Device to 0x007a020c ("Smartphone"). The bridge is a
+     * Classic HID *host*, not a HID device, so it must not look like a Classic gamepad:
+     * use Miscellaneous. The LE appearance below still gives the gamepad icon. */
+    gap_set_class_of_device(WMR_CFG_CLASS_OF_DEVICE);
+    /* General discoverable, BR/EDR not supported: the bridge has a Classic radio for the
+     * controllers, but it is a HID host there, so the only thing a phone can pair with is
+     * the LE HID device. The flag is not enough on its own: a phone that has the bridge's
+     * BR/EDR address still pages it (2026-10-28 logs), which is why the LE address is a
+     * separate static random address (wmr_bridge_main.c). Built from WMR_CFG_BLE_NAME so
+     * the three images need no source change. */
     uint8_t *p = advertising;
     *p++ = 2;
     *p++ = BLUETOOTH_DATA_TYPE_FLAGS;
-    *p++ = 0x02;
+    *p++ = 0x06;
     *p++ = (uint8_t) sizeof(WMR_CFG_BLE_NAME);   /* AD length: type + name, NUL excluded */
     *p++ = BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME;
     memcpy(p, WMR_CFG_BLE_NAME, sizeof(WMR_CFG_BLE_NAME) - 1);
     p += sizeof(WMR_CFG_BLE_NAME) - 1;
-    *p++ = 3;
-    *p++ = BLUETOOTH_DATA_TYPE_INCOMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS;
+    /* Complete list: HID service 0x1812 first, then the FF10 stream service. A HOGP host
+     * decides from the primary advertisement that this is a HID device; with 0x1812 only in
+     * the scan response, a phone that misses the scan response sees a plain vendor device. */
+    *p++ = 5;
+    *p++ = BLUETOOTH_DATA_TYPE_COMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS;
+    *p++ = 0x12;
+    *p++ = 0x18;
     *p++ = 0x10;
     *p++ = 0xff;
     bd_addr_t zero_address = {0};
     gap_advertisements_set_params(WMR_CFG_ADV_INTERVAL_MIN, WMR_CFG_ADV_INTERVAL_MAX,
                                   0, 0, zero_address, WMR_CFG_ADV_CHANNEL_MAP, 0);
     gap_advertisements_set_data((uint8_t) (p - advertising), advertising);
+
+    /* Scan response: Appearance Gamepad (0x03C4). Android uses it for the scan-list icon;
+     * the HID service UUID is in the advertising data above. */
+    static const uint8_t scan_response[] = {
+        0x03, BLUETOOTH_DATA_TYPE_APPEARANCE, 0xC4, 0x03,
+    };
+    gap_scan_response_set_data((uint8_t) sizeof(scan_response), (uint8_t *) scan_response);
 
     pump_timer.process = pump_retry_tick;
     btstack_run_loop_set_timer(&pump_timer, WMR_CFG_PUMP_RETRY_MS);
