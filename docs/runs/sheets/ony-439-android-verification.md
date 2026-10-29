@@ -133,8 +133,8 @@ declines is recorded as `declined`, not as a pass.
 | # | Check | Result | Device | Build | Command | Figures |
 |---|---|---|---|---|---|---|
 | 1 | FF16 live read | partial — console `v` matches the packaged image; app cannot show it (wmr-companion #107); reconnect half not run | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f | §1 | see §7 |
-| 2 | FF17 scan/connect | `partial` — steps 5 and 7 pass (DISCOVER returns NOTHING_TO_DO twice; `0x7f` returns ATT `0x86` = INVALID_PARAM). Both hands were disconnected and re-established HID, but no status read and no ATT byte for `0x03`/`0x02`/`0x05`, and the double-disconnect was not attempted | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §2 | see §7 |
-| 3 | Stick dead zone | `partial` — dead zone 0 was set, but learning stayed on (saved settings read `learn true` after the switch was reported off; toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair and no end-stop reading | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §3 | see §7 |
+| 2 | FF17 scan/connect | `partial` — no ATT byte was ever observed: nRF Connect's `error 134`/`error 131` are Android GATT client statuses (`GATT_CMD_STARTED`/`GATT_DB_FULL`), so `0x7f` and `0x05 0x01` never reached the bridge; only DISCOVER's NOTHING_TO_DO is confirmed, from the console (three times). Both hands were disconnected and re-established HID, but there is no 20-byte status read and no ATT byte for `0x03`/`0x02`/`0x05`, and the double-disconnect was not attempted | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §2 | see §7 |
+| 3 | Stick dead zone | `partial` — three sittings of centre lines: RIGHT stable at ~`−0.112, +0.085` (a real bias), LEFT moved `−0.030, −0.011` → `−0.008, +0.021` → `+0.017, +0.025`, still learning. Dead zone 0 was set, but saved settings read `learn true` after the switch was reported off (toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair and no end-stop reading | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §3 | see §7 |
 | 4 | Latency stream ladder | `partial` — one 120 s run per stream, one session: p50 none 63.4 / 62.3, FF11 34.3, FF12 34.5, FF14 39.3 ms; 479/479 answered each. No ladder verdict: `latency-2` §3.3 needs three runs per cell and a second session | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | latency-2 §3–§5 | see §7 |
 | 5 | App-vs-native probe decision | `partial` — app FF14 p50 39.3 ms vs probe 35.6 ms (`d` = +3.7 ms); stalls app 235/317 vs probe 274/365, inside the 25 % Stay window on both hands, but one unpaired run per client, so `latency-2` §6 forbids a verdict | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | latency-2 §6 | see §7 |
 | 6 | FF13 calibration in fusion | partial — two pose recordings, switch state not labelled; prose rest pair 83.5 / 42.7 unlabelled for off/on; no 90° error | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | companion PROTOCOL | see §7 |
@@ -188,18 +188,31 @@ Step 2 passes: console `v` printed `WMR Bridge firmware 0.2.4 (ESP-IDF v6.1, bui
 23:37:46)`, the same version as `build-info.json`, not `1` and not empty. Step 3 (disconnect,
 reconnect, read again under `none` and `FF14`) was not run.
 
-### FF17 (§2) — first writes, two steps pass
+### FF17 (§2) — no ATT byte observed; earlier “134 is a pass” withdrawn
 
-nRF Connect on the phone, FF14 streaming, bridge `0.2.4`/`41a9e5f`. Only the ATT status the app
-displayed and the firmware's own monitor lines were captured; the 20-byte status was never read.
+nRF Connect on the phone, bridge `0.2.4`/`41a9e5f`. Only the status the app displayed and the
+firmware's own monitor lines were captured; the 20-byte status was never read.
+
+The `error 134` / `error 131` values nRF Connect showed are **Android GATT client status codes**,
+not ATT responses: `134` = `0x86` = `GATT_CMD_STARTED`, `131` = `0x83` = `GATT_DB_FULL`. The earlier
+reading that `134` was ATT `0x86` INVALID_PARAM is withdrawn — no ATT byte came back for `0x7f`,
+and `0x05 0x01` did nothing in the monitor because the phone's own stack refused the write before
+it left the phone. Steps 6 and 7 are therefore **not run**, not passes.
 
 | Step | Write | Expected | Observed | Result |
 |---|---|---|---|---|
-| 5 | `0x01` DISCOVER, twice | ATT `0x83` NOTHING_TO_DO | console at 20:27:31 and 20:27:38: `LEFT and RIGHT addresses are known; nothing to discover (F forgets the stored addresses)` | pass at firmware level — the `NOTHING_TO_DO` path, ATT byte not captured |
-| 7 | `0x7f` invalid opcode | ATT `0x86` INVALID_PARAM | nRF Connect `error 134`; 134 = `0x86` = `0x80 + 0x06` | pass |
+| 5 | `0x01` DISCOVER, twice | ATT `0x83` NOTHING_TO_DO | console at 20:27:31, 20:27:38 and again at 20:55:14: `LEFT and RIGHT addresses are known; nothing to discover (F forgets the stored addresses)` | pass at firmware level — the `NOTHING_TO_DO` path; ATT byte not captured |
+| 7 | `0x7f` invalid opcode | ATT `0x86` INVALID_PARAM | nRF Connect `error 134` = `GATT_CMD_STARTED`; the write never completed and no ATT response was shown | not run — client-side error |
 | 2–3 | `0x03 0x00` / `0x03 0x01`, then reconnect | disconnect then connect per hand | at 20:27:03 LEFT `disconnected after 759639 input report(s)` and RIGHT at 20:27:04 `after 531466`, each followed within a second by `incoming HID connection`, descriptor, `ready: HID descriptor received (model WMR)` | behaviour matches, but the status read and ATT bytes are missing, so not scored |
-| 6 | `0x05 0x01` FORGET_BOND RIGHT | ATT `0x81` BUSY while RIGHT is connected | "did nothing" — no state change, returned byte not recorded | open: `0x81` is the pass, but `0x00` would mean the RIGHT bond was dropped |
+| 6 | `0x05 0x01` FORGET_BOND RIGHT | ATT `0x81` BUSY while RIGHT is connected | "did nothing" in the monitor at 20:27 and again at 20:55; no returned byte | not run — no ATT response |
 | 1, 4 | status read, disconnect twice | — | not attempted; no `has no connection to close` warning in the log, so the second disconnect was never sent | not run |
+
+Third attempt, 20:55:08–20:55:14 (owner comment, 2026-10-29 00:57): the stream was `none`
+(`stream=none`, `rate_tx=0.0/s`, `notify=452526`), not FF14, and nothing in the monitor answered a
+write. `0x05 0x01` "did nothing" again after an initial `error 131` `GATT_DB_FULL`; the only new
+firmware line is the same DISCOVER `nothing to discover` at 20:55:14. The client stack, not the
+bridge, is where the writes are stopping; the retry needs Bluetooth off/on to clear the phone's
+GATT database before reconnecting, then one write and the value nRF Connect shows under it.
 
 `wmr_controller_forget_bond()` returns `WMR_BOND_RESET_BUSY` when `connect_pending` is set or the
 hand has a `cid`/`connected` (`src/wmr_controller.c`), and `ctrl_write` maps that to ATT `0x81`
@@ -234,6 +247,14 @@ Second sitting, dead zone set to 0: the Debug screen then printed the centre lin
 |---|---|---|---|
 | LEFT | `-0.0303, -0.0107` (1x) | `-0.0083, +0.0211` (128x) | `+0.0049, -0.0006` |
 | RIGHT | `-0.1093, +0.0829` (1x) | `-0.1123, +0.0861` (180x) | `+0.0008, -0.0028` |
+
+Third sitting, dead zone still 0 (`deadZone 0.0`), learning claimed off: centre lines read LEFT
+`+0.0166, +0.0254` and RIGHT `−0.1120, +0.0857`. That pair makes the split clear: RIGHT is stable
+to ±0.003 across all three sittings (`−0.1093`, `−0.1123`, `−0.1120` on x; `+0.0829`, `+0.0861`,
+`+0.0857` on y), a real ~0.14 mechanical bias; LEFT went `−0.0303, −0.0107` → `−0.0083, +0.0211`
+→ `+0.0166, +0.0254`, flipping sign on both axes, i.e. the learner still moving. Neither pair
+proves learning-off, because the centre is still changing, and no `out` pair was reported for the
+third sitting.
 
 The owner reported learning switched off for that pair, but the app's saved settings read
 
