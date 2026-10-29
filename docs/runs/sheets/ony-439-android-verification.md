@@ -106,11 +106,12 @@ Controllers face down and still, stream `FF14`, fusion off is fine — this is a
 | 2 | Switch learning off, zero the centre (set it to `0,0`), and set the dead zone to 0 for this step | Normalized equals raw minus the set centre, so the raw rest offset shows on both axes: about `-0.023, 0.009` on LEFT and `-0.112, 0.082` on RIGHT on this unit | Normalized still reads 0,0 with the centre zeroed and the dead zone at 0 — the offset is being hidden before the zone |
 | 3 | Back to the learned centre and 0.05; push each stick to its end stop in all four directions | Normalized reaches ±1 on each axis at the stop, and returns to 0 when released | A direction cannot reach ±1, or does not return to 0 |
 | 4 | Hold a stick slightly off centre (about 0.1) and still for 2 s | Learning either leaves the centre alone or adopts the held position — record which; "Re-centre stick" then sets the current reading as centre | Learning adopts the held position with no way to undo it |
-| 5 | Switch learning off, release the stick, read the centre | Centre stays at the value shown before the switch | Centre keeps changing with learning off |
+| 5 | Switch learning off, release the stick, read the centre, then export or read `stick_settings.json` | Centre stays at the value shown before the switch **and** the saved file reads `learn false` | Centre keeps changing with learning off, or the file still says `learn true` with the switch off |
 
 Paste back: the raw and normalized pairs at rest per hand at dead zone 0.05, then with the centre
 zeroed and the dead zone at 0; the highest normalized value reached per direction, whether learning
-adopted a held offset in step 4, and the dead-zone value used.
+adopted a held offset in step 4, the dead-zone value used, and the `learn` flag and centre values
+from `stick_settings.json` after step 5.
 
 ## 4. Checks with a procedure elsewhere
 
@@ -133,7 +134,7 @@ declines is recorded as `declined`, not as a pass.
 |---|---|---|---|---|---|---|
 | 1 | FF16 live read | partial — console `v` matches the packaged image; app cannot show it (wmr-companion #107); reconnect half not run | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f | §1 | see §7 |
 | 2 | FF17 scan/connect | `partial` — steps 5 and 7 pass (DISCOVER returns NOTHING_TO_DO twice; `0x7f` returns ATT `0x86` = INVALID_PARAM). Both hands were disconnected and re-established HID, but no status read and no ATT byte for `0x03`/`0x02`/`0x05`, and the double-disconnect was not attempted | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §2 | see §7 |
-| 3 | Stick dead zone | `partial` — dead zone 0 was set, but learning stayed on (`learn true` in the saved settings), so no centre-zeroed raw/normalized pair and no end-stop reading | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §3 | see §7 |
+| 3 | Stick dead zone | `partial` — dead zone 0 was set, but learning stayed on (saved settings read `learn true` after the switch was reported off; toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair and no end-stop reading | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §3 | see §7 |
 | 4 | Latency stream ladder | `partial` — one 120 s run per stream, one session: p50 none 63.4 / 62.3, FF11 34.3, FF12 34.5, FF14 39.3 ms; 479/479 answered each. No ladder verdict: `latency-2` §3.3 needs three runs per cell and a second session | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | latency-2 §3–§5 | see §7 |
 | 5 | App-vs-native probe decision | `partial` — app FF14 p50 39.3 ms vs probe 35.6 ms (`d` = +3.7 ms); stalls app 235/317 vs probe 274/365, inside the 25 % Stay window on both hands, but one unpaired run per client, so `latency-2` §6 forbids a verdict | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | latency-2 §6 | see §7 |
 | 6 | FF13 calibration in fusion | partial — two pose recordings, switch state not labelled; prose rest pair 83.5 / 42.7 unlabelled for off/on; no 90° error | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | companion PROTOCOL | see §7 |
@@ -243,14 +244,21 @@ centres[RIGHT] = (-0.111539, 0.086905)
 ```
 
 i.e. learning was still on and the persisted centres match the "after sitting" row. So the two
-near-zero `out` pairs show the learner tracking the centre, not a raw offset: the settings file is
-the evidence, and the learning-off switch did not take (or was switched back on). `StickNormalizer`
+near-zero `out` pairs show the learner tracking the centre, not a raw offset. `StickNormalizer`
 only moves the centre from `_learn()` when `config.learn` is true (`packages/wmr_core/lib/domain/stick_centre.dart`),
-so `out ≈ 0` with a moving centre is expected while learning runs, and the Debug screen's
-`SwitchListTile` is wired straight to `setLearn`, so there is no UI defect to file from this pair.
+so `out ≈ 0` with a moving centre is expected while learning runs.
+
+Why the saved file still says `learn true` is **unresolved**, not explained away: the Debug
+`SwitchListTile` calls `setLearn`, which writes the whole `StickSettings` after a short debounce
+(`apps/wmr_companion_app/lib/ui/debug/stream_settings.dart`), and both the real and fake services
+listen to `stickSettingsProvider.config` and apply it, so the code path looks right. The evidence
+does not distinguish between the switch never being moved, it being switched back on, and the save
+not landing. Step 5's file read settles it; if the file still says `learn true` with the switch
+visibly off, that is an app defect and gets filed rather than noted.
 
 Still needed: step 2 with learning actually off and the centre zeroed (raw vs normalized), step 3
-end stops, and steps 4–5 held offset and learning-off (centre frozen).
+end stops, steps 4–5 held offset and learning-off (centre frozen), and the `stick_settings.json`
+read after switching learning off in step 5 to settle the persistence question above.
 
 ### Latency stream ladder (§4) — five app exports
 
