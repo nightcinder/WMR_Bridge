@@ -59,12 +59,7 @@ differently): `adb uninstall com.onyxlens.wmr_companion` or app settings.
 4. Tap **Export CSV + JSON** (or **Export CSV + JSON + echo**) and save/share
    the files.
 
-If the guided bench offers a **Capture 6DoF pose** step (only when your
-glasses' hand tracking is active): run it if you can. It asks for five short
-movements per hand -- still, drifting, slow pan, medium pan, fast flick --
-about two minutes per hand. Safe to skip if it does not appear or you cannot
-do it; skipped steps are recorded. The resulting files are already inside the
-bundle you send; nothing extra to attach.
+A **Capture 6DoF pose** step is coming in app build 0.2.4 or later (only when your glasses' hand tracking is active); until then it is not in the guided bench, so do not look for it.
 
 ## 7. Send
 
