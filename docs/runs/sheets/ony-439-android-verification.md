@@ -135,7 +135,7 @@ declines is recorded as `declined`, not as a pass.
 | # | Check | Result | Device | Build | Command | Figures |
 |---|---|---|---|---|---|---|
 | 1 | FF16 live read | partial — console `v` matches the packaged image; app cannot show it (wmr-companion #107); reconnect half not run | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f | §1 | see §7 |
-| 2 | FF17 scan/connect | `partial` — fourth attempt captured the 20-byte status v2 from FF17 notifications: version 1, both hands `addr_source` 2 (NVS) with distinct tails, both `flags` 0 (disconnected), discovery idle / round 4. DISCOVER `0x01` confirmed by `last_command 0x01` / `last_result 0x03` NOTHING_TO_DO. Fifth attempt: `0x05 0x01` FORGET_BOND RIGHT returned `last_result 0x00` OK with RIGHT disconnected (link key cleared; RIGHT needs re-pairing), which explains the earlier `05/06` as a >2-byte write — not a firmware defect, and `error 134` there was ATT `0x86`. Connect/disconnect, the double disconnect, `0x7f` and step 6 as specified (BUSY while RIGHT connected) remain unrun; no literal ATT status byte was displayed | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §2 | see §7 |
+| 2 | FF17 scan/connect | `partial` — fourth attempt captured the 20-byte status v2 from FF17 notifications: version 1, both hands `addr_source` 2 (NVS) with distinct tails, both `flags` 0 (disconnected), discovery idle / round 4. DISCOVER `0x01` confirmed by `last_command 0x01` / `last_result 0x03` NOTHING_TO_DO. Fifth attempt: `0x05 0x01` FORGET_BOND RIGHT returned `last_result 0x00` OK with RIGHT disconnected (link key cleared; RIGHT needs re-pairing), which explains the earlier `05/06` as a >2-byte write — not a firmware defect, and a `134` there is consistent with ATT `0x86`. Connect/disconnect, the double disconnect, `0x7f` and step 6 as specified (BUSY while RIGHT connected) remain unrun; no literal ATT status byte was displayed | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §2 | see §7 |
 | 3 | Stick dead zone | `partial` — three sittings of centre lines: RIGHT stable at ~`−0.112, +0.085` (a real bias), LEFT moved `−0.030, −0.011` → `−0.008, +0.021` → `+0.017, +0.025`, still learning. Dead zone 0 was set, but saved settings read `learn true` after the switch was reported off (toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair and no end-stop reading | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §3 | see §7 |
 | 4 | Latency stream ladder | `partial` — one 120 s run per stream, one session: p50 none 63.4 / 62.3, FF11 34.3, FF12 34.5, FF14 39.3 ms; 479/479 answered each. No ladder verdict: `latency-2` §3.3 needs three runs per cell and a second session | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | latency-2 §3–§5 | see §7 |
 | 5 | App-vs-native probe decision | `partial` — app FF14 p50 39.3 ms vs probe 35.6 ms (`d` = +3.7 ms); stalls app 235/317 vs probe 274/365, inside the 25 % Stay window on both hands, but one unpaired run per client, so `latency-2` §6 forbids a verdict | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | latency-2 §6 | see §7 |
@@ -198,9 +198,10 @@ monitor lines; the fourth (below) also captured the 20-byte status v2 from FF17 
 The `error 134` / `error 131` values nRF Connect showed cannot be read as ATT bytes on sight. `131`
 = `0x83` = `GATT_DB_FULL` is unambiguously client-side, but `134` = `0x86` is **also exactly the ATT
 error `ctrl_write` returns for INVALID_PARAM** (`0x80 + 0x06`, `src/wmr_ctrl.c` /
-`src/wmr_transport.c`). The fifth attempt below settles it: the `0x05` write that produced 134 is
-recorded in the status as `05` / `06`, and a corrected two-byte `05 01` returns `00`, so that 134
-was the bridge. Step 7 (`0x7f`) still has no status entry of its own and stays **unscored**.
+`src/wmr_transport.c`). The fifth attempt below does show a `0x05` write receiving ATT `0x86`: the
+malformed `0x05` is recorded in the status as `05` / `06`, so at least one `134` was the bridge
+answering `ctrl_write`. That does not prove *which* write displayed 134, and the `0x7f` attempt still
+has no status entry of its own, so its 134 stays **unproven** and step 7 **unscored**.
 
 | Step | Write | Expected | Observed | Result |
 |---|---|---|---|---|
@@ -224,13 +225,14 @@ the 20-byte status v2 was captured. Two notifications, decoded against §2:
 |---|---|---|
 | 1 | `01 00 02 00 C8 C9 CC 00 00 02 00 C8 F9 A9 00 00 04 01 03 00` | version 1; LEFT flags 0, source 2 NVS, model WMR, tail `C8:C9:CC`; RIGHT flags 0, source 2 NVS, model WMR, tail `C8:F9:A9`; discovery idle, round 4; `last_command` `0x01` DISCOVER, `last_result` `0x03` NOTHING_TO_DO |
 | 2 | `01 00 02 00 C8 C9 CC 00 00 02 00 C8 F9 A9 00 00 04 05 06 00` | same hand fields; `last_command` `0x05`, `last_result` `0x06` INVALID_PARAM |
-| 3 | `01 00 02 00 C8 C9 CC 00 00 02 00 C8 F9 A9 00 00 04 05 00 00` | same hand fields (both `flags` 0); `last_command` `0x05` FORGET_BOND, `last_result` `0x00` OK |
 
 The monitor's `LEFT and RIGHT addresses are known; nothing to discover` line at 21:18:53 is the
 same DISCOVER result the first notification records.
 
 Fifth attempt, 21:34:24 (screenshot `Screenshot_20261028-213437.png`, attached 2026-10-29 01:35):
-row 3 above arrived on the same subscription, with no Bluetooth cycle and no reconnect in between.
+a third notification arrived on the same subscription, with no Bluetooth cycle and no reconnect in
+between — `01 00 02 00 C8 C9 CC 00 00 02 00 C8 F9 A9 00 00 04 05 00 00`: same hand fields (both
+`flags` 0), `last_command` `0x05` FORGET_BOND, `last_result` `0x00` OK.
 `0x00` is only reachable from the FORGET_BOND success path: the parser accepts that opcode only as
 an exactly two-byte write with `hand < 2` (`src/wmr_ctrl.c` `wmr_ctrl_parse_command`,
 `tests/test_ctrl.c`), and `ctrl_write` sets `last_result` to `WMR_CTRL_RES_OK` only when
@@ -240,15 +242,15 @@ an exactly two-byte write with `hand < 2` (`src/wmr_ctrl.c` `wmr_ctrl_parse_comm
 That also settles the earlier rejection: a payload longer than two bytes fails the `len == 2` check,
 and that path still records `buffer[0]` as `last_command` with `INVALID_PARAM`, i.e. `05` / `06`
 exactly as captured at 21:19:32. The first attempt therefore carried a third byte (an nRF value
-field left with a trailing `00` does this), not a truncated write. `error 134` there is ATT
-`0x86` returned by `ctrl_write`, so the "the client stack is dropping these writes" reading stays
-withdrawn, and no firmware defect is implied.
+field left with a trailing `00` does this), not a truncated write. That write's status is `05` / `06`,
+i.e. ATT `0x86`, so a `134` there is consistent with `ctrl_write` and the "the client stack is
+dropping these writes" reading stays withdrawn; no firmware defect is implied.
 
-One artefact to note rather than explain away: the `Data written` row directly under row 3 shows a
-20-byte value starting `01 00`, and a 20-byte write would record `last_command` `0x01` /
-`last_result` `0x06`, not `05` / `00`. That row is a separate write (nRF replaying the status
-value back) and not the one that produced row 3; the two-byte `05 01` that did is above the
-screenshot's visible window.
+One artefact to note rather than explain away: the `Data written` row directly under that
+`05` / `00` notification shows a 20-byte value starting `01 00`, and a 20-byte write would record
+`last_command` `0x01` / `last_result` `0x06`, not `05` / `00`. That row is a separate write (nRF
+replaying the status value back) and not the one that produced the `00`; the two-byte `05 01` that
+did is above the screenshot's visible window.
 
 So:
 
@@ -258,12 +260,13 @@ So:
 - **The format half of step 1 passes; the connected half does not.** `version` 1, `addr_source` 2
   for both hands, distinct non-zero tails and model WMR all match; both `flags` are 0, so this read
   was taken with both hands disconnected. No status with bit 0 and bit 2 set has been captured.
-- **`error 134` was the bridge answering after the `0x05` write.** The notification records
-  `last_result` `0x06`, i.e. ATT `0x86` = 134: at least that write did leave the phone, so "the
+- **A `134` is consistent with the bridge answering the `0x05` write.** The notification records
+  `last_result` `0x06`, i.e. ATT `0x86` = 134: that write did leave the phone, so "the
   client stack is where the writes are stopping" is withdrawn. Whether the earlier `0x7f` write
   also arrived is still unknown.
 - **The `0x05` rejection is explained by the fifth attempt, and is not a firmware defect.** A
-  2-byte `05 01` returns `0x00` (row 3); a longer payload fails the `len == 2` parse and is logged
+  2-byte `05 01` returns `0x00` (fifth-attempt notification); a longer payload fails the `len == 2`
+  parse and is logged
   as `05` / `06`, which is what the 21:19:32 write did. `tests/test_ctrl.c` covers both the
   two-byte accept and the three-byte reject.
 
