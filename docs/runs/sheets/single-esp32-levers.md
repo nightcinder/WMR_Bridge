@@ -69,8 +69,24 @@ current `main` (ONY-438/441/446) plus the ONY-430 toggles:
 
 ```bash
 EXTRA_CFLAGS="-DWMR_CFG_TEST_LEVERS=1" \
-  python3 tools/firmware/build.py --out dist
+  python3 tools/firmware/build.py --out dist \
+  --idf-export /paperclip/sdks/esp-idf/export.sh
 ```
+
+The image built for this sheet is attached to ONY-430:
+
+| Field | Value |
+|---|---|
+| File | `wmr-bridge-factory.bin` (665.8 KiB, 681792 bytes) |
+| SHA-256 | `687a1831dd51cbbb0beb9767f292be084f8e83c82e6833940ac5a556c397b35e` |
+| Source commit | `08fb896` (branch `ONY-430-plan-remaining-esp32-bluetooth-contention-levers-pr-85` = `main` through ONY-446 + ONY-430 toggles) |
+| Version | `0.2.4-18-g08fb896`, variant both, BTstack `e385539`, ESP-IDF v6.1 |
+| Built | 2026-10-29T02:16:08Z, `build-info.json` dirty=false |
+
+Verify before flashing:
+`sha256sum wmr-bridge-factory.bin` must print the hash above. A build without
+`EXTRA_CFLAGS=-DWMR_CFG_TEST_LEVERS=1` has the same version string but contains
+no `LEVERS test image` usage line.
 
 Flash `dist/wmr-bridge-factory.bin` at offset 0 (browser flasher, or
 `esptool.py --chip esp32 write_flash 0x0 dist/wmr-bridge-factory.bin`). On the
