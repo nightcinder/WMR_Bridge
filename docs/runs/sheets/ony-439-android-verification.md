@@ -1,18 +1,23 @@
-# Run sheet: ONY-439 Android verification campaign
+# Run sheet: 0.3.0 Android bench confirmation
 
 > **Procedure plus partial evidence, not a verdict.** A check scores only from figures the owner
-> supplies in §6 or that are recorded in §7; a green CI build is not a result.
+> supplies in §9 or that are recorded in §10; a green CI build is not a result.
 
-Scope: the checks that need only the owner's phone and one ESP32 — no headset, no second bridge,
-no iOS device, no Pi. One sitting on the image already flashed (`v0.2.1` or newer, or the CI APK
-of the same commit); **no reflash and no firmware build**.
+Scope: the checks that need only the owner's phone and one ESP32 running the packaged **0.3.0**
+image (`v0.3.0` release, or a CI build of the same commit) and the **wmr-companion 0.2.2** APK.
+This is the ONY-439 campaign retargeted to 0.3.0 (ONY-482); the 0.2.4 sitting is kept as prior
+evidence in §10. One sitting, no reflash during it.
 
-Three checks have no procedure anywhere yet and are specified in full below: FF16 live read (§1),
-FF17 scan/connect (§2), stick dead zone (§3). The other three already own a procedure elsewhere
-and this sheet only points at them and collects the result: the latency stream ladder and the
-app-vs-native probe decision are in `wmr-companion` [`docs/runs/sheets/latency-2.md`](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md),
-and FF13 calibration applied in fusion is `wmr-companion` `docs/STATUS.md` (FF13 row) with the
-switch described in `wmr-companion` `docs/PROTOCOL.md`.
+The release pass has four checks:
+
+1. FF16 shows `0.3.0` on the companion 0.2.2 Debug screen (§1).
+2. RIGHT reconnects after discovery, encrypts and streams without a board reset — the ONY-446
+   fix (§4).
+3. The status LED shows the right colour for each hand combination (§5).
+4. Android binds the BLE HID gamepad with no app (§6).
+
+Sections 2 and 3 are the carried-forward FF17 and stick checks. They do not gate 0.3.0, but they
+are still unrun, so they stay in the sheet.
 
 ## 0. Record before touching anything
 
@@ -20,34 +25,35 @@ Paste these once at the top of the result block; every check below inherits them
 
 | Field | Where from |
 |---|---|
-| Bridge firmware version and hash | Console `v` and `git describe --tags --always` of the flashed commit; `build-info.json` `version` if a packaged image was flashed |
+| Bridge firmware version and hash | Console `v` and `git describe --tags --always` of the flashed commit; `build-info.json` `version` if a packaged image was flashed. Expect `0.3.0` |
 | `bridge_hands=` boot banner | Serial monitor first line |
-| App version and commit | Debug screen "About", or `git -C wmr-companion log --oneline -1` |
+| App version and commit | Debug screen "About", or `git -C wmr-companion log --oneline -1`. Expect `0.2.2` (versionCode 4) |
 | Phone model and Android version | Settings → About phone |
 | Stream mode in use | App stream selector (`none`, `FF11`, `FF12`, `FF14`) |
 
 If the bridge reports a version the app cannot parse (FF16 empty or `1`), stop: the board is not
 running a packaged build and the FF16 check cannot pass on it.
 
-## 1. FF16 live read (phone only, no stream needed)
+## 1. FF16 live read on companion 0.2.2 (phone only, no stream needed)
 
 Spec: `docs/PROTOCOL.md` "Firmware version, FF16" — read-only UTF-8, no terminator, at most
-31 bytes, independent of the FF11/FF12/FF14 stream exclusion.
+31 bytes, independent of the FF11/FF12/FF14 stream exclusion. The companion reads FF16 once per
+connect and renders the bridge string plus the FF11–FF16 capability bits on the Debug screen.
 
-1. Connect the app to `WMR Bridge` and open the Debug screen. Read the firmware version the app
-   shows and whether it marks FF16 as present.
+1. Connect the app to `WMR Bridge` and open the Debug screen. Read the firmware version and the
+   capability bit row.
 2. Read the same version over the console: send `v` on the serial monitor.
-3. Read the same value a second time after a disconnect/reconnect, to show it is stable and does
-   not depend on the stream being active.
+3. Read the same value a second time after a disconnect/reconnect, with stream `none` and again
+   with `FF14`.
 
 | Step | Pass | Fail |
 |---|---|---|
-| 1 | App shows the same string the console prints, and enables the FF16 feature | App shows nothing, `unknown`, or a different string |
-| 2 | Console `v` prints one line matching `build-info.json` `version` (e.g. `0.2.1`) | `1` or an empty value from an `idf.py` build |
+| 1 | App shows `firmware 0.3.0` and `FF11+ FF12+ FF13+ FF14+ FF15+ FF16+` (companion 0.2.2 does not display FF17) | `firmware n/a (no FF16, older firmware)`, `firmware malformed`, or a different version |
+| 2 | Console `v` prints one line matching `build-info.json` `version` (`0.3.0`) | `1` or an empty value from a bare `idf.py` build |
 | 3 | Same string after reconnect, with stream `none` and with `FF14` | String changes or disappears when the stream changes |
 
-Paste back: the app's string, the console `v` line, `build-info.json` `version`, and the stream
-mode used for step 3.
+Paste back: the app's string and bit row, the console `v` line, `build-info.json` `version`, and
+the stream mode used for step 3.
 
 ## 2. FF17 scan and connect (phone only, one ESP32)
 
@@ -71,7 +77,7 @@ independent of the stream exclusion, and running it under a stream is the intere
 | 7 | Write an invalid opcode, e.g. `0x7f` | ATT error `0x80 + 0x06` (INVALID_PARAM) | Any success code |
 
 Do **not** run step 6 with a hand disconnected: it clears the link key and forces a re-pair. That
-happened at 21:34 (§7, fifth attempt) — RIGHT returned `0x00` OK and its link key is gone, so pair
+happened at 21:34 (§10, fifth attempt) — RIGHT returned `0x00` OK and its link key is gone, so pair
 RIGHT again before the connected half of step 6 can be scored.
 
 Each write is its own value in nRF Connect — there is no multi-command queue, so steps 2–7 are
@@ -115,7 +121,62 @@ zeroed and the dead zone at 0; the highest normalized value reached per directio
 adopted a held offset in step 4, the dead-zone value used, and the `learn` flag and centre values
 from `stick_settings.json` after step 5.
 
-## 4. Checks with a procedure elsewhere
+## 4. ONY-446: RIGHT reconnects after discovery (phone optional)
+
+The 0.2.4 failure: LEFT paired during discovery, RIGHT's ACL came up about 2 s after
+`discovery finished`, nothing encrypted it, and neither hand produced a report for 18 s until the
+board was reset ([`docs/DISCOVERY.md`](../DISCOVERY.md)). 0.3.0 encrypts that ACL after 750 ms and
+drops it after 4 s without a HID channel so the controller pages again.
+
+Setup: both hands paired and stored, bridge booted, serial monitor open, stream `FF14`, and
+nRF Connect (or the app's controller panel) for the FF17 writes in §2.
+
+| Step | Do | Pass | Fail |
+|---|---|---|---|
+| 1 | Disconnect LEFT (`0x03 0x00`) and forget only its address (`0x04 0x00`); confirm LEFT `flags` bit 0 is clear and `addr_source` is 0 in the FF17 status. Keep RIGHT connected | LEFT disconnects and its stored address is gone; RIGHT keeps streaming | LEFT stays connected, or RIGHT drops too |
+| 2 | Reboot the bridge with RIGHT awake and LEFT in pairing mode; wait for `discovery finished` and LEFT to pair again | RIGHT's ACL encrypts within about 750 ms (`RIGHT link encrypted`, or the bridge's `HCI_Set_Connection_Encryption`), `incoming HID connection` opens within 4 s, and RIGHT reports resume. LEFT also streams | No `RIGHT link encrypted`/HID line for 18 s, RIGHT reports never resume, or the board needs a reset |
+| 3 | Power-cycle RIGHT once while both hands stream | A neutral report is sent, then RIGHT encrypts and streams again within about 5 s | RIGHT sticks on its last input or needs a reset |
+
+If you cannot forget only LEFT, console `F` forgets both stored addresses; re-pair both hands and
+score the same steps. Paste back: the monitor lines from RIGHT ACL up to its first report after
+step 2, and the line set for the power-cycle in step 3.
+
+
+## 5. Status LED colours (board with the LED wired)
+
+The LED is one WS2812/NeoPixel on GPIO 4: **red = none, yellow = LEFT only, blue = RIGHT only,
+green = both** ([`README.md`](../../../README.md) "Status LED"). Red at boot until a controller
+connects. If the board has no LED, record the check as `declined` — do not score it from a photo
+of another board.
+
+| Step | Do | Pass | Fail |
+|---|---|---|---|
+| 1 | Boot with no controller connected | Red | Any other colour, or dark |
+| 2 | Connect LEFT only | Yellow | Red, blue or green |
+| 3 | Disconnect LEFT, connect RIGHT only | Blue | Red, yellow or green |
+| 4 | Connect both | Green | Yellow or blue |
+| 5 | Disconnect both | Back to red within about a second | Stays green/yellow/blue |
+
+Paste back: the colour seen at each step and how long the change took.
+
+## 6. Android HID gamepad, no app (phone + both controllers)
+
+Spec: [`docs/HID_GAMEPAD.md`](../HID_GAMEPAD.md). The same phone link carries HID service
+`0x1812`, Report ID 1. 0.3.0 needs LE Secure Connections with bonding, so forget a `WMR Bridge`
+entry left by 0.2.x once before this section.
+
+| Step | Do | Pass | Fail |
+|---|---|---|---|
+| 1 | Bridge booted and advertising (`adv=on`, no discovery round), scan in Android Bluetooth settings and pair `WMR Bridge` | One entry, gamepad icon, pairing dialog completes; bridge logs `BLE phone connected` and `hid=on` | No entry, phone icon, or a second Classic entry |
+| 2 | Open a gamepad tester and press every control on both hands: buttons, d-pad, face buttons, sticks (including click), triggers, menu/home | Every control registers and releases; no stuck input | A control is missing, mapped wrong, or sticks |
+| 3 | Stream `FF14` in companion 0.2.2 with both hands connected and the gamepad tester open | Both hands keep streaming; HID continues; status shows `HID reports` rising with `errors=0` (about 68/s) | Stream stalls or HID stops when FF14 starts |
+| 4 | Power-cycle one controller while the phone stays connected | A neutral report is sent, then input resumes; no button stays pressed | Last input sticks until reconnect |
+| 5 | Reboot the bridge with the phone still bonded | Phone reconnects to the bond without re-pairing; `hid=on` again | Phone asks to pair again, or gets no gamepad |
+
+Paste back: the pair result, per-control notes, the status line during step 3, and what the phone
+showed after steps 4 and 5.
+
+## 7. Checks with a procedure elsewhere
 
 | Check | Procedure | Result lands in |
 |---|---|---|
@@ -126,41 +187,45 @@ from `stick_settings.json` after step 5.
 Record the same device/build header for these three, and paste the exported JSON/CSV names, so the
 ladder and the probe run can be tied to the build hash in §0.
 
-## 5. Results
+## 8. Results
 
-One row per check, filled in only from evidence the owner supplies — the §6 paste-back block, or
-the exports and recordings collected in §7. `not run` is the honest default; a check the owner
+One row per check, filled in only from evidence the owner supplies — the §9 paste-back block, or
+the exports and recordings linked there. `not run` is the honest default; a check the owner
 declines is recorded as `declined`, not as a pass.
 
-| # | Check | Result | Device | Build | Command | Figures |
+| # | Check | Gate | Result | Device | Build | Figures |
 |---|---|---|---|---|---|---|
-| 1 | FF16 live read | partial — console `v` matches the packaged image; app cannot show it (wmr-companion #107); reconnect half not run | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f | §1 | see §7 |
-| 2 | FF17 scan/connect | `partial` — fourth attempt captured the 20-byte status v2 from FF17 notifications: version 1, both hands `addr_source` 2 (NVS) with distinct tails, both `flags` 0 (disconnected), discovery idle / round 4. DISCOVER `0x01` confirmed by `last_command 0x01` / `last_result 0x03` NOTHING_TO_DO. Fifth attempt: `0x05 0x01` FORGET_BOND RIGHT returned `last_result 0x00` OK with RIGHT disconnected (link key cleared; RIGHT needs re-pairing), which explains the earlier `05/06` as a >2-byte write — not a firmware defect, and a `134` there is consistent with ATT `0x86`. Connect/disconnect, the double disconnect, `0x7f` and step 6 as specified (BUSY while RIGHT connected) remain unrun; no literal ATT status byte was displayed | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §2 | see §7 |
-| 3 | Stick dead zone | `partial` — three sittings of centre lines: RIGHT stable at ~`−0.112, +0.085` (a real bias), LEFT moved `−0.030, −0.011` → `−0.008, +0.021` → `+0.017, +0.025`, still learning. Dead zone 0 was set, but saved settings read `learn true` after the switch was reported off (toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair and no end-stop reading | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §3 | see §7 |
-| 4 | Latency stream ladder | `partial` — one 120 s run per stream, one session: p50 none 63.4 / 62.3, FF11 34.3, FF12 34.5, FF14 39.3 ms; 479/479 answered each. No ladder verdict: `latency-2` §3.3 needs three runs per cell and a second session | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | latency-2 §3–§5 | see §7 |
-| 5 | App-vs-native probe decision | `partial` — app FF14 p50 39.3 ms vs probe 35.6 ms (`d` = +3.7 ms); stalls app 235/317 vs probe 274/365, inside the 25 % Stay window on both hands, but one unpaired run per client, so `latency-2` §6 forbids a verdict | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | latency-2 §6 | see §7 |
-| 6 | FF13 calibration in fusion | partial — two pose recordings, switch state not labelled; prose rest pair 83.5 / 42.7 unlabelled for off/on; no 90° error | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | companion PROTOCOL | see §7 |
+| 1 | FF16 on companion 0.2.2 | 0.3.0 | not run | | | §1 |
+| 2 | ONY-446 RIGHT reconnect | 0.3.0 | not run | | | §4 |
+| 3 | Status LED colours | 0.3.0 | not run | | | §5 |
+| 4 | Android HID gamepad | 0.3.0 | not run | | | §6 |
+| 5 | FF17 scan/connect | carried | not run | | | §2 |
+| 6 | Stick dead zone | carried | not run | | | §3 |
 
-## 6. Paste-back block
+The 0.2.4 partials for these checks are in §10; they do not carry over to 0.3.0.
+
+## 9. Paste-back block
 
 ```
 Build: firmware <version> / <hash> / build-info version <...>; app <version> / <commit>
 Phone: <model>, Android <version>; stream <mode>; bridge_hands=<0|1>
-1 FF16: app="<...>" console v="<...>" reconnect="<...>"  -> PASS/FAIL
-2 FF17: status before=<hex> after 0x03 0x00=<hex> ... att=<0x..> each  -> PASS/FAIL
-3 Dead zone: raw L=(x,y) R=(x,y); normalized rest L=(x,y) R=(x,y); max per direction=...  -> PASS/FAIL
-4 Ladder: none p50=.. FF11 p50=.. FF12 p50=.. FF14 p50=..; stalls=..; exports=<names>  -> PASS/FAIL
-5 Probe: app p50=.. probe p50=.. stalls app=.. probe=..; verdict=<stay|native|upstream>  -> PASS/FAIL
-6 FF13 fusion: switch=<on|off>; before/after yaw drift=..; 90 deg error=..  -> PASS/FAIL
+1 FF16: app="<...>" bits="<...>" console v="<...>" reconnect="<...>"  -> PASS/FAIL
+2 ONY-446: RIGHT ACL=<...> encrypted=<yes|no> hid=<yes|no> reports=<yes|no> reset=<yes|no>  -> PASS/FAIL
+3 LED: none=<...> left=<...> right=<...> both=<...> back to none=<...>  -> PASS/FAIL
+4 HID: pair=<...> controls=<...> FF14=<...> power-cycle=<...> reboot=<...>  -> PASS/FAIL
+5 FF17: status before=<hex> after 0x03 0x00=<hex> ... att=<0x..> each  -> PASS/FAIL
+6 Dead zone: raw L=(x,y) R=(x,y); normalized rest L=(x,y) R=(x,y); max per direction=...  -> PASS/FAIL
 Defects filed: <issue ids or none>
 ```
 
 A check with no figures is `not run`, even if the phone "seemed fine".
 
-## 7. Evidence received (2026-10-28 sitting)
+## 10. Prior sitting: 0.2.4 evidence (2026-10-28)
 
-Owner-supplied, not yet a verdict: the rows above stay `partial` until the missing half of each
-check arrives. Re-test from the same phone and bridge; no reflash.
+Owner-supplied, not a verdict, and it does not gate 0.3.0. Section numbers inside this appendix
+refer to the 0.2.4 sheet; the procedures now live in §1–§7.
+
+### Evidence received (0.2.4 sitting)
 
 ### Header (§0, settled)
 

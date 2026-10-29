@@ -58,7 +58,7 @@ defaults and `docs/STATUS.md` in both repos written up. Until then, no sitting a
 | `robustness.md` | Remaining TESTING.md items in one sitting: still-required 2–6, 9, 11; FF12 5–7, 11, 12, 15; B4, B6–B8, B10, B11 | **not run** |
 | `pi-bridge.md` | Linux / Raspberry Pi Wi-Fi host bridge bring-up (P1–P10); upstream loss comparability against ESP32 | **not run** |
 | [`external-test-user.md`](sheets/external-test-user.md) | External tester intake, priority device order, and tiered capture bundle for the v0.2.4 pairing regression, glasses hosts and PSVR2 raw path | template, not run |
-| [`ony-439-android-verification.md`](sheets/ony-439-android-verification.md) | ONY-439: FF16 live read, FF17 scan/connect and stick dead zone (new procedures), plus the pointers to the latency ladder, app-vs-native probe and FF13-in-fusion procedures that live in `wmr-companion` | partial — evidence and open items in sheet §7 |
+| [`ony-439-android-verification.md`](sheets/ony-439-android-verification.md) | 0.3.0 bench confirmation (ONY-482): FF16 on companion 0.2.2, ONY-446 RIGHT reconnect, status LED colours, Android HID gamepad, plus the carried-forward FF17, stick, latency and FF13 procedures | procedure, not run; 0.2.4 partial evidence in §10 |
 
 ## Logs (`logs/`)
 

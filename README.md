@@ -115,11 +115,14 @@ python3 tools/firmware/build.py --idf-export ~/esp/esp-idf/export.sh --flash /de
 
 The first run clones the pinned BTstack commit into `.fw-build/`; later runs
 reuse it. The output in `dist/` includes a merged factory image and a browser
-flasher page. `v0.2.4` is the current tagged release; it carries the 0.2.x
-logging cleanup (ONY-313) and the ONY-307 discovery fix (failed pairing
-connects retried, the Classic radio reserved while a hand is missing, and the
-ACL slot freed before each discovery page). Packaged releases are CI-built and
-hardware-unverified. To install the current release without ESP-IDF, use the
+flasher page. `v0.3.0` is the current tagged release. It adds LE Secure
+Connections with bonding on the phone link, the BLE HID-over-GATT gamepad,
+the ONY-446 reconnect fix for a controller ACL that stalls after discovery,
+the FF17 `FORGET_BOND` retry, the red/yellow/blue/green status LED map, the
+ONY-430 LEVERS contention toggles, and Pi host-bridge packaging. Packaged
+releases are CI-built and hardware-unverified; see
+[CHANGELOG.md](CHANGELOG.md) for the full 0.3.0 notes. To install the current
+release without ESP-IDF, use the
 hosted browser installer at <https://nightcinder.github.io/WMR_Bridge/>, which
 serves all three variants. The
 [GitHub release](https://github.com/nightcinder/WMR_Bridge/releases/latest)
@@ -226,7 +229,7 @@ first-sitting bring-up procedure is in
 [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). The
 `wmr-pi-bridge-0.1.0.tar.gz` asset on the v0.1.0 GitHub release is still the
 only packaged Pi tarball; the `pi/` tree in this repository is package `0.2.1`.
-The current `v0.2.4` firmware release does not include a Pi tarball.
+The current `v0.3.0` firmware release does not include a Pi tarball.
 
 ## BLE interface (summary)
 

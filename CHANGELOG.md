@@ -1,0 +1,74 @@
+# Changelog
+
+Releases before 0.3.0 are listed on the
+[GitHub releases page](https://github.com/nightcinder/WMR_Bridge/releases).
+This file records what each release contains; hardware evidence stays in
+[`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
+
+## 0.3.0 — 2026-10-29
+
+A security and phone-link release. No protocol version change: FF10–FF17 keep
+their payloads, so 0.2.x clients continue to work. Firmware artifacts are
+CI-built and hardware-unverified; the 0.3.0 bench sitting is
+[`docs/runs/sheets/ony-439-android-verification.md`](docs/runs/sheets/ony-439-android-verification.md).
+
+### Phone link
+
+- **LE Secure Connections with bonding (#88, ONY-438).** The bridge requires
+  LESC + bonding on the phone link, sends a Security Request as soon as a
+  central connects, and encrypts every data characteristic except FF16 (the
+  version stays readable before pairing). A stale bond is deleted and the
+  phone can pair again; a central that does not become bonded within 30 s is
+  disconnected. Just Works pairing is encrypted but not MITM-protected — see
+  [`docs/SECURITY.md`](docs/SECURITY.md).
+- **BLE HID gamepad (#89, ONY-441).** One standard HID-over-GATT gamepad
+  (service `0x1812`, Report ID 1) shares the phone link, so Android binds the
+  controllers with no app. CTKD is disabled so a dual-mode phone keeps the LE
+  HID transport; the bridge advertises from a static random LE address and
+  exposes DIS `0x180A`. See [`docs/HID_GAMEPAD.md`](docs/HID_GAMEPAD.md).
+- **GATT security docs and pair-timeout state (#90, ONY-449).** The GATT
+  documentation now matches the descriptor, and a pair timeout reports the
+  real link state.
+
+### Controller link
+
+- **ONY-446: encrypt a controller ACL that stalls after discovery (#92).** A
+  controller that opens its own ACL after `discovery finished` now gets
+  `HCI_Set_Connection_Encryption` from the bridge after 750 ms without
+  encryption, and the ACL is dropped after 4 s without a HID channel so the
+  controller pages again. This removes the 18 s stall that needed a board
+  reset on 0.2.4. See [`docs/DISCOVERY.md`](docs/DISCOVERY.md).
+- **FF17 `FORGET_BOND` retry recorded (#95).** The Android run sheet now has
+  the confirmed `0x05 0x01` → `last_result` `0x00` case, and the earlier
+  `05/06` result is explained as a write longer than two bytes (ATT `0x86`),
+  not a firmware defect.
+
+### Bench and diagnostics
+
+- **Status LED map (#96).** Red = no controller, yellow = LEFT only, blue =
+  RIGHT only, green = both. Red at boot until a controller connects; GPIO 4,
+  WS2812/NeoPixel.
+- **LEVERS runtime contention toggles (#86, ONY-430).** `l`, `v`, `t` and `q`
+  switch the contention levers from the console without rebuilding. The bench
+  image was rebuilt on post-ONY-446 master (#97); see
+  [`docs/runs/sheets/single-esp32-levers.md`](docs/runs/sheets/single-esp32-levers.md).
+- **CI always reports `Build firmware` (#93).** The workflow no longer has a
+  paths filter, so the required check runs on every PR.
+- **GATT docs cross-checked against `wmr_bridge.gatt` (#94).**
+
+### Pi host bridge
+
+- **Packaging and a no-hardware dry run (#87, ONY-440).** `pi/build_package.sh`
+  builds `dist/wmr-bridge-<version>.tar.gz` and its `.sha256`;
+  `pi/tools/verify_package.sh` checks an archive and `pi/tools/dry_run.sh`
+  exercises the daemon without hardware. The Pi package version stays `0.2.1`
+  (out of scope for this release), and `v0.3.0` does not attach a Pi tarball —
+  the only packaged Pi tarball remains on `v0.1.0`. See
+  [`docs/PI_BRIDGE.md`](docs/PI_BRIDGE.md).
+
+### Verification
+
+- Host tests and the ESP-IDF build run in CI on the tag; the firmware reports
+  `0.3.0` over FF16 and in the console `v` line.
+- One flashed board reading FF16 = `0.3.0` is still pending; the bench sheet
+  records it as user-reported evidence once run.
