@@ -1,7 +1,7 @@
 # Run sheet: ONY-439 Android verification campaign
 
-> **Proposed sheet, not yet run.** Nothing here is a hardware result. It becomes one only when
-> the owner pastes back the block in §6 for each check; a green CI build is not a result.
+> **Procedure plus partial evidence, not a verdict.** A check scores only from figures the owner
+> supplies in §6 or that are recorded in §7; a green CI build is not a result.
 
 Scope: the checks that need only the owner's phone and one ESP32 — no headset, no second bridge,
 no iOS device, no Pi. One sitting on the image already flashed (`v0.2.1` or newer, or the CI APK
@@ -72,6 +72,10 @@ independent of the stream exclusion, and running it under a stream is the intere
 
 Do **not** run step 6 with a hand disconnected: it clears the link key and forces a re-pair.
 
+Each write is its own value in nRF Connect — there is no multi-command queue, so steps 2–7 are
+seven separate writes to FF17, and the app's log shows the ATT status (`0x00` for success) next to
+each. Reading the characteristic before and after each write gives the 20-byte status.
+
 Step 5's code is deliberate: `wmr_controller_discover()` returns `WMR_DISCOVERY_NOTHING_TO_DO`
 when `known_hands()` reports both addresses stored (`src/wmr_controller.c`), and
 `ctrl_write` maps that to `WMR_CTRL_RES_NOTHING_TO_DO` (`src/wmr_transport.c`), i.e. ATT
@@ -128,8 +132,8 @@ declines is recorded as `declined`, not as a pass.
 | # | Check | Result | Device | Build | Command | Figures |
 |---|---|---|---|---|---|---|
 | 1 | FF16 live read | partial — console `v` matches the packaged image; app cannot show it (wmr-companion #107); reconnect half not run | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f | §1 | see §7 |
-| 2 | FF17 scan/connect | not run | | | §2 | |
-| 3 | Stick dead zone | partial — rest half only; no centre-zeroed or end-stop reading | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §3 | see §7 |
+| 2 | FF17 scan/connect | `partial` — steps 5 and 7 pass (DISCOVER returns NOTHING_TO_DO twice; `0x7f` returns ATT `0x86` = INVALID_PARAM). Both hands were disconnected and re-established HID, but no status read and no ATT byte for `0x03`/`0x02`/`0x05`, and the double-disconnect was not attempted | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §2 | see §7 |
+| 3 | Stick dead zone | `partial` — dead zone 0 was set, but learning stayed on (`learn true` in the saved settings), so no centre-zeroed raw/normalized pair and no end-stop reading | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §3 | see §7 |
 | 4 | Latency stream ladder | `partial` — one 120 s run per stream, one session: p50 none 63.4 / 62.3, FF11 34.3, FF12 34.5, FF14 39.3 ms; 479/479 answered each. No ladder verdict: `latency-2` §3.3 needs three runs per cell and a second session | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | latency-2 §3–§5 | see §7 |
 | 5 | App-vs-native probe decision | `partial` — app FF14 p50 39.3 ms vs probe 35.6 ms (`d` = +3.7 ms); stalls app 235/317 vs probe 274/365, inside the 25 % Stay window on both hands, but one unpaired run per client, so `latency-2` §6 forbids a verdict | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | latency-2 §6 | see §7 |
 | 6 | FF13 calibration in fusion | partial — two pose recordings, switch state not labelled; prose rest pair 83.5 / 42.7 unlabelled for off/on; no 90° error | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | companion PROTOCOL | see §7 |
@@ -183,10 +187,32 @@ Step 2 passes: console `v` printed `WMR Bridge firmware 0.2.4 (ESP-IDF v6.1, bui
 23:37:46)`, the same version as `build-info.json`, not `1` and not empty. Step 3 (disconnect,
 reconnect, read again under `none` and `FF14`) was not run.
 
-### Stick dead zone (§3) — step 1 half
+### FF17 (§2) — first writes, two steps pass
+
+nRF Connect on the phone, FF14 streaming, bridge `0.2.4`/`41a9e5f`. Only the ATT status the app
+displayed and the firmware's own monitor lines were captured; the 20-byte status was never read.
+
+| Step | Write | Expected | Observed | Result |
+|---|---|---|---|---|
+| 5 | `0x01` DISCOVER, twice | ATT `0x83` NOTHING_TO_DO | console at 20:27:31 and 20:27:38: `LEFT and RIGHT addresses are known; nothing to discover (F forgets the stored addresses)` | pass at firmware level — the `NOTHING_TO_DO` path, ATT byte not captured |
+| 7 | `0x7f` invalid opcode | ATT `0x86` INVALID_PARAM | nRF Connect `error 134`; 134 = `0x86` = `0x80 + 0x06` | pass |
+| 2–3 | `0x03 0x00` / `0x03 0x01`, then reconnect | disconnect then connect per hand | at 20:27:03 LEFT `disconnected after 759639 input report(s)` and RIGHT at 20:27:04 `after 531466`, each followed within a second by `incoming HID connection`, descriptor, `ready: HID descriptor received (model WMR)` | behaviour matches, but the status read and ATT bytes are missing, so not scored |
+| 6 | `0x05 0x01` FORGET_BOND RIGHT | ATT `0x81` BUSY while RIGHT is connected | "did nothing" — no state change, returned byte not recorded | open: `0x81` is the pass, but `0x00` would mean the RIGHT bond was dropped |
+| 1, 4 | status read, disconnect twice | — | not attempted; no `has no connection to close` warning in the log, so the second disconnect was never sent | not run |
+
+`wmr_controller_forget_bond()` returns `WMR_BOND_RESET_BUSY` when `connect_pending` is set or the
+hand has a `cid`/`connected` (`src/wmr_controller.c`), and `ctrl_write` maps that to ATT `0x81`
+(`src/wmr_transport.c`); a `0x00` there would be a real defect. The invalid-opcode result follows
+the same path: `default: res = WMR_CTRL_RES_INVALID_PARAM` → `0x80 + 0x06`.
+
+The reconnect pair also printed `W pair HID SET_PROTOCOL failed: unsupported request (0x03)` after
+each hand — the WMR controller does not implement the HID boot protocol; it is noise here, not a
+defect of this check.
+
+### Stick dead zone (§3) — rest half only
 
 Debug screen at rest, both sticks untouched, FF14 stream: normalized `out` = `+0.0000, +0.0000`
-on both hands (screenshot). Persisted store (`app_flutter/stick_settings.json`):
+on both hands (screenshot). Persisted store (`app_flutter/stick_settings.json`, first sitting):
 
 ```
 deadZone 0.05, learn true
@@ -199,7 +225,32 @@ persisted value while its sample count rose 303 → 318, so learning was still c
 the run; LEFT moved from `-0.0239, +0.0092`. The later Debug line printed `-0.1106, +0.0831` and
 `learned/set 168x` for **both** hands; the stored file has two different centres, so the LEFT line
 is suspect — treat the stored values above as the record and re-read LEFT on the next sitting.
-Still needed: the centre-zeroed reading (step 2), end stops, and held-offset/learning-off.
+
+Second sitting, dead zone set to 0: the Debug screen then printed the centre line for each hand
+(`x`, `y` are the centre, `out` the normalized value):
+
+| Hand | Centre at first read | Centre after sitting | `out` after sitting |
+|---|---|---|---|
+| LEFT | `-0.0303, -0.0107` (1x) | `-0.0083, +0.0211` (128x) | `+0.0049, -0.0006` |
+| RIGHT | `-0.1093, +0.0829` (1x) | `-0.1123, +0.0861` (180x) | `+0.0008, -0.0028` |
+
+The owner reported learning switched off for that pair, but the app's saved settings read
+
+```
+deadZone 0.0, learn true
+centres[LEFT ] = (-0.007763, 0.021720)
+centres[RIGHT] = (-0.111539, 0.086905)
+```
+
+i.e. learning was still on and the persisted centres match the "after sitting" row. So the two
+near-zero `out` pairs show the learner tracking the centre, not a raw offset: the settings file is
+the evidence, and the learning-off switch did not take (or was switched back on). `StickNormalizer`
+only moves the centre from `_learn()` when `config.learn` is true (`packages/wmr_core/lib/domain/stick_centre.dart`),
+so `out ≈ 0` with a moving centre is expected while learning runs, and the Debug screen's
+`SwitchListTile` is wired straight to `setLearn`, so there is no UI defect to file from this pair.
+
+Still needed: step 2 with learning actually off and the centre zeroed (raw vs normalized), step 3
+end stops, and steps 4–5 held offset and learning-off (centre frozen).
 
 ### Latency stream ladder (§4) — five app exports
 
@@ -215,8 +266,16 @@ own (`raw` = FF11, `decoded` = FF12, `batched` = FF14, `none` = no stream).
 | `200916` | `none` | 63.4 ms | 85.5 | 131.9 | −62 → −60 dBm | — | — | — |
 | `201148` | `none` | 62.3 ms | 80.2 | 138.8 | −57 → −59 dBm | — | — | — |
 
-All five report `mtu=517`, `connection_interval_us=15000` and `high_priority_requested=true`. What
-the exports cannot supply is the bridge `STREAM` line for each run, so `lat` and `sub` are
+All five report `mtu=517`, `connection_interval_us=15000` and `high_priority_requested=true`. The
+owner confirms the sitting ran backwards — FF14, FF12, FF11, `none`, `none` — so the labels above
+are the app's own and the timestamps agree. After each `none` run the screen switches back to
+FF11 raw: the latency screen remembers the mode that was active when `none` was picked and restores
+it when the run stops (`_restoreMode` in `apps/wmr_companion_app/lib/ui/latency/latency_providers.dart`),
+which is why the second `none` run also ended on FF11. That is by design and happens after the run
+ends, so neither export is contaminated; it only means the stream has to be picked again for the
+next no-stream run.
+
+What the exports cannot supply is the bridge `STREAM` line for each run, so `lat` and `sub` are
 unrecorded, and `200130` (FF14) drifted 6 dB start to end, past the 3 dB note threshold in
 `latency-2` §2 — that run is the weakest of the five and is the one to repeat first.
 
