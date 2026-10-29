@@ -59,6 +59,7 @@ defaults and `docs/STATUS.md` in both repos written up. Until then, no sitting a
 | `pi-bridge.md` | Linux / Raspberry Pi Wi-Fi host bridge bring-up (P1–P10); upstream loss comparability against ESP32 | **not run** |
 | [`external-test-user.md`](sheets/external-test-user.md) | External tester two-page quickstart (one tier): APK link, install, pair LEFT, pair RIGHT while LEFT streams, bundle export, send zip + LED photo + intake block | template, not run |
 | [`internal-runbook.md`](sheets/internal-runbook.md) | Full external tester runbook (moved verbatim): tiered capture bundle, glasses hosts, PSVR2 raw path, redaction | template, not run |
+| [`pose-filter.md`](sheets/pose-filter.md) | Internal procedure for the optional guided-bench "Capture 6DoF pose" step; cites filter-spec rev 4 | procedure, not run |
 | [`ony-439-android-verification.md`](sheets/ony-439-android-verification.md) | 0.3.0 bench confirmation (ONY-482): FF16 on companion 0.2.2, ONY-446 RIGHT reconnect, status LED colours, Android HID gamepad, plus the carried-forward FF17, stick, latency and FF13 procedures | procedure, not run; 0.2.4 partial evidence in §10 |
 
 ## Logs (`logs/`)
