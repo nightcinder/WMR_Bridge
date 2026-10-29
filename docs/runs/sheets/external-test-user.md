@@ -59,9 +59,21 @@ differently): `adb uninstall com.onyxlens.wmr_companion` or app settings.
 4. Tap **Export CSV + JSON** (or **Export CSV + JSON + echo**) and save/share
    the files.
 
-A **Capture 6DoF pose** step is coming in app build 0.2.4 or later (only when your glasses' hand tracking is active); until then it is not in the guided bench, so do not look for it.
+## 7. Guided bench (app build 0.2.4 or later)
 
-## 7. Send
+Optional alternative. From the **Connect** screen tap **Run guided bench** and pick
+a mode: **3DoF only** (bridge, full run), **6DoF only** (glasses, no bridge,
+shorter run), or **Combined**. With no Raspberry Pi bridge, use **6DoF only** —
+the bridge steps are skipped and the run is shorter; that is expected, not a
+broken install. The bench ends with **Write test bundle**.
+
+**Capture 6DoF pose** appears only when your glasses' hand tracking is active.
+It asks for five short movements per hand — hold still, let it drift, slow pan,
+medium pan, fast flick — about two minutes per hand. Skipping it (whole or per
+segment) is fine and does not break the run. Its files are already inside the
+bundle you send.
+
+## 8. Send
 
 Zip the exported files + one LED photo + the intake block below. Send in the
 thread where you received this runbook.
@@ -90,7 +102,5 @@ thread where you received this runbook.
 - Board hot, smells, or LED goes dark: unplug and stop.
 - Pairing fails twice: stop and send what you have.
 - Do not flash 0.2.0 or a random image; do not open the board.
-```
-
-Let me count lines.<|end|><|start|>start to=shell<|channel|>analysis <|constrain|>xml<|message|><rfl:parameter name="command">
+```<|end|><|start|>start to=shell<|channel|>analysis <|constrain|>xml<|message|><rfl:parameter name="command">
 cd /paperclip/instances/default/projects/aa90afe6-ebcf-46c2-8a7b-e6823086ca61/a71674c5-deb2-4688-8a51-3a4d48693526/WMR_Bridge/.paperclip/worktrees/ONY-488-next-plan-is-to-have-external-test-users-i-believe-this-means-we-need-to-sign-the-apk-differently-and-need-to-de && wc -l docs/runs/sheets/external-test-user.md

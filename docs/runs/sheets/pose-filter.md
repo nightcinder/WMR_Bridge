@@ -2,7 +2,7 @@
 
 Internal procedure for the optional **Capture 6DoF pose** step offered by the
 guided bench wizard. Tester-facing summary lives in
-[`external-test-user.md`](external-test-user.md) §6.
+[`external-test-user.md`](external-test-user.md) §7.
 
 Source of truth for segments, durations and acceptance: **filter-spec rev 4,
 section 8**. This sheet restates them for operators; if they disagree, the spec
