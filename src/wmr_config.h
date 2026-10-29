@@ -369,9 +369,10 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 
 /* ---- Status LED --------------------------------------------------------- */
 
-/* One addressable RGB LED (WS2812/NeoPixel): red = no controller connected, green = one,
- * blue = two. The LED needs 5 V and GND. Set WMR_CFG_STATUS_LED to 0 in builds without
- * an LED. Single-hand builds only ever reach green, because the other hand is not served.
+/* One addressable RGB LED (WS2812/NeoPixel): red = no controller connected, yellow = left
+ * only, blue = right only, green = both. The LED needs 5 V and GND. Set WMR_CFG_STATUS_LED
+ * to 0 in builds without an LED. Single-hand builds only reach red or their hand's colour,
+ * because the other hand is not served.
  *
  * The same frame is driven on more than one data pin so a prebuilt image works without
  * knowing the board: WMR_CFG_STATUS_LED_GPIO (default 4) is the documented external-LED
