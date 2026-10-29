@@ -537,7 +537,7 @@ leave it out and say why in the paste-back; do not create an empty placeholder.
 - Board: ESP32 model, flash size, USB port
 - Firmware: 0.3.0 (source: browser installer / GitHub release / pre-flashed)
 - Firmware evidence: installer screenshot / serial `v` / both
-- App: wmr-companion 0.2.2 unified / 0.1.0 base
+- App: wmr-companion 0.2.2 unified
 - Phone/host: make, model, Android version
 - Controllers: make/model, LEFT/RIGHT, batteries
 - Glasses: make/model, host, connection (USB-C / wireless)
