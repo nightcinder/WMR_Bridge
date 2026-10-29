@@ -8,7 +8,9 @@ This file records what each release contains; hardware evidence stays in
 ## 0.3.0 — 2026-10-29
 
 A security and phone-link release. No protocol version change: FF10–FF17 keep
-their payloads, so 0.2.x clients continue to work. Firmware artifacts are
+their payloads, so companions at 0.2.2 or later continue to work. The phone
+link now requires LE Secure Connections with bonding, so earlier companions,
+which pair without bonding, cannot connect. Firmware artifacts are
 CI-built and hardware-unverified; the 0.3.0 bench sitting is
 [`docs/runs/sheets/ony-439-android-verification.md`](docs/runs/sheets/ony-439-android-verification.md).
 
@@ -62,8 +64,8 @@ CI-built and hardware-unverified; the 0.3.0 bench sitting is
   builds `dist/wmr-bridge-<version>.tar.gz` and its `.sha256`;
   `pi/tools/verify_package.sh` checks an archive and `pi/tools/dry_run.sh`
   exercises the daemon without hardware. The Pi package version stays `0.2.1`
-  (out of scope for this release), and `v0.3.0` does not attach a Pi tarball —
-  the only packaged Pi tarball remains on `v0.1.0`. See
+  (out of scope for this release), and the 0.3.0 release does not attach a Pi
+  tarball — the only packaged Pi tarball remains on `v0.1.0`. See
   [`docs/PI_BRIDGE.md`](docs/PI_BRIDGE.md).
 
 ### Verification

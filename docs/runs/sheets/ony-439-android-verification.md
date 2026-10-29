@@ -133,13 +133,13 @@ nRF Connect (or the app's controller panel) for the FF17 writes in §2.
 
 | Step | Do | Pass | Fail |
 |---|---|---|---|
-| 1 | Disconnect LEFT (`0x03 0x00`) and forget only its address (`0x04 0x00`); confirm LEFT `flags` bit 0 is clear and `addr_source` is 0 in the FF17 status. Keep RIGHT connected | LEFT disconnects and its stored address is gone; RIGHT keeps streaming | LEFT stays connected, or RIGHT drops too |
+| 1 | Disconnect both hands (`0x03 0x00`, `0x03 0x01`) and wait until both FF17 statuses report disconnected. Then send `0x04` (FORGET_ADDRS) and confirm both hands' `addr_source` is 0. `0x04` ignores the hand byte, clears both stored addresses, and is refused while any hand is connected. With LEFT asleep, run discovery (`d`) to store RIGHT again and let it stream; leave LEFT unpaired | Both hands disconnect, `0x04` returns OK, both `addr_source` read 0, then RIGHT alone re-pairs and streams | A hand stays connected, `0x04` is refused or leaves an address set, or RIGHT does not re-pair |
 | 2 | Reboot the bridge with RIGHT awake and LEFT in pairing mode; wait for `discovery finished` and LEFT to pair again | RIGHT's ACL encrypts within about 750 ms (`RIGHT link encrypted`, or the bridge's `HCI_Set_Connection_Encryption`), `incoming HID connection` opens within 4 s, and RIGHT reports resume. LEFT also streams | No `RIGHT link encrypted`/HID line for 18 s, RIGHT reports never resume, or the board needs a reset |
 | 3 | Power-cycle RIGHT once while both hands stream | A neutral report is sent, then RIGHT encrypts and streams again within about 5 s | RIGHT sticks on its last input or needs a reset |
 
-If you cannot forget only LEFT, console `F` forgets both stored addresses; re-pair both hands and
-score the same steps. Paste back: the monitor lines from RIGHT ACL up to its first report after
-step 2, and the line set for the power-cycle in step 3.
+The console `F` command also forgets both stored addresses (it is refused while a hand is
+connected), so it is equivalent to `0x04` here. Paste back: the monitor lines from RIGHT ACL up
+to its first report after step 2, and the line set for the power-cycle in step 3.
 
 
 ## 5. Status LED colours (board with the LED wired)

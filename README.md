@@ -115,7 +115,7 @@ python3 tools/firmware/build.py --idf-export ~/esp/esp-idf/export.sh --flash /de
 
 The first run clones the pinned BTstack commit into `.fw-build/`; later runs
 reuse it. The output in `dist/` includes a merged factory image and a browser
-flasher page. `v0.3.0` is the current tagged release. It adds LE Secure
+flasher page. `0.3.0` is the current release. It adds LE Secure
 Connections with bonding on the phone link, the BLE HID-over-GATT gamepad,
 the ONY-446 reconnect fix for a controller ACL that stalls after discovery,
 the FF17 `FORGET_BOND` retry, the red/yellow/blue/green status LED map, the
@@ -229,7 +229,7 @@ first-sitting bring-up procedure is in
 [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). The
 `wmr-pi-bridge-0.1.0.tar.gz` asset on the v0.1.0 GitHub release is still the
 only packaged Pi tarball; the `pi/` tree in this repository is package `0.2.1`.
-The current `v0.3.0` firmware release does not include a Pi tarball.
+The current 0.3.0 firmware release does not include a Pi tarball.
 
 ## BLE interface (summary)
 

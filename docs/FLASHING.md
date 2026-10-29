@@ -186,7 +186,8 @@ labels.
 ### Hosting
 
 The installer is live at **<https://nightcinder.github.io/WMR_Bridge/>**,
-serving the latest tagged release (`v0.3.0`) images (all three variants).
+serving the latest tagged release's images (all three variants); the 0.3.0
+images appear there once `v0.3.0` is tagged.
 
 `.github/workflows/firmware.yml` deploys `dist/` to GitHub Pages on a `v*`
 tag. This keeps the manifest and the images same-origin, which the browser
@@ -273,7 +274,7 @@ runner or secrets are needed. `actions/checkout` uses full history so
 `git describe` can produce a version.
 
 To publish a release, tag the intended `main` commit (for example, the `v0.2.4`
-release was published from `41a9e5f`; `v0.3.0` is the current release):
+release was published from `41a9e5f`; `0.3.0` is the current release):
 
 ```bash
 git tag -a vX.Y.Z -m "WMR Bridge vX.Y.Z"
