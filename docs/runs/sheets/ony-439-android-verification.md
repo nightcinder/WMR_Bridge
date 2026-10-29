@@ -76,8 +76,12 @@ Step 5's code is deliberate: `wmr_controller_discover()` returns `WMR_DISCOVERY_
 when `known_hands()` reports both addresses stored (`src/wmr_controller.c`), and
 `ctrl_write` maps that to `WMR_CTRL_RES_NOTHING_TO_DO` (`src/wmr_transport.c`), i.e. ATT
 `0x80 + 0x03` and `last_result` 0x03. A real discovery round only runs with at least one address
-missing, so exercise it by forgetting both (`0x04 0x00`, `0x04 0x01`) and re-pairing first; that
-also changes the `addr_source` step 1 reads, so run step 1 before it.
+missing, so exercise it by disconnecting both hands, forgetting both addresses (`0x04 0x00`,
+`0x04 0x01`) and re-pairing. `wmr_controller_forget_addresses()` returns `WMR_FORGET_BUSY`
+(ATT `0x81`) while either hand has a cid or is connected (`src/wmr_controller.c`), so send
+`0x03 0x00` and `0x03 0x01` first (RIGHT may need a second write) and confirm bit 0 is clear for
+both in the status read before the forget writes. That also changes the `addr_source` step 1
+reads, so run step 1 before it.
 
 Paste back: the decoded 20-byte status before step 2, after each write, and the ATT status byte
 the app reports for steps 2–7; plus the `FF17`/discovery lines from the monitor if it prints them.
@@ -95,13 +99,14 @@ Controllers face down and still, stream `FF14`, fusion off is fine — this is a
 | Step | Do | Pass | Fail |
 |---|---|---|---|
 | 1 | Do not touch either stick; watch the Debug screen raw and normalized values for 30 s | Raw shows the rest offset (about `-0.023, 0.009` on LEFT and `-0.112, 0.082` on RIGHT on this unit); normalized stays 0.000 on both axes, both hands, for the whole 30 s | Normalized drifts off 0 at rest, or jitters |
-| 2 | Switch learning off, then zero the centre ("Re-centre stick" at a known-centred stick, or set the centre to `0,0`), leave the dead zone at 0.05 | Normalized shows the raw rest offset, i.e. raw minus the set centre, on both axes | Normalized still reads 0 with the centre zeroed — the offset is being hidden before the zone |
+| 2 | Switch learning off, zero the centre (set it to `0,0`), and set the dead zone to 0 for this step | Normalized equals raw minus the set centre, so the raw rest offset shows on both axes: about `-0.023, 0.009` on LEFT and `-0.112, 0.082` on RIGHT on this unit | Normalized still reads 0,0 with the centre zeroed and the dead zone at 0 — the offset is being hidden before the zone |
 | 3 | Back to the learned centre and 0.05; push each stick to its end stop in all four directions | Normalized reaches ±1 on each axis at the stop, and returns to 0 when released | A direction cannot reach ±1, or does not return to 0 |
 | 4 | Hold a stick slightly off centre (about 0.1) and still for 2 s | Learning either leaves the centre alone or adopts the held position — record which; "Re-centre stick" then sets the current reading as centre | Learning adopts the held position with no way to undo it |
 | 5 | Switch learning off, release the stick, read the centre | Centre stays at the value shown before the switch | Centre keeps changing with learning off |
 
-Paste back: the raw and normalized pairs at rest per hand, the highest normalized value reached
-per direction, whether learning adopted a held offset in step 4, and the dead-zone value used.
+Paste back: the raw and normalized pairs at rest per hand at dead zone 0.05, then with the centre
+zeroed and the dead zone at 0; the highest normalized value reached per direction, whether learning
+adopted a held offset in step 4, and the dead-zone value used.
 
 ## 4. Checks with a procedure elsewhere
 
