@@ -70,8 +70,14 @@ current `main` (ONY-438/441/446) plus the ONY-430 toggles:
 ```bash
 EXTRA_CFLAGS="-DWMR_CFG_TEST_LEVERS=1" \
   python3 tools/firmware/build.py --out dist \
-  --idf-export /paperclip/sdks/esp-idf/export.sh
+  --work .fw-ony476-levers \
+  --idf-export ~/esp/esp-idf/export.sh
 ```
+
+`--work` is required: `EXTRA_CFLAGS` is read at CMake configure time, so a
+shared build directory can silently reuse cached flags and produce an image
+without the LEVERS keys (§2). A fresh `--work` (or `--clean`) forces the
+configure step; the first run also re-clones BTstack.
 
 The image built for this sheet is attached to ONY-430:
 
