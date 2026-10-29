@@ -133,7 +133,7 @@ declines is recorded as `declined`, not as a pass.
 | # | Check | Result | Device | Build | Command | Figures |
 |---|---|---|---|---|---|---|
 | 1 | FF16 live read | partial — console `v` matches the packaged image; app cannot show it (wmr-companion #107); reconnect half not run | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f | §1 | see §7 |
-| 2 | FF17 scan/connect | `partial` — no ATT byte was ever observed: nRF Connect's `error 134`/`error 131` are Android GATT client statuses (`GATT_CMD_STARTED`/`GATT_DB_FULL`), so `0x7f` and `0x05 0x01` never reached the bridge; only DISCOVER's NOTHING_TO_DO is confirmed, from the console (three times). Both hands were disconnected and re-established HID, but there is no 20-byte status read and no ATT byte for `0x03`/`0x02`/`0x05`, and the double-disconnect was not attempted | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §2 | see §7 |
+| 2 | FF17 scan/connect | `partial` — fourth attempt captured the 20-byte status v2 from FF17 notifications: version 1, both hands `addr_source` 2 (NVS) with distinct tails, both `flags` 0 (disconnected), discovery idle / round 4. DISCOVER `0x01` confirmed by `last_command 0x01` / `last_result 0x03` NOTHING_TO_DO; a `0x05` write arrived and was recorded as `last_result 0x06` INVALID_PARAM instead of BUSY/OK. `error 134` is ambiguous (Android `GATT_CMD_STARTED` or ATT `0x86`). Connect/disconnect, the double disconnect and `0x7f` remain unrun; no literal ATT status byte was displayed | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §2 | see §7 |
 | 3 | Stick dead zone | `partial` — three sittings of centre lines: RIGHT stable at ~`−0.112, +0.085` (a real bias), LEFT moved `−0.030, −0.011` → `−0.008, +0.021` → `+0.017, +0.025`, still learning. Dead zone 0 was set, but saved settings read `learn true` after the switch was reported off (toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair and no end-stop reading | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | §3 | see §7 |
 | 4 | Latency stream ladder | `partial` — one 120 s run per stream, one session: p50 none 63.4 / 62.3, FF11 34.3, FF12 34.5, FF14 39.3 ms; 479/479 answered each. No ladder verdict: `latency-2` §3.3 needs three runs per cell and a second session | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | latency-2 §3–§5 | see §7 |
 | 5 | App-vs-native probe decision | `partial` — app FF14 p50 39.3 ms vs probe 35.6 ms (`d` = +3.7 ms); stalls app 235/317 vs probe 274/365, inside the 25 % Stay window on both hands, but one unpaired run per client, so `latency-2` §6 forbids a verdict | Pixel 11 Pro, Android 17 | 0.2.4 / 41a9e5f; app 0.2.1 | latency-2 §6 | see §7 |
@@ -190,29 +190,64 @@ reconnect, read again under `none` and `FF14`) was not run.
 
 ### FF17 (§2) — no ATT byte observed; earlier “134 is a pass” withdrawn
 
-nRF Connect on the phone, bridge `0.2.4`/`41a9e5f`. Only the status the app displayed and the
-firmware's own monitor lines were captured; the 20-byte status was never read.
+nRF Connect on the phone, bridge `0.2.4`/`41a9e5f`. The first three attempts captured only the
+monitor lines; the fourth (below) also captured the 20-byte status v2 from FF17 notifications.
 
-The `error 134` / `error 131` values nRF Connect showed are **Android GATT client status codes**,
-not ATT responses: `134` = `0x86` = `GATT_CMD_STARTED`, `131` = `0x83` = `GATT_DB_FULL`. The earlier
-reading that `134` was ATT `0x86` INVALID_PARAM is withdrawn — no ATT byte came back for `0x7f`,
-and `0x05 0x01` did nothing in the monitor because the phone's own stack refused the write before
-it left the phone. Steps 6 and 7 are therefore **not run**, not passes.
+The `error 134` / `error 131` values nRF Connect showed cannot be read as ATT bytes. `131` =
+`0x83` = `GATT_DB_FULL` is unambiguously client-side, but `134` = `0x86` is **also exactly the ATT
+error `ctrl_write` returns for INVALID_PARAM** (`0x80 + 0x06`, `src/wmr_ctrl.c` /
+`src/wmr_transport.c`), so 134 on its own cannot say whether a write reached the bridge. The
+earlier reading that 134 *was* ATT `0x86` is not proven either; it is ambiguous until the 20-byte
+status carries the opcode. Steps 6 and 7 stay **unscored**.
 
 | Step | Write | Expected | Observed | Result |
 |---|---|---|---|---|
-| 5 | `0x01` DISCOVER, twice | ATT `0x83` NOTHING_TO_DO | console at 20:27:31, 20:27:38 and again at 20:55:14: `LEFT and RIGHT addresses are known; nothing to discover (F forgets the stored addresses)` | pass at firmware level — the `NOTHING_TO_DO` path; ATT byte not captured |
-| 7 | `0x7f` invalid opcode | ATT `0x86` INVALID_PARAM | nRF Connect `error 134` = `GATT_CMD_STARTED`; the write never completed and no ATT response was shown | not run — client-side error |
+| 5 | `0x01` DISCOVER, twice | ATT `0x83` NOTHING_TO_DO | console at 20:27:31, 20:27:38 and again at 20:55:14: `LEFT and RIGHT addresses are known; nothing to discover (F forgets the stored addresses)`; fourth attempt also shows `last_command` `0x01` / `last_result` `0x03` in the FF17 notification | pass at firmware level — the `NOTHING_TO_DO` path; ATT byte not captured |
+| 7 | `0x7f` invalid opcode | ATT `0x86` INVALID_PARAM | nRF Connect `error 134`; no ATT response was shown and no status read carries `0x7f` | not run — 134 is ambiguous here |
 | 2–3 | `0x03 0x00` / `0x03 0x01`, then reconnect | disconnect then connect per hand | at 20:27:03 LEFT `disconnected after 759639 input report(s)` and RIGHT at 20:27:04 `after 531466`, each followed within a second by `incoming HID connection`, descriptor, `ready: HID descriptor received (model WMR)` | behaviour matches, but the status read and ATT bytes are missing, so not scored |
-| 6 | `0x05 0x01` FORGET_BOND RIGHT | ATT `0x81` BUSY while RIGHT is connected | "did nothing" in the monitor at 20:27 and again at 20:55; no returned byte | not run — no ATT response |
-| 1, 4 | status read, disconnect twice | — | not attempted; no `has no connection to close` warning in the log, so the second disconnect was never sent | not run |
+| 6 | `0x05 0x01` FORGET_BOND RIGHT | ATT `0x81` BUSY while RIGHT is connected | fourth attempt: the notification after the `0x05` write reads `last_command` `0x05` / `last_result` `0x06` INVALID_PARAM, so the write reached the bridge but was rejected before the BUSY/OK path | not run — unexpected INVALID_PARAM; see below |
+| 1, 4 | status read, disconnect twice | — | fourth attempt: 20-byte status v2 captured from notifications, but both `flags` are 0, so it was taken with both hands disconnected; the double disconnect was never sent | status format and NVS tails pass, connected-state half not run |
 
 Third attempt, 20:55:08–20:55:14 (owner comment, 2026-10-29 00:57): the stream was `none`
 (`stream=none`, `rate_tx=0.0/s`, `notify=452526`), not FF14, and nothing in the monitor answered a
 write. `0x05 0x01` "did nothing" again after an initial `error 131` `GATT_DB_FULL`; the only new
-firmware line is the same DISCOVER `nothing to discover` at 20:55:14. The client stack, not the
-bridge, is where the writes are stopping; the retry needs Bluetooth off/on to clear the phone's
-GATT database before reconnecting, then one write and the value nRF Connect shows under it.
+firmware line is the same DISCOVER `nothing to discover` at 20:55:14. At that point the writes were
+assumed to be stopping in the client stack.
+
+Fourth attempt, 21:17–21:20 (screenshot `Screenshot_20261028-212024.png`, attached 2026-10-29
+01:21): Bluetooth was cycled, nRF Connect reconnected, and this time FF17 notifications arrived, so
+the 20-byte status v2 was captured. Two notifications, decoded against §2:
+
+| # | Payload | Decoded |
+|---|---|---|
+| 1 | `01 00 02 00 C8 C9 CC 00 00 02 00 C8 F9 A9 00 00 04 01 03 00` | version 1; LEFT flags 0, source 2 NVS, model WMR, tail `C8:C9:CC`; RIGHT flags 0, source 2 NVS, model WMR, tail `C8:F9:A9`; discovery idle, round 4; `last_command` `0x01` DISCOVER, `last_result` `0x03` NOTHING_TO_DO |
+| 2 | `01 00 02 00 C8 C9 CC 00 00 02 00 C8 F9 A9 00 00 04 05 06 00` | same hand fields; `last_command` `0x05`, `last_result` `0x06` INVALID_PARAM |
+
+The monitor's `LEFT and RIGHT addresses are known; nothing to discover` line at 21:18:53 is the
+same DISCOVER result the first notification records.
+
+So:
+
+- **Step 5 is confirmed by the status, not just the console.** The notification after `0x01` carries
+  `last_command` `0x01` / `last_result` `0x03` and `discovery_state` stays 0. The literal ATT byte
+  is still not displayed, but the firmware's own result field is captured.
+- **The format half of step 1 passes; the connected half does not.** `version` 1, `addr_source` 2
+  for both hands, distinct non-zero tails and model WMR all match; both `flags` are 0, so this read
+  was taken with both hands disconnected. No status with bit 0 and bit 2 set has been captured.
+- **`error 134` was the bridge answering after the `0x05` write.** The notification records
+  `last_result` `0x06`, i.e. ATT `0x86` = 134: at least that write did leave the phone, so "the
+  client stack is where the writes are stopping" is withdrawn. Whether the earlier `0x7f` write
+  also arrived is still unknown.
+- **The `0x05` rejection is itself unexplained.** A 2-byte `05 01` is accepted by
+  `wmr_ctrl_parse_command` (tests/test_ctrl.c:65), and a disconnected RIGHT should reach
+  `wmr_controller_forget_bond()` and return OK or NO_ADDRESS, never INVALID_PARAM, which only comes
+  from the length/hand parse check. Either nRF Connect sent a value that was not two bytes, or the
+  write path truncated it. One retry with the exact bytes confirmed is needed before calling this a
+  firmware defect.
+
+The app's Debug → Controller control panel keeps one status row and replaces it on each
+notification, so "only one notification" there is not by itself a defect; no app issue was filed
+for it.
 
 `wmr_controller_forget_bond()` returns `WMR_BOND_RESET_BUSY` when `connect_pending` is set or the
 hand has a `cid`/`connected` (`src/wmr_controller.c`), and `ctrl_write` maps that to ATT `0x81`
