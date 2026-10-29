@@ -36,9 +36,10 @@
  */
 
 /*
- * wmr_status_led.h - one addressable RGB LED showing how many controllers are connected:
- * red = none, green = one, blue = two. The driver and the poll timer exist only on the
- * ESP32 build; the colour mapping is plain C so the host tests can check it.
+ * wmr_status_led.h - one addressable RGB LED showing which controllers are connected:
+ * red = none, yellow = left only, blue = right only, green = both. The driver and the
+ * poll timer exist only on the ESP32 build; the colour mapping is plain C so the host
+ * tests can check it.
  */
 
 #ifndef WMR_STATUS_LED_H
@@ -48,14 +49,15 @@
 
 typedef enum {
     WMR_STATUS_LED_RED = 0,
-    WMR_STATUS_LED_GREEN,
+    WMR_STATUS_LED_YELLOW,
     WMR_STATUS_LED_BLUE,
+    WMR_STATUS_LED_GREEN,
     WMR_STATUS_LED_COUNT
 } wmr_status_led_color_t;
 
-/* Red for none, green for one, blue for two or more (a single-hand build can only
- * ever reach one). Values above two are clamped to blue. */
-wmr_status_led_color_t wmr_status_led_color_for_connected(unsigned connected);
+/* Red for none, yellow for left only, blue for right only, green for both. A
+ * single-hand build only ever shows red or its hand's colour. */
+wmr_status_led_color_t wmr_status_led_color_for_hands(bool left, bool right);
 
 const char *wmr_status_led_color_name(wmr_status_led_color_t color);
 
