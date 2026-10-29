@@ -50,6 +50,7 @@
 #include <stdio.h>
 #include "btstack_config.h"
 #include "btstack.h"
+#include "esp_mac.h"
 #include "wmr_config.h"
 #include "wmr_console.h"
 #include "wmr_controller.h"
@@ -102,6 +103,15 @@ int btstack_main(int argc, const char *argv[]){
     l2cap_init();
 #ifdef ENABLE_BLE
     sm_init();
+    /* 0.3 phone-link security: LE Secure Connections with bonding only. Legacy
+     * pairing is refused, a bond is required before any protected attribute is
+     * served, and the peripheral asks for security as soon as a central connects.
+     * There is no display and no keypad, so LESC uses Just Works (encrypted, not
+     * MITM-protected); docs/SECURITY.md records that residual risk. */
+    sm_set_io_capabilities(IO_CAPABILITY_NO_INPUT_NO_OUTPUT);
+    sm_set_authentication_requirements(SM_AUTHREQ_SECURE_CONNECTION | SM_AUTHREQ_BONDING);
+    sm_set_secure_connections_only_mode(true);
+    sm_set_request_security(true);
 #endif
     wmr_controller_init(wmr_transport_submit_report);   /* HID host + handler */
     wmr_transport_init();                               /* ATT server + handler */
@@ -123,7 +133,24 @@ int btstack_main(int argc, const char *argv[]){
     hci_set_master_slave_policy(HCI_ROLE_MASTER);
     hci_registration.callback = wmr_bridge_hci_handler;
     hci_add_event_handler(&hci_registration);
-    gap_discoverable_control(1);
+    /* Page scan stays on for controller reconnects; inquiry scan is off so a phone cannot
+     * see (and then Classic-pair) the BR/EDR side. See WMR_CFG_CLASSIC_DISCOVERABLE. */
+    gap_connectable_control(1);
+    gap_discoverable_control(WMR_CFG_CLASSIC_DISCOVERABLE);
+
+    /* Advertise LE with a static random address instead of the public BR/EDR address.
+     * A phone that knows the bridge's BR/EDR address (or infers it from a public LE
+     * address) can merge the two and open Classic HID, which this bridge cannot serve;
+     * the 2026-10-28 logs show the Pixel's BR/EDR side (B0:9C:B2:CE:26:88) coming up
+     * within a second of every LE drop. The address is derived from the BT MAC, so it is
+     * stable across reboots and the phone bond survives. See docs/HID_GAMEPAD.md. */
+    uint8_t le_address[6];
+    if (esp_read_mac(le_address, ESP_MAC_BT) == ESP_OK){
+        le_address[0] |= 0xC0;   /* static random: two most significant bits set */
+        gap_random_address_set(le_address);
+        printf("BLE LE address: %s (static random; separate from the BR/EDR identity)\n",
+               bd_addr_to_str(le_address));
+    }
 
     setvbuf(stdout, NULL, _IONBF, 0);
     wmr_status_led_init();                              /* red/green/blue = 0/1/2 controllers */

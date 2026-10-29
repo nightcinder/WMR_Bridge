@@ -71,6 +71,7 @@ void wmr_console_show_usage(void){
     printf("K: BOND RESET RIGHT - delete the ESP32's stored link key for RIGHT only\n");
     printf("b: BOND RESET ALL   - delete all stored link keys from the ESP32\n");
     printf("   (manual; controller must be disconnected. Put it in pairing mode afterwards.)\n");
+    printf("P: PHONE BOND RESET - delete all bonded BLE phones; disconnect the phone first\n");
 #if WMR_CFG_TEST_LEVERS
     printf("LEVERS test image:\n");
     printf("x: show lever state             t: TX power and DLE readback\n");
@@ -145,8 +146,10 @@ static void print_stats(bool periodic){
     const wmr_stats_t *st = wmr_transport_stats();
     char conn[48] = "n/a";
     if (info.conn_known) wmr_conn_format(&info.conn, conn, sizeof(conn));
-    printf("STREAM phone=%u sub=%u stream=%s mtu=%u conn=[%s]%s q=%u/%u high=%u notify=%lu errors=%lu bridge_hands=%d\n",
-           info.phone_connected, info.subscribed, wmr_stream_mode_name(info.stream), info.mtu,
+    printf("STREAM phone=%u adv=%s hid=%s sub=%u stream=%s mtu=%u conn=[%s]%s q=%u/%u high=%u notify=%lu errors=%lu bridge_hands=%d\n",
+           info.phone_connected, info.advertising ? "on" : "off",
+           info.hid_subscribed ? "on" : "off",
+           info.subscribed, wmr_stream_mode_name(info.stream), info.mtu,
            conn, info.conn_update_pending ? " (update requested, not granted yet)" : "",
            info.queue_count, info.queue_capacity, info.queue_high_water,
            (unsigned long) st->notifications, (unsigned long) st->errors, WMR_CFG_BRIDGE_HANDS);
@@ -157,6 +160,9 @@ static void print_stats(bool periodic){
            batch_mean[0] ? batch_mean : "n/a", (unsigned long) st->batch_max,
            (unsigned long) st->batch_full_flushes);
     const wmr_echo_state_t *echo = wmr_transport_echo();
+    printf("  HID reports=%lu errors=%lu decode_errors=%lu\n",
+           (unsigned long) st->hid_reports, (unsigned long) st->hid_errors,
+           (unsigned long) st->hid_decode_errors);
     printf("  FF15 echo accepted=%lu sent=%lu pending=%u busy=%lu bad=%lu unsubscribed=%lu cancelled=%lu\n",
            (unsigned long) echo->accepted, (unsigned long) echo->sent, echo->pending ? 1u : 0u,
            (unsigned long) echo->busy, (unsigned long) echo->bad,
@@ -164,6 +170,14 @@ static void print_stats(bool periodic){
     wmr_cfgmgr_print();
     printf("  vhci_drop=%lu log_errors=%lu\n",
            (unsigned long) wmr_linkdiag_vhci_drops(), (unsigned long) wmr_linkdiag_log_errors());
+#if WMR_CFG_ATT_TRACE
+    wmr_linkdiag_att_t att;
+    wmr_linkdiag_att_get(&att);
+    printf("  ATT trace=on rx=%lu tx=%lu writes=%lu two_byte_writes=%lu smp=%lu le_sig=%lu\n",
+           (unsigned long) att.rx, (unsigned long) att.tx,
+           (unsigned long) att.writes, (unsigned long) att.two_byte_writes,
+           (unsigned long) att.smp, (unsigned long) att.le_signal);
+#endif
 #if WMR_CFG_FF12_DECIMATE > 1
     printf("  DIAGNOSTIC BUILD: FF12 sends every %dth report per hand (WMR_CFG_FF12_DECIMATE)\n",
            WMR_CFG_FF12_DECIMATE);
@@ -273,6 +287,23 @@ static void bond_reset(unsigned hand){
     }
 }
 
+/* 0.3: delete the stored phone bonds (LE device DB). Separate from `b`, which deletes
+ * Classic link keys for the controllers. */
+static void phone_bond_reset(void){
+    wmr_transport_info_t info;
+    wmr_transport_get_info(&info);
+    if (info.phone_connected){
+        printf("PHONE BOND RESET refused: disconnect the phone first\n");
+        return;
+    }
+    int bonded = le_device_db_count();
+    for (int index = le_device_db_max_count() - 1; index >= 0; index--){
+        le_device_db_remove(index);
+    }
+    printf("PHONE BOND RESET: deleted %d bonded phone(s). Pair again on the next connection.\n",
+           bonded);
+}
+
 static void stdin_process(char cmd){
     switch (cmd){
         case 'c': case 'l': wmr_controller_connect(WMR_HAND_LEFT); break;
@@ -316,6 +347,7 @@ static void stdin_process(char cmd){
             gap_delete_all_link_keys();
             printf("BOND RESET ALL: deleted all stored link keys from ESP32 link key DB\n");
             break;
+        case 'P': phone_bond_reset(); break;
         case '\r': case '\n': break;
         default: wmr_console_show_usage(); break;
     }

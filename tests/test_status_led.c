@@ -51,18 +51,19 @@ static int checks, failures;
     printf("  FAIL line %d: %s\n", __LINE__, #cond); } } while (0)
 
 static void test_mapping(void){
-    printf("controller count to colour\n");
-    CHECK(wmr_status_led_color_for_connected(0) == WMR_STATUS_LED_RED);
-    CHECK(wmr_status_led_color_for_connected(1) == WMR_STATUS_LED_GREEN);
-    CHECK(wmr_status_led_color_for_connected(2) == WMR_STATUS_LED_BLUE);
-    CHECK(wmr_status_led_color_for_connected(3) == WMR_STATUS_LED_BLUE);
+    printf("connected hands to colour\n");
+    CHECK(wmr_status_led_color_for_hands(false, false) == WMR_STATUS_LED_RED);
+    CHECK(wmr_status_led_color_for_hands(true, false) == WMR_STATUS_LED_YELLOW);
+    CHECK(wmr_status_led_color_for_hands(false, true) == WMR_STATUS_LED_BLUE);
+    CHECK(wmr_status_led_color_for_hands(true, true) == WMR_STATUS_LED_GREEN);
 }
 
 static void test_names(void){
     printf("colour names\n");
     CHECK(strcmp(wmr_status_led_color_name(WMR_STATUS_LED_RED), "red") == 0);
-    CHECK(strcmp(wmr_status_led_color_name(WMR_STATUS_LED_GREEN), "green") == 0);
+    CHECK(strcmp(wmr_status_led_color_name(WMR_STATUS_LED_YELLOW), "yellow") == 0);
     CHECK(strcmp(wmr_status_led_color_name(WMR_STATUS_LED_BLUE), "blue") == 0);
+    CHECK(strcmp(wmr_status_led_color_name(WMR_STATUS_LED_GREEN), "green") == 0);
     CHECK(strcmp(wmr_status_led_color_name(WMR_STATUS_LED_COUNT), "?") == 0);
 }
 

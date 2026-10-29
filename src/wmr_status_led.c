@@ -52,18 +52,20 @@
 
 /* ---- Colour mapping (also built by the host tests) ---------------------- */
 
-wmr_status_led_color_t wmr_status_led_color_for_connected(unsigned connected){
-    if (connected == 0) return WMR_STATUS_LED_RED;
-    if (connected == 1) return WMR_STATUS_LED_GREEN;
-    return WMR_STATUS_LED_BLUE;
+wmr_status_led_color_t wmr_status_led_color_for_hands(bool left, bool right){
+    if (left && right) return WMR_STATUS_LED_GREEN;
+    if (left) return WMR_STATUS_LED_YELLOW;
+    if (right) return WMR_STATUS_LED_BLUE;
+    return WMR_STATUS_LED_RED;
 }
 
 const char *wmr_status_led_color_name(wmr_status_led_color_t color){
     switch (color){
-        case WMR_STATUS_LED_RED:   return "red";
-        case WMR_STATUS_LED_GREEN: return "green";
-        case WMR_STATUS_LED_BLUE:  return "blue";
-        default:                   return "?";
+        case WMR_STATUS_LED_RED:    return "red";
+        case WMR_STATUS_LED_YELLOW: return "yellow";
+        case WMR_STATUS_LED_BLUE:   return "blue";
+        case WMR_STATUS_LED_GREEN:  return "green";
+        default:                    return "?";
     }
 }
 
@@ -107,9 +109,10 @@ static bool led_write(wmr_status_led_color_t color){
     uint8_t r = 0, g = 0, b = 0;
 
     switch (color){
-        case WMR_STATUS_LED_GREEN: g = scale; break;
-        case WMR_STATUS_LED_BLUE:  b = scale; break;
-        default:                   r = scale; break;
+        case WMR_STATUS_LED_YELLOW: r = scale; g = scale; break;
+        case WMR_STATUS_LED_GREEN:  g = scale; break;
+        case WMR_STATUS_LED_BLUE:   b = scale; break;
+        default:                    r = scale; break;
     }
     led_grb[0] = g;
     led_grb[1] = r;
@@ -143,14 +146,15 @@ void wmr_status_led_show(wmr_status_led_color_t color){
 
 static void led_poll(void *arg){
     (void) arg;
-    unsigned connected = 0;
+    bool connected[WMR_NUM_CONTROLLERS] = { false, false };
     for (unsigned hand = 0; hand < WMR_NUM_CONTROLLERS; hand++){
         if (!WMR_BRIDGE_HAND_ENABLED(hand)) continue;
         wmr_controller_status_t status;
         wmr_controller_get_status(hand, &status);
-        if (status.connected) connected++;
+        connected[hand] = status.connected;
     }
-    wmr_status_led_show(wmr_status_led_color_for_connected(connected));
+    wmr_status_led_show(wmr_status_led_color_for_hands(connected[WMR_HAND_LEFT],
+                                                        connected[WMR_HAND_RIGHT]));
 }
 
 static bool led_add_pin(int gpio){

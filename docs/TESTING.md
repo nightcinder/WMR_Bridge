@@ -31,6 +31,15 @@ The host tests cover (see `tests/test_protocol.c`):
   per-hand purge counts, peak survives clear;
 - all eight sample frames in `samples/controller_frames.txt` at every capacity.
 
+The 0.3 phone-link policy has its own host test (`tests/test_secure.c`): a
+pairing or re-encryption result is accepted only with both success and a stored
+bond, a failed pairing or a 30 s timeout refuses the central, a re-encryption
+failure caused by a stale key (`PIN_OR_KEY_MISSING`) asks the transport to
+delete the bond and re-pair instead of disconnecting, events for another
+connection are ignored, and a second central may not connect. It does not test
+BTstack's SM, the GATT permission bits or the radio; those need the phone + ESP32
+run.
+
 These tests exercise the pure-C protocol and queue code only. They do **not**
 test BTstack integration, callbacks, timers or radio behavior.
 

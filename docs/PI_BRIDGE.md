@@ -216,6 +216,50 @@ file). The token file must be owned by `wmr` (mode 0600): a root-owned file is
 unreadable by the service, which then exits with a message naming the path and
 the uid it runs as. It does not enable itself until you do.
 
+### Pre-flight kit (no hardware)
+
+The image is **Raspberry Pi OS Bookworm 64-bit** (Lite or Desktop) written with
+Raspberry Pi Imager, plus this package. No custom `pi-gen` image is maintained:
+the daemon is one dependency-free Python tree, so a bespoke image would only
+duplicate Raspberry Pi OS and add another artifact to keep current. Record the
+image date and kernel in the sitting record (§5.1 of the run sheet).
+
+Build and verify the installable package on any Linux host:
+
+```bash
+pi/build_package.sh                 # dist/wmr-bridge-0.2.1.tar.gz + .sha256
+pi/tools/verify_package.sh dist/wmr-bridge-0.2.1.tar.gz
+scp dist/wmr-bridge-0.2.1.tar.gz* pi@<pi>:~
+ssh pi@<pi> 'tar -xzf wmr-bridge-0.2.1.tar.gz && sudo wmr-bridge-0.2.1/pi/install.sh'
+```
+
+The package carries `pi/` (daemon, probe, installer, systemd unit, udev rule),
+`docs/PI_BRIDGE.md` and `samples/controller_frames.txt`, so it installs without
+a git checkout. The installer copies the replay capture to
+`/opt/wmr-bridge/samples/`, which makes the P2 check runnable on the Pi before a
+controller is paired:
+
+```bash
+cd /opt/wmr-bridge/pi
+python3 -m wmr_bridge --list
+python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
+python3 tools/wifi_probe.py --stream batched --duration 10
+```
+
+Host-side dry run (no Pi, no controller, no root; safe to run in CI):
+
+```bash
+pi/tools/dry_run.sh
+```
+
+It builds and verifies the package, stages `pi/install.sh` into a temporary
+rootfs, starts the daemon from the staged tree in replay mode, and asserts that
+the packaged probe receives both hands with zero sequence gaps, zero tick-based
+missing reports, zero server drops and zero decode errors. It also checks the
+installed unit, udev rule and `0600` token. A pass means the packaging path is
+sound; it is **not** a Pi, BlueZ or radio result. The hardware checks remain
+P1–P10 in the run sheet.
+
 ### Wi-Fi and firewall
 
 - Use a 5 GHz SSID and verify with `iw dev wlan0 link` (`freq` above 5000).
@@ -504,10 +548,11 @@ safeguards below are enforced by the daemon; the transport is still plaintext.
   a web page cannot open a socket to the daemon.
 - **Bounded handshake.** An HTTP upgrade that does not complete within 5 seconds
   is closed, so half-open connections cannot accumulate.
-- The WebSocket is plaintext. The token prevents unauthorised clients, but it
-  does not encrypt controller data and does not resist an on-path attacker. Use
-  WPA2/WPA3, a dedicated/trusted network, or an SSH tunnel until TLS is
-  implemented.
+- The WebSocket is plaintext by itself. The token prevents unauthorised
+  clients, but it does not encrypt controller data and does not resist an
+  on-path attacker. Terminate TLS in front of the daemon (see
+  [TLS termination](#tls-termination)) or use WPA2/WPA3, a dedicated/trusted
+  network, or an SSH tunnel.
 - Never port-forward 8765 from the internet. Bind only the interface you
   intend, and keep the firewall closed except for the LAN clients you expect.
 - Store the token in a mode-600 file **owned by the service user** (`wmr`) and
@@ -521,7 +566,75 @@ safeguards below are enforced by the daemon; the transport is still plaintext.
 - Controller motion data can be personal data. Captures and logs should be
   handled accordingly. The repository samples contain no Bluetooth address.
 - There is no rate limiting, no per-client authorisation beyond the token, and
-  no TLS yet. Treat it as bench equipment with a small, local attack surface.
+  no TLS in the daemon itself. Treat it as bench equipment with a small, local
+  attack surface.
+
+### TLS termination
+
+The daemon deliberately has no TLS stack of its own. Put a TLS terminator on the
+Pi and point the companion at `wss://<pi>:8443/` instead of `ws://<pi>:8765/`:
+
+```
+phone (wss://) --TLS--> stunnel or nginx on the Pi --ws://127.0.0.1--> wmr_bridge
+```
+
+Keep the daemon on loopback (`--bind 127.0.0.1`) so only the terminator can reach
+it, and keep the bearer token: TLS protects data in transit, the token still
+authorises the client. Do not add `--insecure-no-token` because the listener is
+TLS-wrapped.
+
+**stunnel (simplest).** `/etc/stunnel/wmr-bridge.conf`:
+
+```
+[wmr-bridge]
+accept  = 0.0.0.0:8443
+connect = 127.0.0.1:8765
+cert    = /etc/wmr-bridge/tls/fullchain.pem
+key     = /etc/wmr-bridge/tls/privkey.pem
+```
+
+`systemctl enable --now stunnel4`. stunnel forwards the TLS payload unchanged,
+so the WebSocket upgrade, token and origin checks all run in the daemon as
+before.
+
+**nginx (if it is already on the Pi).** The upgrade headers are required:
+
+```nginx
+server {
+    listen 8443 ssl;
+    server_name wmr-bridge.local;
+    ssl_certificate     /etc/wmr-bridge/tls/fullchain.pem;
+    ssl_certificate_key /etc/wmr-bridge/tls/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8765;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+}
+```
+
+**Certificates.** A phone trusts a public CA, not a name on the LAN. Use either:
+
+- a real hostname with a Let's Encrypt certificate (DNS-01, so the Pi does not
+  need to be reachable from the internet), and connect to that hostname; or
+- a local CA/self-signed certificate and install that CA on the phone's user
+  trust store, then connect to the name in the certificate's SAN. Self-signed
+  certificates are rejected by a phone that has not been told to trust them, and
+  the companion app cannot bypass that.
+
+Do **not** use `--allow-origin '*'` to make a browser work through the
+terminator: the companion and probe do not send an `Origin` header, and a
+browser page that can reach the terminator should not be allowed to open the
+stream.
+
+Firewall port 8443 to the LAN clients you expect, and keep 8765 closed. TLS
+termination does not change the Classic Bluetooth posture: the Pi still trusts
+whatever BlueZ paired, and assigns hands by HID name.
 
 ## Performance expectations and limits
 
@@ -622,9 +735,11 @@ INFO/WARNING:
 
 - Hardware validation of P1-P10 using the bring-up run sheet [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md).
 - Companion app Wi-Fi transport (`wmr_ws` and connect UI in `wmr-companion`).
-- TLS or a pinned-key handshake for non-LAN use.
+- Native TLS in the daemon itself (external termination is documented in
+  [TLS termination](#tls-termination)).
 - FF13 calibration-blob forwarding.
-- Native packaging (`pip install`, `.deb`) and udev rules shipped as files.
+- Native system packaging (`pip install`, `.deb`) and udev rules shipped as files
+  (the tarball package is done: `pi/build_package.sh`).
 - Bench-validate `--hand` single-hand mode and `--advertise-mdns` discovery on real hardware.
 
 ## Files
@@ -633,7 +748,10 @@ INFO/WARNING:
 | --- | --- |
 | `pi/wmr_bridge/` | host bridge package: protocol, decoder, BlueZ, WebSocket, server, mDNS, CLI |
 | `pi/tools/wifi_probe.py` | bench client: throughput, sequence gaps, tick-based missing reports, RTT (min/p50/p95/max), status |
+| `pi/build_package.sh` | builds `dist/wmr-bridge-<version>.tar.gz` plus `.sha256` |
+| `pi/tools/verify_package.sh` | checks package layout, version and checksum |
+| `pi/tools/dry_run.sh` | stages the package, runs replay and asserts the P2 result (no hardware) |
 | `pi/install.sh` | unattended installer (`/opt/wmr-bridge`, udev rule, token, systemd unit & env) |
 | `pi/systemd/` | service unit and environment example (`WMR_BRIDGE_ARGS`) |
 | `pi/udev/` | udev rule (`99-wmr-bridge.rules`) granting `input` group access to `/dev/hidraw*` |
-| `pi/tests/` | 113 host tests (no hardware) |
+| `pi/tests/` | host tests, including the package/dry-run pre-flight (no hardware) |

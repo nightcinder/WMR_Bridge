@@ -53,7 +53,9 @@
 
 typedef struct {
     bool     phone_connected;
+    bool     advertising;      /* connectable LE advertising is on (HCI confirmed) */
     bool     subscribed;       /* phone enabled FF11 or FF12 notifications */
+    bool     hid_subscribed;   /* phone enabled HID input report notifications */
     wmr_stream_t stream;       /* which one (NONE, RAW or DECODED) */
     uint16_t mtu;              /* negotiated ATT MTU; 0 if no phone */
     unsigned queue_count;
@@ -70,6 +72,9 @@ void wmr_transport_init(void);
 /* HCI events: advertising start, LE connect/disconnect of the phone. */
 void wmr_transport_on_hci_event(uint8_t *packet, uint16_t size);
 
+/* SM events: pairing/re-encryption results and the Just Works confirmation. */
+void wmr_transport_on_sm_event(uint8_t *packet, uint16_t size);
+
 /* Report sink for the controller module. Assigns the per-hand sequence
  * number, then queues the frame or counts why it was not queued. */
 void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t length);
@@ -78,6 +83,9 @@ const wmr_stats_t *wmr_transport_stats(void);
 void wmr_transport_get_info(wmr_transport_info_t *info);
 /* Print the last LE data-length-change values seen on the phone link (LEVERS `t`). */
 void wmr_transport_print_dle(void);
+/* Re-assert connectable advertising at the end of a radio-heavy phase (controller
+ * discovery). Logs when the phone can connect again. */
+void wmr_transport_advertising_ready(const char *reason);
 /* FF15 echo counters and pending state. */
 const wmr_echo_state_t *wmr_transport_echo(void);
 
