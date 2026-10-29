@@ -202,13 +202,18 @@ All five are app `wmr-latency` v3 exports from one sitting, 120.0 s each, ping i
 `mtu=517`, bridge `8c:94:df:12:b9:b6`, 479 pings sent and 479 answered. Stream labels are the app's
 own (`raw` = FF11, `decoded` = FF12, `batched` = FF14, `none` = no stream).
 
-| Export (`latency-20261028-…`) | Stream | RTT p50 | p95 | max | Stalls >50 ms L / R | Seq gaps L / R | Tick loss L / R |
-|---|---|---|---|---|---|---|---|
-| `200130` | `batched` (FF14) | 39.3 ms | 92.0 | 126.6 | 235 / 317 | 0 / 0 | 14.5 / 20.7 % |
-| `200358` | `decoded` (FF12) | 34.5 ms | 100.9 | 149.4 | 133 / 140 | 0 / 0 | 15.1 / 24.1 % |
-| `200617` | `raw` (FF11) | 34.3 ms | 98.5 | 126.2 | 158 / 143 | 0 / 0 | not reported |
-| `200916` | `none` | 63.4 ms | 85.5 | 131.9 | — | — | — |
-| `201148` | `none` | 62.3 ms | 80.2 | 138.8 | — | — | — |
+| Export (`latency-20261028-…`) | Stream | RTT p50 | p95 | max | RSSI start → end | Stalls >50 ms L / R | Seq gaps L / R | Tick loss L / R |
+|---|---|---|---|---|---|---|---|---|
+| `200130` | `batched` (FF14) | 39.3 ms | 92.0 | 126.6 | −59 → −65 dBm | 235 / 317 | 0 / 0 | 14.5 / 20.7 % |
+| `200358` | `decoded` (FF12) | 34.5 ms | 100.9 | 149.4 | −64 → −62 dBm | 133 / 140 | 0 / 0 | 15.1 / 24.1 % |
+| `200617` | `raw` (FF11) | 34.3 ms | 98.5 | 126.2 | −62 → −60 dBm | 158 / 143 | 0 / 0 | not reported |
+| `200916` | `none` | 63.4 ms | 85.5 | 131.9 | −62 → −60 dBm | — | — | — |
+| `201148` | `none` | 62.3 ms | 80.2 | 138.8 | −57 → −59 dBm | — | — | — |
+
+All five report `mtu=517`, `connection_interval_us=15000` and `high_priority_requested=true`. What
+the exports cannot supply is the bridge `STREAM` line for each run, so `lat` and `sub` are
+unrecorded, and `200130` (FF14) drifted 6 dB start to end, past the 3 dB note threshold in
+`latency-2` §2 — that run is the weakest of the five and is the one to repeat first.
 
 The ladder is complete: all four streams, with `none` run twice. The `none` frame CSVs are
 98 bytes — header only — which is correct for a run with no decoded samples; the JSON for each
