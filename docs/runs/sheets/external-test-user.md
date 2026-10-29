@@ -1,17 +1,17 @@
-# External tester quickstart — WMR Bridge v0.2.4
+# External tester quickstart — WMR Bridge v0.3.0
 
-One tier, ~20 min. Android 14+ phone, both WMR controllers, board already on v0.2.4.
-Private room: the BLE link is unauthenticated.
+One tier, ~20 min. Android 14+ phone, both WMR controllers, board already on v0.3.0.
+Private room: controller links are unauthenticated.
 
 ## 0. Prerequisites
 
 - Android 14 or newer. Android 13 and below is not supported.
-- Board flashed to v0.2.4 (flasher: https://nightcinder.github.io/WMR_Bridge/). Pre-flashed is fine; say so in the intake block.
+- Board flashed to v0.3.0 (flasher: https://nightcinder.github.io/WMR_Bridge/). Pre-flashed is fine; say so in the intake block.
 - If unsure of the version, reflash; flashing erases stored pairings (expected).
 
 ## 1. Get the APK
 
-https://github.com/nightcinder/wmr-companion/releases/download/v0.0.0-unified-dryrun3/wmr-companion-0.0.0-unified-dryrun3-unified-arm64-v8a.apk
+https://github.com/nightcinder/wmr-companion/releases/download/v0.2.2/wmr-companion-0.2.2-unified-debug.apk
 
 If an older WMR Companion is installed, uninstall it first (CI APKs are signed
 differently): `adb uninstall com.onyxlens.wmr_companion` or app settings.
@@ -26,9 +26,11 @@ differently): `adb uninstall com.onyxlens.wmr_companion` or app settings.
 1. Power the board. Status LED should be **red** (no controllers).
 2. Open the app; grant Bluetooth / Nearby-devices permission.
 3. On the **Connect** screen, scan for `WMR Bridge` and connect.
-4. Confirm the screen says **connected, streaming** with negotiated **MTU** 517
+4. If Android shows a pairing request for `WMR Bridge`, allow it. Firmware 0.3.0
+   bonds and encrypts the phone link.
+5. Confirm the screen says **connected, streaming** with negotiated **MTU** 517
    (>= 61 is usable). Record the MTU shown.
-5. Tap **Open 3D debug view**; stay on the debug screen.
+6. Tap **Open 3D debug view**; stay on the debug screen.
 
 ## 4. Pair controllers
 
@@ -76,8 +78,8 @@ thread where you received this runbook.
 
 - Handle:
 - Date/timezone:
-- Firmware: 0.2.4
-- App: 0.2.2 unified (signed release)
+- Firmware: 0.3.0
+- App: 0.2.2 unified (debug-signed)
 - Phone: make/model/Android
 - Controllers: make/model, LEFT/RIGHT
 - Result: PASS / PARTIAL / FAIL / BLOCKED
