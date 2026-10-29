@@ -5,6 +5,7 @@ Private room: the BLE link is unauthenticated.
 
 ## 0. Prerequisites
 
+- Android 14 or newer. Android 13 and below is not supported.
 - Board flashed to v0.2.4 (flasher: https://nightcinder.github.io/WMR_Bridge/). Pre-flashed is fine; say so in the intake block.
 - If unsure of the version, reflash; flashing erases stored pairings (expected).
 
@@ -32,8 +33,8 @@ differently): `adb uninstall com.onyxlens.wmr_companion` or app settings.
 ## 4. Pair controllers
 
 1. No other host connected to the controllers.
-2. Put BOTH controllers in pairing mode: hold the Windows button on each until
-   their LEDs flash.
+2. Pair both controllers at the same time, not one after the other: put BOTH in
+   pairing mode by holding the Windows button on each until their LEDs flash.
 3. On the debug screen, find **Controller control** and tap **Scan for controllers**.
 4. Wait up to 60 s. Success: both hands `LEFT/RIGHT connected - WMR - HID ready`,
    live stream on both, LED **green**.

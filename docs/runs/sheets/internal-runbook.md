@@ -18,8 +18,9 @@ Do not start with the glasses. Pairing is the gate for every other device.
 **Quick start:**
 
 1. Flash v0.2.4 (or confirm it is already installed).
-2. Install the app on an Android 13+ phone.
-3. Connect to `WMR Bridge`, pair LEFT, then pair RIGHT while LEFT is already streaming.
+2. Install the app on an Android 14+ phone (Android 13 and below is not supported).
+3. Connect to `WMR Bridge`, then pair BOTH controllers together: put both in pairing
+   mode at the same time and scan once.
 4. Screenshot **Controller control**, **Connect**, and the LED; fill in the manifest.
 5. Send the Tier 0 bundle. If anything failed, add the Tier 1 serial log.
 
@@ -35,7 +36,7 @@ Do not start with the glasses. Pairing is the gate for every other device.
 | WMR Bridge board (ESP32 Classic, at least 2 MB flash) | everything | An ESP32-S3 will **not** work: it has no Bluetooth Classic. Do not open the board. |
 | USB data cable | flashing and serial | A charge-only cable will not appear as a port. |
 | Desktop or laptop with Chrome or Edge | flashing | Web Serial is desktop-only; Firefox, Safari and mobile browsers will not work. |
-| Android phone, 64-bit Android 13 or newer | Tier 0 / Tier 2 | Android 13+ is required by the unified app APK. For an older phone, use the fallback APK in §3.2. |
+| Android phone, 64-bit Android 14 or newer | Tier 0 / Tier 2 | Android 14+ is required. Android 13 and below is not supported. |
 | Both WMR controllers, charged | Tier 0 | LEFT and RIGHT. Know which is which; the ring/trigger orientation is in the capture steps. |
 | VITURE Pro Neckband + glasses | device 2 | Optional. The Neckband is an Android host; the glasses are the display. |
 | XREAL glasses + Beam Pro (or S24/S25-class phone) | device 3 | Optional. Air 2 Ultra is the only XREAL model with hand tracking; other models are display/3DoF only. |
@@ -99,16 +100,14 @@ The last line is a consent statement, not a legal contract. You can stop at any 
 | Part | Version | Where it comes from |
 |---|---|---|
 | Firmware | **v0.2.4** (`41a9e5f`) | Browser installer or GitHub release. This is the current tagged release, CI-built and hardware-unverified. |
-| App, Android 13+ | **v0.2.1 unified debug APK** (`0.2.1+3`) | GitHub release asset. This APK contains one shared Unity runtime for the VITURE and XREAL paths. It is large (about 584 MB). |
-| App, Android older than 13 | **v0.1.0 base debug APK** | GitHub release asset. It has the BLE/3DoF/capture/latency screens, but not the unified vendor tracking runtime. |
+| App, Android 14+ | **v0.2.1 unified debug APK** (`0.2.1+3`) | GitHub release asset. This APK contains one shared Unity runtime for the VITURE and XREAL paths. It is large (about 584 MB). |
 | Capture tools (desktop, optional) | WMR_Bridge `main` | `tools/capture_ble.py`, `tools/analyze_capture.py`. |
 
 ### 3.2 Links
 
 - Browser installer (all three firmware variants): <https://nightcinder.github.io/WMR_Bridge/>
 - Firmware release v0.2.4: <https://github.com/nightcinder/WMR_Bridge/releases/tag/v0.2.4>
-- Unified app APK (Android 13+): <https://github.com/nightcinder/wmr-companion/releases/download/v0.2.1/wmr-companion-0.2.1-unified-debug.apk>
-- Fallback base app APK (older Android): <https://github.com/nightcinder/wmr-companion/releases/download/v0.1.0/wmr-companion-0.1.0-debug.apk>
+- Unified app APK (Android 14+): <https://github.com/nightcinder/wmr-companion/releases/download/v0.2.1/wmr-companion-0.2.1-unified-debug.apk>
 - App release notes: <https://github.com/nightcinder/wmr-companion/releases/tag/v0.2.1>
 - Pairing/discovery reference: <https://github.com/nightcinder/WMR_Bridge/blob/main/docs/DISCOVERY.md>
 - Flashing reference: <https://github.com/nightcinder/WMR_Bridge/blob/main/docs/FLASHING.md>
@@ -128,7 +127,7 @@ APK or firmware image.
 
 | Order | Device | What it settles | Minimum bundle | Stop / continue |
 |---|---|---|---|---|
-| **1** | **Android phone + both WMR controllers on v0.2.4** | Whether the `0.2.0` pairing regression is fixed: pair LEFT, then RIGHT while LEFT is already streaming. Also the baseline BLE stream and app screens. | **Tier 0**; Tier 1 if anything fails; Tier 2 if Tier 0 passes and you have time. | If pairing fails, stop and send Tier 1. Do not move to the glasses first. |
+| **1** | **Android phone + both WMR controllers on v0.2.4** | Whether the `0.2.0` pairing regression is fixed: pair BOTH controllers at the same time. Also the baseline BLE stream and app screens. | **Tier 0**; Tier 1 if anything fails; Tier 2 if Tier 0 passes and you have time. | If pairing fails, stop and send Tier 1. Do not move to the glasses first. |
 | **2** | **VITURE Pro Neckband + glasses** | Whether the unified APK runs on the Neckband, displays in the glasses, and whether the VITURE tracking path reports `available`/`unsupported`. Hand tracking needs a Luma Ultra. | Tier 0 (display + app) + Tier 2-V (tracking). | If the app will not install or display, record that and move on. |
 | **3** | **XREAL glasses + Beam Pro** | Same for the XREAL path. Hand tracking needs an Air 2 Ultra and the XREAL input source set to Hands. | Tier 0 + Tier 2-X. | If the model is not an Air 2 Ultra, record `unsupported`/display-only and move on. |
 | **4** | **PSVR2 Sense** | Whether v0.2.4 discovers/pairs PSVR2 hands and forwards raw `0xA1 0x31` frames. No decoded PSVR2 stream exists. | Tier 1 + Tier 2-P. | No PSVR2 hardware is a valid "not run". |
@@ -165,18 +164,12 @@ board yourself, the installer screenshot shows what is available, not what is in
 
 ### 5.2 Install the app
 
-**Phone on Android 13 or newer:**
+**Phone on Android 14 or newer:**
 
 1. Open the unified APK link in §3.2 on the phone.
 2. Allow "install unknown apps" for the browser or file manager when asked.
 3. Install. If an older WMR Companion is already installed, uninstall it first: every CI APK
    is signed differently.
-
-**Phone older than Android 13:**
-
-1. Use the v0.1.0 base APK instead.
-2. If that also refuses to install, record the phone model and Android version and stop; do not
-   sideload a random build.
 
 **If you have adb and prefer it:**
 
@@ -205,32 +198,25 @@ but it does **not** test the `0.2.4` pairing fix. To test pairing, flash `0.2.4`
 the stored pairings) or disconnect each hand, use **Forget bond** on both, and re-pair. If you
 only need the stream baseline, continue without re-pairing.
 
-### 5.4 Pair LEFT first
+### 5.4 Pair both controllers at the same time
 
 1. Make sure no other host is connected to the controllers (turn off Bluetooth on a PC or
    headset that was previously paired, or remove the pairing there).
-2. Put **LEFT** in pairing mode: hold the Windows button until the LEDs flash.
+2. Put **BOTH** controllers in pairing mode together: hold the Windows button on each until
+   their LEDs flash. Do not pair one and then start the other.
 3. In the app, find **Controller control** on the debug screen and press **Scan for
    controllers**. If the board's automatic discovery already timed out after boot, this starts
-   a fresh run.
-4. Wait up to 60 seconds. Success looks like `LEFT connected - WMR - HID ready` and live
-   stream numbers on the debug screen. The LED should turn **green**.
-5. If the hand stays `not connected` or the app shows an error, press the **Forget bond
-   (LEFT)** icon, put LEFT back in pairing mode, and scan again once. The exact Bluetooth error
-   code, such as `0x05`, `0x06` or `0x13`, is in the serial log (Tier 1). If it still fails,
-   stop this hand and go to Tier 1.
+   a fresh run. The board may connect the two hands one after the other within the same scan.
+4. Wait up to 60 seconds. Success looks like `LEFT/RIGHT connected - WMR - HID ready`, live
+   stream numbers on both hands, and a **green** LED.
+5. If one hand stays `not connected` or the app shows an error, press the matching **Forget
+   bond (LEFT)** / **Forget bond (RIGHT)** icon, put both controllers back in pairing mode,
+   and scan once more. The exact Bluetooth error code, such as `0x05`, `0x06` or `0x13`, is in
+   the serial log (Tier 1). If it still fails, stop and send Tier 1.
 
-### 5.5 Pair RIGHT while LEFT is streaming (the regression case)
-
-1. Leave LEFT connected and streaming. Do not disconnect it.
-2. Put **RIGHT** in pairing mode.
-3. Press **Scan for controllers** again.
-4. Wait up to 60 seconds. Success looks like `RIGHT connected - WMR - HID ready`, live stream
-   numbers for both hands, and a **blue** LED.
-5. If RIGHT fails while LEFT is streaming, that is the known `0.2.x` second-hand failure
-   pattern this run is meant to test. If your `0.2.0` failure looked different, say so in the
-   intake and still run this sequence. Do not reflash `0.2.0`. Press **Forget bond (RIGHT)**,
-   retry once, then stop and send Tier 1.
+The old `0.2.x` failure pattern was RIGHT failing while LEFT was already streaming. If your
+`0.2.0` failure looked different, say so in the intake instead of changing this sequence. Do
+not reflash `0.2.0`.
 
 ### 5.6 Capture Tier 0
 
@@ -314,7 +300,7 @@ Then:
 1. Reset the board (press **EN**, or unplug/replug USB) so the log includes the boot banner.
 2. Type `v` and press Enter. The log should print the firmware version; confirm `0.2.4`.
 3. Type `s` and press Enter to print the status block.
-4. Repeat the LEFT-then-RIGHT pairing steps from §5.4–§5.5.
+4. Repeat the pairing steps from §5.4.
 5. If the second hand fails, let the retries finish (about 30 seconds) before stopping.
 6. Type `s` once more, then stop the capture.
 
@@ -421,7 +407,7 @@ Follow the prompts. Repeat with `--hand RIGHT`. Keep the raw `.txt`; do **not** 
 
 ### 7.4 VITURE: display and tracking observation
 
-Do this only if you have a VITURE Pro Neckband (Android 13+) and glasses. Use the unified APK.
+Do this only if you have a VITURE Pro Neckband (Android 14+) and glasses. Use the unified APK.
 
 1. Disconnect the phone from the bridge. The bridge serves one client.
 2. Install the unified APK on the Neckband. Launch it.
@@ -443,7 +429,7 @@ or Unity yourself.
 ### 7.5 XREAL: display and tracking observation
 
 Do this only if you have XREAL glasses and a Beam Pro (or an S24/S25-class phone). The unified
-APK needs a 64-bit Android 13+ host.
+APK needs a 64-bit Android 14+ host.
 
 1. Disconnect the phone from the bridge.
 2. Connect the XREAL glasses to the Beam Pro/phone and confirm the display works.
@@ -466,8 +452,8 @@ only; that is not a failure.
 
 For any glasses not covered above:
 
-1. Connect the glasses to their normal Android host.
-2. Install and launch the app (base APK is fine if the host is older than Android 13).
+1. Connect the glasses to their normal Android 14+ host.
+2. Install and launch the app.
 3. Record the make/model and whether the app is visible and usable.
 4. Screenshot the display.
 5. Do not claim tracking or controller support from this step.
@@ -606,12 +592,12 @@ This is a helper, not a guarantee. Read the files before sending.
 
 ### 10.1 Android phone + both WMR controllers (device 1)
 
-This is the gate. The important sequence is **LEFT first, then RIGHT while LEFT is already
-streaming**. That is the `0.2.0` regression pattern. A clean run shows both hands as
-`connected - WMR - HID ready`, a blue LED, live rates on both hands, and no repeated
-authentication errors.
+This is the gate. The important sequence is **both controllers in pairing mode at the same
+time, one scan**. The board may connect the hands one after the other within that scan. A clean
+run shows both hands as `connected - WMR - HID ready`, a green LED, live rates on both hands,
+and no repeated authentication errors.
 
-If the second hand fails, capture the serial log with the `pair` lines and the HCI error. The
+If one hand fails, capture the serial log with the `pair` lines and the HCI error. The
 useful codes are `0x05` (link key mismatch), `0x06` (PIN or key missing), `0x09` (connection
 limit exceeded) and `0x13` (remote user terminated). Do not interpret them; send them.
 
@@ -693,11 +679,11 @@ Keep the short block in the message; put the full manifest in `manifest.md`.
 - Handle:
 - Date/timezone:
 - Firmware: 0.2.4 (installer screenshot attached)
-- App: 0.2.1 unified / 0.1.0 base
+- App: 0.2.1 unified
 - Phone: make/model/Android
 - Controllers: make/model, LEFT/RIGHT
 - Result: PASS / PARTIAL / FAIL / BLOCKED
-- Pairing: LEFT ____, RIGHT while LEFT streaming ____
+- Pairing: BOTH paired simultaneously ____
 - LED: red / green / blue
 - MTU shown: ____
 - Files: manifest, installer, controller-control, connect, debug, LEDs
