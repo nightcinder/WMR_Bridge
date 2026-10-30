@@ -214,6 +214,12 @@ checksum and runs the installer from the extracted tree. Set
 installer creates the same user, udev rule, token and env file but does not
 enable the service; the `.deb` does.
 
+Every `v*` release attaches `wmr-bridge-<version>.tar.gz`, its `.sha256`,
+`wmr-bridge_<version>_all.deb`, its `.sha256` and `install.sh`, built by the
+`package` job in `.github/workflows/firmware.yml` from `pi/build_package.sh` and
+`pi/build_deb.sh`. The package version comes from `pi/wmr_bridge/__version__`,
+not from the tag.
+
 Or run the equivalent manual steps:
 
 ```bash
@@ -252,7 +258,7 @@ Build and verify the installable packages on any Linux host:
 
 ```bash
 pi/build_package.sh                 # dist/wmr-bridge-0.2.1.tar.gz + .sha256
-pi/build_deb.sh                     # dist/wmr-bridge_0.2.1_all.deb
+pi/build_deb.sh                     # dist/wmr-bridge_0.2.1_all.deb + .sha256
 pi/tools/verify_package.sh dist/wmr-bridge-0.2.1.tar.gz
 scp dist/wmr-bridge_0.2.1_all.deb pi@<pi>:~
 ssh pi@<pi> 'sudo apt install ./wmr-bridge_0.2.1_all.deb'
@@ -784,7 +790,7 @@ INFO/WARNING:
 | `pi/wmr_bridge/` | host bridge package: protocol, decoder, BlueZ, WebSocket, server, mDNS, CLI |
 | `pi/tools/wifi_probe.py` | bench client: throughput, sequence gaps, tick-based missing reports, RTT (min/p50/p95/max), status |
 | `pi/build_package.sh` | builds `dist/wmr-bridge-<version>.tar.gz` plus `.sha256` |
-| `pi/build_deb.sh` | builds `dist/wmr-bridge_<version>_all.deb` (no root; maintainer scripts in `pi/debian/`) |
+| `pi/build_deb.sh` | builds `dist/wmr-bridge_<version>_all.deb` and its `.sha256` (no root; maintainer scripts in `pi/debian/`) |
 | `pi/tools/verify_package.sh` | checks package layout, version and checksum |
 | `pi/tools/dry_run.sh` | stages the `.deb`, checks reinstall/remove, runs replay (no hardware) |
 | `pi/install.sh` | unattended installer; piped mode fetches and verifies the release tarball |

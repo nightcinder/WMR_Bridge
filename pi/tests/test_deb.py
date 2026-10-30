@@ -41,6 +41,18 @@ class DebPackagingTests(unittest.TestCase):
             deb = out / f"wmr-bridge_{VERSION}_all.deb"
             self.assertTrue(deb.is_file(), msg=proc.stdout)
 
+            sums = out / f"wmr-bridge_{VERSION}_all.deb.sha256"
+            self.assertTrue(sums.is_file(), msg=proc.stdout)
+            check = subprocess.run(
+                ["sha256sum", "-c", sums.name],
+                cwd=out,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(check.returncode, 0, msg=check.stderr)
+            self.assertIn(f"{deb.name}: OK", check.stdout)
+
             info = subprocess.run(
                 ["dpkg-deb", "-I", str(deb)],
                 capture_output=True,
