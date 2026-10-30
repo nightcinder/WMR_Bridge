@@ -8,6 +8,21 @@ Source of truth for segments, durations and acceptance: **filter-spec rev 4,
 section 8**. This sheet restates them for operators; if they disagree, the spec
 wins.
 
+## Search grid (filter-spec rev 4, section 7)
+
+Copied verbatim from `filter-spec` rev 4 section 7 for the analysis harness.
+Operators do not choose these values. If this table and the spec disagree, the
+spec wins and the run is invalid.
+
+| Constant | Min | Max | Step | Points |
+|---|---|---|---|---|
+| minCutoff | 1.0 Hz | 4.0 Hz | 0.25 Hz | 13 |
+| beta | 0.00 | 0.40 Hz per cm/s | 0.01 | 41 |
+| dCutoff | 0.5 Hz | 4.0 Hz | 0.5 Hz | 8 |
+
+That is 4,264 points per runtime, all of them evaluated by capture replay. No
+early stop and no coarse-to-fine pruning.
+
 ## When the step appears
 
 - Only when the active tracking source reports hand joints (VITURE / XREAL /
