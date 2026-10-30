@@ -78,13 +78,19 @@ jobs:
           set -euo pipefail
           export IDF_TOOLS_PATH="$HOME/.espressif"
           IDF_DIR="/opt/hostedtoolcache/esp-idf/v6.1"
-          # First run clones and installs ESP-IDF 6.1 into the runner's
-          # persistent volumes; later runs reuse it. install.sh and the build
-          # share this step because PATH changes do not carry across steps.
+          # The clone and tool install live in the runner's persistent volumes:
+          # the first run pays for them, later runs reuse them. install.sh and
+          # the build share this step because PATH changes do not carry across
+          # steps. An earlier run can leave the clone without a working
+          # toolchain, so re-check the tools before skipping the install.
           if [ ! -f "$IDF_DIR/export.sh" ]; then
             mkdir -p "$(dirname "$IDF_DIR")"
             git clone --depth 1 --branch v6.1 --recursive --shallow-submodules \
               https://github.com/espressif/esp-idf.git "$IDF_DIR"
+            "$IDF_DIR/install.sh" esp32
+          elif ! ( . "$IDF_DIR/export.sh" >/dev/null 2>&1 && \
+                   command -v xtensa-esp32-elf-gcc >/dev/null 2>&1 ); then
+            echo "ESP-IDF is present but its esp32 tools are not; installing."
             "$IDF_DIR/install.sh" esp32
           fi
           . "$IDF_DIR/export.sh"
