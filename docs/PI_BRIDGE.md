@@ -178,6 +178,8 @@ Useful flags:
 
 ### Installation
 
+For a step-by-step tester guide covering OS flashing with Raspberry Pi Imager, 5 GHz Wi-Fi setup, controller pairing, `wifi_probe` validation, upgrades, and troubleshooting, see the [Raspberry Pi Deployment and Update Runbook](DEPLOY_RPI.md).
+
 On **Raspberry Pi OS Bookworm 64-bit**, install the Debian package:
 
 ```bash
