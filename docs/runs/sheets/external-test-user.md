@@ -58,7 +58,8 @@ Optional alternative. From the **Connect** screen tap **Run guided bench** and p
 a mode: **3DoF only** (bridge, full run), **6DoF only** (glasses, no bridge,
 shorter run), or **Combined**. With no Raspberry Pi bridge, use **6DoF only** —
 the bridge steps are skipped and the run is shorter; that is expected, not a
-broken install. The bench ends with **Write test bundle**.
+broken install. (For deploying and running with a Raspberry Pi bridge, see
+the [RPi deployment runbook](../../DEPLOY_RPI.md)). The bench ends with **Write test bundle**.
 
 **Capture 6DoF pose** appears only when your glasses' hand tracking is active.
 It asks for five short movements per hand — hold still, let it drift, slow pan,
