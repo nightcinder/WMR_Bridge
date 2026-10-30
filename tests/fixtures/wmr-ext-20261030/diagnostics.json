@@ -1,0 +1,65 @@
+{
+  "format": "wmr-test-bundle/1",
+  "generated_at": "2026-10-30T12:00:05.000Z",
+  "app": {
+    "name": "wmr_companion_app",
+    "version": "0.2.2+4",
+    "commit": "c0ffee1"
+  },
+  "device": {
+    "phone": "Google Pixel 8",
+    "android": "Android 14 (API 34)"
+  },
+  "stream": {
+    "mode": "raw",
+    "raw": {
+      "hand": "both"
+    }
+  },
+  "bridges": [
+    {
+      "id": "AA:BB:CC:DD:EE:FF",
+      "transport": "BLE",
+      "firmware": {
+        "source": "FF16",
+        "version": "1.2.3",
+        "malformed": false,
+        "feature_present": true,
+        "unavailable": false,
+        "features": [
+          "firmware_version"
+        ]
+      },
+      "mtu": 247,
+      "link": {
+        "state": "connected",
+        "rssi_dbm": -48,
+        "connection_interval_us": 7500,
+        "phy": "2M"
+      },
+      "stream": {
+        "mode": "raw",
+        "rate_hz": [
+          99.8,
+          99.6
+        ],
+        "loss": [
+          0.004,
+          0.011
+        ]
+      }
+    }
+  ],
+  "bench_mode": "3dof_only",
+  "tracking_runtime": "androidXr",
+  "app_commit": "c0ffee1",
+  "firmware_sha": "0123abc",
+  "pose_captures": [
+    {
+      "file": "pose_capture_androidXr_left_still.json",
+      "runtime": "androidXr",
+      "hand": "left",
+      "segment": "still"
+    }
+  ]
+}

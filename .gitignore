@@ -5,6 +5,8 @@ sdkconfig.old
 
 # Hardware capture output (tools/capture_ble.py)
 captures/
+# ...except the checked-in triage fixture, which needs its capture files
+!tests/fixtures/*/captures/
 
 # Firmware build and release artifacts (tools/firmware/build.py)
 .fw-build/

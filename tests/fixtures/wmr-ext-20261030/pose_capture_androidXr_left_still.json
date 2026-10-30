@@ -1,0 +1,21 @@
+{
+  "format": "wmr-pose-recording",
+  "version": 1,
+  "samples": [
+    {
+      "host_ns": 1000,
+      "left": {
+        "hand": "left",
+        "host_time_ns": 1000
+      },
+      "right": {
+        "hand": "right",
+        "host_time_ns": 1000
+      },
+      "tracking": {
+        "v": 1,
+        "time_ns": 1000
+      }
+    }
+  ]
+}
