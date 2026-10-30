@@ -19,9 +19,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The `liesa` runner is deliberately isolated: it has no Docker socket, so
+  # firmware is built natively there from an ESP-IDF checkout kept in its
+  # persistent volumes. Only push, tag and manual runs go to it — a pull
+  # request must never execute code on that host — so PRs keep building in the
+  # pinned ESP-IDF container on a GitHub-hosted runner. `Build firmware` stays
+  # the required PR check.
   build:
     name: Build firmware
-    runs-on: [self-hosted, liesa, esp-idf]
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
     container:
       image: espressif/idf:v6.1
     timeout-minutes: 90
@@ -38,6 +45,49 @@ jobs:
           IDF_PATH: /opt/esp/idf
         run: |
           . "$IDF_PATH/export.sh"
+          for variant in both left right; do
+            python3 tools/firmware/build.py --variant "$variant" --out dist
+          done
+
+      - name: List artifacts
+        run: ls -lh dist
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: firmware
+          path: dist
+          if-no-files-found: error
+          retention-days: 30
+
+  build-liesa:
+    name: Build firmware (self-hosted)
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, liesa, esp-idf]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Mark the checkout safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Build firmware (native ESP-IDF)
+        run: |
+          set -euo pipefail
+          export IDF_TOOLS_PATH="$HOME/.espressif"
+          IDF_DIR="/opt/hostedtoolcache/esp-idf/v6.1"
+          # First run clones and installs ESP-IDF 6.1 into the runner's
+          # persistent volumes; later runs reuse it. install.sh and the build
+          # share this step because PATH changes do not carry across steps.
+          if [ ! -f "$IDF_DIR/export.sh" ]; then
+            mkdir -p "$(dirname "$IDF_DIR")"
+            git clone --depth 1 --branch v6.1 --recursive --shallow-submodules \
+              https://github.com/espressif/esp-idf.git "$IDF_DIR"
+            "$IDF_DIR/install.sh" esp32
+          fi
+          . "$IDF_DIR/export.sh"
           for variant in both left right; do
             python3 tools/firmware/build.py --variant "$variant" --out dist
           done
@@ -86,7 +136,7 @@ jobs:
   release:
     name: Publish GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, package]
+    needs: [build-liesa, package]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -120,7 +170,7 @@ jobs:
   pages:
     name: Deploy browser flasher
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: build-liesa
     runs-on: ubuntu-latest
     permissions:
       pages: write

@@ -269,9 +269,13 @@ developer can build uncommitted changes. The `commit` and `dirty` fields in
 - **Manual dispatch** builds and uploads the workflow artifact but does not
   deploy to Pages. Serve `dist/` locally to test the installer before tagging.
 
-The build runs on the self-hosted `liesa` runner
-(`[self-hosted, liesa, esp-idf]`) in the official `espressif/idf:v6.1`
-container; no secrets are needed. `actions/checkout` uses full history so
+Releases build on the self-hosted `liesa` runner
+(`[self-hosted, liesa, esp-idf]`), natively: the runner has no Docker socket, so
+the job clones ESP-IDF `v6.1` into `/opt/hostedtoolcache/esp-idf/v6.1` and
+installs its tools into `$HOME/.espressif` on the first run, and reuses both on
+later runs. Pull requests never run on that host: their `Build firmware` check
+builds in the `espressif/idf:v6.1` container on a GitHub-hosted runner. No
+secrets are needed either way. `actions/checkout` uses full history so
 `git describe` can produce a version.
 
 To publish a release, tag the intended `main` commit (for example, the `v0.2.4`
