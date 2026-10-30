@@ -164,8 +164,8 @@ copy_deb_payload() {
 
 run_maintainer() {
     script="$1"
-    argument="$2"
-    DESTDIR="$ROOT" WMR_SKIP_PRIVILEGED=1 sh "$CONTROL/$script" "$argument"
+    shift
+    DESTDIR="$ROOT" WMR_SKIP_PRIVILEGED=1 sh "$CONTROL/$script" "$@"
 }
 
 assert_deb_install() {
@@ -194,6 +194,7 @@ staged_deb() {
     grep -q '^ Architecture: all$' "$WORK/deb-info.txt" || die "package is not Architecture: all"
     grep -qx '/etc/wmr-bridge/wmr-bridge.env' "$CONTROL/conffiles" ||
         die "wmr-bridge.env is not a conffile"
+    DEB_VERSION="$(sed -n 's/^ Version: //p' "$WORK/deb-info.txt")"
     echo "PASS deb: $(sed -n 's/^ Package: /package=/p; s/^ Version: /version=/p' "$WORK/deb-info.txt" | tr '\n' ' ')arch=all"
 
     copy_deb_payload "$ROOT" 0
@@ -206,16 +207,18 @@ staged_deb() {
     printf '\n# local admin edit kept across upgrades\n' >>"$ROOT/etc/wmr-bridge/wmr-bridge.env"
     ENV_BEFORE="$(sha256sum "$ROOT/etc/wmr-bridge/wmr-bridge.env" | cut -d' ' -f1)"
 
+    run_maintainer prerm upgrade "$DEB_VERSION" >>"$WORK/postinst.log" 2>&1 ||
+        die "prerm upgrade failed (see $WORK/postinst.log)"
     copy_deb_payload "$ROOT" 1
-    run_maintainer postinst configure >>"$WORK/postinst.log" 2>&1 ||
-        die "postinst failed on reinstall (see $WORK/postinst.log)"
+    run_maintainer postinst configure "$DEB_VERSION" >>"$WORK/postinst.log" 2>&1 ||
+        die "postinst failed on upgrade (see $WORK/postinst.log)"
     assert_deb_install
     TOKEN_AFTER="$(sha256sum "$ROOT/etc/wmr-bridge/token" | cut -d' ' -f1)"
     ENV_AFTER="$(sha256sum "$ROOT/etc/wmr-bridge/wmr-bridge.env" | cut -d' ' -f1)"
     [ "$TOKEN_BEFORE" = "$TOKEN_AFTER" ] || die "reinstall replaced the token"
     [ "$ENV_BEFORE" = "$ENV_AFTER" ] || die "reinstall replaced the edited wmr-bridge.env"
     TOKEN_SHORT="$(printf '%s' "$TOKEN_BEFORE" | cut -c1-16)"
-    echo "PASS reinstall: token sha256 ${TOKEN_SHORT}... unchanged; edited wmr-bridge.env preserved"
+    echo "PASS upgrade/reinstall: token sha256 ${TOKEN_SHORT}... unchanged; edited wmr-bridge.env preserved"
 
     replay_from "$ROOT/opt/wmr-bridge"
 
@@ -230,7 +233,7 @@ staged_deb() {
         die "postrm purge failed (see $WORK/prerm.log)"
     [ ! -e "$ROOT/etc/wmr-bridge/token" ] || die "purge kept the token"
     echo "PASS purge: token removed"
-    echo "PASS dry run: Pi .deb installs, reinstalls, replays and removes"
+    echo "PASS dry run: Pi .deb installs, upgrades, replays and removes"
 }
 
 PACKAGE="${1:-}"

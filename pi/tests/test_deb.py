@@ -102,9 +102,9 @@ class DebPackagingTests(unittest.TestCase):
                 "WMR_SKIP_PRIVILEGED": "1",
             }
 
-            def maintainer(script: str, argument: str) -> subprocess.CompletedProcess[str]:
+            def maintainer(script: str, *arguments: str) -> subprocess.CompletedProcess[str]:
                 return subprocess.run(
-                    ["sh", str(control / script), argument],
+                    ["sh", str(control / script), *arguments],
                     env=env,
                     capture_output=True,
                     text=True,
@@ -120,7 +120,9 @@ class DebPackagingTests(unittest.TestCase):
             self.assertGreaterEqual(len(first), 24)
             self.assertTrue((root / "etc" / "wmr-bridge" / "wmr-bridge.env").is_file())
 
-            proc = maintainer("postinst", "configure")
+            proc = maintainer("prerm", "upgrade", VERSION)
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            proc = maintainer("postinst", "configure", VERSION)
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
             self.assertEqual(token.read_text(encoding="utf-8").strip(), first)
 

@@ -104,7 +104,7 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, msg=proc.stdout + proc.stderr)
         self.assertIn("PASS deb:", proc.stdout)
         self.assertIn("PASS install:", proc.stdout)
-        self.assertIn("PASS reinstall:", proc.stdout)
+        self.assertIn("PASS upgrade/reinstall:", proc.stdout)
         self.assertIn("PASS replay:", proc.stdout)
         self.assertIn("PASS remove:", proc.stdout)
         self.assertIn("PASS dry run:", proc.stdout)
