@@ -81,16 +81,33 @@ jobs:
           # The clone and tool install live in the runner's persistent volumes:
           # the first run pays for them, later runs reuse them. install.sh and
           # the build share this step because PATH changes do not carry across
-          # steps. An earlier run can leave the clone without a working
-          # toolchain, so re-check the tools before skipping the install.
-          if [ ! -f "$IDF_DIR/export.sh" ]; then
+          # steps.
+          #
+          # A run cancelled mid-clone (concurrency cancels in progress) leaves a
+          # tree that export.sh exists in but that git never finished checking
+          # out: the toolchain check below would pass, the build would then fail
+          # on a missing file, and every later run would inherit the damage. So
+          # validate the tree itself and re-clone through a scratch directory
+          # rather than into one that may already be populated.
+          idf_tree_ok() {
+            [ -f "$IDF_DIR/export.sh" ] &&
+              git -C "$IDF_DIR" rev-parse --verify --quiet HEAD >/dev/null 2>&1 &&
+              ! git -C "$IDF_DIR" submodule status --recursive 2>/dev/null | grep -q '^-'
+          }
+          if idf_tree_ok; then
+            if ! ( . "$IDF_DIR/export.sh" >/dev/null 2>&1 && \
+                   command -v xtensa-esp32-elf-gcc >/dev/null 2>&1 ); then
+              echo "ESP-IDF is present but its esp32 tools are not; installing."
+              "$IDF_DIR/install.sh" esp32
+            fi
+          else
+            echo "ESP-IDF at $IDF_DIR is missing or incomplete; re-cloning."
+            rm -rf "$IDF_DIR.tmp"
             mkdir -p "$(dirname "$IDF_DIR")"
             git clone --depth 1 --branch v6.1 --recursive --shallow-submodules \
-              https://github.com/espressif/esp-idf.git "$IDF_DIR"
-            "$IDF_DIR/install.sh" esp32
-          elif ! ( . "$IDF_DIR/export.sh" >/dev/null 2>&1 && \
-                   command -v xtensa-esp32-elf-gcc >/dev/null 2>&1 ); then
-            echo "ESP-IDF is present but its esp32 tools are not; installing."
+              https://github.com/espressif/esp-idf.git "$IDF_DIR.tmp"
+            rm -rf "$IDF_DIR"
+            mv "$IDF_DIR.tmp" "$IDF_DIR"
             "$IDF_DIR/install.sh" esp32
           fi
           . "$IDF_DIR/export.sh"
