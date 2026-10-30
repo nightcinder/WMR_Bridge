@@ -53,10 +53,40 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  package:
+    name: Build Pi bridge packages
+    # The Pi package version is independent of the firmware tag (it comes from
+    # pi/wmr_bridge/__version__), so the tag does not override it. The ESP-IDF
+    # build container has no dpkg-deb, hence the separate ubuntu-latest job.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build tarball, .deb and release installer
+        run: |
+          pi/build_package.sh --out dist
+          pi/build_deb.sh --out dist
+          cp pi/install.sh dist/install.sh
+
+      - name: Verify assets and checksums
+        run: |
+          ls -l dist
+          (cd dist && sha256sum -c ./*.sha256)
+          test -f dist/install.sh
+
+      - name: Upload Pi bridge packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: pi-package
+          path: dist
+          if-no-files-found: error
+          retention-days: 30
+
   release:
     name: Publish GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, package]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -65,6 +95,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: firmware
+          path: dist
+
+      - name: Download Pi bridge packages
+        uses: actions/download-artifact@v8
+        with:
+          name: pi-package
           path: dist
 
       - name: Create release

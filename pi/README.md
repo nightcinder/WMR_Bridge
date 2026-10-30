@@ -43,8 +43,8 @@ pi/tools/dry_run.sh
 ## Installable packages
 
 ```bash
-pi/build_package.sh                          # dist/wmr-bridge-<version>.tar.gz
-pi/build_deb.sh                              # dist/wmr-bridge_<version>_all.deb
+pi/build_package.sh                          # dist/wmr-bridge-<version>.tar.gz + .sha256
+pi/build_deb.sh                              # dist/wmr-bridge_<version>_all.deb + .sha256
 pi/tools/verify_package.sh dist/wmr-bridge-<version>.tar.gz
 ```
 
@@ -107,7 +107,7 @@ the probe do not send one.
 | `wmr_bridge/__main__.py` | `python3 -m wmr_bridge` CLI |
 | `tools/wifi_probe.py` | bench client: throughput, gaps, tick-based missing reports, RTT, status |
 | `build_package.sh` | builds `dist/wmr-bridge-<version>.tar.gz` and its `.sha256` |
-| `build_deb.sh` | builds `dist/wmr-bridge_<version>_all.deb` (Architecture: all, no root) |
+| `build_deb.sh` | builds `dist/wmr-bridge_<version>_all.deb` and its `.sha256` (Architecture: all, no root) |
 | `debian/` | Debian control, conffiles and `postinst`/`prerm`/`postrm` templates |
 | `tools/verify_package.sh` | checks package layout, version and checksum |
 | `tools/dry_run.sh` | .deb install/reinstall/remove + replay dry run, no hardware |

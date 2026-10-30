@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build the Debian package for the Raspberry Pi / Linux host bridge.
 #
-#   pi/build_deb.sh                  # dist/wmr-bridge_<version>_all.deb
+#   pi/build_deb.sh                  # dist/wmr-bridge_<version>_all.deb + .sha256
 #   pi/build_deb.sh --out DIR        # write into DIR instead
 #
 # The package is architecture-independent: the daemon is Python. It places the
@@ -118,10 +118,15 @@ for script in postinst prerm postrm; do
 done
 
 mkdir -p "$OUT_DIR"
-rm -f "$DEB"
+rm -f "$DEB" "${DEB}.sha256"
 dpkg-deb --root-owner-group --build "$ROOT" "$DEB" >/dev/null
+
+(
+    cd "$OUT_DIR"
+    sha256sum "${DEB_NAME}" > "${DEB_NAME}.sha256"
+)
 
 echo "package: ${DEB}"
 echo "version: ${DEB_VERSION}"
-echo "sha256:  $(sha256sum "$DEB" | cut -d' ' -f1)"
+echo "sha256:  $(cut -d' ' -f1 "${DEB}.sha256")"
 echo "size:    $(wc -c < "$DEB") bytes"
