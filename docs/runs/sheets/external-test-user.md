@@ -1,7 +1,8 @@
 # External tester quickstart — WMR Bridge v0.3.0 (unified APK)
 
 Three setups, 15–25 minutes depending on which one you are. Android 14+ phone.
-Private room: the BLE link is unauthenticated.
+
+The WMR bridge instructions below are for the ESP32-based bridge. Raspberry Pi bridge instructions are still in development.
 
 ## 0. Which setup are you?
 
@@ -15,7 +16,6 @@ Say which one you ran in the intake block.
 
 - Android 14 or newer. Android 13 and below is not supported.
 - For setups A and C, the board must be flashed to v0.3.0. Flasher: https://nightcinder.github.io/WMR_Bridge/. A pre-flashed board is fine; say so in the intake block. If you are unsure of the version, reflash — flashing erases stored pairings (expected), so the first pairing after a flash is normal.
-- A private room: controller links are unauthenticated.
 
 ### LED legend
 
@@ -68,7 +68,7 @@ From the **Connect** screen tap **Run guided bench**. It ends with **Write test 
 
 ### 6A — 3DoF only, or Combined (bridge)
 
-Pick **3DoF only** for the controller-only path, or **Combined** if you have both the bridge and glasses. Follow the wizard: connect, both hands, firmware/config, still, slow move, 60 s FF11, latency, photo, serial. Every step can be skipped and is recorded as skipped.
+Pick **3DoF only** for the controller-only path, or **Combined** if you have both the bridge and glasses. Follow the wizard: connect, both hands, firmware/config, still, slow move, 60 s FF11, latency, serial. Every step can be skipped and is recorded as skipped.
 
 ### 6B — 6DoF only (no bridge)
 
@@ -90,7 +90,7 @@ PSVR2 support is compiled into firmware 0.2 and later, but it has **never been r
 
 ## 7. Send
 
-Zip the exported files + one LED photo (setups A and C) + the intake block below. Send in the thread where you received this runbook.
+Zip the exported files + the intake block below. Send in the thread where you received this runbook.
 
 ### Intake block
 
@@ -108,12 +108,6 @@ Zip the exported files + one LED photo (setups A and C) + the intake block below
 - Pairing: BOTH controllers paired together ____
 - LED: red / yellow / blue / green
 - MTU shown: ____
-- Files: manifest, exports, LED photo
+- Files: manifest, exports
 - What happened (3 lines max):
 ```
-
-## Stop rules
-
-- Board hot, smells, or LED goes dark: unplug and stop.
-- Pairing fails twice: stop and send what you have.
-- Do not flash an older image or a random one; do not open the board.
