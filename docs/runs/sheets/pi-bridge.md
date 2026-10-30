@@ -112,8 +112,9 @@ The package and the daemon can be validated before the Pi exists. These are
 | Check | Command | Result |
 |---|---|---|
 | Package build + layout + sha256 | `pi/build_package.sh && pi/tools/verify_package.sh dist/wmr-bridge-0.2.1.tar.gz` | pass (`wmr-bridge-0.2.1.tar.gz`: daemon/probe/unit/udev/docs/replay present, no bytecode). The tarball's exact byte count and sha256 depend on the gzip/toolchain, so record them per build instead of comparing them here |
-| Installer staging | `DESTDIR=<tmp> WMR_SKIP_PRIVILEGED=1 pi/install.sh` | pass (`/opt/wmr-bridge`, systemd unit, udev rule, token mode `0600`) |
-| Replay end to end from the installed tree | `pi/tools/dry_run.sh` | pass (480 records, 300 LEFT / 180 RIGHT, `gaps=(0,0)`, `missing=(0,0)`, `dropped=0`, `clients=1`, `errors=0`) |
+| Debian package | `pi/build_deb.sh && dpkg-deb -I/-c dist/wmr-bridge_0.2.1_all.deb` | pass (`Architecture: all`, app in `/opt/wmr-bridge`, unit + udev rule, `/etc/wmr-bridge` conffiles, `postinst` token) |
+| Installer staging | `DESTDIR=<tmp> WMR_SKIP_PRIVILEGED=1 pi/install.sh` | pass (`/opt/wmr-bridge`, systemd unit, udev rule, power-save drop-in, token mode `0600`) |
+| Replay end to end from the installed tree | `pi/tools/dry_run.sh` | pass for the `.deb` (staged install, reinstall keeps token and edited env, 480 records, 300 LEFT / 180 RIGHT, `gaps=(0,0)`, `missing=(0,0)`, `dropped=0`, `clients=1`, `errors=0`, remove/purge exit 0). Pass `dist/wmr-bridge-0.2.1.tar.gz` for the tarball path |
 
 The image is Raspberry Pi OS Bookworm 64-bit from Raspberry Pi Imager plus this
 package; there is no custom image. Re-run `pi/tools/dry_run.sh` after any change
