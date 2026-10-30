@@ -19,8 +19,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The `liesa` runner is deliberately isolated: it has no Docker socket, so
+  # firmware is built natively there from an ESP-IDF checkout kept in its
+  # persistent volumes. Only push, tag and manual runs go to it — a pull
+  # request must never execute code on that host — so PRs keep building in the
+  # pinned ESP-IDF container on a GitHub-hosted runner. `Build firmware` stays
+  # the required PR check.
   build:
     name: Build firmware
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     container:
       image: espressif/idf:v6.1
@@ -38,6 +45,72 @@ jobs:
           IDF_PATH: /opt/esp/idf
         run: |
           . "$IDF_PATH/export.sh"
+          for variant in both left right; do
+            python3 tools/firmware/build.py --variant "$variant" --out dist
+          done
+
+      - name: List artifacts
+        run: ls -lh dist
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: firmware
+          path: dist
+          if-no-files-found: error
+          retention-days: 30
+
+  build-liesa:
+    name: Build firmware (self-hosted)
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, liesa, esp-idf]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Mark the checkout safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Build firmware (native ESP-IDF)
+        run: |
+          set -euo pipefail
+          export IDF_TOOLS_PATH="$HOME/.espressif"
+          IDF_DIR="/opt/hostedtoolcache/esp-idf/v6.1"
+          # The clone and tool install live in the runner's persistent volumes:
+          # the first run pays for them, later runs reuse them. install.sh and
+          # the build share this step because PATH changes do not carry across
+          # steps.
+          #
+          # A run cancelled mid-clone (concurrency cancels in progress) leaves a
+          # tree that export.sh exists in but that git never finished checking
+          # out: the toolchain check below would pass, the build would then fail
+          # on a missing file, and every later run would inherit the damage. So
+          # validate the tree itself and re-clone through a scratch directory
+          # rather than into one that may already be populated.
+          idf_tree_ok() {
+            [ -f "$IDF_DIR/export.sh" ] &&
+              git -C "$IDF_DIR" rev-parse --verify --quiet HEAD >/dev/null 2>&1 &&
+              ! git -C "$IDF_DIR" submodule status --recursive 2>/dev/null | grep -q '^-'
+          }
+          if idf_tree_ok; then
+            if ! ( . "$IDF_DIR/export.sh" >/dev/null 2>&1 && \
+                   command -v xtensa-esp32-elf-gcc >/dev/null 2>&1 ); then
+              echo "ESP-IDF is present but its esp32 tools are not; installing."
+              "$IDF_DIR/install.sh" esp32
+            fi
+          else
+            echo "ESP-IDF at $IDF_DIR is missing or incomplete; re-cloning."
+            rm -rf "$IDF_DIR.tmp"
+            mkdir -p "$(dirname "$IDF_DIR")"
+            git clone --depth 1 --branch v6.1 --recursive --shallow-submodules \
+              https://github.com/espressif/esp-idf.git "$IDF_DIR.tmp"
+            rm -rf "$IDF_DIR"
+            mv "$IDF_DIR.tmp" "$IDF_DIR"
+            "$IDF_DIR/install.sh" esp32
+          fi
+          . "$IDF_DIR/export.sh"
           for variant in both left right; do
             python3 tools/firmware/build.py --variant "$variant" --out dist
           done
@@ -86,7 +159,7 @@ jobs:
   release:
     name: Publish GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, package]
+    needs: [build-liesa, package]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -120,7 +193,7 @@ jobs:
   pages:
     name: Deploy browser flasher
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: build-liesa
     runs-on: ubuntu-latest
     permissions:
       pages: write

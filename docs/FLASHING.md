@@ -239,10 +239,10 @@ The framework pins the two moving pieces that caused most setup failures:
 | Component | Pin |
 | --- | --- |
 | BTstack | commit `e38553977a25fb0b55b383c72c289be0975f422c` (`tools/firmware/build.py`) |
-| ESP-IDF | `espressif/idf:v6.1` in CI; v6.1 locally, as in [BUILD_WINDOWS.md](BUILD_WINDOWS.md) |
+| ESP-IDF | v6.1 everywhere: the `espressif/idf:v6.1` container for pull-request builds, a native v6.1 clone on the `liesa` runner for releases; v6.1 locally, as in [BUILD_WINDOWS.md](BUILD_WINDOWS.md) |
 | Partition table | stock BTstack `port/esp32/sdkconfig.defaults`: `CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y` |
 
-The same source, BTstack commit and ESP-IDF image are used for every release.
+The same source, BTstack commit and ESP-IDF v6.1 are used for every release, whether it runs in the container or natively.
 The build is not claimed to be bit-for-bit reproducible: ESP-IDF embeds
 build-time metadata in the application image. A local Windows build can also
 differ byte-for-byte from the Linux CI image; the release artifact is the CI
@@ -256,8 +256,10 @@ developer can build uncommitted changes. The `commit` and `dirty` fields in
 
 `.github/workflows/firmware.yml`:
 
-- **Pull requests and pushes to `main`** build the firmware and upload `dist/`
-  as a workflow artifact. This catches integration breakage (a source file
+- **Pull requests** build the firmware in the `espressif/idf:v6.1` container on a
+  GitHub-hosted runner and upload `dist/` as a workflow artifact.
+- **Pushes to `main`**, tags and manual dispatch build natively on the
+  `liesa` runner, as described below. This catches integration breakage (a source file
   missing from `integration/main-CMakeLists.txt`, for instance) without
   touching a board.
 - **Tags `v*`** additionally attach every file in `dist/` to the GitHub
@@ -269,8 +271,15 @@ developer can build uncommitted changes. The `commit` and `dirty` fields in
 - **Manual dispatch** builds and uploads the workflow artifact but does not
   deploy to Pages. Serve `dist/` locally to test the installer before tagging.
 
-The build runs in the official `espressif/idf:v6.1` container; no self-hosted
-runner or secrets are needed. `actions/checkout` uses full history so
+Everything except pull requests builds on the self-hosted `liesa` runner
+(`[self-hosted, liesa, esp-idf]`), natively: the runner has no Docker socket, so
+the job clones ESP-IDF `v6.1` into `/opt/hostedtoolcache/esp-idf/v6.1` and
+installs its tools into `$HOME/.espressif` on the first run, and reuses both on
+later runs. If that checkout is ever left incomplete (a cancelled run can cut
+the clone short), the job re-clones it instead of building a broken tree. Pull
+requests never run on that host: their `Build firmware` check builds in the
+`espressif/idf:v6.1` container on a GitHub-hosted runner. No
+secrets are needed either way. `actions/checkout` uses full history so
 `git describe` can produce a version.
 
 To publish a release, tag the intended `main` commit (for example, the `v0.2.4`
