@@ -269,8 +269,9 @@ developer can build uncommitted changes. The `commit` and `dirty` fields in
 - **Manual dispatch** builds and uploads the workflow artifact but does not
   deploy to Pages. Serve `dist/` locally to test the installer before tagging.
 
-The build runs in the official `espressif/idf:v6.1` container; no self-hosted
-runner or secrets are needed. `actions/checkout` uses full history so
+The build runs on the self-hosted `liesa` runner
+(`[self-hosted, liesa, esp-idf]`) in the official `espressif/idf:v6.1`
+container; no secrets are needed. `actions/checkout` uses full history so
 `git describe` can produce a version.
 
 To publish a release, tag the intended `main` commit (for example, the `v0.2.4`
