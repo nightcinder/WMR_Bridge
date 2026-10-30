@@ -260,9 +260,13 @@ ssh pi@<pi> 'sudo apt install ./wmr-bridge_0.2.1_all.deb'
 
 The tarball alternative is `scp dist/wmr-bridge-0.2.1.tar.gz* pi@<pi>:~` then
 `ssh pi@<pi> 'tar -xzf wmr-bridge-0.2.1.tar.gz && sudo wmr-bridge-0.2.1/pi/install.sh'`.
-Both carry `pi/` (daemon, probe, installer, systemd unit, udev rule),
-`docs/PI_BRIDGE.md` and `samples/controller_frames.txt`, so they install without
-a git checkout. The installer copies the replay capture to
+Both carry `pi/` (daemon, probe, installer, systemd unit, udev rule,
+NetworkManager drop-in), `docs/PI_BRIDGE.md` and
+`samples/controller_frames.txt`, so they install without
+a git checkout. The installed `/opt/wmr-bridge/pi` keeps the drop-in next to
+`install.sh`, so re-running the installer from the installed tree works;
+`run_tests.sh` stays in the checkout/release tree because the suite needs the
+repo build scripts. The installer copies the replay capture to
 `/opt/wmr-bridge/samples/`, which makes the P2 check runnable on the Pi before a
 controller is paired:
 

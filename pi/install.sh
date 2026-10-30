@@ -145,6 +145,7 @@ mkdir -p \
     "${DEST_PI}/tools" \
     "${DEST_PI}/systemd" \
     "${DEST_PI}/udev" \
+    "${DEST_PI}/networkmanager" \
     "${DEST_ETC}" \
     "${DEST_UDEV}" \
     "${DEST_SYSTEMD}" \
@@ -155,7 +156,11 @@ for pyfile in "${SCRIPT_DIR}"/wmr_bridge/*.py; do
 done
 
 install -m 0755 "${SCRIPT_DIR}/tools/wifi_probe.py" "${DEST_PI}/tools/wifi_probe.py"
-install -m 0755 "${SCRIPT_DIR}/run_tests.sh" "${DEST_PI}/run_tests.sh"
+# Keep the installed pi/ tree self-sufficient: the shipped install.sh reads the
+# NetworkManager drop-in from its own directory. run_tests.sh stays out of the
+# installed tree because the suite needs the repo build scripts.
+install -m 0644 "${SCRIPT_DIR}/networkmanager/99-wmr-bridge-powersave.conf" \
+    "${DEST_PI}/networkmanager/99-wmr-bridge-powersave.conf"
 install -m 0755 "${SCRIPT_DIR}/install.sh" "${DEST_PI}/install.sh"
 install -m 0644 "${SCRIPT_DIR}/pyproject.toml" "${DEST_PI}/pyproject.toml"
 install -m 0644 "${SCRIPT_DIR}/README.md" "${DEST_PI}/README.md"

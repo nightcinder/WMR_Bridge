@@ -75,6 +75,7 @@ install -d -m 0755 \
     "${OPT}/pi/tools" \
     "${OPT}/pi/systemd" \
     "${OPT}/pi/udev" \
+    "${OPT}/pi/networkmanager" \
     "${OPT}/docs" \
     "${OPT}/samples" \
     "${ETC}" \
@@ -87,7 +88,11 @@ for pyfile in "${SCRIPT_DIR}"/wmr_bridge/*.py; do
     install -m 0644 "$pyfile" "${OPT}/pi/wmr_bridge/$(basename "$pyfile")"
 done
 install -m 0755 "${SCRIPT_DIR}/tools/wifi_probe.py" "${OPT}/pi/tools/wifi_probe.py"
-install -m 0755 "${SCRIPT_DIR}/run_tests.sh" "${OPT}/pi/run_tests.sh"
+# The shipped installer reads the drop-in from its own tree, so the package must
+# carry it: without it install.sh aborts under set -eu. run_tests.sh is not
+# shipped because the suite needs the repo build scripts, not just this tree.
+install -m 0644 "${SCRIPT_DIR}/networkmanager/99-wmr-bridge-powersave.conf" \
+    "${OPT}/pi/networkmanager/99-wmr-bridge-powersave.conf"
 install -m 0755 "${SCRIPT_DIR}/install.sh" "${OPT}/pi/install.sh"
 install -m 0644 "${SCRIPT_DIR}/pyproject.toml" "${OPT}/pi/pyproject.toml"
 install -m 0644 "${SCRIPT_DIR}/README.md" "${OPT}/pi/README.md"
