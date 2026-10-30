@@ -10,6 +10,7 @@ from pathlib import Path
 
 PI_DIR = Path(__file__).resolve().parents[1]
 BUILD = PI_DIR / "build_package.sh"
+BUILD_DEB = PI_DIR / "build_deb.sh"
 VERIFY = PI_DIR / "tools" / "verify_package.sh"
 DRY_RUN = PI_DIR / "tools" / "dry_run.sh"
 
@@ -73,6 +74,39 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, msg=proc.stdout + proc.stderr)
         self.assertIn("PASS install:", proc.stdout)
         self.assertIn("PASS replay:", proc.stdout)
+        self.assertIn("PASS dry run:", proc.stdout)
+
+
+    def test_dry_run_installs_and_replays_the_deb(self) -> None:
+        if subprocess.run(
+            ["sh", "-c", "command -v dpkg-deb >/dev/null 2>&1"],
+            check=False,
+        ).returncode != 0:
+            self.skipTest("dpkg-deb is not installed")
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "dist"
+            build = subprocess.run(
+                [str(BUILD_DEB), "--out", str(out)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(build.returncode, 0, msg=build.stderr)
+            deb = out / "wmr-bridge_0.2.1_all.deb"
+            self.assertTrue(deb.is_file(), msg=build.stdout)
+            proc = subprocess.run(
+                [str(DRY_RUN), str(deb)],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=120,
+            )
+        self.assertEqual(proc.returncode, 0, msg=proc.stdout + proc.stderr)
+        self.assertIn("PASS deb:", proc.stdout)
+        self.assertIn("PASS install:", proc.stdout)
+        self.assertIn("PASS upgrade/reinstall:", proc.stdout)
+        self.assertIn("PASS replay:", proc.stdout)
+        self.assertIn("PASS remove:", proc.stdout)
         self.assertIn("PASS dry run:", proc.stdout)
 
 

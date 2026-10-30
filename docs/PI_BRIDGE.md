@@ -176,19 +176,43 @@ Useful flags:
 | `--duration SECONDS` | stop after a fixed time (bench convenience) |
 | `--list` | print hidraw nodes and exit |
 
-### Unattended service
+### Installation
 
-Run the self-contained installer to create the `wmr` system user (`input`
-group), copy `pi/` into `/opt/wmr-bridge/pi`, install
-`pi/udev/99-wmr-bridge.rules` into `/etc/udev/rules.d/`, generate
-`/etc/wmr-bridge/token` (`0600 wmr:wmr`) if absent, and install
-`pi/systemd/wmr-bridge.service` plus `/etc/wmr-bridge/wmr-bridge.env`:
+On **Raspberry Pi OS Bookworm 64-bit**, install the Debian package:
 
 ```bash
-sudo ./pi/install.sh
-sudo systemctl enable --now wmr-bridge
+sudo apt install ./wmr-bridge_<version>_all.deb
 journalctl -u wmr-bridge -f
 ```
+
+The package is `Architecture: all` (the daemon is Python). `postinst` creates
+the `wmr` system user (`input` group), generates `/etc/wmr-bridge/token`
+(`0600 wmr:wmr`) if it is absent, reloads udev, then enables and starts the
+unit. `/etc/wmr-bridge/wmr-bridge.env` and its example are conffiles, so an
+upgrade keeps local edits; the generated token is not a package file and
+survives reinstall and upgrade. `apt remove wmr-bridge` stops and disables the
+unit and keeps the token; `apt purge wmr-bridge` removes the token.
+
+Tarball and one-line installs use the same tree:
+
+```bash
+# release tarball
+tar -xzf wmr-bridge-<version>.tar.gz
+sudo wmr-bridge-<version>/pi/install.sh
+sudo systemctl enable --now wmr-bridge
+
+# one line, no checkout
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
+sudo systemctl enable --now wmr-bridge
+```
+
+When `install.sh` is piped, `$0` is the shell, so it downloads the matching
+`wmr-bridge-<version>.tar.gz` and `.sha256` from the same release, verifies the
+checksum and runs the installer from the extracted tree. Set
+`WMR_BRIDGE_VERSION=<version>` to pin a release (the tag defaults to
+`v<version>`) and `WMR_BRIDGE_RELEASE_BASE_URL` to use a mirror. The tarball
+installer creates the same user, udev rule, token and env file but does not
+enable the service; the `.deb` does.
 
 Or run the equivalent manual steps:
 
@@ -214,7 +238,7 @@ reads the token from `/etc/wmr-bridge/token`, and loads optional flags from
 `WMR_BRIDGE_ARGS=--hand left` on a single-hand Pi without editing the unit
 file). The token file must be owned by `wmr` (mode 0600): a root-owned file is
 unreadable by the service, which then exits with a message naming the path and
-the uid it runs as. It does not enable itself until you do.
+the uid it runs as.
 
 ### Pre-flight kit (no hardware)
 
@@ -224,18 +248,25 @@ the daemon is one dependency-free Python tree, so a bespoke image would only
 duplicate Raspberry Pi OS and add another artifact to keep current. Record the
 image date and kernel in the sitting record (§5.1 of the run sheet).
 
-Build and verify the installable package on any Linux host:
+Build and verify the installable packages on any Linux host:
 
 ```bash
 pi/build_package.sh                 # dist/wmr-bridge-0.2.1.tar.gz + .sha256
+pi/build_deb.sh                     # dist/wmr-bridge_0.2.1_all.deb
 pi/tools/verify_package.sh dist/wmr-bridge-0.2.1.tar.gz
-scp dist/wmr-bridge-0.2.1.tar.gz* pi@<pi>:~
-ssh pi@<pi> 'tar -xzf wmr-bridge-0.2.1.tar.gz && sudo wmr-bridge-0.2.1/pi/install.sh'
+scp dist/wmr-bridge_0.2.1_all.deb pi@<pi>:~
+ssh pi@<pi> 'sudo apt install ./wmr-bridge_0.2.1_all.deb'
 ```
 
-The package carries `pi/` (daemon, probe, installer, systemd unit, udev rule),
-`docs/PI_BRIDGE.md` and `samples/controller_frames.txt`, so it installs without
-a git checkout. The installer copies the replay capture to
+The tarball alternative is `scp dist/wmr-bridge-0.2.1.tar.gz* pi@<pi>:~` then
+`ssh pi@<pi> 'tar -xzf wmr-bridge-0.2.1.tar.gz && sudo wmr-bridge-0.2.1/pi/install.sh'`.
+Both carry `pi/` (daemon, probe, installer, systemd unit, udev rule,
+NetworkManager drop-in), `docs/PI_BRIDGE.md` and
+`samples/controller_frames.txt`, so they install without
+a git checkout. The installed `/opt/wmr-bridge/pi` keeps the drop-in next to
+`install.sh`, so re-running the installer from the installed tree works;
+`run_tests.sh` stays in the checkout/release tree because the suite needs the
+repo build scripts. The installer copies the replay capture to
 `/opt/wmr-bridge/samples/`, which makes the P2 check runnable on the Pi before a
 controller is paired:
 
@@ -252,20 +283,24 @@ Host-side dry run (no Pi, no controller, no root; safe to run in CI):
 pi/tools/dry_run.sh
 ```
 
-It builds and verifies the package, stages `pi/install.sh` into a temporary
-rootfs, starts the daemon from the staged tree in replay mode, and asserts that
-the packaged probe receives both hands with zero sequence gaps, zero tick-based
+It builds and verifies the `.deb`, stages it in a temporary rootfs, creates the
+token, reinstalls it (keeping the token and a locally edited `wmr-bridge.env`),
+starts the daemon from the staged tree in replay mode, and asserts that the
+packaged probe receives both hands with zero sequence gaps, zero tick-based
 missing reports, zero server drops and zero decode errors. It also checks the
-installed unit, udev rule and `0600` token. A pass means the packaging path is
-sound; it is **not** a Pi, BlueZ or radio result. The hardware checks remain
-P1–P10 in the run sheet.
+installed unit, udev rule, power-save drop-in and `0600` token, then runs
+`prerm`/`postrm` for remove and purge. A pass means the packaging path is sound;
+it is **not** a Pi, BlueZ or radio result. The hardware checks remain P1–P10 in
+the run sheet.
 
 ### Wi-Fi and firewall
 
 - Use a 5 GHz SSID and verify with `iw dev wlan0 link` (`freq` above 5000).
-- Disable Wi-Fi power saving for lower jitter, for example
-  `nmcli connection modify "<name>" wifi.powersave 2` and reconnect, or
-  `sudo iw dev wlan0 set power_save off` for the current boot.
+- Wi-Fi power saving is disabled persistently by the package's NetworkManager
+  drop-in `/etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf`
+  (`wifi.powersave = 2`). Reconnect or reboot after install to apply it. For a
+  host without NetworkManager, use `sudo iw dev wlan0 set power_save off` for the
+  current boot and add it to your network bring-up script.
 - Open only the bridge port: `sudo ufw allow 8765/tcp`.
 - Do not expose the port to the internet. See [Security](#security).
 
@@ -738,8 +773,8 @@ INFO/WARNING:
 - Native TLS in the daemon itself (external termination is documented in
   [TLS termination](#tls-termination)).
 - FF13 calibration-blob forwarding.
-- Native system packaging (`pip install`, `.deb`) and udev rules shipped as files
-  (the tarball package is done: `pi/build_package.sh`).
+- Native system packaging beyond the released `.deb`/tarball (`pip install`,
+  APT repository, signing, image).
 - Bench-validate `--hand` single-hand mode and `--advertise-mdns` discovery on real hardware.
 
 ## Files
@@ -749,9 +784,11 @@ INFO/WARNING:
 | `pi/wmr_bridge/` | host bridge package: protocol, decoder, BlueZ, WebSocket, server, mDNS, CLI |
 | `pi/tools/wifi_probe.py` | bench client: throughput, sequence gaps, tick-based missing reports, RTT (min/p50/p95/max), status |
 | `pi/build_package.sh` | builds `dist/wmr-bridge-<version>.tar.gz` plus `.sha256` |
+| `pi/build_deb.sh` | builds `dist/wmr-bridge_<version>_all.deb` (no root; maintainer scripts in `pi/debian/`) |
 | `pi/tools/verify_package.sh` | checks package layout, version and checksum |
-| `pi/tools/dry_run.sh` | stages the package, runs replay and asserts the P2 result (no hardware) |
-| `pi/install.sh` | unattended installer (`/opt/wmr-bridge`, udev rule, token, systemd unit & env) |
+| `pi/tools/dry_run.sh` | stages the `.deb`, checks reinstall/remove, runs replay (no hardware) |
+| `pi/install.sh` | unattended installer; piped mode fetches and verifies the release tarball |
 | `pi/systemd/` | service unit and environment example (`WMR_BRIDGE_ARGS`) |
 | `pi/udev/` | udev rule (`99-wmr-bridge.rules`) granting `input` group access to `/dev/hidraw*` |
+| `pi/networkmanager/` | NetworkManager drop-in disabling Wi-Fi power save persistently |
 | `pi/tests/` | host tests, including the package/dry-run pre-flight (no hardware) |

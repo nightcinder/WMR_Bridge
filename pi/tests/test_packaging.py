@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import re
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -14,6 +16,13 @@ INSTALL_SH = PI_DIR / "install.sh"
 SERVICE_FILE = PI_DIR / "systemd" / "wmr-bridge.service"
 ENV_EXAMPLE = PI_DIR / "systemd" / "wmr-bridge.env.example"
 UDEV_RULES = PI_DIR / "udev" / "99-wmr-bridge.rules"
+POWERSAVE_CONF = PI_DIR / "networkmanager" / "99-wmr-bridge-powersave.conf"
+BUILD_PACKAGE = PI_DIR / "build_package.sh"
+VERSION = re.search(
+    r'^__version__ = "([^"]+)"$',
+    (PI_DIR / "wmr_bridge" / "__init__.py").read_text(encoding="utf-8"),
+    re.MULTILINE,
+).group(1)
 
 
 def _write_stub(bin_dir: Path, name: str, body: str) -> None:
@@ -64,6 +73,13 @@ class PackagingTests(unittest.TestCase):
             installed_unit = destdir / "etc" / "systemd" / "system" / "wmr-bridge.service"
             self.assertTrue(installed_unit.is_file())
             self.assertEqual(installed_unit.read_text(encoding="utf-8"), SERVICE_FILE.read_text(encoding="utf-8"))
+
+            installed_powersave = destdir / "etc" / "NetworkManager" / "conf.d" / "99-wmr-bridge-powersave.conf"
+            self.assertTrue(installed_powersave.is_file())
+            self.assertEqual(
+                installed_powersave.read_text(encoding="utf-8"),
+                POWERSAVE_CONF.read_text(encoding="utf-8"),
+            )
 
             installed_env_example = destdir / "etc" / "wmr-bridge" / "wmr-bridge.env.example"
             installed_env = destdir / "etc" / "wmr-bridge" / "wmr-bridge.env"
@@ -126,6 +142,62 @@ class PackagingTests(unittest.TestCase):
             self.assertIn("udevadm control --reload-rules", calls)
             self.assertIn("udevadm trigger", calls)
             self.assertIn("systemctl daemon-reload", calls)
+
+
+    def test_installer_fetches_and_verifies_release_when_piped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            release = tmp_path / "release"
+            build = subprocess.run(
+                [str(BUILD_PACKAGE), "--out", str(release)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(build.returncode, 0, msg=build.stderr)
+
+            rootfs = tmp_path / "rootfs"
+            env = {
+                **os.environ,
+                "WMR_BRIDGE_VERSION": VERSION,
+                "WMR_BRIDGE_RELEASE_BASE_URL": release.as_uri(),
+                "DESTDIR": str(rootfs),
+                "WMR_SKIP_PRIVILEGED": "1",
+            }
+            proc = subprocess.run(
+                ["/bin/sh", "-s"],
+                input=INSTALL_SH.read_text(encoding="utf-8"),
+                cwd=tmp_path,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            self.assertIn(f"using release {VERSION}", proc.stdout)
+            self.assertTrue(
+                (rootfs / "opt" / "wmr-bridge" / "pi" / "wmr_bridge" / "__main__.py").is_file()
+            )
+            self.assertTrue((rootfs / "etc" / "wmr-bridge" / "token").is_file())
+
+            corrupt = tmp_path / "corrupt"
+            shutil.copytree(release, corrupt)
+            (corrupt / f"wmr-bridge-{VERSION}.tar.gz").write_bytes(b"not a tarball")
+            bad_rootfs = tmp_path / "bad-rootfs"
+            env["WMR_BRIDGE_RELEASE_BASE_URL"] = corrupt.as_uri()
+            env["DESTDIR"] = str(bad_rootfs)
+            proc = subprocess.run(
+                ["/bin/sh", "-s"],
+                input=INSTALL_SH.read_text(encoding="utf-8"),
+                cwd=tmp_path,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("sha256 verification failed", proc.stderr)
+            self.assertFalse(bad_rootfs.exists())
 
 
 if __name__ == "__main__":

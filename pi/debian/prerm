@@ -1,0 +1,20 @@
+#!/bin/sh
+# Stop the bridge when the package is removed. Upgrades leave it running and
+# postinst restarts it after the new files are in place.
+set -e
+
+SKIP_PRIVILEGED="${WMR_SKIP_PRIVILEGED:-0}"
+
+case "$1" in
+    remove|deconfigure)
+        if [ "$SKIP_PRIVILEGED" != "1" ] && [ -d /run/systemd/system ] &&
+            command -v systemctl >/dev/null 2>&1; then
+            systemctl stop wmr-bridge.service || true
+            systemctl disable wmr-bridge.service || true
+        fi
+        ;;
+    upgrade|failed-upgrade)
+        ;;
+esac
+
+exit 0

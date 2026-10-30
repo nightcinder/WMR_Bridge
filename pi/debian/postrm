@@ -1,0 +1,24 @@
+#!/bin/sh
+# Remove the generated token on purge. The env conffiles are left to dpkg.
+set -e
+
+DESTDIR="${DESTDIR:-}"
+DESTDIR="${DESTDIR%/}"
+SKIP_PRIVILEGED="${WMR_SKIP_PRIVILEGED:-0}"
+ETC_DIR="${DESTDIR}/etc/wmr-bridge"
+
+case "$1" in
+    remove|purge)
+        if [ "$SKIP_PRIVILEGED" != "1" ] && [ -d /run/systemd/system ] &&
+            command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload || true
+        fi
+        ;;
+esac
+
+if [ "$1" = "purge" ]; then
+    rm -f "${ETC_DIR}/token"
+    rmdir "$ETC_DIR" 2>/dev/null || true
+fi
+
+exit 0

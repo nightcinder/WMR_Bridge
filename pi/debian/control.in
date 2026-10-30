@@ -1,0 +1,17 @@
+Package: wmr-bridge
+Version: @VERSION@
+Architecture: all
+Maintainer: nightcinder <67344577+nightcinder@users.noreply.github.com>
+Installed-Size: @INSTALLED_SIZE@
+Depends: python3 (>= 3.10)
+Recommends: bluez, network-manager
+Section: net
+Priority: optional
+Homepage: https://github.com/nightcinder/WMR_Bridge
+Description: WMR motion controller host bridge over Wi-Fi
+ The WMR Bridge daemon reads Motion Controller HID reports from BlueZ,
+ decodes them, and serves the same FF11/FF12/FF14 payloads the ESP32
+ firmware exposes over a WebSocket on Wi-Fi.
+ .
+ It runs as the wmr system user, needs read access to /dev/hidraw*, and
+ requires a token for non-loopback listens.

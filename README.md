@@ -226,10 +226,14 @@ For live use, pair the controllers with the Pi first; `python3 -m wmr_bridge --l
 shows the hidraw nodes. Full setup, the wire protocol, security notes and the
 hardware test checklist are in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md), and the
 first-sitting bring-up procedure is in
-[docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). The
-`wmr-pi-bridge-0.1.0.tar.gz` asset on the v0.1.0 GitHub release is still the
-only packaged Pi tarball; the `pi/` tree in this repository is package `0.2.1`.
-The current 0.3.0 firmware release does not include a Pi tarball.
+[docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). The `pi/` tree
+builds two installable artifacts: `wmr-bridge_<version>_all.deb` and
+`wmr-bridge-<version>.tar.gz`, plus a piped `install.sh` that fetches and
+verifies the matching release tarball. The `wmr-pi-bridge-0.1.0.tar.gz` asset on
+the v0.1.0 GitHub release is the only old packaged Pi tarball; the `pi/` tree in
+this repository is package `0.2.1`. The current 0.3.0 firmware release does not
+include a Pi package; attaching the current `.deb`, tarball and installer to the
+`v*` releases is tracked separately.
 
 ## BLE interface (summary)
 

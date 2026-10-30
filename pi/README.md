@@ -40,16 +40,33 @@ end on the desk (no Pi, no controller, no root):
 pi/tools/dry_run.sh
 ```
 
-## Installable package
+## Installable packages
 
 ```bash
 pi/build_package.sh                          # dist/wmr-bridge-<version>.tar.gz
+pi/build_deb.sh                              # dist/wmr-bridge_<version>_all.deb
 pi/tools/verify_package.sh dist/wmr-bridge-<version>.tar.gz
 ```
 
-Copy the tarball to a Raspberry Pi OS Bookworm 64-bit host, extract it, and run
-`sudo wmr-bridge-<version>/pi/install.sh`. See
-[`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md#pre-flight-kit-no-hardware).
+On a Raspberry Pi OS Bookworm 64-bit host, install either the `.deb` or the
+tarball:
+
+```bash
+sudo apt install ./wmr-bridge_<version>_all.deb   # enables and starts the unit
+# or: extract the tarball and run sudo wmr-bridge-<version>/pi/install.sh
+```
+
+The `.deb` is `Architecture: all`, keeps `wmr-bridge.env` and the generated
+token across upgrades, and creates the `wmr` user and `/etc/wmr-bridge/token` in
+`postinst`. Removing the package stops and disables the unit but keeps the
+token; `apt purge wmr-bridge` removes it. `pi/tools/dry_run.sh` installs,
+reinstalls, replays and removes the `.deb` in a staged rootfs with no root.
+
+When `pi/install.sh` is piped (`curl … | sudo bash`), it fetches the matching
+release tarball, verifies its `.sha256` and runs from the extracted tree. The
+release must carry `wmr-bridge-<version>.tar.gz`; set `WMR_BRIDGE_VERSION` to pin
+a version or `WMR_BRIDGE_RELEASE_BASE_URL` to use a mirror. See
+[`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md#installation).
 
 ## Live bridge
 
@@ -90,11 +107,14 @@ the probe do not send one.
 | `wmr_bridge/__main__.py` | `python3 -m wmr_bridge` CLI |
 | `tools/wifi_probe.py` | bench client: throughput, gaps, tick-based missing reports, RTT, status |
 | `build_package.sh` | builds `dist/wmr-bridge-<version>.tar.gz` and its `.sha256` |
+| `build_deb.sh` | builds `dist/wmr-bridge_<version>_all.deb` (Architecture: all, no root) |
+| `debian/` | Debian control, conffiles and `postinst`/`prerm`/`postrm` templates |
 | `tools/verify_package.sh` | checks package layout, version and checksum |
-| `tools/dry_run.sh` | package install + replay dry run, no hardware |
-| `install.sh` | unattended installer (`/opt/wmr-bridge`, udev rule, token, systemd unit & env) |
+| `tools/dry_run.sh` | .deb install/reinstall/remove + replay dry run, no hardware |
+| `install.sh` | unattended installer; also works piped by fetching the release tarball |
 | `systemd/wmr-bridge.service` | unit file for an unattended bridge (`WMR_BRIDGE_ARGS` via `/etc/wmr-bridge/wmr-bridge.env`) |
 | `udev/99-wmr-bridge.rules` | udev rule granting `input` group access to `/dev/hidraw*` |
+| `networkmanager/99-wmr-bridge-powersave.conf` | persistent Wi-Fi power-save off (NetworkManager drop-in) |
 | `tests/` | host tests; no hardware required |
 
 ## Version
