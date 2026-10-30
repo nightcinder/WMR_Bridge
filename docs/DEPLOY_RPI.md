@@ -113,7 +113,7 @@ You can then build and install the Debian package (recommended) or run the insta
 **Build and install Debian package (`.deb`)**:
 ```bash
 ./pi/build_deb.sh
-sudo apt install ./dist/wmr-bridge_0.2.1_all.deb
+sudo apt install ./dist/*.deb
 ```
 
 **Or run installer script directly**:
@@ -130,10 +130,10 @@ using the one-line installer or downloaded package.
 
 #### Option A: One-line installer (pinned version)
 
-To install a specific released version (e.g. `0.2.1`), run:
+To install a specific released version (must be a release tag cut after #104), run:
 
 ```bash
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | WMR_BRIDGE_VERSION=0.2.1 sudo -E bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | WMR_BRIDGE_VERSION=<version> sudo -E bash
 ```
 
 To install the latest release without pinning:
@@ -233,8 +233,8 @@ journalctl -u wmr-bridge -n 30 --no-pager
 
 ## 6. Step 5: Test Telemetry with `wifi_probe`
 
-Run the included verification client directly on the Pi (or from another machine
-on the same LAN) to verify report streaming, sequence continuity, and latency:
+Run the included verification client directly on the Pi to verify report
+streaming, sequence continuity, and latency:
 
 ```bash
 python3 /opt/wmr-bridge/pi/tools/wifi_probe.py \
@@ -243,6 +243,8 @@ python3 /opt/wmr-bridge/pi/tools/wifi_probe.py \
     --stream batched \
     --duration 10
 ```
+
+*(Optional: To run `wifi_probe.py` from another machine on the same 5 GHz Wi-Fi network instead of on the Pi, specify `--host wmr-pi.local` and provide the token with `--token <token-string>` copied from `/etc/wmr-bridge/token` on the Pi).*
 
 ### Expected Output
 
@@ -378,7 +380,7 @@ git pull
 
 # Rebuild and install package:
 ./pi/build_deb.sh
-sudo apt install ./dist/wmr-bridge_<new-version>_all.deb
+sudo apt install ./dist/*.deb
 
 # Or rerun installer directly:
 # sudo ./pi/install.sh
