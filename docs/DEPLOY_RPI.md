@@ -90,10 +90,45 @@ to disable Wi-Fi power saving permanently).*
 
 ## 4. Step 3: Install WMR Bridge
 
-You can install using either the one-line installer pinned to a specific
-version (recommended) or the standalone Debian package.
+> **Release Asset Availability**:
+> CI release packaging workflows that publish `install.sh`, `wmr-bridge_<version>_all.deb`,
+> and `wmr-bridge-<version>.tar.gz` were introduced in PRs #103 and #104. These assets
+> are attached to GitHub releases starting with the first `v*` tag cut after #104.
+> Existing tags cut prior to #104 (such as `v0.3.0`) only contain ESP32 firmware assets;
+> querying those tags returns 404 or installer fetch errors.
+>
+> Until the next release tag is cut, use the **Git Checkout Path** (Method 1).
 
-### Option A: One-line installer (pinned version)
+### Method 1: Git Checkout Path (Current / Pre-release)
+
+From a local clone on the Raspberry Pi:
+
+```bash
+git clone https://github.com/nightcinder/WMR_Bridge.git
+cd WMR_Bridge
+```
+
+You can then build and install the Debian package (recommended) or run the installer directly:
+
+**Build and install Debian package (`.deb`)**:
+```bash
+./pi/build_deb.sh
+sudo apt install ./dist/wmr-bridge_0.2.1_all.deb
+```
+
+**Or run installer script directly**:
+```bash
+sudo ./pi/install.sh
+```
+
+---
+
+### Method 2: Released Artifacts (Available from first release tag after #104)
+
+Once a new `v*` release is published containing the packaging assets, you can install
+using the one-line installer or downloaded package.
+
+#### Option A: One-line installer (pinned version)
 
 To install a specific released version (e.g. `0.2.1`), run:
 
@@ -115,14 +150,16 @@ The installer:
 5. Generates a secure authorization token at `/etc/wmr-bridge/token` (mode `0600 wmr:wmr`).
 6. Configures the systemd service `/etc/systemd/system/wmr-bridge.service`.
 
-### Option B: Debian package (`.deb`)
+#### Option B: Standalone Debian package (`.deb`)
 
 Download the `.deb` asset from the [GitHub Releases](https://github.com/nightcinder/WMR_Bridge/releases) page:
 
 ```bash
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.0/wmr-bridge_0.2.1_all.deb
-sudo apt install ./wmr-bridge_0.2.1_all.deb
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/<release-tag>/wmr-bridge_<version>_all.deb
+sudo apt install ./wmr-bridge_<version>_all.deb
 ```
+
+---
 
 ### Start and Verify the Service
 
@@ -210,31 +247,152 @@ python3 /opt/wmr-bridge/pi/tools/wifi_probe.py \
 ### Expected Output
 
 ```text
-wifi_probe: connecting to ws://127.0.0.1:8765/wmr
-hello: version 0.2.1, handFilter ['LEFT', 'RIGHT']
-subscribed to 'batched' (10 s)
+connected to ws://127.0.0.1:8765/wmr as 0.2.1
+hello: {
+  "type": "hello",
+  "protocol": 1,
+  "transport": "wifi",
+  "device": "wmr-pi",
+  "version": "0.2.1",
+  "handFilter": [
+    "LEFT",
+    "RIGHT"
+  ],
+  "hostname": "wmr-pi",
+  "authRequired": true,
+  "streams": [
+    "raw",
+    "decoded",
+    "batched"
+  ],
+  "recordSize": 56,
+  "batchMax": 9,
+  "fragmentCapacity": 244
+}
+auth: {'type': 'auth_ok'}
+subscribe: {'type': 'subscribed', 'stream': 'batched', 'recordSize': 56, 'batchMax': 9, 'fragmentCapacity': 244}
+   2.0s    200.0 rec/s  left=400 right=400  gaps=(0,0)  missing=(0,0) loss=(0.0%,0.0%)  batches=45  rtt=1.2ms
+   4.0s    200.0 rec/s  left=800 right=800  gaps=(0,0)  missing=(0,0) loss=(0.0%,0.0%)  batches=89  rtt=1.1ms
 ...
-Summary:
-  Left : reports: 1000, gaps: 0, missing (tick): 0
-  Right: reports: 1000, gaps: 0, missing (tick): 0
-  Echo RTT ms: min=..., p50=..., p95=..., max=...
+{
+  "records": 2000,
+  "messages": 224,
+  "batches": 224,
+  "gaps": [
+    0,
+    0
+  ],
+  "missingFromTicks": [
+    0,
+    0
+  ],
+  "lossPct": [
+    0.0,
+    0.0
+  ],
+  "rawFrames": 0,
+  "rawIncomplete": 0,
+  "lastSequence": [
+    1000,
+    1000
+  ],
+  "hands": [
+    {
+      "hand": "LEFT",
+      "records": 1000,
+      "recordsPerSecond": 100.0,
+      "sequenceGaps": 0,
+      "lastSequence": 1000,
+      "missingFromTicks": 0,
+      "lossPct": 0.0,
+      "periodTicks": 50000,
+      "periodMs": 5.0,
+      "tickDiscontinuities": 0
+    },
+    {
+      "hand": "RIGHT",
+      "records": 1000,
+      "recordsPerSecond": 100.0,
+      "sequenceGaps": 0,
+      "lastSequence": 1000,
+      "missingFromTicks": 0,
+      "lossPct": 0.0,
+      "periodTicks": 50000,
+      "periodMs": 5.0,
+      "tickDiscontinuities": 0
+    }
+  ],
+  "bleFields": {
+    "rssi": "n/a",
+    "phy": "n/a",
+    "mtu": "n/a",
+    "interval": "n/a",
+    "esp_timer": "n/a"
+  },
+  "elapsedS": 10.0,
+  "handFilter": [
+    "LEFT",
+    "RIGHT"
+  ],
+  "recordsPerSecond": 200.0,
+  "rttMs": {
+    "samples": 5,
+    "min": 0.9,
+    "p50": 1.2,
+    "p95": 1.8,
+    "max": 2.1
+  },
+  "dropped": 0,
+  "serverStatus": {
+    "type": "status",
+    "version": "0.2.1",
+    "handFilter": [
+      "LEFT",
+      "RIGHT"
+    ],
+    "uptimeS": 10.0,
+    "clients": 1,
+    "subscribed": 1,
+    "dropped": 0,
+    "batches": 224
+  }
+}
 ```
 
 Verify that:
-- Both `Left` and `Right` controllers report incoming frames.
-- Sequence gaps and tick-based missing reports remain 0 or near 0 in clean RF conditions.
+- Periodic lines show incoming reports per second (`rec/s`), active sequence counters, and round-trip ping time (`rtt`).
+- In the final JSON summary, both `LEFT` and `RIGHT` hands report received records (`records > 0`).
+- `sequenceGaps` and `missingFromTicks` remain 0 or near 0 in clean RF conditions (`lossPct: 0.0`).
 
 ---
 
 ## 7. Step 6: Upgrading WMR Bridge (Verifying Bond Persistence)
 
-When a new version is released, upgrade using the one-line installer or `apt install`:
+When a new version or commit is available, upgrade using the corresponding method:
+
+### Upgrading via Git Checkout (Current / Pre-release)
+
+```bash
+cd WMR_Bridge
+git pull
+
+# Rebuild and install package:
+./pi/build_deb.sh
+sudo apt install ./dist/wmr-bridge_<new-version>_all.deb
+
+# Or rerun installer directly:
+# sudo ./pi/install.sh
+```
+
+### Upgrading via Release Artifacts (Post-#104 tags)
+
+When upgrading against published release tags:
 
 ```bash
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | WMR_BRIDGE_VERSION=<new-version> sudo -E bash
 ```
 
-Or for a `.deb` package:
+Or for a downloaded `.deb` package:
 
 ```bash
 sudo apt install ./wmr-bridge_<new-version>_all.deb
