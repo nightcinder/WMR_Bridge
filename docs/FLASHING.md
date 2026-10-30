@@ -270,8 +270,8 @@ developer can build uncommitted changes. The `commit` and `dirty` fields in
   deploy to Pages. Serve `dist/` locally to test the installer before tagging.
 
 The build runs on the self-hosted `liesa` runner
-(`[self-hosted, liesa, esp-idf]`) in the official `espressif/idf:v6.1`
-container; no secrets are needed. `actions/checkout` uses full history so
+(`[self-hosted, liesa, esp-idf]`) using the ESP-IDF installation already on
+that machine; no secrets are needed. `actions/checkout` uses full history so
 `git describe` can produce a version.
 
 To publish a release, tag the intended `main` commit (for example, the `v0.2.4`
