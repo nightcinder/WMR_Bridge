@@ -92,6 +92,8 @@ jobs:
         run: python3 -m unittest tests.test_triage_bundle -v
       - name: Run docs/GATT property tests
         run: python3 tests/test_doc_gatt.py
+      - name: Run docs link checks
+        run: python3 tests/test_docs_links.py
       - name: Run Linux/Pi host-bridge tests
         working-directory: pi
         run: python3 -m unittest discover -s tests -v

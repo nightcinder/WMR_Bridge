@@ -134,7 +134,7 @@ from `stick_settings.json` after step 5.
 
 The 0.2.4 failure: LEFT paired during discovery, RIGHT's ACL came up about 2 s after
 `discovery finished`, nothing encrypted it, and neither hand produced a report for 18 s until the
-board was reset ([`docs/DISCOVERY.md`](../DISCOVERY.md)). 0.3.0 encrypts that ACL after 750 ms and
+board was reset ([`docs/DISCOVERY.md`](../../DISCOVERY.md)). 0.3.0 encrypts that ACL after 750 ms and
 drops it after 4 s without a HID channel so the controller pages again.
 
 Setup: both hands paired and stored, bridge booted, serial monitor open, stream `FF14`, and
@@ -170,7 +170,7 @@ Paste back: the colour seen at each step and how long the change took.
 
 ## 6. Android HID gamepad, no app (phone + both controllers)
 
-Spec: [`docs/HID_GAMEPAD.md`](../HID_GAMEPAD.md). The same phone link carries HID service
+Spec: [`docs/HID_GAMEPAD.md`](../../HID_GAMEPAD.md). The same phone link carries HID service
 `0x1812`, Report ID 1. 0.3.0 needs LE Secure Connections with bonding, so forget a `WMR Bridge`
 entry left by 0.2.x once before this section.
 
