@@ -231,7 +231,7 @@ builds two installable artifacts: `wmr-bridge_<version>_all.deb` and
 `wmr-bridge-<version>.tar.gz`, plus a piped `install.sh` that fetches and
 verifies the matching release tarball. The `wmr-pi-bridge-0.1.0.tar.gz` asset on
 the v0.1.0 GitHub release is the only old packaged Pi tarball; the `pi/` tree in
-this repository is package `0.2.2`. Every `v*` release now attaches the current
+this repository is package `0.2.3`. Every `v*` release now attaches the current
 `.deb`, tarball, both `.sha256` files and `install.sh`, so the one-line install
 works from `releases/latest/download/install.sh`.
 
