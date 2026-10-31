@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import triage_bundle  # noqa: E402
 
 
-def build_bundle(destination, drop=(), edit=None):
+def build_bundle(destination, drop=(), edit=None, rename=None):
     """Zip the fixture, optionally dropping paths or rewriting a file."""
     with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(FIXTURE.rglob("*")):
@@ -36,6 +36,7 @@ def build_bundle(destination, drop=(), edit=None):
             if any(rel == name or rel.startswith(name.rstrip("/") + "/")
                    for name in drop):
                 continue
+            rel = (rename or {}).get(rel, rel)
             data = path.read_bytes()
             if edit is not None:
                 data = edit(rel, data)
@@ -109,10 +110,10 @@ class FailingBundleTest(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory(prefix="wmr-triage-test-")
         self.addCleanup(self._tmp.cleanup)
 
-    def bundle(self, drop=(), edit=None):
+    def bundle(self, drop=(), edit=None, rename=None):
         return build_bundle(
             os.path.join(self._tmp.name, "wmr-ext-20261030.zip"),
-            drop=drop, edit=edit)
+            drop=drop, edit=edit, rename=rename)
 
     def test_missing_manifest_exits_nonzero_naming_it(self):
         code, out, err = run_main(self.bundle(drop=("manifest.md",)))
@@ -165,6 +166,37 @@ class FailingBundleTest(unittest.TestCase):
 
     def test_run_at_30_seconds_passes(self):
         code, out, _err = run_main(self.bundle(edit=set_pose_span(30)))
+        self.assertEqual(code, 0)
+        self.assertNotIn("shorter than 30 s", out)
+        self.assertIn("Problems: none", out)
+
+    def test_one_sample_run_is_flagged_as_short(self):
+        def one_sample(rel, data):
+            if rel != "pose_capture_androidXr_left_still.json":
+                return data
+            document = json.loads(data)
+            document["samples"] = document["samples"][:1]
+            return json.dumps(document).encode()
+
+        code, out, _err = run_main(self.bundle(edit=one_sample))
+        self.assertEqual(code, 0)
+        self.assertIn("run is 0.0 s, shorter than 30 s", out)
+        self.assertNotIn("no readable host_ns timestamps", out)
+
+    def test_occlusion_run_shorter_than_30_seconds_is_not_flagged(self):
+        old = "pose_capture_androidXr_left_still.json"
+        new = "pose_capture_androidXr_left_occlusion.json"
+
+        def occlusion(rel, data):
+            if rel == "diagnostics.json":
+                document = json.loads(data)
+                document["pose_captures"][0].update(
+                    file=new, segment="occlusion")
+                return json.dumps(document).encode()
+            return set_pose_span(29)(rel, data)
+
+        code, out, _err = run_main(
+            self.bundle(edit=occlusion, rename={old: new}))
         self.assertEqual(code, 0)
         self.assertNotIn("shorter than 30 s", out)
         self.assertIn("Problems: none", out)

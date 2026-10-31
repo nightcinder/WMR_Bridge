@@ -201,20 +201,27 @@ def _pose_section(directory, diagnostics, problems):
                             "bundle" % base)
             continue
         lines.append("  %s  %s/%s/%s  %s"
-                     % (base, runtime, hand, segment, _pose_file_note(path, problems)))
+                     % (base, runtime, hand, segment,
+                        _pose_file_note(path, problems, segment)))
     for base in on_disk:
         if base in by_file:
             continue
         problems.append("%s: present in the bundle but not listed in "
                         "diagnostics.json" % base)
         lines.append("  %s  (not listed)  %s" % (base, _pose_file_note(
-            os.path.join(directory, base), problems)))
+            os.path.join(directory, base), problems, _pose_segment(base))))
     return lines
+
+
+def _pose_segment(name):
+    """Motion segment from `pose_capture_<runtime>_<hand>_<segment>.json`."""
+    stem = name[:-len(".json")] if name.endswith(".json") else name
+    return stem.rsplit("_", 1)[-1] if "_" in stem else None
 
 
 def _pose_run_seconds(samples):
     """Seconds between the first and last sample, or None if unreadable."""
-    if len(samples) < 2:
+    if not samples:
         return None
     try:
         first = samples[0]["host_ns"]
@@ -226,7 +233,7 @@ def _pose_run_seconds(samples):
     return (last - first) / 1e9
 
 
-def _pose_file_note(path, problems):
+def _pose_file_note(path, problems, segment=None):
     try:
         with open(path, "r") as fp:
             data = json.load(fp)
@@ -250,7 +257,7 @@ def _pose_file_note(path, problems):
         problems.append("%s: samples have no readable host_ns timestamps"
                         % os.path.basename(path))
         return "%d samples" % len(samples)
-    if seconds < minimumRunSeconds:
+    if seconds < minimumRunSeconds and segment != "occlusion":
         problems.append("%s: run is %.1f s, shorter than %d s"
                         % (os.path.basename(path), seconds, minimumRunSeconds))
     return "%d samples over %.1f s" % (len(samples), seconds)
