@@ -18,7 +18,7 @@ This document is the **canonical copy** of the compatibility matrix. The client 
 
 ## Compatibility Matrix (Keyed on FF16 Version / WebSocket `hello.version`)
 
-The ESP32 BLE bridge exposes its firmware version over GATT characteristic `FF16` (`0000FF16-0000-1000-8000-00805F9B34FB`) as a read-only UTF-8 string with no terminator (up to 31 bytes). The Linux / Raspberry Pi Wi-Fi host bridge does not run a GATT server; it reports its software version in the initial WebSocket `hello` control message (`"version": "0.2.1"` for the current `pi/` package, protocol 1 on `wmr-wifi-v1`), which `wmr_ws` surfaces through the `read(FF16)` seam without a network round trip.
+The ESP32 BLE bridge exposes its firmware version over GATT characteristic `FF16` (`0000FF16-0000-1000-8000-00805F9B34FB`) as a read-only UTF-8 string with no terminator (up to 31 bytes). The Linux / Raspberry Pi Wi-Fi host bridge does not run a GATT server; it reports its software version in the initial WebSocket `hello` control message (`"version": "0.2.2"` for the current `pi/` package, protocol 1 on `wmr-wifi-v1`), which `wmr_ws` surfaces through the `read(FF16)` seam without a network round trip.
 
 The table below describes every bridge era/target and how the client library interacts with it:
 

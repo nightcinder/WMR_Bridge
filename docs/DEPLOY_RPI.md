@@ -249,13 +249,13 @@ python3 /opt/wmr-bridge/pi/tools/wifi_probe.py \
 ### Expected Output
 
 ```text
-connected to ws://127.0.0.1:8765/wmr as 0.2.1
+connected to ws://127.0.0.1:8765/wmr as 0.2.2
 hello: {
   "type": "hello",
   "protocol": 1,
   "transport": "wifi",
   "device": "wmr-pi",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "handFilter": [
     "LEFT",
     "RIGHT"
@@ -347,7 +347,7 @@ subscribe: {'type': 'subscribed', 'stream': 'batched', 'recordSize': 56, 'batchM
   "dropped": 0,
   "serverStatus": {
     "type": "status",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "handFilter": [
       "LEFT",
       "RIGHT"

@@ -119,7 +119,7 @@ the probe do not send one.
 
 ## Version
 
-Current package version: `0.2.1` (`wmr_bridge.__version__`).
+Current package version: `0.2.2` (`wmr_bridge.__version__`).
 
 ## Logs
 

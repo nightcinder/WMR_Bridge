@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import tarfile
 import tempfile
@@ -13,6 +14,11 @@ BUILD = PI_DIR / "build_package.sh"
 BUILD_DEB = PI_DIR / "build_deb.sh"
 VERIFY = PI_DIR / "tools" / "verify_package.sh"
 DRY_RUN = PI_DIR / "tools" / "dry_run.sh"
+VERSION = re.search(
+    r'^__version__ = "([^"]+)"$',
+    (PI_DIR / "wmr_bridge" / "__init__.py").read_text(encoding="utf-8"),
+    re.MULTILINE,
+).group(1)
 
 
 class PreflightTests(unittest.TestCase):
@@ -26,13 +32,13 @@ class PreflightTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
-            archive = out / "wmr-bridge-0.2.1.tar.gz"
+            archive = out / f"wmr-bridge-{VERSION}.tar.gz"
             self.assertTrue(archive.is_file(), msg=proc.stdout)
-            self.assertTrue((out / "wmr-bridge-0.2.1.tar.gz.sha256").is_file())
+            self.assertTrue((out / f"wmr-bridge-{VERSION}.tar.gz.sha256").is_file())
 
             with tarfile.open(archive) as tar:
                 names = set(tar.getnames())
-            prefix = "wmr-bridge-0.2.1/"
+            prefix = f"wmr-bridge-{VERSION}/"
             for member in (
                 "pi/install.sh",
                 "pi/wmr_bridge/__main__.py",
@@ -52,7 +58,7 @@ class PreflightTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(check.returncode, 0, msg=check.stderr)
-            self.assertIn("OK: wmr-bridge-0.2.1.tar.gz", check.stdout)
+            self.assertIn(f"OK: wmr-bridge-{VERSION}.tar.gz", check.stdout)
 
     def test_dry_run_serves_replay_from_the_installed_tree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -65,7 +71,7 @@ class PreflightTests(unittest.TestCase):
             )
             self.assertEqual(build.returncode, 0, msg=build.stderr)
             proc = subprocess.run(
-                [str(DRY_RUN), str(out / "wmr-bridge-0.2.1.tar.gz")],
+                [str(DRY_RUN), str(out / f"wmr-bridge-{VERSION}.tar.gz")],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -92,7 +98,7 @@ class PreflightTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(build.returncode, 0, msg=build.stderr)
-            deb = out / "wmr-bridge_0.2.1_all.deb"
+            deb = out / f"wmr-bridge_{VERSION}_all.deb"
             self.assertTrue(deb.is_file(), msg=build.stdout)
             proc = subprocess.run(
                 [str(DRY_RUN), str(deb)],
