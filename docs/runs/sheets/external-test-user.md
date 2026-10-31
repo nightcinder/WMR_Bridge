@@ -1,21 +1,21 @@
-# External tester quickstart ,  WMR Bridge v0.3.0
+# External tester quickstart for WMR Bridge v0.3.2
 
 One tier, about 20 min. Android 14+ phone, both WMR controllers, board already
-on v0.3.0. Private room: controller links are unauthenticated.
+on v0.3.2. Private room: controller links are unauthenticated.
 
 ## 0. Prerequisites
 
 - Android 14 or newer. Android 13 and below is not supported.
-- Board flashed to v0.3.0 (flasher: https://nightcinder.github.io/WMR_Bridge/).
+- Board flashed to v0.3.2 (flasher: https://nightcinder.github.io/WMR_Bridge/).
   Pre-flashed is fine; say so in the intake block.
 - If unsure of the version, reflash. Flashing erases stored pairings (expected).
 
 ## 1. Get the APK
 
-https://github.com/nightcinder/wmr-companion/releases/download/v0.2.2/wmr-companion-0.2.2-unified-debug.apk
+https://github.com/nightcinder/wmr-companion/releases/download/v0.3.5/wmr-companion-0.3.5-unified-arm64-v8a.apk
 
-If an older WMR Companion is installed, uninstall it first (CI APKs are signed
-differently): `adb uninstall com.onyxlens.wmr_companion` or app settings.
+If a WMR Companion built before 0.3.3 is installed (debug or locally signed),
+uninstall it first: `adb uninstall com.onyxlens.wmr_companion` or app settings.
 
 ## 2. Install
 
@@ -27,8 +27,8 @@ differently): `adb uninstall com.onyxlens.wmr_companion` or app settings.
 1. Power the board. Status LED should be red (no controllers).
 2. Open the app. Grant Bluetooth / Nearby-devices permission.
 3. On the Connect screen, scan for `WMR Bridge` and connect.
-4. If Android shows a pairing request for `WMR Bridge`, allow it. Firmware
-   0.3.0 bonds and encrypts the phone link.
+4. If Android shows a pairing request for `WMR Bridge`, allow it. Firmware 0.3.2
+   bonds and encrypts the phone link.
 5. Confirm the screen says connected, streaming with negotiated MTU 517 (at
    least 61 is usable). Record the MTU shown.
 6. Tap Open 3D debug view. Stay on the debug screen.
@@ -52,21 +52,21 @@ differently): `adb uninstall com.onyxlens.wmr_companion` or app settings.
 3. Tap Start. Do not touch anything for 120 s. Tap Stop.
 4. Tap Export CSV + JSON (or Export CSV + JSON + echo) and save/share the files.
 
-## 6. Guided bench (app build 0.2.2 or later)
+## 6. Guided bench (app build 0.3.5 or later)
 
 Optional alternative. From the Connect screen tap Run guided bench and pick a
 mode: 3DoF only (bridge, full run), 6DoF only (glasses, no bridge, shorter run),
-or Combined. With no Raspberry Pi bridge, use 6DoF only ,  the bridge steps are
-skipped and the run is shorter. That is expected, not a broken install. (For
+or Combined. With no Raspberry Pi bridge, use 6DoF only. The bridge steps are
+skipped and the run is shorter. That is expected, not a broken install. For
 deploying and running with a Raspberry Pi bridge, see the
-[RPi deployment runbook](../../DEPLOY_RPI.md).) The bench ends with Write test
+[RPi deployment runbook](../../DEPLOY_RPI.md). The bench ends with Write test
 bundle.
 
 Capture 6DoF pose appears only when your glasses' hand tracking is active. It
-asks for five short movements per hand ,  hold still, let it drift, slow pan,
-medium pan, fast flick ,  about two minutes per hand. Skipping it (whole or per
-segment) is fine and does not break the run. Its files are already inside the
-bundle you send.
+asks for five short movements per hand: hold still, let it drift, slow pan,
+medium pan, fast flick. That takes about two minutes per hand. Skipping it
+(whole or per segment) is fine and does not break the run. Its files are already
+inside the bundle you send.
 
 ## 7. Send
 
@@ -76,12 +76,12 @@ thread where you received this runbook.
 ### Intake block
 
 ```markdown
-### WMR external test ,  Tier 0
+### WMR external test, Tier 0
 
 - Handle:
 - Date/timezone:
-- Firmware: 0.3.0
-- App: 0.2.2 unified (debug-signed)
+- Firmware: 0.3.2
+- App: 0.3.5 unified (signed)
 - Phone: make/model/Android
 - Controllers: make/model, LEFT/RIGHT
 - Result: PASS / PARTIAL / FAIL / BLOCKED
