@@ -1,0 +1,15 @@
+{
+  "note": "Static DRAM must leave 2 KiB free in the ESP32 image, and the application image must fit the stock 1500 KiB factory partition. Raise a limit only with the reason in the pull request; see docs/FLASHING.md.",
+  "appImageMax": 1536000,
+  "variants": {
+    "both": {
+      "dramUsedMax": 122532
+    },
+    "left": {
+      "dramUsedMax": 122532
+    },
+    "right": {
+      "dramUsedMax": 122532
+    }
+  }
+}

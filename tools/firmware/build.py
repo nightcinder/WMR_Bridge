@@ -47,6 +47,7 @@ REPO_ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 
 import fwpackage  # noqa: E402
+import sizecheck  # noqa: E402
 
 BTSTACK_URL = "https://github.com/bluekitchen/btstack.git"
 BTSTACK_COMMIT = "e38553977a25fb0b55b383c72c289be0975f422c"
@@ -341,6 +342,60 @@ def build_dir_for(work, variant="both"):
     return Path(work) / build_dir_name(variant)
 
 
+def size_report_name(variant):
+    """Name of the per-variant size report written next to the images."""
+    return "size-%s.json" % variant
+
+
+def size_report_argv(build_dir, output):
+    """`idf.py size` arguments for a machine-readable report.
+
+    json2 is the structured summary `idf.py size` documents; the older `json`
+    alias is gone in ESP-IDF v6.1. `--output-file` keeps the build log clean.
+    """
+    return [
+        "idf.py",
+        "-B",
+        str(build_dir),
+        "size",
+        "--format",
+        "json2",
+        "--output-file",
+        str(output),
+    ]
+
+
+def check_size_budget(port_dir, build_dir, env, variant, app_bin):
+    """Write the variant's size report, log it, and fail if it is over budget.
+
+    The DRAM number is static allocation, which is what the PSVR2 frame and
+    queue sizes spend; the flash number is the packaged application image,
+    which must still fit the 1500 KiB factory partition. Returns the path of
+    the report so it can be shipped with the other artifacts.
+    """
+    budget_path = REPO_ROOT / "tools" / "firmware" / sizecheck.BUDGET_NAME
+    try:
+        budgets = sizecheck.load_budget(budget_path)
+        limits = sizecheck.require_variant(budgets, variant)
+    except sizecheck.SizeError as exc:
+        fail(str(exc))
+    report_path = Path(build_dir) / "wmr-size.json"
+    run(size_report_argv(build_dir, report_path), cwd=port_dir, env=env)
+    try:
+        report = sizecheck.load_report(report_path)
+    except sizecheck.SizeError as exc:
+        fail(str(exc))
+    report["appImage"] = Path(app_bin).stat().st_size
+    log(sizecheck.format_line(variant, report, limits))
+    problems = sizecheck.check(report, limits)
+    for problem in problems:
+        log("SIZE BUDGET: " + problem)
+    if problems:
+        fail("the %s build is over its size budget; update %s only with a "
+             "deliberate review" % (variant, budget_path))
+    return report_path
+
+
 def build_env(variant="both", base_env=None):
     """Environment for the build, with the variant's compile-time defines.
 
@@ -515,6 +570,8 @@ def main():
     verify_port_sdkconfig(build_dir)
 
     artifacts = fwpackage.collect_artifacts(build_dir)
+    report_path = check_size_budget(port_dir, build_dir, env, args.variant,
+                                    artifacts["app_bin"])
     package_outputs(
         artifacts=artifacts,
         out=out,
@@ -528,6 +585,9 @@ def main():
         env=env,
         variant=args.variant,
     )
+    size_report = out / size_report_name(args.variant)
+    shutil.copyfile(report_path, size_report)
+    log("packaged %s" % size_report)
 
     if args.flash:
         log("flashing %s (%s variant)" % (args.flash, args.variant))
@@ -537,7 +597,7 @@ def main():
     names = fwpackage.artifact_names(args.variant)
     log("done. Artifacts in %s" % out)
     for name in (names["factory"], names["manifest"], names["build_info"],
-                 "index.html"):
+                 size_report_name(args.variant), "index.html"):
         path = out / name
         if path.is_file():
             log("  %-36s %8.1f KiB" % (name, path.stat().st_size / 1024.0))
