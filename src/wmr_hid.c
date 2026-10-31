@@ -49,28 +49,35 @@
 #include "wmr_decoded.h"
 #include "wmr_hid.h"
 
-/* Gamepad model bits, in the order of GamepadButton in the companion package. */
+/* Button bit positions in the HID report, which are also the Button usage
+ * numbers the host sees (bit 0 is usage 1). Android maps a gamepad's Button
+ * usages onto Linux BTN_A.. in order (see Generic.kl): A, B, C, X, Y, Z, L1,
+ * R1, L2, R2, Select, Start, Mode, ThumbL, ThumbR. C and Z have no WMR
+ * control but still occupy their slots, so X..R3 sit two bits later than the
+ * companion's GamepadButton order. */
 enum {
     GP_A = 0,
     GP_B,
+    GP_C,
     GP_X,
     GP_Y,
+    GP_Z,
     GP_L1,
     GP_R1,
     GP_L2,
     GP_R2,
-    GP_L3,
-    GP_R3,
     GP_SELECT,
     GP_START,
     GP_GUIDE,
+    GP_L3,
+    GP_R3,
     GP_DPAD_UP,
     GP_DPAD_DOWN,
     GP_DPAD_LEFT,
     GP_DPAD_RIGHT,
 };
 
-#define GP_MASK_REPORT  0x1FFFu   /* bits 0..12 are the 16-bit HID button map */
+#define GP_MASK_REPORT  0x7FFFu   /* bits 0..14 are the 15 used HID buttons */
 #define GP_DIRECTIONAL  ((1u << GP_DPAD_UP) | (1u << GP_DPAD_DOWN) | \
                          (1u << GP_DPAD_LEFT) | (1u << GP_DPAD_RIGHT))
 
