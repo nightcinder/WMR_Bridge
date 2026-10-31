@@ -25,6 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CAPTURE_DIR = "captures/"
 POSE_PREFIX = "pose_capture_"
 POSE_FORMAT = "wmr-pose-recording"
+minimumRunSeconds = 30
 
 
 class BundleError(Exception):
@@ -211,6 +212,20 @@ def _pose_section(directory, diagnostics, problems):
     return lines
 
 
+def _pose_run_seconds(samples):
+    """Seconds between the first and last sample, or None if unreadable."""
+    if len(samples) < 2:
+        return None
+    try:
+        first = samples[0]["host_ns"]
+        last = samples[-1]["host_ns"]
+    except (KeyError, TypeError):
+        return None
+    if not isinstance(first, int) or not isinstance(last, int):
+        return None
+    return (last - first) / 1e9
+
+
 def _pose_file_note(path, problems):
     try:
         with open(path, "r") as fp:
@@ -229,7 +244,16 @@ def _pose_file_note(path, problems):
         return "bad samples"
     if not samples:
         problems.append("%s: no pose samples" % os.path.basename(path))
-    return "%d samples" % len(samples)
+        return "0 samples"
+    seconds = _pose_run_seconds(samples)
+    if seconds is None:
+        problems.append("%s: samples have no readable host_ns timestamps"
+                        % os.path.basename(path))
+        return "%d samples" % len(samples)
+    if seconds < minimumRunSeconds:
+        problems.append("%s: run is %.1f s, shorter than %d s"
+                        % (os.path.basename(path), seconds, minimumRunSeconds))
+    return "%d samples over %.1f s" % (len(samples), seconds)
 
 
 def _manifest_checks(meta, diagnostics, problems):

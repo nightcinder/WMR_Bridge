@@ -50,6 +50,22 @@ def run_main(zip_path):
     return code, out.getvalue(), err.getvalue()
 
 
+def set_pose_span(seconds):
+    """Rewrite the fixture's pose file so its samples span `seconds`."""
+    def edit(rel, data):
+        if rel != "pose_capture_androidXr_left_still.json":
+            return data
+        document = json.loads(data)
+        first = document["samples"][0]
+        last = document["samples"][-1]
+        last["host_ns"] = first["host_ns"] + int(seconds * 1_000_000_000)
+        for key in ("left", "right"):
+            last[key]["host_time_ns"] = last["host_ns"]
+        last["tracking"]["time_ns"] = last["host_ns"]
+        return json.dumps(document).encode()
+    return edit
+
+
 class FixtureReportTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory(prefix="wmr-triage-test-")
@@ -141,6 +157,17 @@ class FailingBundleTest(unittest.TestCase):
 
         _code, out, _err = run_main(self.bundle(edit=wrong_count))
         self.assertIn("manifest says 2 bridge(s); diagnostics.json has 1", out)
+
+    def test_run_shorter_than_30_seconds_is_flagged(self):
+        code, out, _err = run_main(self.bundle(edit=set_pose_span(29)))
+        self.assertEqual(code, 0)
+        self.assertIn("run is 29.0 s, shorter than 30 s", out)
+
+    def test_run_at_30_seconds_passes(self):
+        code, out, _err = run_main(self.bundle(edit=set_pose_span(30)))
+        self.assertEqual(code, 0)
+        self.assertNotIn("shorter than 30 s", out)
+        self.assertIn("Problems: none", out)
 
 
 if __name__ == "__main__":

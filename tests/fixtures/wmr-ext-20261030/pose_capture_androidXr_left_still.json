@@ -16,6 +16,21 @@
         "v": 1,
         "time_ns": 1000
       }
+    },
+    {
+      "host_ns": 30000001000,
+      "left": {
+        "hand": "left",
+        "host_time_ns": 30000001000
+      },
+      "right": {
+        "hand": "right",
+        "host_time_ns": 30000001000
+      },
+      "tracking": {
+        "v": 1,
+        "time_ns": 30000001000
+      }
     }
   ]
 }
