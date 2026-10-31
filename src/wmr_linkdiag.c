@@ -354,10 +354,14 @@ void wmr_linkdiag_link_identified(unsigned hand, uint16_t con_handle){
 }
 
 void wmr_linkdiag_on_hci_event(uint8_t *packet, uint16_t size){
-    (void)size;
+    /* Every field read below is bounds-checked against the packet length: the
+     * event bytes are untrusted input, and a truncated event must be ignored
+     * rather than read past the end of the buffer. */
+    if (packet == NULL || size < 2) return;
     switch (hci_event_packet_get_type(packet)){
         case HCI_EVENT_CONNECTION_REQUEST: {
 #if WMR_CFG_ATT_TRACE
+            if (size < 12) break;                   /* bd_addr [2..7], link type [11] */
             /* A phone that decides this is a Classic HID device pages the BR/EDR side.
              * Log it: that attempt, not the LE link, is where such a phone stops. */
             bd_addr_t address;
@@ -370,6 +374,7 @@ void wmr_linkdiag_on_hci_event(uint8_t *packet, uint16_t size){
             break;
         }
         case HCI_EVENT_CONNECTION_COMPLETE: {
+            if (size < 11) break;                   /* status, handle, bd_addr */
             if (hci_event_connection_complete_get_status(packet) != ERROR_CODE_SUCCESS) break;
             bd_addr_t address;
             hci_event_connection_complete_get_bd_addr(packet, address);
@@ -381,6 +386,7 @@ void wmr_linkdiag_on_hci_event(uint8_t *packet, uint16_t size){
             break;
         }
         case HCI_EVENT_DISCONNECTION_COMPLETE: {
+            if (size < 5) break;                    /* status, handle */
             int hand = hand_for_handle(hci_event_disconnection_complete_get_connection_handle(packet));
             if (hand < 0) break;
             links[hand].connected = false;
@@ -388,6 +394,7 @@ void wmr_linkdiag_on_hci_event(uint8_t *packet, uint16_t size){
             break;
         }
         case HCI_EVENT_MODE_CHANGE: {
+            if (size < 8) break;                    /* status, handle, mode, interval */
             if (hci_event_mode_change_get_status(packet) != ERROR_CODE_SUCCESS) break;
             int hand = hand_for_handle(hci_event_mode_change_get_handle(packet));
             if (hand < 0) break;
@@ -402,14 +409,16 @@ void wmr_linkdiag_on_hci_event(uint8_t *packet, uint16_t size){
             break;
         }
         case HCI_EVENT_COMMAND_COMPLETE: {
+            if (size < 5) break;                    /* num packets, opcode */
             uint16_t opcode = hci_event_command_complete_get_command_opcode(packet);
+            uint16_t ret_len = (uint16_t) (size - 5);
             if (opcode == hci_le_read_buffer_size.opcode || opcode == hci_le_read_buffer_size_v2.opcode){
                 /* Read once during stack start-up; logged once, nothing is polled. */
                 uint16_t acl_length;
                 uint8_t acl_count;
-                if (packet[1] > 3 &&
+                if (ret_len > 0 &&
                     wmr_diag_parse_le_buffer_size(hci_event_command_complete_get_return_parameters(packet),
-                                                  (uint16_t) (packet[1] - 3), &acl_length, &acl_count)){
+                                                  ret_len, &acl_length, &acl_count)){
                     char line[80];
                     wmr_diag_format_le_buffers(line, sizeof(line), acl_length, acl_count);
                     printf("%s\n", line);
@@ -420,7 +429,6 @@ void wmr_linkdiag_on_hci_event(uint8_t *packet, uint16_t size){
             if (opcode != command_for(awaiting_job.kind)->opcode) break;
             uint16_t handle = 0;
             const uint8_t *ret = hci_event_command_complete_get_return_parameters(packet);
-            uint16_t ret_len = (uint16_t) (packet[1] > 3 ? packet[1] - 3 : 0);
             wmr_diag_parse_link_reply((wmr_linkcmd_t) awaiting_job.kind, ret, ret_len, &handle,
                                       &links[awaiting_job.hand].health);
             awaiting = false;
