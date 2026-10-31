@@ -166,6 +166,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # The runner workspace is empty apart from the downloaded artifacts, so
+      # the checkout is what makes tools/release/make_sums.sh available.
+      - uses: actions/checkout@v7
+
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
