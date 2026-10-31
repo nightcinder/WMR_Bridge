@@ -83,9 +83,9 @@ Run with the refactored firmware flashed. Record dates and observed numbers here
 5. **Controller disconnect/reconnect** while the phone is subscribed: the other hand keeps flowing; the affected hand resumes; sequence numbers continue.
 6. **Phone disconnect/reconnect**: advertising restarts; after reconnect the phone must request MTU/High priority and write the CCC again; `purged`/`offline` behave as described in [RECONNECT_AND_QUEUE.md](RECONNECT_AND_QUEUE.md); no duplicate "BLE phone connected" lines.
 7. **Large MTU + High priority**: log the *negotiated* MTU on the phone, compare with `mtu=`.
-8. **Phone-side sequence validation**: lossless end-to-end delivery has **not** been established by any test. A gap-checking receiver is future work.
+8. **Phone-side sequence validation**: lossless end-to-end delivery has **not** been established by any test. A gap-checking receiver is future work. (Code item, not docs: it needs a gap-checking receiver in the phone app; out of scope for this docs task, so it is recorded here and not implemented.)
 9. **Manual bond reset** (`k`/`K`): refused while connected; works while disconnected; controller re-pairs afterwards.
-10. **Capture sample frames** labelled LEFT and RIGHT from this build and add them to `samples/` (current samples are from earlier bring-up sessions with the hand not recorded).
+10. **Capture sample frames** labelled LEFT and RIGHT from this build and add them to `samples/` (current samples are from earlier bring-up sessions with the hand not recorded). (Bench capture task, not docs: needs a hardware capture run; out of scope for this docs task.)
 11. **Long soak** (hours) watching `errors`, `drop`, heap, and uptime.
 12. Comparison against the original single-file bridge under the same conditions (that version is not included in this repository).
 
@@ -143,6 +143,10 @@ Firmware: the PR #8 branch. Added to find where controller reports are lost (iss
 #3, closed). Everything below is **not yet run**; what the assistant ran is host-only (`tests/test_diag.c`
 in CI: the missing-report estimator, log classification, mode tracking and reply parsing) and a
 full ESP-IDF build.
+
+Leftovers from this refresh: D4 (tick-based estimate vs. the analyzer), D6 (reconnect) and D10
+(DECODING.md experiments) are still `not yet run` — no bench results are available, so they stay
+as recorded. They need hardware runs, not docs.
 
 | # | Check | How | Expect | Result |
 | --- | --- | --- | --- | --- |
