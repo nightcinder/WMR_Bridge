@@ -19,17 +19,22 @@ This documents what the firmware does today (unchanged by the refactor).
 - **Outgoing connections** (`l`, `r`) are for recovery; they need a known address.
   FF17 CONNECT (`0x02 hand`) is the same request: if that hand already has a HID
   channel open or opening, it returns OK and does nothing; it does not return
-  BUSY or start a second connection.
+  BUSY or start a second connection. If the previous disconnect has not finished
+  and the channel is still closing, it returns BUSY instead, because there is no
+  open connection for OK to describe.
 - Only one connection attempt (outgoing or accepted) may be in flight
   (`connect_pending`); it ends when the HID descriptor arrives, the open
   fails, or the connection closes before completing.
 - **Disconnect detection** is the Classic link supervision timeout. The bridge
-  writes `WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT` (default `0x1F40` = 5 s) to every
+  writes `WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT` (default `0x1F40` = 5 s) to each
   ACL for a known hand. BTstack's default is `0x7D00` = 20 s, which is how long a
   hand that is switched off keeps the connected bit set and the LED lit. The
-  timeout is written explicitly because BTstack only applies its own value to
-  outgoing links where the bridge is master; controller reconnects usually arrive
-  as incoming links.
+  HCI write is only valid while the local controller is the master: at a
+  controller-initiated reconnect the bridge starts as slave, so the write is
+  deferred at connection complete and sent again from `HCI_EVENT_ROLE_CHANGE`
+  when the link switches to master. The command-complete status is logged as
+  `applied` or `not applied`. A link that stays slave keeps the timeout the
+  controller (the master) chose, and the log says the write was not applied.
 - **The reconnect itself is controller-initiated.** When the supervision timeout
   drops the ACL, the bridge does not page the controller automatically (that would
   undo an explicit disconnect). The controller pages the bridge when it boots or
@@ -43,14 +48,18 @@ Measured targets after this change:
 
 | Measurement | Target |
 | --- | --- |
-| Last controller packet → `link closed: connection timeout` (`reason=0x08`) | ≤ 6 s (5 s supervision + event latency) |
+| Last controller packet → `link closed: connection timeout` (`reason=0x08`) | ≤ 6 s (5 s supervision + event latency) when the bridge is master and the write is applied; otherwise the peer master's timeout |
 | `link up` → `HID channel open` on a reconnect | ≤ 1 s (0.21 s measured) |
 | `link closed` → `link up` | controller-driven; 12.2 s measured, unchanged by firmware |
-| FF17 CONNECT while the same hand is open/opening | ATT `0x00`, log says `connect is a no-op` |
+| FF17 CONNECT while the same hand is open/opening | result byte `0x00` (OK), log says `connect is a no-op` |
+| FF17 CONNECT while the same hand is still closing | result byte `0x01` (busy), log says `is still closing` |
 
 Bench step: connect both hands and stream FF14. Note the LEFT `rx` counter and
-timestamp from `s`, then switch LEFT off. Expect `LEFT link closed: connection
-timeout` and FF17 LEFT flags `0x00` within about 6 s of the last report. Switch
+timestamp from `s`, then switch LEFT off. Check that the log says `link
+supervision timeout applied` for LEFT, then expect `LEFT link closed: connection
+timeout` and FF17 LEFT flags `0x00` within about 6 s of the last report. If it
+says `not applied` (LEFT stayed slave), the peer's timeout still governs and the
+6 s target does not apply. Switch
 LEFT on and record the `link closed` → `link up` → `HID channel open` timestamps.
 Finally, while LEFT is open or opening, write FF17 `02 00` and confirm ATT success
 and `connect is a no-op` in the console log.

@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "wmr_ctrl.h"
+#include "wmr_controller.h"
 
 static int checks, failures;
 
@@ -176,10 +177,19 @@ static void test_result_mapping(void){
     CHECK(wmr_ctrl_res_to_att_error(WMR_CTRL_RES_INVALID_PARAM) == 0x86);
 }
 
+static void test_connect_gate(void){
+    printf("FF17 CONNECT OK-vs-BUSY for an already tracked hand\n");
+    CHECK(wmr_controller_connect_gate(false, false) == WMR_CONNECT_GATE_START);
+    CHECK(wmr_controller_connect_gate(false, true) == WMR_CONNECT_GATE_START);
+    CHECK(wmr_controller_connect_gate(true, false) == WMR_CONNECT_GATE_ACK);
+    CHECK(wmr_controller_connect_gate(true, true) == WMR_CONNECT_GATE_CLOSING);
+}
+
 int main(void){
     test_command_parsing();
     test_status_pack_unpack();
     test_result_mapping();
+    test_connect_gate();
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

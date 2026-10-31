@@ -83,6 +83,19 @@ typedef enum {
     WMR_DISCONNECT_NOT_CONNECTED
 } wmr_disconnect_result_t;
 
+/* What FF17 CONNECT does for a hand that already has a HID channel. Separated from
+ * wmr_controller.c so the host test covers the OK-vs-BUSY choice without a radio. */
+typedef enum {
+    WMR_CONNECT_GATE_START = 0,     /* no channel: start a new connection attempt */
+    WMR_CONNECT_GATE_ACK,           /* open or opening: answer OK, start nothing */
+    WMR_CONNECT_GATE_CLOSING        /* closing after a disconnect: answer BUSY */
+} wmr_connect_gate_t;
+
+static inline wmr_connect_gate_t wmr_controller_connect_gate(bool has_cid, bool disconnecting){
+    if (!has_cid) return WMR_CONNECT_GATE_START;
+    return disconnecting ? WMR_CONNECT_GATE_CLOSING : WMR_CONNECT_GATE_ACK;
+}
+
 typedef enum {
     WMR_BOND_RESET_OK = 0,
     WMR_BOND_RESET_BUSY,     /* controller connected/connecting; nothing done */
