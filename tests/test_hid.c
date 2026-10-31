@@ -156,6 +156,52 @@ static void read_descriptor(const char *path){
           "descriptor bytes differ from the companion's");
 }
 
+/* Button bit positions must match the host's Button usage order (Android:
+ * A, B, C, X, Y, Z, L1, R1, L2, R2, Select, Start, Mode, ThumbL, ThumbR), so
+ * C and Z stay empty and nothing lands a slot early. */
+static uint16_t mapped_buttons(const wmr_hid_hand_t *left, const wmr_hid_hand_t *right){
+    wmr_hid_report_t report;
+    wmr_hid_map(left, right, wmr_hid_default_config(), NULL, &report);
+    return report.buttons;
+}
+
+static void test_button_slots(void){
+    const wmr_hid_hand_t none = {0};
+    wmr_hid_hand_t hand = {0};
+    hand.connected = true;
+
+    hand.buttons = WMR_BTN_SQUEEZE;
+    CHECK(mapped_buttons(&hand, &none) == (1u << 6), "LEFT squeeze is usage 7 (L1)");
+    CHECK(mapped_buttons(&none, &hand) == (1u << 7), "RIGHT squeeze is usage 8 (R1)");
+
+    hand.buttons = WMR_BTN_THUMBSTICK_CLICK;
+    CHECK(mapped_buttons(&hand, &none) == (1u << 13), "LEFT stick click is usage 14 (L3)");
+    CHECK(mapped_buttons(&none, &hand) == (1u << 14), "RIGHT stick click is usage 15 (R3)");
+
+    hand.buttons = WMR_BTN_MENU;
+    CHECK(mapped_buttons(&hand, &none) == (1u << 10), "LEFT menu is usage 11 (Select)");
+    CHECK(mapped_buttons(&none, &hand) == (1u << 11), "RIGHT menu is usage 12 (Start)");
+
+    hand.buttons = WMR_BTN_HOME;
+    CHECK(mapped_buttons(&hand, &none) == (1u << 12), "home is usage 13 (Mode)");
+
+    hand.buttons = 0;
+    hand.trigger = 255;
+    CHECK(mapped_buttons(&hand, &none) == (1u << 8), "LEFT trigger is usage 9 (L2)");
+    CHECK(mapped_buttons(&none, &hand) == (1u << 9), "RIGHT trigger is usage 10 (R2)");
+
+    hand.trigger = 0;
+    hand.buttons = WMR_BTN_TRACKPAD_CLICK | WMR_BTN_TRACKPAD_TOUCH;
+    hand.trackpad[0] = 0.9f;  hand.trackpad[1] = 0.1f;
+    CHECK(mapped_buttons(&none, &hand) == (1u << 1), "right pad right is usage 2 (B)");
+    hand.trackpad[0] = -0.9f;
+    CHECK(mapped_buttons(&none, &hand) == (1u << 3), "right pad left is usage 4 (X)");
+    hand.trackpad[0] = 0.1f;  hand.trackpad[1] = 0.9f;
+    CHECK(mapped_buttons(&none, &hand) == (1u << 4), "right pad up is usage 5 (Y)");
+    hand.trackpad[1] = -0.9f;
+    CHECK(mapped_buttons(&none, &hand) == (1u << 0), "right pad down is usage 1 (A)");
+}
+
 /* A neutral 46-byte WMR input report: sticks centred, no buttons. */
 static void neutral_frame(uint8_t frame[WMR_DECODE_FRAME_LENGTH]){
     memset(frame, 0, WMR_DECODE_FRAME_LENGTH);
@@ -186,7 +232,7 @@ static void test_state(void){
     frame[2] = 0x08;              /* LEFT squeeze */
     CHECK(wmr_hid_note_report(&state, 0, frame, sizeof(frame), 20000), "squeeze sample");
     CHECK(wmr_hid_take_report(&state, 20000, report), "squeeze report");
-    CHECK(report[0] == 0x10, "LEFT squeeze is L1, got 0x%02x", report[0]);
+    CHECK(report[0] == 0x40, "LEFT squeeze is L1 (usage 7), got 0x%02x", report[0]);
 
     frame[2] = 0x00;
     CHECK(wmr_hid_note_report(&state, 0, frame, sizeof(frame), 21000), "release sample");
@@ -198,7 +244,7 @@ static void test_state(void){
     frame[2] = 0x08;
     CHECK(wmr_hid_note_report(&state, 0, frame, sizeof(frame), 31000), "second squeeze");
     CHECK(wmr_hid_take_report(&state, 41002, report), "second squeeze report");
-    CHECK(report[0] == 0x10, "second LEFT squeeze is L1, got 0x%02x", report[0]);
+    CHECK(report[0] == 0x40, "second LEFT squeeze is L1 (usage 7), got 0x%02x", report[0]);
 
     /* No sample for WMR_HID_STALE_MS: release the hand once. */
     CHECK(wmr_hid_expire(&state, 41002 + WMR_HID_STALE_US + 1), "hand must expire");
@@ -210,7 +256,7 @@ static void test_state(void){
     frame[2] = 0x08;
     CHECK(wmr_hid_note_report(&state, 1, frame, sizeof(frame), 900000), "right sample");
     CHECK(wmr_hid_take_report(&state, 900000, report), "right report");
-    CHECK(report[0] == 0x20, "RIGHT squeeze is R1, got 0x%02x", report[0]);
+    CHECK(report[0] == 0x80, "RIGHT squeeze is R1 (usage 8), got 0x%02x", report[0]);
 
     /* Bad frames are ignored and do not touch the state. */
     CHECK(!wmr_hid_note_report(&state, 2, frame, sizeof(frame), 910000), "hand 2 rejected");
@@ -226,6 +272,7 @@ int main(int argc, char **argv){
     }
     read_vectors(argv[1]);
     read_descriptor(argv[2]);
+    test_button_slots();
     test_state();
     if (failures){
         printf("%d FAILURES\n", failures);
