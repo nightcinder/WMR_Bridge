@@ -35,11 +35,13 @@ early stop and no coarse-to-fine pruning.
 Plain-language prompt plus countdown. Durations and motions are fixed by the
 spec; do not improvise.
 
-1. **Still** — 10 s. Controller rested in the hand, arm braced.
-2. **Held, drifting** — 10 s. Hold as if aiming and let it wander slowly.
-3. **Slow pan** — 30 cm sideways over 3 s, back and forth, 3 times.
-4. **Medium pan** — 50 cm sideways in 1 s, back and forth, 10 s.
-5. **Fast flick** — 45 cm flick in 0.3 s, pause, return; 10 reps.
+1. **Still** — cycle length 10 s. Controller rested in the hand, arm braced.
+2. **Held, drifting** — cycle length 10 s. Hold as if aiming and let it wander slowly.
+3. **Slow pan** — cycle length 18 s (30 cm sideways over 3 s, back and forth, 3 times).
+4. **Medium pan** — cycle length 10 s (50 cm sideways in 1 s, back and forth).
+5. **Fast flick** — cycle length 20 s (45 cm flick in 0.3 s, pause, return; 10 reps).
+
+Run >= 30 s: each segment cycle repeats until the timer ends.
 
 ## Output
 
