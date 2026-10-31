@@ -44,7 +44,7 @@ implemented. See [docs/PROTOCOL.md](docs/PROTOCOL.md).
 > the ESP32 radio is the working hypothesis, not proven. See [docs/DECODING.md](docs/DECODING.md)
 > and the run records in [docs/runs/](docs/runs/README.md). Many checks in
 > [docs/TESTING.md](docs/TESTING.md) have not been run. Read
-> [What is and is not tested](#what-is-and-isnt-tested) before relying on it.
+> [What is and is not tested](#what-is-and-is-not-tested) before relying on it.
 
 ## What it does
 
