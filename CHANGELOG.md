@@ -39,8 +39,8 @@ remain CI-built and hardware-unverified.
 
 ### Verification
 
-- Host tests and the ESP-IDF build run in CI on the tag; firmware reports
-  the tag version over FF16.
+- Host tests run in CI before tagging (PR/main); the ESP-IDF build runs on
+  the tag; firmware reports the tag version over FF16.
 - Pi package is `0.2.3`; protocol unchanged.
 
 ## 0.3.1 — 2026-10-31
