@@ -530,6 +530,23 @@ static const char *role_name(hci_role_t role){
     }
 }
 
+/* Ask the controller to report the ACL lost after the configured silence, instead of the
+ * controller default (20 s on this BTstack/ESP32 combination). Written for every ACL to a
+ * known hand, whatever its role: BTstack's own gap_set_link_supervision_timeout() only
+ * covers outgoing links where the host is master at connection complete. */
+static void link_supervision_apply(hci_con_handle_t handle, const controller_t *c){
+#if WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT
+    hci_send_cmd(&hci_write_link_supervision_timeout, handle,
+                 (uint16_t) WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT);
+    WMR_LOGI("link", "%s link supervision timeout: %lu ms (%u slots)",
+             c->name, (unsigned long) ((uint32_t) WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT * 625u / 1000u),
+             (unsigned) WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT);
+#else
+    (void) handle;
+    (void) c;
+#endif
+}
+
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
 
 #define POLICY_RETRY_MS  100u
@@ -1034,6 +1051,11 @@ void wmr_controller_init(wmr_report_sink_t sink){
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
     policy_timer.process = policy_timer_fire;
 #endif
+#if WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT
+    /* BTstack only writes this for outgoing links where the bridge is master; the explicit
+     * per-handle write below covers incoming links and the slave role too. */
+    gap_set_link_supervision_timeout((uint16_t) WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT);
+#endif
     hid_host_init(descriptor_storage, sizeof(descriptor_storage));
     hid_host_register_packet_handler(hid_packet_handler);
     gap_register_classic_connection_filter(disc_accept_classic_connection);
@@ -1092,12 +1114,18 @@ static wmr_connect_result_t connect_hand_impl(unsigned hand){
         WMR_LOGW("pair", "%s has no address; put it in pairing mode and press d", c->name);
         return WMR_CONNECT_NO_ADDRESS;
     }
+    if (c->cid){
+        /* CONNECT is also the companion's reconnect button. A hand whose HID channel is
+         * already open, or still opening (the disconnect from the previous tap has not
+         * completed), is exactly what the caller asked for: acknowledge it instead of
+         * returning BUSY and leaving the companion to retry. The FF17 status still shows
+         * the real connected/connecting flags. */
+        WMR_LOGI("pair", "%s is already open or opening (cid=%u); connect is a no-op",
+                 c->name, c->cid);
+        return WMR_CONNECT_OK;
+    }
     if (connect_pending){
         WMR_LOGW("pair", "another connection or discovery is still in progress");
-        return WMR_CONNECT_BUSY;
-    }
-    if (c->cid){
-        WMR_LOGW("pair", "%s is already open or opening (cid=%u)", c->name, c->cid);
         return WMR_CONNECT_BUSY;
     }
 #if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
@@ -1751,6 +1779,7 @@ static void incoming_resolved(const uint8_t *name, size_t len){
     addresses_save();
     /* The ACL link came up before the address was known, so link diagnostics missed it. */
     wmr_linkdiag_link_identified((unsigned) hand, incoming_con_handle);
+    link_supervision_apply(incoming_con_handle, c);
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
     /* The HCI connection-complete event could not name this hand yet. */
     policy_link_opened((unsigned) hand, incoming_con_handle, c->address);
@@ -1840,6 +1869,7 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
                     c->handle = handle;
                     c->encrypted = false;
                     unknown_acl_clear(handle);
+                    link_supervision_apply(handle, c);
                     if (connect_pending && c == connect_watch_owner && !c->connected)
                         connect_watch_start(c, handle);
                 }

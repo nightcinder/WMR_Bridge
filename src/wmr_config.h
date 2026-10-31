@@ -348,6 +348,23 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_BLE_PAIR_TIMEOUT_MS 30000
 #endif
 
+/* ---- Classic ACL supervision ------------------------------------------- */
+
+/* Link supervision timeout written on every Classic ACL to a known controller, in
+ * 0.625 ms slots. BTstack leaves the controller default alone (0x7D00 = 20 s), which is
+ * how long a switched-off controller stays "connected" in FF17 and the LED. 0x1F40 is
+ * 5 s: a powered-off controller is reported disconnected about 5 s after its last
+ * packet. Keep it well above the longest radio stall a discovery round or WiFi
+ * coexistence can cause, because a spurious expiry costs a full controller reconnect.
+ * 0 = do not write a timeout (leave the controller default). */
+#ifndef WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT
+#define WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT 0x1F40
+#endif
+#if WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT != 0 && \
+    (WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT < 0x000A || WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT > 0xFFFF)
+#error "WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT must be 0 or 0x000A..0xFFFF (0.625 ms slots)"
+#endif
+
 /* ---- Timers ------------------------------------------------------------ */
 
 /* Retry period for the notification pump: re-requests a send when frames are

@@ -17,9 +17,44 @@ This documents what the firmware does today (unchanged by the refactor).
 - **Discovery** (automatic after boot when a hand has no address, or `d`) finds
   controllers by name and connects them outwards; see [DISCOVERY.md](DISCOVERY.md).
 - **Outgoing connections** (`l`, `r`) are for recovery; they need a known address.
+  FF17 CONNECT (`0x02 hand`) is the same request: if that hand already has a HID
+  channel open or opening, it returns OK and does nothing; it does not return
+  BUSY or start a second connection.
 - Only one connection attempt (outgoing or accepted) may be in flight
   (`connect_pending`); it ends when the HID descriptor arrives, the open
   fails, or the connection closes before completing.
+- **Disconnect detection** is the Classic link supervision timeout. The bridge
+  writes `WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT` (default `0x1F40` = 5 s) to every
+  ACL for a known hand. BTstack's default is `0x7D00` = 20 s, which is how long a
+  hand that is switched off keeps the connected bit set and the LED lit. The
+  timeout is written explicitly because BTstack only applies its own value to
+  outgoing links where the bridge is master; controller reconnects usually arrive
+  as incoming links.
+- **The reconnect itself is controller-initiated.** When the supervision timeout
+  drops the ACL, the bridge does not page the controller automatically (that would
+  undo an explicit disconnect). The controller pages the bridge when it boots or
+  wakes, and the bridge accepts and opens HID as soon as that ACL appears. In the
+  0.3.2 session (`full session` log, LEFT, uptime 2367.5–2379.8 s) the gap from
+  `link closed` to `link up` was 12.2 s, and from `link up` to `HID channel open`
+  0.21 s. The 12.2 s is the controller's own page/boot interval, not a bridge
+  timer or backoff; FF17 CONNECT pages it immediately once the hand has no cid.
+
+Measured targets after this change:
+
+| Measurement | Target |
+| --- | --- |
+| Last controller packet → `link closed: connection timeout` (`reason=0x08`) | ≤ 6 s (5 s supervision + event latency) |
+| `link up` → `HID channel open` on a reconnect | ≤ 1 s (0.21 s measured) |
+| `link closed` → `link up` | controller-driven; 12.2 s measured, unchanged by firmware |
+| FF17 CONNECT while the same hand is open/opening | ATT `0x00`, log says `connect is a no-op` |
+
+Bench step: connect both hands and stream FF14. Note the LEFT `rx` counter and
+timestamp from `s`, then switch LEFT off. Expect `LEFT link closed: connection
+timeout` and FF17 LEFT flags `0x00` within about 6 s of the last report. Switch
+LEFT on and record the `link closed` → `link up` → `HID channel open` timestamps.
+Finally, while LEFT is open or opening, write FF17 `02 00` and confirm ATT success
+and `connect is a no-op` in the console log.
+
 - **State per hand** (cid, connected, descriptor, report count) is cleared when
   its connection closes and when a new connection starts. The status
   `reports` value therefore counts since the current connection.

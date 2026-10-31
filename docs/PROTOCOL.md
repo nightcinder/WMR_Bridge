@@ -874,7 +874,7 @@ Writes execute control actions that mirror serial console commands. Writes take 
 | Opcode | Name | Size | Argument | Action / firmware function |
 | --- | --- | --- | --- | --- |
 | `0x01` | DISCOVER | 1-2 B | hand ignored | `wmr_controller_discover()`: starts bounded inquiry/discovery for unbound hands |
-| `0x02` | CONNECT | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_connect(hand)`: initiates Classic BT HID connection |
+| `0x02` | CONNECT | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_connect(hand)`: initiates Classic BT HID connection; if that hand is already open or opening, returns OK without starting a second attempt |
 | `0x03` | DISCONNECT | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_disconnect(hand)`: closes Classic BT HID connection |
 | `0x04` | FORGET_ADDRS | 1-2 B | hand ignored | `wmr_controller_forget_addresses()`: clears stored NVS addresses (refused if connected/connecting) |
 | `0x05` | FORGET_BOND | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_forget_bond(hand)`: clears paired link key (refused if connected/connecting) |
