@@ -17,6 +17,7 @@ Standard library only. Run from anywhere:
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 import zipfile
@@ -25,6 +26,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CAPTURE_DIR = "captures/"
 POSE_PREFIX = "pose_capture_"
 POSE_FORMAT = "wmr-pose-recording"
+POSE_NAME = re.compile(
+    r"^pose_capture_([A-Za-z0-9]+)_(left|right)_(.+?)(?:_run(\d+))?\.json$")
 minimumRunSeconds = 30
 
 
@@ -191,7 +194,10 @@ def _pose_section(directory, diagnostics, problems):
         runtime = entry.get("runtime")
         hand = entry.get("hand")
         segment = entry.get("segment")
-        expected = "%s%s_%s_%s.json" % (POSE_PREFIX, runtime, hand, segment)
+        run = entry.get("run", 1)
+        run_suffix = "_run%d" % run if isinstance(run, int) and run > 1 else ""
+        expected = "%s%s_%s_%s%s.json" % (
+            POSE_PREFIX, runtime, hand, segment, run_suffix)
         if base != expected:
             problems.append("%s: name does not match runtime/hand/segment "
                             "(expected %s)" % (base, expected))
@@ -214,9 +220,9 @@ def _pose_section(directory, diagnostics, problems):
 
 
 def _pose_segment(name):
-    """Motion segment from `pose_capture_<runtime>_<hand>_<segment>.json`."""
-    stem = name[:-len(".json")] if name.endswith(".json") else name
-    return stem.rsplit("_", 1)[-1] if "_" in stem else None
+    """Motion segment from `pose_capture_<runtime>_<hand>_<segment>[_runN].json`."""
+    match = POSE_NAME.match(name)
+    return match.group(3) if match else None
 
 
 def _pose_run_seconds(samples):
