@@ -51,7 +51,7 @@ offsets and scales; it does not validate signs or axes.
 ## Calibration: design (done on the phone)
 
 FF12 stays uncalibrated. The phone gets each controller's firmware config block from
-the bridge on FF13 ([PROTOCOL.md](PROTOCOL.md#controller-config-block-ff13-proposed-design-only-not-implemented)),
+the bridge on FF13 ([PROTOCOL.md](PROTOCOL.md#controller-config-block-ff13-approved-layout-implemented-in-firmware-read-run-on-hardware-user-reported)),
 including how the ESP32 reads it over HID, caches it, and keeps the 78-byte responses
 out of the input stream. **The firmware reads and serves the block (WMR_Bridge #17, with the streaming fix #21). User-reported 2026-10-22: the phone read it in 496-byte windows, LEFT 7147 bytes and RIGHT 7148 bytes, CRC-32 matching the firmware's, and the app decoded gyro and accelerometer calibration.**
 

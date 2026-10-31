@@ -40,11 +40,13 @@ jobs:
       - name: Mark the checkout safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Build and package all three variants
+      - name: Build, package and check all three variants
         env:
           IDF_PATH: /opt/esp/idf
         run: |
           . "$IDF_PATH/export.sh"
+          # build.py prints each variant's static DRAM and image size and fails
+          # the build if either is over tools/firmware/size-budget.json.
           for variant in both left right; do
             python3 tools/firmware/build.py --variant "$variant" --out dist
           done
@@ -73,7 +75,7 @@ jobs:
       - name: Mark the checkout safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Build firmware (native ESP-IDF)
+      - name: Build firmware and check size budgets (native ESP-IDF)
         run: |
           set -euo pipefail
           export IDF_TOOLS_PATH="$HOME/.espressif"

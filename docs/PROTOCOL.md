@@ -214,7 +214,7 @@ There is no read value.
 ## Subscription: FF11, FF12 and FF14 are mutually exclusive
 
 Decoded records go only to a phone subscribed to FF12; raw fragments go only to a
-phone subscribed to FF11; batches of decoded records ([FF14](#batched-decoded-stream-ff14-version-2-implemented-in-firmware-not-yet-run-on-hardware))
+phone subscribed to FF11; batches of decoded records ([FF14](#batched-decoded-stream-ff14-version-2-implemented-in-firmware-run-on-hardware-user-reported))
 go only to a phone subscribed to FF14. At most one of the three is ever active, which
 keeps the BLE budget at one stream's worth.
 
@@ -310,7 +310,7 @@ rotation capture in [DECODING.md](DECODING.md) is done.
 - **`rx_time_us`** (ESP32 receive time) includes Bluetooth scheduling jitter and
   is only for measuring latency and jitter, for example against a phone-side
   clock. It answers the one-way part of issue #1 (closed); the round trip is the
-  [FF15 echo](#echo-ff15-version-1-approved-implemented-in-firmware-not-yet-run-on-hardware),
+  [FF15 echo](#echo-ff15-version-1-approved-implemented-in-firmware-run-on-hardware-user-reported),
   whose answer carries a timestamp on the same clock.
 
 ## Delivery rules
@@ -944,5 +944,5 @@ may stutter") while `discovery_state` is non-zero.
 # Proposals (NOT decided, NOT implemented, NOT part of the spec above)
 
 None at present. The FF12 version 2 batching sketch that was here is now the implemented
-[FF14](#batched-decoded-stream-ff14-version-2-implemented-in-firmware-not-yet-run-on-hardware)
+[FF14](#batched-decoded-stream-ff14-version-2-implemented-in-firmware-run-on-hardware-user-reported)
 section above. FF13 (controller config block) is implemented and approved; see its section above.

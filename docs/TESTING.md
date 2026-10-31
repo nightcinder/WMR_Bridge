@@ -91,14 +91,19 @@ Run with the refactored firmware flashed. Record dates and observed numbers here
 
 ## Rerunning the host tests
 
-```powershell
-.\tests\run_tests.ps1
+```sh
+./tests/run_c_tests.sh
 ```
 
-Needs a C99 compiler on PATH (`gcc`, `clang`, or `zig`); it also builds and runs the FF14 tests
-(`tests/test_batch.c`). Written and run here
-with `zig cc` from a throwaway Python venv, because no host compiler was
-installed.
+This is the list CI runs (`host-tests`): one build and run per test, C99 with
+`-Wall -Wextra -Wconversion -Werror`. The `host-tests-sanitizers` job runs the
+same script with `-fsanitize=address,undefined -fno-sanitize-recover=all` and no
+suppression flags, so a buffer or UB finding fails the job.
+
+`tests/run_tests.ps1` is the older Windows helper and covers the pure-C tests
+only. The BTstack-side tests (`tests/test_console.c`, `tests/test_cfgmgr.c`,
+`tests/test_linkdiag.c`) use the fakes in `tests/host_stubs/` and POSIX stdout
+capture, so they run on Linux/CI, not through the PowerShell script.
 
 ## FF12 decoded stream: bench-test checklist (hardware)
 

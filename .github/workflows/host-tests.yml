@@ -8,90 +8,33 @@ on:
   pull_request:
 
 jobs:
+  # The same C suite with the address and undefined-behaviour sanitizers. The
+  # plain job stays the fast one; this one proves the host tests stay inside
+  # their buffers and do not trip UB on the paths they cover. No suppression
+  # flags: a finding is a finding.
+  host-tests-sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and run host C tests under ASan and UBSan
+        env:
+          CFLAGS: -O1 -fsanitize=address,undefined -fno-sanitize-recover=all -g
+        run: ./tests/run_c_tests.sh
+
   host-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Build protocol and queue tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_protocol.c src/wmr_protocol.c src/wmr_queue.c src/wmr_decoded.c src/wmr_decode.c -o test_protocol
-      - name: Build decoder tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_decode.c src/wmr_decode.c -lm -o test_decode
-      - name: Build link-parameter tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_link.c src/wmr_link.c -o test_link
-      - name: Build FF12 stream-mode tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_stream_mode.c src/wmr_stream_mode.c src/wmr_decoded.c src/wmr_decode.c -o test_stream_mode
-      - name: Build FF14 batching tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_batch.c src/wmr_batch.c src/wmr_levers.c src/wmr_stream_mode.c src/wmr_queue.c src/wmr_decoded.c src/wmr_decode.c -o test_batch
-      - name: Build LEVERS runtime-state tests (release defaults)
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_levers.c src/wmr_levers.c -o test_levers
-      - name: Build LEVERS runtime-state tests (image)
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -DWMR_CFG_TEST_LEVERS=1 -Isrc tests/test_levers.c src/wmr_levers.c -o test_levers_on
-      - name: Build FF14 batching tests (LEVERS image)
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -DWMR_CFG_TEST_LEVERS=1 -Isrc tests/test_batch.c src/wmr_batch.c src/wmr_levers.c src/wmr_stream_mode.c src/wmr_queue.c src/wmr_decoded.c src/wmr_decode.c -o test_batch_on
-      - name: Build FF15 echo tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_echo.c src/wmr_echo.c -o test_echo
-      - name: Build FF13 config-block tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_cfg.c src/wmr_cfg.c -o test_cfg
-      - name: Build discovery tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_discovery.c src/wmr_discovery.c -o test_discovery
-      - name: Build log-format tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_log.c -o test_log
-      - name: Build link-diagnostics tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_diag.c src/wmr_devloss.c src/wmr_diag.c -o test_diag
-      - name: Build reconnect-handoff tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_linkwait.c src/wmr_linkwait.c -o test_linkwait
-      - name: Build status-LED tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_status_led.c src/wmr_status_led.c -o test_status_led
-      - name: Build HID gamepad tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_hid.c src/wmr_hid.c src/wmr_decoded.c src/wmr_decode.c -lm -o test_hid
-      - name: Build FF17 controller-status tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_ctrl.c src/wmr_ctrl.c -o test_ctrl
-      - name: Build phone-link security tests
-        run: gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc tests/test_secure.c src/wmr_secure.c -o test_secure
-      - name: Run protocol and queue tests
-        run: ./test_protocol samples/controller_frames.txt
-      - name: Run decoder tests
-        run: ./test_decode samples/controller_frames.txt
-      - name: Run link-parameter tests
-        run: ./test_link
-      - name: Run FF12 stream-mode tests
-        run: ./test_stream_mode samples/controller_frames.txt
-      - name: Run FF14 batching tests
-        run: ./test_batch
-      - name: Run LEVERS runtime-state tests
-        run: ./test_levers && ./test_levers_on
-      - name: Run FF14 batching tests (LEVERS image)
-        run: ./test_batch_on
-      - name: Run FF15 echo tests
-        run: ./test_echo
-      - name: Run FF13 config-block tests
-        run: ./test_cfg
-      - name: Run discovery tests
-        run: ./test_discovery
-      - name: Run log-format tests
-        run: ./test_log
-      - name: Run discovery tests with hand variants
-        run: |
-          gcc -std=c99 -Wall -Wextra -Wconversion -Werror -DWMR_CFG_BRIDGE_HANDS=1 -Isrc tests/test_discovery.c src/wmr_discovery.c -o test_discovery_h1 && ./test_discovery_h1
-          gcc -std=c99 -Wall -Wextra -Wconversion -Werror -DWMR_CFG_BRIDGE_HANDS=2 -Isrc tests/test_discovery.c src/wmr_discovery.c -o test_discovery_h2 && ./test_discovery_h2
-      - name: Run link-diagnostics tests
-        run: ./test_diag
-      - name: Run reconnect-handoff tests
-        run: ./test_linkwait
-      - name: Run status-LED tests
-        run: ./test_status_led
-      - name: Run HID gamepad tests
-        run: ./test_hid tests/vectors/hid_gamepad.txt tests/vectors/hid_report_descriptor.txt
-      - name: Run FF17 controller-status tests
-        run: ./test_ctrl
-      - name: Run phone-link security tests
-        run: ./test_secure
+      - name: Build and run host C tests
+        run: ./tests/run_c_tests.sh
       - name: Run capture/analysis script tests
         run: python3 tests/test_analyze_capture.py
       - name: Run tester-bundle triage tests
         run: python3 -m unittest tests.test_triage_bundle -v
       - name: Run docs/GATT property tests
         run: python3 tests/test_doc_gatt.py
+      - name: Run docs link checks
+        run: python3 tests/test_docs_links.py
       - name: Run Linux/Pi host-bridge tests
         working-directory: pi
         run: python3 -m unittest discover -s tests -v
@@ -99,3 +42,5 @@ jobs:
         run: ./pi/tools/dry_run.sh
       - name: Run firmware packaging tests
         run: python3 tests/test_firmware_package.py
+      - name: Run firmware size budget tests
+        run: python3 tests/test_firmware_size.py

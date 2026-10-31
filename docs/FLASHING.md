@@ -232,6 +232,26 @@ when a matching manifest and images are next to it.
   (see [SECURITY.md](SECURITY.md)). Only flash images built by this
   repository's workflow.
 
+### Size budgets
+
+Every build prints and checks its static DRAM and application image size:
+
+```
+[fw] both: DRAM  118.9 KiB used (119.7 KiB budget,  0.8 free), app   595.0 KiB ( 1500.0 KiB budget,  905.0 free)
+```
+
+The DRAM figure is the static allocation from `idf.py size --format json2`, the
+memory the PSVR2 frame size and queue capacity spend. The image figure is the
+packaged `.bin`, which has to fit the stock 1500 KiB factory partition. A build
+over either budget fails before its images are packaged, so a change that
+quietly eats the headroom cannot reach a flashing session.
+
+The limits live in `tools/firmware/size-budget.json`, one DRAM entry per variant
+and one shared image limit. When a change legitimately needs more, raise the
+number in that file in the same commit and explain why in the pull request; do
+not raise it just to make a failing build pass. `tests/test_firmware_size.py`
+proves the checker rejects a simulated 1 KiB overrun.
+
 ## Reproducibility
 
 The framework pins the two moving pieces that caused most setup failures:
@@ -311,6 +331,12 @@ original name and manifest field, `left`/`right` carry the variant in artifact,
 manifest and build-info names, the manifest label names the hand, `build-info`
 records the variant and flag values, and the build environment/build directory
 are per-variant. The host-tests workflow runs it on every push and pull request.
+
+`tests/test_firmware_size.py` covers the size budget without a toolchain: a
+build inside both limits passes, a simulated 1 KiB overrun of the DRAM budget
+or of the image budget fails with the amount over, both violations are reported
+together, and a malformed report or budget is rejected. The checked-in budget is
+also asserted to cover all three variants.
 
 It does **not** prove that the firmware builds or that a board boots. Those
 still need the firmware CI job and a hardware report.
