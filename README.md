@@ -115,12 +115,11 @@ python3 tools/firmware/build.py --idf-export ~/esp/esp-idf/export.sh --flash /de
 
 The first run clones the pinned BTstack commit into `.fw-build/`; later runs
 reuse it. The output in `dist/` includes a merged factory image and a browser
-flasher page. `0.3.1` is the current release. It is a packaging and tester-docs release
-on top of 0.3.0 (Pi `.deb`/installer and release attachments, the RPi
-deployment and update runbook, the tester quickstart and pose-filter sheet,
-the tester-bundle triage CLI, the Liesa firmware CI build, and workflow
-action bumps); no protocol change, firmware behaviour unchanged from 0.3.0.
-Packaged releases are CI-built and hardware-unverified; see
+flasher page. `0.3.2` is the current release. It is a release-infrastructure and
+Pi-packaging release on top of 0.3.1 (an all-asset `SHA256SUMS` in the release
+job, the repo checkout that makes it possible, and `wmr-bridge` on `PATH` with
+the Pi package at `0.2.3`); no protocol change, firmware behaviour unchanged
+from 0.3.1. Packaged releases are CI-built and hardware-unverified; see
 [CHANGELOG.md](CHANGELOG.md) for the full notes. To install the current
 release without ESP-IDF, use the
 hosted browser installer at <https://nightcinder.github.io/WMR_Bridge/>, which

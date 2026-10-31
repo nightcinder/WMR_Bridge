@@ -5,6 +5,44 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.2 — 2026-10-31
+
+A release-infrastructure and Pi-packaging release on top of 0.3.1. No
+protocol change: FF10–FF17 keep their payloads, so companions at 0.2.2 or
+later continue to work, and the firmware reports the tag version over FF16
+(0.3.2 when tagged) with no behaviour change from 0.3.1. The Linux/
+Raspberry Pi host bridge package is `0.2.3`. Firmware and Pi artifacts
+remain CI-built and hardware-unverified.
+
+### CI
+
+- **All-asset `SHA256SUMS` (#112, ONY-653).** The release job now writes one
+  `SHA256SUMS` covering every attached asset (firmware images, `.deb`,
+  tarball, installer, per-file `.sha256`), verified against the files before
+  the release runs; `tools/release/make_sums.sh`.
+- **Repo checkout in the release job (#112, ONY-653).** The release runner
+  checks out the repository so `make_sums.sh` is available.
+
+### Pi host bridge
+
+- **`wmr-bridge` on `PATH` + package `0.2.3` (#113, ONY-654).** The `.deb`
+  and installer put a `wmr-bridge` launcher on `PATH`
+  (`/usr/bin/wmr-bridge`); `wmr-bridge --version` prints
+  `wmr_bridge 0.2.3`. Package bump `0.2.2` → `0.2.3`.
+
+### Tooling tests
+
+- **Release-sums host test (#112, ONY-653).** `tests/test_release_sums.py`
+  covers the all-asset digest list.
+- **Pi packaging/deb host tests (#113, ONY-654).** `pi/tests/test_deb.py`
+  and `pi/tests/test_packaging.py`.
+
+### Verification
+
+- Host tests run in CI before tagging (PR/main); the ESP-IDF build runs on
+  the tag; firmware reports the tag version over FF16.
+- Pi package is `0.2.3`; protocol unchanged.
+
 ## 0.3.1 — 2026-10-31
 
 A packaging and tester-docs release on top of 0.3.0. No protocol change:
