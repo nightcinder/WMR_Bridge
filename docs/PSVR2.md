@@ -75,7 +75,7 @@ LEFT first report: cid=... frame_len=79 descriptor=available
 # Default firmware: PSVR2 and WMR, MAX_FRAME=80
 python3 tools/firmware/build.py --variant both        # needs ESP-IDF on PATH
 
-# Host tests (PSVR2 is part of the default build: 198 discovery checks,
+# Host tests (PSVR2 is part of the default build: 216 discovery checks,
 # 6127 protocol checks)
 gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc \
     tests/test_discovery.c src/wmr_discovery.c -o /tmp/test_discovery && /tmp/test_discovery
