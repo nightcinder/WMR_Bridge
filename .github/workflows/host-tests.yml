@@ -40,6 +40,8 @@ jobs:
         run: python3 -m unittest discover -s tests -v
       - name: Pi package and daemon dry run
         run: ./pi/tools/dry_run.sh
+      - name: Run release checksum tests
+        run: python3 tests/test_release_sums.py
       - name: Run firmware packaging tests
         run: python3 tests/test_firmware_package.py
       - name: Run firmware size budget tests
