@@ -61,6 +61,7 @@ typedef struct {
     wmr_model_t model;                /* WMR until discovery/name says otherwise */
     bool        address_confirmed;    /* the address has been connected to (or has a link key) */
     uint16_t    cid;                  /* 0 = no connection tracked */
+    bool        disconnecting;        /* a disconnect was requested; cid is still closing */
     hci_con_handle_t handle;          /* HCI_CON_HANDLE_INVALID = no Classic link tracked */
     bool        encrypted;            /* the current ACL link is encrypted */
     bool        connected;
@@ -530,6 +531,62 @@ static const char *role_name(hci_role_t role){
     }
 }
 
+/* Ask the controller to report the ACL lost after the configured silence, instead of the
+ * controller default (20 s on this BTstack/ESP32 combination). The HCI command is Command
+ * Disallowed while the local controller is the slave, which is the role an incoming
+ * controller reconnect starts with, so it is sent only once this side is master and the
+ * role-change handler retries it after a switch. BTstack's own
+ * gap_set_link_supervision_timeout() only covers outgoing links where the host is master
+ * at connection complete. */
+static void link_supervision_apply(hci_con_handle_t handle, const controller_t *c){
+#if WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT
+    hci_role_t role = gap_get_role(handle);
+    if (role != HCI_ROLE_MASTER){
+        WMR_LOGI("link", "%s link supervision timeout deferred: local role is %s; "
+                 "will write it if the link switches to master", c->name, role_name(role));
+        return;
+    }
+    uint8_t status = hci_send_cmd(&hci_write_link_supervision_timeout, handle,
+                                  (uint16_t) WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT);
+    if (status != ERROR_CODE_SUCCESS){
+        WMR_LOGW("link", "%s link supervision timeout not sent: %s (0x%02x)",
+                 c->name, pair_status_text(status), status);
+        return;
+    }
+    WMR_LOGI("link", "%s link supervision timeout write requested: %lu ms (%u slots)",
+             c->name, (unsigned long) ((uint32_t) WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT * 625u / 1000u),
+             (unsigned) WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT);
+#else
+    (void) handle;
+    (void) c;
+#endif
+}
+
+/* The write's status arrives here; log what the controller actually accepted rather than
+ * claiming the timeout took effect when the command was only queued. */
+static void link_supervision_on_command_complete(const uint8_t *packet){
+#if WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT
+    if (hci_event_command_complete_get_command_opcode(packet) !=
+        HCI_OPCODE_HCI_WRITE_LINK_SUPERVISION_TIMEOUT) return;
+    const uint8_t *ret = hci_event_command_complete_get_return_parameters(packet);
+    uint8_t status = ret[0];
+    hci_con_handle_t handle = little_endian_read_16(ret, 1);
+    controller_t *c = controller_for_handle(handle);
+    const char *name = c ? c->name : "?";
+    if (status == ERROR_CODE_SUCCESS){
+        WMR_LOGI("link", "%s link supervision timeout applied: %lu ms (%u slots)",
+                 name, (unsigned long) ((uint32_t) WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT * 625u / 1000u),
+                 (unsigned) WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT);
+    } else {
+        WMR_LOGW("link", "%s link supervision timeout not applied: %s (0x%02x); "
+                 "the local controller does not master this link", name,
+                 pair_status_text(status), status);
+    }
+#else
+    (void) packet;
+#endif
+}
+
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
 
 #define POLICY_RETRY_MS  100u
@@ -895,6 +952,7 @@ static void linkwait_timer_fire(btstack_timer_source_t *timer){
                          (unsigned) WMR_LINKWAIT_DROP_MS);
                 if (accepted){
                     c->cid = 0;
+                    c->disconnecting = false;
                     c->descriptor_available = false;
                     if (connect_pending){
                         connect_pending = false;
@@ -1034,6 +1092,11 @@ void wmr_controller_init(wmr_report_sink_t sink){
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
     policy_timer.process = policy_timer_fire;
 #endif
+#if WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT
+    /* BTstack only writes this for outgoing links where the bridge is master; the explicit
+     * per-handle write below covers incoming links and the slave role too. */
+    gap_set_link_supervision_timeout((uint16_t) WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT);
+#endif
     hid_host_init(descriptor_storage, sizeof(descriptor_storage));
     hid_host_register_packet_handler(hid_packet_handler);
     gap_register_classic_connection_filter(disc_accept_classic_connection);
@@ -1092,12 +1155,26 @@ static wmr_connect_result_t connect_hand_impl(unsigned hand){
         WMR_LOGW("pair", "%s has no address; put it in pairing mode and press d", c->name);
         return WMR_CONNECT_NO_ADDRESS;
     }
+    switch (wmr_controller_connect_gate(c->cid != 0, c->disconnecting)){
+        case WMR_CONNECT_GATE_ACK:
+            /* CONNECT is also the companion's reconnect button. A hand whose HID channel
+             * is already open, or still opening, is exactly what the caller asked for:
+             * acknowledge it instead of returning BUSY and leaving the companion to retry.
+             * The FF17 status still shows the real connected/connecting flags. */
+            WMR_LOGI("pair", "%s is already open or opening (cid=%u); connect is a no-op",
+                     c->name, c->cid);
+            return WMR_CONNECT_OK;
+        case WMR_CONNECT_GATE_CLOSING:
+            /* The previous disconnect has not completed, so cid still names a channel
+             * that is closing. Nothing would open if this returned OK. */
+            WMR_LOGW("pair", "%s is still closing (cid=%u); retry when it has closed",
+                     c->name, c->cid);
+            return WMR_CONNECT_BUSY;
+        default:
+            break;
+    }
     if (connect_pending){
         WMR_LOGW("pair", "another connection or discovery is still in progress");
-        return WMR_CONNECT_BUSY;
-    }
-    if (c->cid){
-        WMR_LOGW("pair", "%s is already open or opening (cid=%u)", c->name, c->cid);
         return WMR_CONNECT_BUSY;
     }
 #if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
@@ -1120,6 +1197,7 @@ static wmr_connect_result_t connect_hand_impl(unsigned hand){
         WMR_LOGW("pair", "%s connect request failed: %s (0x%02x)",
                  c->name, pair_status_text(status), status);
         c->cid = 0;
+        c->disconnecting = false;
         connect_pending = false;
         connect_watch_stop();
         return WMR_CONNECT_BUSY;
@@ -1144,6 +1222,7 @@ wmr_disconnect_result_t wmr_controller_disconnect(unsigned hand){
         WMR_LOGW("pair", "%s has no connection to close", c->name);
         return WMR_DISCONNECT_NOT_CONNECTED;
     }
+    c->disconnecting = true;
     hid_host_disconnect(c->cid);
     return WMR_DISCONNECT_OK;
 }
@@ -1300,6 +1379,7 @@ static bool disc_disconnect_hands(const char *why){
         if (!WMR_BRIDGE_HAND_ENABLED(h)) continue;
         if (!c->cid && c->handle == HCI_CON_HANDLE_INVALID) continue;
         WMR_LOGI("pair", "%s disconnects %s; it reconnects afterwards", c->name, why);
+        if (c->cid) c->disconnecting = true;
         if (c->handle != HCI_CON_HANDLE_INVALID){
             dropped = true;
             gap_disconnect(c->handle);
@@ -1706,6 +1786,7 @@ static void accept_incoming(controller_t *c, uint16_t cid){
 #endif
     c->cid = cid;
     c->connected = false;
+    c->disconnecting = false;
     c->descriptor_available = false;
     c->reports = 0;
     c->other_reports = 0;
@@ -1751,6 +1832,7 @@ static void incoming_resolved(const uint8_t *name, size_t len){
     addresses_save();
     /* The ACL link came up before the address was known, so link diagnostics missed it. */
     wmr_linkdiag_link_identified((unsigned) hand, incoming_con_handle);
+    link_supervision_apply(incoming_con_handle, c);
 #if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
     /* The HCI connection-complete event could not name this hand yet. */
     policy_link_opened((unsigned) hand, incoming_con_handle, c->address);
@@ -1840,6 +1922,7 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
                     c->handle = handle;
                     c->encrypted = false;
                     unknown_acl_clear(handle);
+                    link_supervision_apply(handle, c);
                     if (connect_pending && c == connect_watch_owner && !c->connected)
                         connect_watch_start(c, handle);
                 }
@@ -1872,6 +1955,13 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
                 role = (hci_role_t) hci_event_role_change_get_role(packet);
             }
             log_link_role(address, status, role, "role_change");
+            if (status == ERROR_CODE_SUCCESS && role == HCI_ROLE_MASTER){
+                /* The per-ACL supervision write was refused while this side was the
+                 * slave (the usual role at an incoming reconnect), so retry it now. */
+                controller_t *c = controller_for_address(address);
+                if (c && c->handle != HCI_CON_HANDLE_INVALID)
+                    link_supervision_apply(c->handle, c);
+            }
 #if WMR_CFG_CLASSIC_FORCE_MASTER
             int hand = wmr_controller_hand_for_address(address);
             WMR_LOGI("link", "%s link role changed to %s (status=%s)",
@@ -1970,11 +2060,12 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
 #endif
             break;
         }
-#if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
         case HCI_EVENT_COMMAND_COMPLETE:
+#if WMR_CFG_CLASSIC_NO_SNIFF || WMR_CFG_CLASSIC_FORCE_MASTER
             policy_on_command_complete(packet);
-            break;
 #endif
+            link_supervision_on_command_complete(packet);
+            break;
         default:
             break;
     }
@@ -2147,11 +2238,13 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
                 disc_pair_failed((unsigned) (c - controllers), status);
                 c->cid = 0;
                 c->connected = false;
+                c->disconnecting = false;
                 connect_pending = false;
                 disc_connect_progress();
                 break;
             }
             c->connected = true;
+            c->disconnecting = false;
             c->descriptor_available = false;
             wmr_linkwait_finish(&linkwait[(unsigned) (c - controllers)]);
             /* The connection (and its pairing, if it needed one) succeeded: this address
@@ -2254,6 +2347,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             c->cid = 0;
             c->handle = HCI_CON_HANDLE_INVALID;
             c->connected = false;
+            c->disconnecting = false;
             c->descriptor_available = false;
             disc_connect_progress();
             break;
