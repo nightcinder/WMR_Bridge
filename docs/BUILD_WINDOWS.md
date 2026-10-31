@@ -1,6 +1,6 @@
 # Build and flash (Windows PowerShell)
 
-> **One-command alternative.** `tools/firmware/build.py` performs the setup,
+> One-command alternative. `tools/firmware/build.py` performs the setup,
 > build and optional flash described below, and packages a browser-installable
 > image. See [FLASHING.md](FLASHING.md). The manual steps here are kept for
 > troubleshooting and for understanding exactly what the script does.
@@ -22,9 +22,9 @@ Controller mode is `CONFIG_BTDM_CTRL_MODE_BTDM` (Classic + BLE) from
 
 ## One-time setup: place wmr_bridge inside BTstack
 
-This repository is **not** a complete project. It builds inside the BTstack
-ESP32 port. Use the BTstack commit listed above (newer ones may work but are
-untested):
+This repository is not a complete project. It builds inside the BTstack
+ESP32 port. Use the BTstack commit listed above. Newer ones may work but are
+untested.
 
 ```powershell
 git clone https://github.com/bluekitchen/btstack.git
@@ -39,27 +39,37 @@ Copy-Item wmr_bridge\integration\main-CMakeLists.txt port\esp32\main\CMakeLists.
 ```
 
 `integration\main-CMakeLists.diff` shows exactly what differs from the stock
-file: it selects `EXAMPLE=wmr_bridge`, and runs `compile_gatt.py` explicitly
+file. It selects `EXAMPLE=wmr_bridge`, and runs `compile_gatt.py` explicitly
 through the ESP-IDF Python (see "GATT compilation" below). No other BTstack file
-is modified; the stock `port/esp32/sdkconfig.defaults` is used.
+is modified. The stock `port/esp32/sdkconfig.defaults` is used.
 
-**Re-copy `main-CMakeLists.txt` after pulling the FF14 change:** the file lists the
+Re-copy `main-CMakeLists.txt` after pulling the FF14 change. The file lists the
 application's sources, and `wmr_batch.c` was added. Without the new copy the link
 fails with undefined `wmr_batch_*` symbols.
-No controller addresses need editing: the bridge finds the controllers by name after the
-first flash and stores their addresses ([DISCOVERY.md](DISCOVERY.md)). Put them in pairing
-mode within the first minute after boot. **Re-copy `main-CMakeLists.txt` after pulling the
-discovery change:** it adds `wmr_discovery.c` (undefined `wmr_discovery_*` symbols
-otherwise).
-The FF13 change adds `wmr_cfg.c` and `wmr_cfgmgr.c` the same way (refresh `integration\main-CMakeLists.txt`
-over `port\esp32\main\CMakeLists.txt`; the link fails without them).
+No controller addresses need editing. The bridge finds the controllers by name
+after the first flash and stores their addresses ([DISCOVERY.md](DISCOVERY.md)).
+Put them in pairing mode within the first minute after boot. Re-copy
+`main-CMakeLists.txt` after pulling the discovery change. It adds
+`wmr_discovery.c` (undefined `wmr_discovery_*` symbols otherwise).
+The FF13 change adds `wmr_cfg.c` and `wmr_cfgmgr.c` the same way. Refresh
+`integration\main-CMakeLists.txt` over `port\esp32\main\CMakeLists.txt`. The link
+fails without them.
 
-**Simplest rule: re-copy `main-CMakeLists.txt` with `-Force` after every pull** (`Copy-Item wmr_bridge\integration\main-CMakeLists.txt port\esp32\main\CMakeLists.txt -Force`). When updating the copy at `wmr_bridge` with `robocopy ... /E`, note that robocopy does not delete files: source files removed or renamed upstream stay in the folder, which is harmless as long as the CMake file does not list them. Robocopy exit codes below 8 are success.
+Simplest rule: re-copy `main-CMakeLists.txt` with `-Force` after every pull
+(`Copy-Item wmr_bridge\integration\main-CMakeLists.txt port\esp32\main\CMakeLists.txt -Force`).
+When updating the copy at `wmr_bridge` with `robocopy ... /E`, note that robocopy
+does not delete files. Source files removed or renamed upstream stay in the
+folder. That is harmless as long as the CMake file does not list them. Robocopy
+exit codes below 8 are success.
 
-**FF13 config read switch.** `WMR_CFG_FF13_READ` (default 1, `src/wmr_config.h`) makes the bridge read each controller's config block after the descriptor arrives. Set it to 0 (edit the header, or `-DWMR_CFG_FF13_READ=0`) to send no config command; input then streams as it did before FF13 and FF13 state stays 0. Check C7 in [TESTING.md](TESTING.md) is the test for this and has not been run.
+FF13 config read switch. `WMR_CFG_FF13_READ` (default 1, `src/wmr_config.h`)
+makes the bridge read each controller's config block after the descriptor
+arrives. Set it to 0 (edit the header, or `-DWMR_CFG_FF13_READ=0`) to send no
+config command. Input then streams as it did before FF13 and FF13 state stays 0.
+Check C7 in [TESTING.md](TESTING.md) is the test for this and has not been run.
 
-The FF15 echo change adds `wmr_echo.c` in the same way (undefined `wmr_echo_*` without a
-fresh copy).
+The FF15 echo change adds `wmr_echo.c` in the same way (undefined `wmr_echo_*`
+without a fresh copy).
 
 ## Build
 
@@ -74,17 +84,17 @@ idf.py -B build-wmr-bridge build
 ```
 
 `EXAMPLE` is read by `port/esp32/main/CMakeLists.txt`. The value `wmr_bridge`
-selects the multi-file application in `<btstack>\wmr_bridge\src`; any other value
-builds the stock BTstack example of that name as before. The environment
-variable lasts for the PowerShell session: set it again in each new window,
-and clear it (`Remove-Item Env:EXAMPLE`) before building something else.
+selects the multi-file application in `<btstack>\wmr_bridge\src`. Any other
+value builds the stock BTstack example of that name as before. The environment
+variable lasts for the PowerShell session. Set it again in each new window, and
+clear it (`Remove-Item Env:EXAMPLE`) before building something else.
 
 `-B build-wmr-bridge` keeps this build separate from the existing `build`
 directory (used for `hid_host_demo`), so neither overwrites the other. Both
-share `port/esp32/sdkconfig`; building `wmr_bridge` did not modify it.
+share `port/esp32/sdkconfig`. Building `wmr_bridge` did not modify it.
 
-Expected result: `Project build complete`, binary about 0x87000 bytes (about 36 % of
-the 1.5 MB app partition).
+Expected result: `Project build complete`, binary about 0x87000 bytes (about 36 %
+of the 1.5 MB app partition).
 
 ## Flash and monitor
 
@@ -101,32 +111,34 @@ the port. Exit the monitor with Ctrl+].
 ## GATT compilation
 
 The GATT database is compiled by `tool\compile_gatt.py`. `main/CMakeLists.txt`
-runs it **explicitly through the ESP-IDF Python interpreter**. Executing the
-script directly on this Windows setup launched Node.js instead of Python, so
-do not "simplify" the custom command back to `target_gatt()` or a bare script
-path. The generated header is `build-wmr-bridge\esp-idf\main\wmr_bridge.h`.
+runs it explicitly through the ESP-IDF Python interpreter. Executing the script
+directly on this Windows setup launched Node.js instead of Python. So do not
+"simplify" the custom command back to `target_gatt()` or a bare script path.
+The generated header is `build-wmr-bridge\esp-idf\main\wmr_bridge.h`.
 
 ## Rolling back
 
-Keep a copy of whatever firmware you had before flashing; this repository does
-not ship binaries. The stock BTstack examples still build as before by
-setting `$env:EXAMPLE` to their name.
+Keep a copy of whatever firmware you had before flashing. This repository does
+not ship binaries. The stock BTstack examples still build as before by setting
+`$env:EXAMPLE` to their name.
 
 ## Experiment: Classic-against-BLE controller options (changes the BTstack tree, not this repository)
 
 Two ESP-IDF controller options may matter for the missing-report experiments in
-[DECODING.md](DECODING.md). **Neither is documented to reduce loss; either may do nothing.**
-`CONFIG_BTDM_CTRL_AUTO_LATENCY` is described by ESP-IDF as "BLE auto latency, used to enhance
-classic BT performance while classic BT and BLE are enabled at the same time" and is **off** in
-this build; `CONFIG_BTDM_CTRL_MODEM_SLEEP` is **on**. Both live in the generated file
-`<btstack>\port\esp32\sdkconfig`, which belongs to your BTstack tree, not to this repository,
-and which is **shared** with the other builds in that tree (for example `hid_host_demo`).
-(Menu paths below were read from the generated `build-wmr-bridge\config\kconfig_menus.json`;
-nothing was flashed or run.)
+[DECODING.md](DECODING.md). Neither is documented to reduce loss. Either may do
+nothing. `CONFIG_BTDM_CTRL_AUTO_LATENCY` is described by ESP-IDF as "BLE auto
+latency, used to enhance classic BT performance while classic BT and BLE are
+enabled at the same time" and is off in this build.
+`CONFIG_BTDM_CTRL_MODEM_SLEEP` is on. Both live in the generated file
+`<btstack>\port\esp32\sdkconfig`, which belongs to your BTstack tree, not to
+this repository, and which is shared with the other builds in that tree (for
+example `hid_host_demo`). (Menu paths below were read from the generated
+`build-wmr-bridge\config\kconfig_menus.json`; nothing was flashed or run.)
 
-**Do each variant at the same fixed, stated controller position, in an A/B/A order**: baseline
-(A), option changed (B), baseline again (A), using the three-state protocol in DECODING.md for
-each. Moving the controllers changes the loss by itself.
+Do each variant at the same fixed, stated controller position, in an A/B/A
+order: baseline (A), option changed (B), baseline again (A). Use the
+three-state protocol in DECODING.md for each. Moving the controllers changes the
+loss by itself.
 
 ```powershell
 . C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
@@ -157,10 +169,11 @@ Select-String build-wmr-bridge\config\sdkconfig.h -Pattern "AUTO_LATENCY|MODEM_S
 #    expect  #define CONFIG_BTDM_CTRL_AUTO_LATENCY 1   (or no MODEM_SLEEP line when it is off)
 ```
 
-**Do not put these lines in `sdkconfig.defaults`**: ESP-IDF reads that file only when
-`sdkconfig` does not exist, so on an existing tree the change would silently do nothing.
+Do not put these lines in `sdkconfig.defaults`. ESP-IDF reads that file only when
+`sdkconfig` does not exist, so on an existing tree the change would silently do
+nothing.
 
-**Putting it back:**
+Putting it back:
 
 ```powershell
 Copy-Item sdkconfig.before-coex-test sdkconfig -Force
@@ -170,5 +183,5 @@ Select-String build-wmr-bridge\config\sdkconfig.h -Pattern "AUTO_LATENCY|MODEM_S
 #    expect  CONFIG_BTDM_CTRL_MODEM_SLEEP 1  and no CONFIG_BTDM_CTRL_AUTO_LATENCY
 ```
 
-Changing only one option per run keeps the result attributable. Record the option, the
-position and the `last5s`/`cum` figures in the experiment table.
+Changing only one option per run keeps the result attributable. Record the
+option, the position and the `last5s`/`cum` figures in the experiment table.
