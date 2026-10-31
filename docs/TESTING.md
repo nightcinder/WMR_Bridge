@@ -11,7 +11,7 @@ verified until it has.
 | --- | --- |
 | Firmware build, ESP-IDF v6.1, target esp32, `EXAMPLE=wmr_bridge` | Passed. No compiler warnings from `wmr_*` sources. `esp32-example.bin` 0x870d0 bytes (36 % of the app partition) |
 | `sdkconfig` unchanged by the build | Confirmed by byte comparison |
-| Host unit tests: `tests/run_tests.ps1` (built with `zig cc`, C99, `-Wall -Wextra -Wconversion`) | Passed: 6087 checks, 0 failures |
+| Host unit tests: `tests/run_tests.ps1` (built with `zig cc`, C99, `-Wall -Wextra -Wconversion`) | Passed: 6127 checks, 0 failures |
 
 The host tests cover (see `tests/test_protocol.c`):
 

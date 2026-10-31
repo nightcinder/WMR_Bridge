@@ -231,7 +231,7 @@ builds two installable artifacts: `wmr-bridge_<version>_all.deb` and
 `wmr-bridge-<version>.tar.gz`, plus a piped `install.sh` that fetches and
 verifies the matching release tarball. The `wmr-pi-bridge-0.1.0.tar.gz` asset on
 the v0.1.0 GitHub release is the only old packaged Pi tarball; the `pi/` tree in
-this repository is package `0.2.1`. Every `v*` release now attaches the current
+this repository is package `0.2.2`. Every `v*` release now attaches the current
 `.deb`, tarball, both `.sha256` files and `install.sh`, so the one-line install
 works from `releases/latest/download/install.sh`.
 
@@ -257,7 +257,7 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 | --- | --- |
 | Firmware build (ESP-IDF v6.1, ESP32) | Passes, no warnings from this code |
 | Host unit tests of the protocol encoder, reassembler and queue (6127 checks) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
-| Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 113 tests) | Pass (host tests only; never run on a Raspberry Pi or with real controllers) |
+| Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 122 tests) | Pass (host tests only; never run on a Raspberry Pi or with real controllers) |
 | Flash and boot on a real ESP32 | Passes; advertises; stats print every 5 s; no debug spam |
 | **One bench run, about 15 s, both controllers and a phone** (log pasted by the user, not instrumented on the phone) | Both controllers connected on their own; ATT MTU went 23 to 517; about 174/s (LEFT) and 154/s (RIGHT); sent = received for both hands; 0 drops, 0 offline, 0 purged, 0 send errors; queue back to 0 after a startup peak of 11; counter accounting added up exactly |
 

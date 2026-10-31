@@ -259,15 +259,15 @@ image date and kernel in the sitting record (§5.1 of the run sheet).
 Build and verify the installable packages on any Linux host:
 
 ```bash
-pi/build_package.sh                 # dist/wmr-bridge-0.2.1.tar.gz + .sha256
-pi/build_deb.sh                     # dist/wmr-bridge_0.2.1_all.deb + .sha256
-pi/tools/verify_package.sh dist/wmr-bridge-0.2.1.tar.gz
-scp dist/wmr-bridge_0.2.1_all.deb pi@<pi>:~
-ssh pi@<pi> 'sudo apt install ./wmr-bridge_0.2.1_all.deb'
+pi/build_package.sh                 # dist/wmr-bridge-0.2.2.tar.gz + .sha256
+pi/build_deb.sh                     # dist/wmr-bridge_0.2.2_all.deb + .sha256
+pi/tools/verify_package.sh dist/wmr-bridge-0.2.2.tar.gz
+scp dist/wmr-bridge_0.2.2_all.deb pi@<pi>:~
+ssh pi@<pi> 'sudo apt install ./wmr-bridge_0.2.2_all.deb'
 ```
 
-The tarball alternative is `scp dist/wmr-bridge-0.2.1.tar.gz* pi@<pi>:~` then
-`ssh pi@<pi> 'tar -xzf wmr-bridge-0.2.1.tar.gz && sudo wmr-bridge-0.2.1/pi/install.sh'`.
+The tarball alternative is `scp dist/wmr-bridge-0.2.2.tar.gz* pi@<pi>:~` then
+`ssh pi@<pi> 'tar -xzf wmr-bridge-0.2.2.tar.gz && sudo wmr-bridge-0.2.2/pi/install.sh'`.
 Both carry `pi/` (daemon, probe, installer, systemd unit, udev rule,
 NetworkManager drop-in), `docs/PI_BRIDGE.md` and
 `samples/controller_frames.txt`, so they install without
@@ -332,7 +332,7 @@ was allowed at startup with `--allow-origin <value>` (repeatable). This stops a
 web page on the LAN from opening a socket to the daemon. Origin matching is
 case-insensitive on the normalised value; `*` is not a wildcard.
 
-JSON examples below use the current 0.2.1 package version; `pi/wmr_bridge/__version__` reports `0.2.1`.
+JSON examples below use the current 0.2.2 package version; `pi/wmr_bridge/__version__` reports `0.2.2`.
 
 ```json
 {
@@ -340,7 +340,7 @@ JSON examples below use the current 0.2.1 package version; `pi/wmr_bridge/__vers
   "protocol": 1,
   "transport": "wifi",
   "device": "wmr-pi",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "handFilter": ["LEFT", "RIGHT"],
   "hostname": "wmr-pi",
   "authRequired": true,
@@ -483,7 +483,7 @@ Records of both hands may share a batch; each carries its own hand.
 ```json
 {
   "type": "status",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "handFilter": ["LEFT", "RIGHT"],
   "uptimeS": 42.5,
   "hostTimeUs": 123456789,
@@ -759,7 +759,7 @@ INFO/WARNING:
   `client <peer> unsubscribed`.
 - No controller: a one-time warning `no WMR controllers found; pair one in bluetoothctl, check ...`.
 - Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
-- `hello.version` reports the package version (`0.2.1`; `0.1.0` before PR #78 merged).
+- `hello.version` reports the package version (`0.2.2`; `0.1.0` before PR #78 merged).
 
 ## Troubleshooting
 

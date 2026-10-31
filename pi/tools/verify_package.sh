@@ -1,7 +1,7 @@
 #!/bin/sh
 # Check a wmr-bridge Pi package before it is copied to a host.
 #
-#   pi/tools/verify_package.sh dist/wmr-bridge-0.2.1.tar.gz
+#   pi/tools/verify_package.sh dist/wmr-bridge-0.2.2.tar.gz
 #
 # Verifies the layout install.sh expects, the package version against the
 # daemon, and the sibling .sha256 file when present. No extraction to disk.
