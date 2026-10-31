@@ -66,6 +66,22 @@ class PackagingTests(unittest.TestCase):
             self.assertTrue((opt_pi / "install.sh").is_file())
             self.assertTrue((destdir / "opt" / "wmr-bridge" / "docs" / "PI_BRIDGE.md").is_file())
 
+            installed_wrapper = destdir / "usr" / "bin" / "wmr-bridge"
+            self.assertTrue(installed_wrapper.is_file())
+            self.assertTrue(os.access(installed_wrapper, os.X_OK))
+            run = subprocess.run(
+                [str(installed_wrapper), "--version"],
+                env={
+                    **os.environ,
+                    "WMR_BRIDGE_PREFIX": str(destdir / "opt" / "wmr-bridge"),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(run.returncode, 0, msg=run.stderr)
+            self.assertIn(VERSION, run.stdout)
+
             installed_udev = destdir / "etc" / "udev" / "rules.d" / "99-wmr-bridge.rules"
             self.assertTrue(installed_udev.is_file())
             self.assertEqual(installed_udev.read_text(encoding="utf-8"), UDEV_RULES.read_text(encoding="utf-8"))

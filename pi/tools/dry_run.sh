@@ -34,6 +34,26 @@ die() {
     exit 1
 }
 
+# Assert the installed /usr/bin/wmr-bridge launcher runs the staged daemon.
+assert_wrapper() {
+    root="$1"
+    staged="$2"
+    wrapper="${root}/usr/bin/wmr-bridge"
+    [ -x "$wrapper" ] || die "PATH wrapper is missing: $wrapper"
+    version="$(
+        sed -n 's/^__version__ = "\(.*\)"$/\1/p' "${staged}/pi/wmr_bridge/__init__.py"
+    )"
+    [ -n "$version" ] || die "could not read the staged daemon version"
+    if ! output="$(WMR_BRIDGE_PREFIX="$staged" "$wrapper" --version 2>&1)"; then
+        die "PATH wrapper failed: $output"
+    fi
+    case "$output" in
+        *"$version"*) ;;
+        *) die "wmr-bridge --version printed '$output', expected $version" ;;
+    esac
+    echo "PASS wrapper: wmr-bridge --version = $version"
+}
+
 # Serve the replay capture from an installed tree and assert zero gaps/drops.
 replay_from() {
     staged="$1"
@@ -135,6 +155,7 @@ staged_tarball() {
     [ -f "$WORK/rootfs/etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf" ] || die "power-save config is missing"
     [ -f "$WORK/rootfs/etc/wmr-bridge/token" ] || die "token file is missing"
     [ "$(stat -c '%a' "$WORK/rootfs/etc/wmr-bridge/token")" = "600" ] || die "token mode is not 0600"
+    assert_wrapper "$WORK/rootfs" "$staged"
     echo "PASS install: staged tree, unit, udev rule, power-save config and 0600 token"
     replay_from "$staged"
     echo "PASS dry run: Pi tarball and daemon are ready for the hardware sitting"
@@ -180,6 +201,7 @@ assert_deb_install() {
     [ -f "$ROOT/etc/wmr-bridge/wmr-bridge.env" ] || die "wmr-bridge.env is missing"
     [ -f "$ROOT/etc/wmr-bridge/token" ] || die "token file is missing"
     [ "$(stat -c '%a' "$ROOT/etc/wmr-bridge/token")" = "600" ] || die "token mode is not 0600"
+    assert_wrapper "$ROOT" "$ROOT/opt/wmr-bridge"
 }
 
 staged_deb() {

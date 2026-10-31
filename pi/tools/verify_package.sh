@@ -28,6 +28,7 @@ fi
 LIST="$(tar -tzf "$ARCHIVE")"
 for path in \
     "${PREFIX}pi/install.sh" \
+    "${PREFIX}pi/wmr-bridge.in" \
     "${PREFIX}pi/wmr_bridge/__main__.py" \
     "${PREFIX}pi/tools/wifi_probe.py" \
     "${PREFIX}pi/systemd/wmr-bridge.service" \

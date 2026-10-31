@@ -149,6 +149,8 @@ The installer:
 4. Disables Wi-Fi power saving via `/etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf`.
 5. Generates a secure authorization token at `/etc/wmr-bridge/token` (mode `0600 wmr:wmr`).
 6. Configures the systemd service `/etc/systemd/system/wmr-bridge.service`.
+7. Installs `/usr/bin/wmr-bridge`, a launcher for `python3 -m wmr_bridge` from
+   `/opt/wmr-bridge`.
 
 #### Option B: Standalone Debian package (`.deb`)
 
@@ -162,6 +164,15 @@ sudo apt install ./wmr-bridge_<version>_all.deb
 ---
 
 ### Start and Verify the Service
+
+Both install methods also put `/usr/bin/wmr-bridge` on `PATH`; it runs
+`python3 -m wmr_bridge` from `/opt/wmr-bridge`, so the daemon can be inspected
+without changing directory:
+
+```bash
+wmr-bridge --version   # wmr_bridge 0.2.3
+wmr-bridge --list
+```
 
 Enable and start the service:
 
@@ -249,13 +260,13 @@ python3 /opt/wmr-bridge/pi/tools/wifi_probe.py \
 ### Expected Output
 
 ```text
-connected to ws://127.0.0.1:8765/wmr as 0.2.2
+connected to ws://127.0.0.1:8765/wmr as 0.2.3
 hello: {
   "type": "hello",
   "protocol": 1,
   "transport": "wifi",
   "device": "wmr-pi",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "handFilter": [
     "LEFT",
     "RIGHT"
@@ -347,7 +358,7 @@ subscribe: {'type': 'subscribed', 'stream': 'batched', 'recordSize': 56, 'batchM
   "dropped": 0,
   "serverStatus": {
     "type": "status",
-    "version": "0.2.2",
+    "version": "0.2.3",
     "handFilter": [
       "LEFT",
       "RIGHT"

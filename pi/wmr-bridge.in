@@ -1,0 +1,15 @@
+#!/bin/sh
+# wmr-bridge: run the host bridge installed under @PREFIX@.
+#
+# Installed as /usr/bin/wmr-bridge by the .deb and by pi/install.sh. Set
+# WMR_BRIDGE_PREFIX to point at a staged or relocated install tree.
+set -eu
+
+PREFIX="${WMR_BRIDGE_PREFIX:-@PREFIX@}"
+
+if [ ! -d "${PREFIX}/pi/wmr_bridge" ]; then
+    echo "wmr-bridge: no installation under ${PREFIX}" >&2
+    exit 1
+fi
+cd "${PREFIX}/pi"
+exec python3 -m wmr_bridge "$@"
