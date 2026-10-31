@@ -1,9 +1,9 @@
 # Testing status
 
-Last updated with the refactor commit candidate (2026-10-21). This page
-separates what was **actually run** from what is **still required**. Nothing
-in the "still required" section has been done; the refactor must not be called
-verified until it has.
+Last updated with the refactor commit candidate (2026-10-21). This page separates
+what was actually run from what is still required. Nothing in the "still
+required" section has been done. The refactor must not be called verified until
+it has.
 
 ## Run (and results)
 
@@ -37,11 +37,11 @@ bond, a failed pairing or a 30 s timeout refuses the central, a re-encryption
 failure caused by a stale key (`PIN_OR_KEY_MISSING`) asks the transport to
 delete the bond and re-pair instead of disconnecting, events for another
 connection are ignored, and a second central may not connect. It does not test
-BTstack's SM, the GATT permission bits or the radio; those need the phone + ESP32
-run.
+BTstack's SM, the GATT permission bits or the radio. Those need the phone +
+ESP32 run.
 
-These tests exercise the pure-C protocol and queue code only. They do **not**
-test BTstack integration, callbacks, timers or radio behavior.
+These tests exercise the pure-C protocol and queue code only. They do not test
+BTstack integration, callbacks, timers or radio behavior.
 
 ## Run on hardware (ESP32 on COM5, 115200 baud; no controllers or phone present)
 
@@ -62,32 +62,48 @@ test BTstack integration, callbacks, timers or radio behavior.
 | Queue | `high=11` (a burst at connect), never grew afterwards |
 
 Not covered by this session: duration beyond about 15 s, controller or phone
-disconnect/reconnect, the bond reset, and any phone-side check. The MTU shown
-is the ESP32's view; the phone's own `onMtuChanged` value was not recorded.
+disconnect/reconnect, the bond reset, and any phone-side check. The MTU shown is
+the ESP32's view. The phone's own `onMtuChanged` value was not recorded.
 Required items 2 and 3 are therefore only partly done and 7 is half done.
 
-This covers required test 1 only. Idle counters are all zero, as expected with nothing connected.
+This covers required test 1 only. Idle counters are all zero, as expected with
+nothing connected.
 
 ## Still required (hardware, not yet run)
 
 Run with the refactored firmware flashed. Record dates and observed numbers here.
 
-1. ~~Boot and advertising~~ - done, see above.
-2. **Both controllers, phone subscribed**: LEFT and RIGHT connected, phone subscribed (`sub=1`), at least 10 minutes running.
+1. Boot and advertising, done, see above.
+2. Both controllers, phone subscribed: LEFT and RIGHT connected, phone subscribed
+   (`sub=1`), at least 10 minutes running.
    - `rate_tx` tracks `rate_rx` for each hand;
    - `drop` stops increasing;
    - `q` does not grow persistently (`high` stays well below 256);
    - the accounting identity in [COUNTERS.md](COUNTERS.md) holds.
-3. **Incoming connections**: power-cycle each controller; it reconnects by itself and its stream resumes.
-4. **Outgoing connections**: `l` and `r`, one at a time.
-5. **Controller disconnect/reconnect** while the phone is subscribed: the other hand keeps flowing; the affected hand resumes; sequence numbers continue.
-6. **Phone disconnect/reconnect**: advertising restarts; after reconnect the phone must request MTU/High priority and write the CCC again; `purged`/`offline` behave as described in [RECONNECT_AND_QUEUE.md](RECONNECT_AND_QUEUE.md); no duplicate "BLE phone connected" lines.
-7. **Large MTU + High priority**: log the *negotiated* MTU on the phone, compare with `mtu=`.
-8. **Phone-side sequence validation**: lossless end-to-end delivery has **not** been established by any test. A gap-checking receiver is future work. (Code item, not docs: it needs a gap-checking receiver in the phone app; out of scope for this docs task, so it is recorded here and not implemented.)
-9. **Manual bond reset** (`k`/`K`): refused while connected; works while disconnected; controller re-pairs afterwards.
-10. **Capture sample frames** labelled LEFT and RIGHT from this build and add them to `samples/` (current samples are from earlier bring-up sessions with the hand not recorded). (Bench capture task, not docs: needs a hardware capture run; out of scope for this docs task.)
-11. **Long soak** (hours) watching `errors`, `drop`, heap, and uptime.
-12. Comparison against the original single-file bridge under the same conditions (that version is not included in this repository).
+3. Incoming connections: power-cycle each controller; it reconnects by itself
+   and its stream resumes.
+4. Outgoing connections: `l` and `r`, one at a time.
+5. Controller disconnect/reconnect while the phone is subscribed: the other hand
+   keeps flowing; the affected hand resumes; sequence numbers continue.
+6. Phone disconnect/reconnect: advertising restarts; after reconnect the phone
+   must request MTU/High priority and write the CCC again; `purged`/`offline`
+   behave as described in [RECONNECT_AND_QUEUE.md](RECONNECT_AND_QUEUE.md); no
+   duplicate "BLE phone connected" lines.
+7. Large MTU + High priority: log the negotiated MTU on the phone, compare with
+   `mtu=`.
+8. Phone-side sequence validation: lossless end-to-end delivery has not been
+   established by any test. A gap-checking receiver is future work. (Code item,
+   not docs: it needs a gap-checking receiver in the phone app; out of scope for
+   this docs task, so it is recorded here and not implemented.)
+9. Manual bond reset (`k`/`K`): refused while connected; works while
+   disconnected; controller re-pairs afterwards.
+10. Capture sample frames labelled LEFT and RIGHT from this build and add them to
+    `samples/` (current samples are from earlier bring-up sessions with the hand
+    not recorded). (Bench capture task, not docs: needs a hardware capture run;
+    out of scope for this docs task.)
+11. Long soak (hours) watching `errors`, `drop`, heap, and uptime.
+12. Comparison against the original single-file bridge under the same conditions
+    (that version is not included in this repository).
 
 ## Rerunning the host tests
 
@@ -107,16 +123,19 @@ capture, so they run on Linux/CI, not through the PowerShell script.
 
 ## FF12 decoded stream: bench-test checklist (hardware)
 
-Firmware: FF12 as merged to `main` (PR #5). **Results marked "Reported" or "PARTIAL" were
-run by the user (Pixel with nRF Connect, a pasted ESP32 log and one screenshot) and relayed through
-WMR_Bridge issue #3 (closed); the assistant did not run or see them, and they are not claimed as verified by
-it.** Rows still saying "not yet run" have no report at all. What the assistant ran is host-only: the pure CCC-exclusion rule, the minimum-MTU rule and the
-raw-frame-to-record path (`tests/test_stream_mode.c`, in CI) and a full ESP-IDF build
-(the command and result are in the pull request). Beyond the rows below, nothing over the
-air has been reported.
+Firmware: FF12 as merged to `main` (PR #5). Results marked "Reported" or
+"PARTIAL" were run by the user (Pixel with nRF Connect, a pasted ESP32 log and
+one screenshot) and relayed through WMR_Bridge issue #3 (closed). The assistant
+did not run or see them, and they are not claimed as verified by it. Rows still
+saying "not yet run" have no report at all. What the assistant ran is host-only:
+the pure CCC-exclusion rule, the minimum-MTU rule and the raw-frame-to-record
+path (`tests/test_stream_mode.c`, in CI) and a full ESP-IDF build (the command
+and result are in the pull request). Beyond the rows below, nothing over the air
+has been reported.
 
-Use any BLE client that can write descriptors and subscribe (nRF Connect, or a script).
-Record the date, the build, the phone/client and the observed numbers in the Result column.
+Use any BLE client that can write descriptors and subscribe (nRF Connect, or a
+script). Record the date, the build, the phone/client and the observed numbers in
+the Result column.
 
 | # | Check | How | Expect | Result |
 | --- | --- | --- | --- | --- |
@@ -139,19 +158,19 @@ Record the date, the build, the phone/client and the observed numbers in the Res
 | 17 | `rx_time_us` | Compare record timestamps | Monotonic per hand across a controller reconnect; spacing matches `device_ticks` x 100 ns within jitter | PARTIAL: `rx_time_us` monotonic, but bursty: three consecutive hand-1 records arrived 2,437 us and 155 us apart while their `device_ticks` are 4.990 ms apart, so arrival time is not the sensor clock (as specified). Across a controller reconnect: not run. |
 | 18 | Tick unit and wrap | Use `tools/analyze_capture.py` on an FF11 capture (or compute from FF12) | ticks/wall about 1.0 confirms 100 ns per tick; unconfirmed until run | PARTIAL (from FF12): three consecutive hand-1 records have sequence +1 and `device_ticks` +49,896 each (4.990 ms), the same median as the capture analysis, consistent with 100 ns per tick. The 2^32 wrap (about 7 minutes of controller time) has not been observed. Phone FF11 captures (reported): ticks/wall 1.0016 (RIGHT), 1.0083 (LEFT). |
 
-Do not flash from this repository's CI or from an assistant session; flashing and the
+Do not flash from this repository's CI or from an assistant session. Flashing and the
 runs above are done by hand.
 
 ## Link diagnostics: bench-test checklist (hardware; `LINKLOG` and link lines have been used in every 2026-10-22 run, user-reported)
 
 Firmware: the PR #8 branch. Added to find where controller reports are lost (issue
-#3, closed). Everything below is **not yet run**; what the assistant ran is host-only (`tests/test_diag.c`
-in CI: the missing-report estimator, log classification, mode tracking and reply parsing) and a
-full ESP-IDF build.
+#3, closed). Everything below is not yet run. What the assistant ran is host-only
+(`tests/test_diag.c` in CI: the missing-report estimator, log classification, mode
+tracking and reply parsing) and a full ESP-IDF build.
 
-Leftovers from this refresh: D4 (tick-based estimate vs. the analyzer), D6 (reconnect) and D10
-(DECODING.md experiments) are still `not yet run` — no bench results are available, so they stay
-as recorded. They need hardware runs, not docs.
+Leftovers from this refresh: D4 (tick-based estimate vs. the analyzer), D6 (reconnect)
+and D10 (DECODING.md experiments) are still `not yet run`, no bench results are
+available, so they stay as recorded. They need hardware runs, not docs.
 
 | # | Check | How | Expect | Result |
 | --- | --- | --- | --- | --- |
@@ -159,7 +178,7 @@ as recorded. They need hardware runs, not docs.
 | D2 | Link health answered | Watch the `link:` lines for 30 s | `rssi`, `fcc`, `lq` show numbers, or `n/a(0xNN)` with a status (record which, per hand) | Reported: the controllers answered all three commands. In all runs `rssi=0 lq=255 fcc=0`; RIGHT showed `rssi` -3 to -7 and `lq` 248 to 251 before the MTU change. No refusal reported. What the values mean for a Classic link is still the unverified reading in DECODING.md. |
 | D3 | HCI cost | Count commands for 60 s (e.g. with `WMR_CFG_HCI_TRACE` set, or a sniffer) | About 72 Read RSSI / Failed Contact / Link Quality commands per minute (1.2/s), none closer than 100 ms | not yet run |
 | D4 | Tick-based estimate vs the analyzer | Same controller, phone capture and the ESP32 `dev_missing` over the same period | `dev_missing` and the analyzer's `device reports missing` roughly agree (the analyzer's window is the whole phase, the ESP32's is the last 256 deltas) | not yet run |
-| D5 | Estimate on a clean stream | A controller very close to the ESP32, nothing else on | `dev_missing` stays near 0 and `period` is about 4.99 ms | Reported, **expectation not met**: with both controllers right next to the ESP32, one per side (a phone connected and FF12 subscribed, nothing sent), `dev_missing` was 9 to 11.5 % of expected per hand, not near 0; `period` 4.98 ms. So a nearby controller does not by itself give a clean stream. |
+| D5 | Estimate on a clean stream | A controller very close to the ESP32, nothing else on | `dev_missing` stays near 0 and `period` is about 4.99 ms | Reported, expectation not met: with both controllers right next to the ESP32, one per side (a phone connected and FF12 subscribed, nothing sent), `dev_missing` was 9 to 11.5 % of expected per hand, not near 0; `period` 4.98 ms. So a nearby controller does not by itself give a clean stream. |
 | D6 | Reconnect | Power-cycle a controller | `link:` shows `n/a (no ACL link)` while down; `dev_missing` and `discont` restart from 0 on reconnect, with no spike | not yet run |
 | D7 | Mode changes | Leave a controller idle, then move it | A `LEFT link mode: active -> sniff ...` line appears only if the link really changes mode, once per change; none otherwise | PARTIAL (reported): no mode change was seen in any run and `mode=active` throughout. The idle-then-move case specifically was not reported, and a controller that never enters sniff in these runs does not show the log line works. |
 | D8 | VHCI drop counter | Normal streaming for 10 minutes | `vhci_drop` stays 0, or rises, which would be a finding; also try the old tick-based shortfall against it | not yet run |
@@ -168,10 +187,11 @@ as recorded. They need hardware runs, not docs.
 
 ## PR #8 diagnostics build: first bench data (user-reported; the assistant did not run or see it)
 
-Relayed on WMR_Bridge issue #3 (closed). Setup as reported: both controllers right next to the ESP32, one
-per side; Pixel with nRF Connect; FF12 subscribed; the MTU stayed at 23 for the first part,
-then 517 was requested. Single runs, not repeated. Rows D1, D2, D5, D7, D9 and checks 13 and
-14 above are filled in from this report.
+Relayed on WMR_Bridge issue #3 (closed). Setup as reported: both controllers right
+next to the ESP32, one per side; Pixel with nRF Connect; FF12 subscribed; the MTU
+stayed at 23 for the first part, then 517 was requested. Single runs, not
+repeated. Rows D1, D2, D5, D7, D9 and checks 13 and 14 above are filled in from
+this report.
 
 | Observation (reported) | Value |
 | --- | --- |
@@ -182,84 +202,94 @@ then 517 was requested. Single runs, not repeated. Rows D1, D2, D5, D7, D9 and c
 | Cumulative `dev_missing` | creeps from 13.5 % to 14.3 % (it includes the idle period) |
 | Link health, all runs | `rssi=0 lq=255 fcc=0 mode=active`; `vhci_drop=0 log_errors=0 discont=0`; `period=4.98 ms` |
 
-**The reported finding** (from the part of the run **before the controllers were moved**:
-controllers beside the ESP32, `rssi=0`, `lq=255`): missing device reports per hand went from
-about 10 % (idle or `mtu_skip`) to about 20 % while FF12 actually streams. It fits `rate_rx` falling from 175-183 to
-158-163 against a nominal of about 200/s (a 200/s controller at 160/s is 20 % missing).
-With the earlier FF11 and phone-capture figures it suggests that BLE notification traffic
-costs reports on the Classic link, but the earlier, larger losses had the controllers in the
-user's hands, so other factors are likely too. **Not established.** The decimation option below
-is the next test.
+The reported finding (from the part of the run before the controllers were moved:
+controllers beside the ESP32, `rssi=0`, `lq=255`): missing device reports per hand
+went from about 10 % (idle or `mtu_skip`) to about 20 % while FF12 actually
+streams. It fits `rate_rx` falling from 175-183 to 158-163 against a nominal of
+about 200/s (a 200/s controller at 160/s is 20 % missing). With the earlier FF11
+and phone-capture figures it suggests that BLE notification traffic costs reports
+on the Classic link, but the earlier, larger losses had the controllers in the
+user's hands, so other factors are likely too. Not established. The decimation
+option below is the next test.
 
-**Per-interval figure.** The first report's "about 45 missing per hand" was corrected by the
-project owner to about 45 per **second**, i.e. about 225 per 5 s or about 22 %, which agrees with
-`rate_rx` 158 to 163 against about 200 and with the later per-interval table (about 208 missing
-per 1000).
+Per-interval figure. The first report's "about 45 missing per hand" was
+corrected by the project owner to about 45 per second, i.e. about 225 per 5 s or
+about 22 %, which agrees with `rate_rx` 158 to 163 against about 200 and with the
+later per-interval table (about 208 missing per 1000).
 
-**Later in the same run the user moved both controllers away from the ESP32** (to simulate real
-distance). The loss and link-quality readings that followed changed with the distance and are
-**not** a time-dependent or BLE effect; they are in [DECODING.md](DECODING.md), "Bench runs on the
-diagnostics build". A fair decimation test needs the controllers at one fixed, stated
-position for the whole run.
+Later in the same run the user moved both controllers away from the ESP32 (to
+simulate real distance). The loss and link-quality readings that followed changed
+with the distance and are not a time-dependent or BLE effect. They are in
+[DECODING.md](DECODING.md), "Bench runs on the diagnostics build". A fair
+decimation test needs the controllers at one fixed, stated position for the whole
+run.
 
-**Reading `vhci_drop=0 log_errors=0`.** It is consistent with no drops. It cannot distinguish
-that from the log sink not receiving BTstack's message (the sink depends on BTstack's wording),
-because no error-level message has appeared at all to show the sink works.
+Reading `vhci_drop=0 log_errors=0`. It is consistent with no drops. It cannot
+distinguish that from the log sink not receiving BTstack's message (the sink
+depends on BTstack's wording), because no error-level message has appeared at all
+to show the sink works.
 
 ### The `drop=1200 / purged=12,7 / high=256` counters after the MTU change
 
-Reported: after the MTU change `drop` is 1200 / 1213, `purged` 12 / 7 and `high` 256, constant
-since, and FF12 below MTU 59 should not queue anything. What the code allows (read from
-`src/wmr_transport.c`, nothing measured):
+Reported: after the MTU change `drop` is 1200 / 1213, `purged` 12 / 7 and
+`high` 256, constant since, and FF12 below MTU 59 should not queue anything.
+What the code allows (read from `src/wmr_transport.c`, nothing measured):
 
-1. **FF12 cannot have filled the queue at MTU 23.** `wmr_transport_submit_report` returns
-   (counting `mtu_skip`) before it pushes anything while the stream is FF12 and the MTU is
-   below 59, and `pump_send_decoded` removes and counts any frame that was queued before the
-   MTU was known to be too small. The MTU cannot go down inside a connection, and the queue is
-   emptied when the phone connects and on every subscription change. So the check-13 phase
-   itself did not queue.
-2. **The counters are since boot, not since connection or subscription.** `drop`, `purged` and
-   `notifications` are free-running and are reset only by a reboot ([COUNTERS.md](COUNTERS.md)),
-   and `high` is the peak since boot and never decreases. So `drop=1200`, `purged=12/7` and
-   `high=256` can have been set at any time since the last reboot, including before this run,
-   and "constant since the MTU change" only says nothing was added after it.
-3. **The most likely source is an earlier FF11 phase in the same boot at MTU 23** (not proven).
-   FF11 has no MTU rule: at MTU 23 it queues, the queue fills to 256 and the newest reports
-   are dropped. The earlier "MTU 23, queue full and dropping, about 135/s each" data point is
-   exactly that situation. Switching FF11 off then purges whatever is queued (`purged`). About
-   1200 drops in total is roughly 600 per hand, a few seconds at 135/s per hand, which fits a
+1. FF12 cannot have filled the queue at MTU 23. `wmr_transport_submit_report`
+   returns (counting `mtu_skip`) before it pushes anything while the stream is
+   FF12 and the MTU is below 59, and `pump_send_decoded` removes and counts any
+   frame that was queued before the MTU was known to be too small. The MTU
+   cannot go down inside a connection, and the queue is emptied when the phone
+   connects and on every subscription change. So the check-13 phase itself did
+   not queue.
+2. The counters are since boot, not since connection or subscription. `drop`,
+   `purged` and `notifications` are free-running and are reset only by a reboot
+   ([COUNTERS.md](COUNTERS.md)), and `high` is the peak since boot and never
+   decreases. So `drop=1200`, `purged=12/7` and `high=256` can have been set at
+   any time since the last reboot, including before this run, and "constant since
+   the MTU change" only says nothing was added after it.
+3. The most likely source is an earlier FF11 phase in the same boot at MTU 23
+   (not proven). FF11 has no MTU rule: at MTU 23 it queues, the queue fills to
+   256 and the newest reports are dropped. The earlier "MTU 23, queue full and
+   dropping, about 135/s each" data point is exactly that situation. Switching
+   FF11 off then purges whatever is queued (`purged`). About 1200 drops in total
+   is roughly 600 per hand, a few seconds at 135/s per hand, which fits a
    short test, but the number alone does not prove it.
-4. **A stall inside FF12 after the MTU rose is the alternative that cannot be ruled out from
-   the counters.** If the can-send-now event was delayed during the MTU exchange, FF12 records
-   would queue (about 320/s, so 256 in under a second) and then drop until sending resumed. A
-   stall of about 4 to 5 s would be needed for 1200 drops. `errors` would rise if
-   `att_server_notify` failed (its value was not reported); a delayed event would not raise it.
-5. **What separates the two:** the `STREAM` block printed **just before** the MTU request
-   (if `drop` is already 1200 and `high` 256 there, it predates the transition, which points to
-   item 3), the value of `errors`, and a run from a fresh reboot with FF12 only. A firmware
-   change that would remove the ambiguity (log the first drop of each episode with the stream
-   mode, MTU and queue depth) is **proposed, not made**.
+4. A stall inside FF12 after the MTU rose is the alternative that cannot be
+   ruled out from the counters. If the can-send-now event was delayed during the
+   MTU exchange, FF12 records would queue (about 320/s, so 256 in under a
+   second) and then drop until sending resumed. A stall of about 4 to 5 s would
+   be needed for 1200 drops. `errors` would rise if `att_server_notify` failed
+   (its value was not reported). A delayed event would not raise it.
+5. What separates the two: the `STREAM` block printed just before the MTU
+   request (if `drop` is already 1200 and `high` 256 there, it predates the
+   transition, which points to item 3), the value of `errors`, and a run from a
+   fresh reboot with FF12 only. A firmware change that would remove the
+   ambiguity (log the first drop of each episode with the stream mode, MTU and
+   queue depth) is proposed, not made.
 
 ## Diagnostic build option: FF12 decimation (`WMR_CFG_FF12_DECIMATE`; not yet run on hardware)
 
-Default `1` = off, no behaviour change. Set `N` in `src/wmr_config.h` (or before including it)
-to send only every Nth report of each hand on FF12; the rest are counted per hand as
-`decimated` and the STREAM block prints `DIAGNOSTIC BUILD: FF12 sends every Nth report`. The
-phone's `sequence` then jumps by N (the skipped reports keep their numbers, as with
-`mtu_skip`). FF11 is not decimated. It tests whether BLE airtime costs controller reports:
-**if `dev_missing` falls back toward the idle level (about 10 %) at N=2 or 4, airtime is a
-cause; if it stays at about 20 %, it is not (or not only).** Build and CI: see the pull request.
+Default `1` = off, no behaviour change. Set `N` in `src/wmr_config.h` (or before
+including it) to send only every Nth report of each hand on FF12. The rest are
+counted per hand as `decimated` and the STREAM block prints `DIAGNOSTIC BUILD:
+FF12 sends every Nth report`. The phone's `sequence` then jumps by N (the
+skipped reports keep their numbers, as with `mtu_skip`). FF11 is not decimated.
+It tests whether BLE airtime costs controller reports: if `dev_missing` falls
+back toward the idle level (about 10 %) at N=2 or 4, airtime is a cause. If it
+stays at about 20 %, it is not (or not only). Build and CI: see the pull
+request.
 
 | # | Check | How | Expect | Result |
 | --- | --- | --- | --- | --- |
 | X1 | Default build unchanged | Flash the PR build with `N=1` | `decimated=0` on both hands; no DIAGNOSTIC line; same behaviour as before | not yet run |
 | X2 | N=2 | Rebuild with `WMR_CFG_FF12_DECIMATE=2`, FF12 at MTU 517, 60 s | `DIAGNOSTIC BUILD` line; `tx` about half of `rx`; `decimated` about half of `rx`; identity holds; phone `sequence` steps of 2 | not yet run |
 | X3 | N=4 | Same with 4 | `tx` about a quarter of `rx`; steps of 4 | not yet run |
-| X4 | The test itself | At N=1, 2, 4 and with no phone, **controllers at one fixed, stated position for every run (state it, and note `rssi`/`lq`; do not move them)**: `rate_rx`, `last5s` and `cum` per hand, 2 minutes each | Record all four; compare with the idle level | not yet run |
+| X4 | The test itself | At N=1, 2, 4 and with no phone, controllers at one fixed, stated position for every run (state it, and note `rssi`/`lq`; do not move them): `rate_rx`, `last5s` and `cum` per hand, 2 minutes each | Record all four; compare with the idle level | not yet run |
 
 ## New log lines (PR #9; run on hardware as part of the 2026-10-22 sessions, user-reported)
 
-Logging only; no new HCI traffic. Lines are described in [COUNTERS.md](COUNTERS.md).
+Logging only. No new HCI traffic. Lines are described in [COUNTERS.md](COUNTERS.md).
 
 | # | Check | How | Expect | Result |
 | --- | --- | --- | --- | --- |
@@ -271,17 +301,20 @@ Logging only; no new HCI traffic. Lines are described in [COUNTERS.md](COUNTERS.
 
 ## FF14 batched stream (merged; hardware: partly user-reported, see the Result column)
 
-What was run (host only, by the assistant): `tests/test_batch.c` (golden bytes for a batch of 1, 2 and
-the maximum of 9; the MTU rule at 0, 23, 59, 60, 61, 116, 117, 247, 285, 517; the flush rule
-including a partial flush on the hold time and a simulated 200 reports/s arrival that never held a
-record longer than the hold time; all six orderings of the FF11/FF12/FF14 exclusion; queue-full and
-wraparound behaviour; a failed send keeping its records), plus the extended `LINKLOG` strings in
-`tests/test_diag.c`. These ran locally with `zig cc` (0 failures); the CI result is on the pull request. The ESP-IDF build
-(`EXAMPLE=wmr_bridge`) is clean with 0 warnings. **Not tested anywhere:** `pump_send_batch`,
-the hold timer and `att_server_notify` in `wmr_transport.c` (they need BTstack and a radio), and
-everything below. Hardware results are in the Result column; user-reported 2026-10-22 runs with nRF Connect (MTU 517) showed batches of mean 6.4 to 6.7 records, max 9, and the counters adding up.
+What was run (host only, by the assistant): `tests/test_batch.c` (golden bytes for a
+batch of 1, 2 and the maximum of 9; the MTU rule at 0, 23, 59, 60, 61, 116, 117, 247, 285,
+517; the flush rule including a partial flush on the hold time and a simulated 200 reports/s
+arrival that never held a record longer than the hold time; all six orderings of the
+FF11/FF12/FF14 exclusion; queue-full and wraparound behaviour; a failed send keeping its
+records), plus the extended `LINKLOG` strings in `tests/test_diag.c`. These ran locally with
+`zig cc` (0 failures). The CI result is on the pull request. The ESP-IDF build
+(`EXAMPLE=wmr_bridge`) is clean with 0 warnings. Not tested anywhere: `pump_send_batch`, the
+hold timer and `att_server_notify` in `wmr_transport.c` (they need BTstack and a radio), and
+everything below. Hardware results are in the Result column. User-reported 2026-10-22 runs
+with nRF Connect (MTU 517) showed batches of mean 6.4 to 6.7 records, max 9, and the
+counters adding up.
 
-**One BTstack-side file changes with this branch:** `integration/main-CMakeLists.txt` lists
+One BTstack-side file changes with this branch: `integration/main-CMakeLists.txt` lists
 `wmr_batch.c` as a new source. Copy it over `port\esp32\main\CMakeLists.txt` again (as in
 [BUILD_WINDOWS.md](BUILD_WINDOWS.md)) before building, or the link fails with undefined
 `wmr_batch_*` references.
@@ -292,55 +325,59 @@ everything below. Hardware results are in the Result column; user-reported 2026-
 | --- | --- | --- | --- | --- |
 | B1 | FF14 exists | Connect, discover service FF10 | A notify-only `0000FF14-...` characteristic with a CCC, after FF12; FF11 and FF12 still present and unchanged | not yet run |
 | B2 | Exclusion, all six orders | With FF11 / FF12 / FF14 in turn enabled, try to enable each of the other two (six pairs) | Every second enable fails with ATT error `0x80` and the first stream keeps running; after writing `0x0000` to the active CCC the other enables | not yet run |
-| B3 | Batches at MTU 517 | Subscribe to FF14, both controllers streaming, 60 s | Values start `02 NN`; `NN` between 1 and 9; value length `2 + 56 x NN`; STREAM `FF14` line shows `batches_tx` rising, `mean` between 1 and 9, `max` up to 9; **`notify` rises by `batches_tx`, much slower than FF12's ~320/s** (the expectation is of the order of 70 to 100 per second at a 15 ms interval; not measured) | user-reported 2026-10-22 (nRF Connect, MTU 517, 15 ms): values start `02 NN`, mean 6.4 to 6.7 records, max 9, about 48 notifications/s against about 300/s on FF12 |
+| B3 | Batches at MTU 517 | Subscribe to FF14, both controllers streaming, 60 s | Values start `02 NN`; `NN` between 1 and 9; value length `2 + 56 x NN`; STREAM `FF14` line shows `batches_tx` rising, `mean` between 1 and 9, `max` up to 9; `notify` rises by `batches_tx`, much slower than FF12's about 320/s (the expectation is of the order of 70 to 100 per second at a 15 ms interval; not measured) | user-reported 2026-10-22 (nRF Connect, MTU 517, 15 ms): values start `02 NN`, mean 6.4 to 6.7 records, max 9, about 48 notifications/s against about 300/s on FF12 |
 | B4 | Nothing lost to batching | Same run; on the phone, per hand, `sequence` gaps | Gaps equal the FF12 gaps for the same run (missing reports from the controllers show as gaps, batching adds none); no repeated or reordered `sequence` within a hand | not yet run |
 | B5 | Identity | STREAM and `LEFT`/`RIGHT` lines at the end of B3 | `rx = tx + drop + offline + purged + mtu_skip + dec_err + decimated + q` per hand, with `tx` in records; `tx` (both hands) grew by `records_in_batches`; `notify` grew by `batches_tx` | user-reported 2026-10-22: `rx = tx + q` per hand, `tx` over both hands equals `records_in_batches`; `drop=0` |
 | B6 | MTU 247 | Cap the phone's MTU at 247 | `max` is at most 4; values at most 226 bytes | not yet run |
 | B7 | MTU below 61 | MTU 23, then (if the phone allows) 59 or 60 | Nothing arrives on FF14; `mtu_skip` rises for both hands; `batches_tx` stays 0. At 59/60 FF12 still works and FF14 does not | not yet run |
 | B8 | Partial flush | Only one controller connected (about 160 to 200 reports/s) | Batches smaller than full: `mean` about the reports that arrive in one connection interval (roughly 3 at 15 ms, not measured); `batch_full_flushes` stays near 0; the phone still sees every record | not yet run |
-| B9 | Latency of a record | Use `rx_time_us` against the phone's arrival time for a few seconds of FF12, then FF14 (needs the app to log both) | FF14 arrival-minus-`rx_time_us` is larger by at most about one connection interval; **not measured so far** | not yet run |
+| B9 | Latency of a record | Use `rx_time_us` against the phone's arrival time for a few seconds of FF12, then FF14 (needs the app to log both) | FF14 arrival-minus-`rx_time_us` is larger by at most about one connection interval; not measured so far | not yet run |
 | B10 | FF12 and FF11 unchanged | Re-run X1 (FF12 at `N=1`) and the FF11 checks | Identical to before; `FF14` line stays at zero | not yet run |
 | B11 | Switching | FF12, then `0x0000`, then FF14, then `0x0000`, then FF11 | Each switch starts a fresh stream (the queue is cleared, `purged` counts what was dropped), no stale batch | not yet run |
 | B12 | `LINKLOG` | Capture a B3 run | Header and lines have the same number of fields; the last five are `batches_tx,records_in_batches,batch_mean,batch_max,batch_full_flushes`; the first fourteen are unchanged | user-reported 2026-10-22: `LINKLOG` lines parsed with the 19-field header (the batch fields are the last five) |
 
 ### The comparison the project owner asked for (user to run; the assistant has not)
 
-Question: does sending the same samples in far fewer notifications reduce the missing-report
-share the way decimation did? Use the default build (decimation off, `N=1`), the **same fixed,
-stated table position** for every run (controllers face down and still, as in the decimation
-runs), MTU 517, interval as granted (note it). Four 2-minute runs, in this order:
+Question: does sending the same samples in far fewer notifications reduce the
+missing-report share the way decimation did? Use the default build (decimation
+off, `N=1`), the same fixed, stated table position for every run (controllers
+face down and still, as in the decimation runs), MTU 517, interval as granted
+(note it). Four 2-minute runs, in this order:
 
-1. **No phone** (baseline; the idle level).
-2. **A: FF12**, `N=1`.
-3. **B: FF14**.
-4. **A again: FF12**, `N=1` (A/B/A: if the second A differs from the first, the position or the
-   session drifted and the comparison is weaker).
+1. No phone (baseline; the idle level).
+2. A: FF12, `N=1`.
+3. B: FF14.
+4. A again: FF12, `N=1` (A/B/A: if the second A differs from the first, the
+   position or the session drifted and the comparison is weaker).
 
-Per run, record per hand `rate_rx`, `last5s` and `cum`, `rssi`/`lq`, the granted interval and
-`mtu`, and for FF14 `mean`, `max`, `batches_tx` (the `LINKLOG` lines carry all of it; paste the
-capture).
+Per run, record per hand `rate_rx`, `last5s` and `cum`, `rssi`/`lq`, the granted
+interval and `mtu`, and for FF14 `mean`, `max`, `batches_tx` (the `LINKLOG`
+lines carry all of it; paste the capture).
 
-How to read it, so the conclusion is not chosen after the fact: in the decimation runs RIGHT fell
-from 28 to 36 % at N=1 to 12 to 15 % at N=2 and 4, and LEFT stayed at about 18 to 20 % at every N
-(user-reported, one position, one session). If FF14 brings RIGHT down toward that range,
-notification count is part of RIGHT's loss and FF14 helps it without dropping samples. If RIGHT
-stays near its FF12 level, batching does not help at this position. **LEFT is not expected to
-change and a change would be a new finding; do not claim FF14 fixes LEFT.** One session at one
-position cannot say more than that.
+How to read it, so the conclusion is not chosen after the fact: in the
+decimation runs RIGHT fell from 28 to 36 % at N=1 to 12 to 15 % at N=2 and 4,
+and LEFT stayed at about 18 to 20 % at every N (user-reported, one position, one
+session). If FF14 brings RIGHT down toward that range, notification count is
+part of RIGHT's loss and FF14 helps it without dropping samples. If RIGHT stays
+near its FF12 level, batching does not help at this position. LEFT is not
+expected to change and a change would be a new finding. Do not claim FF14 fixes
+LEFT. One session at one position cannot say more than that.
 
 ## FF15 echo (issue #1; hardware: checklist reported passed by the user, no output pasted)
 
-What was run (host only, by the assistant): `tests/test_echo.c` (golden bytes of the request and
-the answer; rejected lengths and versions; one outstanding echo, `busy`, `unsubscribed`,
-`cancelled`, a retry restamping the turnaround, saturation). The firmware sources were also
-syntax-checked with gcc against current BTstack `master` headers and a `wmr_bridge.gatt` compiled
-with BTstack's `compile_gatt.py` (FF15 value handle 0x0012, CCC 0x0013; all earlier handles
-unchanged). The assistant did not build with ESP-IDF, flash or run it. On 2026-10-22 the user
-reported that E1-E10 all passed (below); the host tests above are all the assistant ran.
+What was run (host only, by the assistant): `tests/test_echo.c` (golden bytes of
+the request and the answer; rejected lengths and versions; one outstanding echo,
+`busy`, `unsubscribed`, `cancelled`, a retry restamping the turnaround,
+saturation). The firmware sources were also syntax-checked with gcc against
+current BTstack `master` headers and a `wmr_bridge.gatt` compiled with BTstack's
+`compile_gatt.py` (FF15 value handle 0x0012, CCC 0x0013; all earlier handles
+unchanged). The assistant did not build with ESP-IDF, flash or run it. On
+2026-10-22 the user reported that E1-E10 all passed (below). The host tests
+above are all the assistant ran.
 
-**One BTstack-side file changes:** `integration/main-CMakeLists.txt` lists `wmr_echo.c`. Copy it over
-`port\esp32\main\CMakeLists.txt` again before building, or the link fails with undefined
-`wmr_echo_*` references.
+One BTstack-side file changes: `integration/main-CMakeLists.txt` lists
+`wmr_echo.c`. Copy it over `port\esp32\main\CMakeLists.txt` again before
+building, or the link fails with undefined `wmr_echo_*` references.
 
 | # | Check | How | Expect | Result |
 | --- | --- | --- | --- | --- |
@@ -357,19 +394,22 @@ reported that E1-E10 all passed (below); the host tests above are all the assist
 
 ## Discovery by name (issue #2; hardware: checklist reported passed by the user, no output pasted)
 
-What was run (host only, by the assistant): `tests/test_discovery.c` (name matching incl. case,
-padding and near misses; golden bytes of the stored address record and what it rejects; address
-parsing; a discovery run with names in the inquiry response, with remote name requests, with one
-hand already known, with a second controller of the same hand, with a full pending list; the
-incoming-connection rule). The firmware sources were syntax-checked with gcc against BTstack
-`e38553977a25` (the tested commit) and current `master` headers. **Not built with ESP-IDF, not
-flashed, not run.** Not tested anywhere: inquiry, remote name requests, NVS storage, the held
-incoming connection, connecting and pairing after discovery, and everything below.
+What was run (host only, by the assistant): `tests/test_discovery.c` (name
+matching incl. case, padding and near misses; golden bytes of the stored address
+record and what it rejects; address parsing; a discovery run with names in the
+inquiry response, with remote name requests, with one hand already known, with a
+second controller of the same hand, with a full pending list; the
+incoming-connection rule). The firmware sources were syntax-checked with gcc
+against BTstack `e38553977a25` (the tested commit) and current `master`
+headers. Not built with ESP-IDF, not flashed, not run. Not tested anywhere:
+inquiry, remote name requests, NVS storage, the held incoming connection,
+connecting and pairing after discovery, and everything below.
 
-**Before testing:** this change removes the compiled-in addresses, so the first boot has none
-stored and starts discovery. Re-copy `integration/main-CMakeLists.txt` (adds `wmr_discovery.c`).
-Already-paired controllers keep their link keys on the ESP32; whether they reconnect inwards
-before discovery has found them is check D6.
+Before testing: this change removes the compiled-in addresses, so the first boot
+has none stored and starts discovery. Re-copy `integration/main-CMakeLists.txt`
+(adds `wmr_discovery.c`). Already-paired controllers keep their link keys on
+the ESP32. Whether they reconnect inwards before discovery has found them is
+check D6.
 
 | # | Check | How | Expect | Result |
 | --- | --- | --- | --- | --- |
@@ -385,12 +425,11 @@ before discovery has found them is check D6.
 | D10 | Loss during discovery | One controller streaming to the phone (FF12), the other missing, run `d` | Note `last5s` of the streaming hand during the inquiry rounds vs. before; stays connected | user-reported (2026-10-22): passed; one-line report for the whole checklist, no output pasted, so no figures are recorded. The row asks for `last5s` before and during the inquiry rounds; no figures reported |
 | D11 | Override | Build with `-DWMR_CFG_LEFT_ADDRESS=\"..\"` | LEFT `compile-time override`; discovery looks only for RIGHT; `F` keeps LEFT | user-reported (2026-10-22): passed; one-line report for the whole checklist, no output pasted, so no figures are recorded |
 
-
 ## FF13 config block (APPROVED layout; merged; C1-C3, C5, C6 user-reported, C4 inconclusive, C7 not run)
 
-Host tests (`tests/test_cfg.c`, CI) cover formats and the reader only. The checks below need
-the ESP32 build and a controller. Results per check are in the table. Watch the console for
-`FF13 LEFT: ...` lines and the statistics `FF13` lines.
+Host tests (`tests/test_cfg.c`, CI) cover formats and the reader only. The checks
+below need the ESP32 build and a controller. Results per check are in the table.
+Watch the console for `FF13 LEFT: ...` lines and the statistics `FF13` lines.
 
 | # | Check | Expected | Result |
 | --- | --- | --- | --- |

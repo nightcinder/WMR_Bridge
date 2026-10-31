@@ -7,20 +7,23 @@ still read FF11/FF12/FF14 from the same connection.
 
 ## Report
 
-Report ID 1, 9 payload bytes, the same layout as
-`wmr_companion_hid_android/lib/src/hid_report.dart`:
+Report ID 1, 9 payload bytes. The report descriptor and the axis/hat layout
+are the same as `wmr_companion_hid_android/lib/src/hid_report.dart`; the
+button bits use the host's HID order rather than the package's model order
+(see "Button slots" below):
 
 | byte | content |
 |---|---|
-| 0-1 | 16 button bits, little endian, `hidButtonOrder`: A, B, X, Y, L1, R1, L2, R2, L3, R3, Select, Start, Guide |
+| 0-1 | 16 button bits, little endian, in Android/Linux HID order: A, B, C, X, Y, Z, L1, R1, L2, R2, Select, Start, Mode, L3, R3 (bit 0 is the first entry; bit 15 unused) |
 | 2 | low nibble: hat switch 0..7 clockwise from up, 15 = centred; high nibble 0 |
 | 3, 4 | left stick X, Y: -127..127, Y positive down |
 | 5, 6 | right stick X (Z), Y (Rz), same scale |
 | 7, 8 | left trigger (Brake), right trigger (Accelerator): 0..255 |
 
 The descriptor is byte-for-byte `hidReportDescriptor` from that package. The
-firmware copies it into `src/wmr_hid.c`; the vector files below fail the host
-tests if the two ever drift.
+firmware copies it into `src/wmr_hid.c`; the descriptor vector file fails the
+host tests if the two ever drift. The report bytes are the firmware's own
+`tests/vectors/hid_gamepad.txt`, now in host button order.
 
 ## Mapping
 
@@ -44,6 +47,50 @@ by 32767, so there is no learned stick centre and no radial dead zone in the
 firmware. The app's `StickNormalizer` (centre learning and dead zone) is not
 ported; a stick that rests off-centre will show that offset in a gamepad
 tester. See "Known gaps".
+
+### Button slots
+
+Android treats a gamepad's 16 Button usages as Linux `BTN_A` and the following
+codes in order (`Generic.kl`: `key 304` = `BUTTON_A` through `key 318` =
+`BUTTON_THUMBR`). The report therefore has to leave slots 3 (C) and 6 (Z)
+empty even though no WMR control uses them; otherwise every later button lands
+one or two slots early. Firmware 0.3.2 packed the companion's model order
+directly, which is the off-by-one the user saw.
+
+| Physical control | HID usage / bit | Android keycode | Label in a tester |
+|---|---|---|---|
+| A | 1 / bit 0 | `BUTTON_A` (96) | A |
+| B | 2 / bit 1 | `BUTTON_B` (97) | B |
+| (none) | 3 / bit 2 | `BUTTON_C` (98) | C |
+| X | 4 / bit 3 | `BUTTON_X` (99) | X |
+| Y | 5 / bit 4 | `BUTTON_Y` (100) | Y |
+| (none) | 6 / bit 5 | `BUTTON_Z` (101) | Z |
+| Squeeze LEFT | 7 / bit 6 | `BUTTON_L1` (102) | L1 |
+| Squeeze RIGHT | 8 / bit 7 | `BUTTON_R1` (103) | R1 |
+| Trigger LEFT | 9 / bit 8 | `BUTTON_L2` (104) | L2 |
+| Trigger RIGHT | 10 / bit 9 | `BUTTON_R2` (105) | R2 |
+| Menu LEFT | 11 / bit 10 | `BUTTON_SELECT` (109) | Select |
+| Menu RIGHT | 12 / bit 11 | `BUTTON_START` (108) | Start |
+| Home | 13 / bit 12 | `BUTTON_MODE` (110) | Mode / Home |
+| Stick click LEFT | 14 / bit 13 | `BUTTON_THUMBL` (106) | L3 |
+| Stick click RIGHT | 15 / bit 14 | `BUTTON_THUMBR` (107) | R3 |
+
+The hat (d-pad) and both trackpad roles are unchanged. The companion package's
+`encodeHidReport()` still packs its model order for its own
+`BluetoothHidDevice`; app HID output should be off when the firmware gamepad
+is in use, and moving that encoder to the same table is a companion follow-up.
+
+### Bench check for the user
+
+1. Flash the build from this change and forget/re-pair the phone once if the
+   HID descriptor cache keeps the old layout (the descriptor itself is
+   unchanged, so a normal reconnect is usually enough).
+2. Open any gamepad tester that shows button names (the Android
+   `BUTTON_*` labels above) and press each control on each hand.
+3. Expected: A→A, B→B, X→X, Y→Y, squeeze→L1/R1, trigger→L2/R2,
+   stick click→L3/R3, menu→Select/Start, home→Mode. C and Z never light up.
+4. Paste the observed labels back on ONY-685; a mismatch names the remaining
+   slot offset.
 
 ## Link behaviour
 
