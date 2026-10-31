@@ -5,6 +5,53 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.1 — 2026-10-31
+
+A packaging and tester-docs release on top of 0.3.0. No protocol change:
+FF10–FF17 keep their payloads, so companions at 0.2.2 or later continue
+to work, and the firmware reports the tag version over FF16 (0.3.1 when
+tagged) with no behaviour change from 0.3.0. The Linux/Raspberry Pi host
+bridge package stays at `0.2.2`. Firmware and Pi artifacts remain CI-built
+and hardware-unverified.
+
+### Pi host bridge
+
+- **Pi bridge `.deb` + one-line installer (#103, ONY-550).** `pi/` now
+  builds a `.deb` and a release-fetching one-line installer.
+- **Pi release attachments (#104, ONY-551).** CI attaches the Pi bridge
+  `.deb`, tarball and installer to `v*` releases.
+- **RPi deployment and update runbook (#105, ONY-552).** Tester-facing RPi
+  deployment and update documentation.
+- **Pi package `0.2.2` (ONY-639).** Packaging/installer fixes with no
+  runtime change.
+
+### Tester docs and tooling
+
+- **Tester quickstart + pose-filter sheet (#100, ONY-527; #101, ONY-531).**
+  Tester quickstart plus the pose-filter sheet carrying the filter-spec rev 4
+  §7 grid.
+- **Tester-bundle triage CLI (#106, ONY-583).** CLI for triaging tester
+  bundles.
+- **Flag 6DoF capture runs shorter than 30 s (#109, ONY-634).**
+- **ONY-439 sheet refresh + TESTING.md leftovers (#107, ONY-601).** App
+  target and testing-doc cleanup.
+
+### CI
+
+- **Workflow actions to current Node 24 majors (#99, ONY-521).**
+- **Firmware build on the Liesa self-hosted runner (#108, ONY-605).**
+
+### Housekeeping
+
+- **Truth-up test counts and current release (ONY-640).** Pi test count
+  corrected to 122; host checks to 6127.
+
+### Verification
+
+- Host tests and the ESP-IDF build run in CI on the tag; firmware reports
+  the tag version over FF16 and in the console `v` line.
+- Pi package remains `0.2.2`; protocol unchanged.
+
 ## 0.3.0 — 2026-10-29
 
 A security and phone-link release. No protocol version change: FF10–FF17 keep
