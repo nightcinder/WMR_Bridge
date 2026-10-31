@@ -139,7 +139,7 @@ today's artifact names.
 
 The same command works with a single board: `--variant left` flashes a board
 that serves only LEFT. That is the cheap route for the one-board validation
-sitting in plan M12.3' ,  no hand-edited rebuild and no second Classic ESP32.
+sitting in plan M12.3', no hand-edited rebuild and no second Classic ESP32.
 Use `--variant right` if you want to validate the RIGHT path instead. The
 boot banner and `STREAM` line show which image is running
 (`WMR Bridge L`, `bridge_hands=1`).

@@ -525,7 +525,7 @@ FF12's `rx_time_us`, so the phone can relate the two clocks (see "Using it").
 
 | Item | UUID | Properties |
 | --- | --- | --- |
-| Characteristic | `0000FF15-0000-1000-00805F9B34FB` | write without response, notify (in service `FF10`) |
+| Characteristic | `0000FF15-0000-1000-8000-00805F9B34FB` | write without response, notify (in service `FF10`) |
 | CCC (0x2902) | - | read/write |
 
 `FF13` is left for the config block design below. `FF15` is the next free

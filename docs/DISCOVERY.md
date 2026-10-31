@@ -309,7 +309,7 @@ with next action.
 
 Failure hints on the `pair` tag:
 
-- `authentication failed: ... (link key mismatch) (0x05)` ,  remove the
+- `authentication failed: ... (link key mismatch) (0x05)`, remove the
   controller's old pairing or press `k`/`K` for a bond reset.
 - `PIN or key missing (controller lost the bond)` (0x06).
 - `remote user terminated` (0x13).

@@ -219,6 +219,12 @@ checksum and runs the installer from the extracted tree. Set
 installer creates the same user, udev rule, token and env file but does not
 enable the service. The `.deb` does.
 
+Every `v*` release attaches `wmr-bridge-<version>.tar.gz`, its `.sha256`,
+`wmr-bridge_<version>_all.deb`, its `.sha256` and `install.sh`, built by the
+`package` job in `.github/workflows/firmware.yml` from `pi/build_package.sh` and
+`pi/build_deb.sh`. The package version comes from `pi/wmr_bridge/__version__`,
+not from the tag.
+
 Or run the equivalent manual steps:
 
 ```bash
@@ -433,7 +439,7 @@ Rules:
 Every binary message is exactly the BLE notification value of the subscribed
 stream. All integers are little-endian.
 
-Raw ,  one FF11 fragment. The 12-byte header is:
+Raw, one FF11 fragment. The 12-byte header is:
 
 | Offset | Size | Field |
 | --- | --- | --- |
@@ -449,7 +455,7 @@ The default fragment capacity is 244 bytes including the header, so a 46-byte
 frame is one message of 58 bytes. The companion's existing FF11 reassembler
 handles this unchanged. See [PROTOCOL.md](PROTOCOL.md) for the receiver rules.
 
-Decoded ,  one FF12 version 1 record. Exactly 56 bytes:
+Decoded, one FF12 version 1 record. Exactly 56 bytes:
 
 | Offset | Size | Field |
 | --- | --- | --- |
@@ -472,7 +478,7 @@ The decoder is a Python port of `src/wmr_decode.c` and `src/wmr_decoded.c`.
 `pi/tests/test_protocol.py` pins two sample frames to bytes produced by the C
 implementation, so the two decoders agree bit for bit.
 
-Batched ,  one FF14 version 2 batch. Two-byte header (`version = 2`,
+Batched, one FF14 version 2 batch. Two-byte header (`version = 2`,
 `count = 1..9`) followed by `count` complete FF12 records, oldest first. A
 partial batch is flushed after `--batch-hold-ms` (default 5 ms) or when full.
 Records of both hands may share a batch. Each carries its own hand.
@@ -592,7 +598,7 @@ safeguards below are enforced by the daemon. The transport is still plaintext.
   is closed, so half-open connections cannot accumulate.
 - The WebSocket is plaintext by itself. The token prevents unauthorised clients,
   but it does not encrypt controller data and does not resist an on-path
-  attacker. Terminate TLS in front of the daemon (see TLS termination) or use
+  attacker. Terminate TLS in front of the daemon (see [TLS termination](#tls-termination)) or use
   WPA2/WPA3, a dedicated/trusted network, or an SSH tunnel.
 - Never port-forward 8765 from the internet. Bind only the interface you
   intend, and keep the firewall closed except for the LAN clients you expect.

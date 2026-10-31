@@ -133,7 +133,7 @@ mechanical safeguards were added in #47 / ONY-116:
   casually. The sample frames in `samples/` are from bring-up sessions, are not
   decoded and contain no Bluetooth address.
 
-### ESP32 flash encryption and secure boot ,  plan (not enabled)
+### ESP32 flash encryption and secure boot, plan (not enabled)
 
 Both features burn eFuses and are irreversible on a given board, so they stay
 off until the owner approves the change and a recovery path exists. The plan:

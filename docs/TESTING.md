@@ -73,7 +73,7 @@ nothing connected.
 
 Run with the refactored firmware flashed. Record dates and observed numbers here.
 
-1. Boot and advertising ,  done, see above.
+1. Boot and advertising, done, see above.
 2. Both controllers, phone subscribed: LEFT and RIGHT connected, phone subscribed
    (`sub=1`), at least 10 minutes running.
    - `rate_tx` tracks `rate_rx` for each hand;
@@ -169,7 +169,7 @@ Firmware: the PR #8 branch. Added to find where controller reports are lost (iss
 tracking and reply parsing) and a full ESP-IDF build.
 
 Leftovers from this refresh: D4 (tick-based estimate vs. the analyzer), D6 (reconnect)
-and D10 (DECODING.md experiments) are still `not yet run` ,  no bench results are
+and D10 (DECODING.md experiments) are still `not yet run`, no bench results are
 available, so they stay as recorded. They need hardware runs, not docs.
 
 | # | Check | How | Expect | Result |

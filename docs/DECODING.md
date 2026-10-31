@@ -351,7 +351,7 @@ In `src/xrt/drivers/wmr/wmr_protocol.h`:
 - Lines 130-137:
   ```c
   static inline int16_t
-  read16(const unsigned char buffer)
+  read16(const unsigned char **buffer)
   {
       int16_t ret = (*(*buffer + 0) << 0) | //
                     (*(*buffer + 1) << 8);
@@ -865,12 +865,12 @@ Other BLE settings that could lower the airtime cost besides batching (read from
   be carried in fewer link-layer packets if the controller and the phone accept it. The firmware
   does not log the data-length change event, so whether it took effect is unknown.
 - PHY. Whether this ESP32 controller supports anything but the 1M PHY has now been checked
-  (ONY-98) and the answer is a permanent no ,  2M PHY is not available on this hardware at any price.
+  (ONY-98) and the answer is a permanent no, 2M PHY is not available on this hardware at any price.
   The three independent checks:
   1. The firmware never asks for it. There is no `gap_le_set_phy` / `hci_le_set_phy` call
      anywhere under `src/`. The only BLE connection tuning is the interval/latency request at
      `src/wmr_transport.c:154` (`gap_request_connection_parameter_update`). BTstack does not switch
-     PHY on its own ,  a 2M link needs an explicit LE Set PHY procedure, and the default LE
+     PHY on its own, a 2M link needs an explicit LE Set PHY procedure, and the default LE
      connection PHY is 1M.
   2. The hardware cannot do it. The bridge is the original Classic ESP32 (README build table:
      ESP32 rev v1.1; `docs/FLASHING.md` calls for a Classic ESP32 because the S3 has no Classic
@@ -882,7 +882,7 @@ Other BLE settings that could lower the airtime cost besides batching (read from
      latency run means "not observable", not "2M".
   Consequently, there is no `sdkconfig` option, build flag or variant that enables 2M on this board.
   A 2M link would need a Bluetooth 5.0 bridge SoC, and the ESP32-S3/C3/C6 parts have no Classic
-  Bluetooth ,  which the controllers require ,  so that is a two-radio redesign, not a drop-in part
+  Bluetooth, which the controllers require, so that is a two-radio redesign, not a drop-in part
   swap. The throughput levers that remain on 4.2 are DLE plus the batching/decimation work already
   described in this document.
 - Connection event length. BTstack's `le_minimum_ce_length` / `le_maximum_ce_length` are

@@ -17,8 +17,8 @@ CSV and the per-record frame CSV (the app exports the last one as
 |---|---|---|---|---|---|---|
 | 2026-10-22 14:56:31 | FF14 batched | `latency-20261022-145631{,-echo,-samples}.csv`, `.json` | 40.8 / 97.1 / 151.9 ms | 117 / 479 | 25.1 % / 17.8 % | −69 → −48 dBm |
 | 2026-10-24 18:43:35 | FF14 batched | `latency-20261024-184335{,-echo,-samples}.csv`, `.json` | 40.5 / 102.5 / 125.3 ms | 121 / 479 | 21.0 % / 15.2 % | −86 → −81 dBm |
-| 2026-10-24 20:11:49 | none | `latency-20261024-201149{,-echo,-samples}.csv`, `.json` | 61.6 / 106.4 / 151.8 ms | 438 / 479 | ,  (no stream) | −80 → −80 dBm |
-| 2026-10-24 20:14:40 | FF11 raw | `latency-20261024-201440{,-echo,-samples}.csv`, `.json` | 44.8 / 119.9 / 150.0 ms | 191 / 479 | ,  (raw frames) | −84 → −86 dBm |
+| 2026-10-24 20:11:49 | none | `latency-20261024-201149{,-echo,-samples}.csv`, `.json` | 61.6 / 106.4 / 151.8 ms | 438 / 479 |, (no stream) | −80 → −80 dBm |
+| 2026-10-24 20:14:40 | FF11 raw | `latency-20261024-201440{,-echo,-samples}.csv`, `.json` | 44.8 / 119.9 / 150.0 ms | 191 / 479 |, (raw frames) | −84 → −86 dBm |
 | 2026-10-24 20:16:56 | FF12 decoded | `latency-20261024-201656{,-echo,-samples}.csv`, `.json` | 44.3 / 124.7 / 195.3 ms | 194 / 479 | 30.7 % / 17.6 % | −88 → −87 dBm |
 
 The firmware/app pair is in the last column of the table in the companion
