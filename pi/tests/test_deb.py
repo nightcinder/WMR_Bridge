@@ -75,6 +75,7 @@ class DebPackagingTests(unittest.TestCase):
                 "./opt/wmr-bridge/pi/networkmanager/99-wmr-bridge-powersave.conf",
                 "./opt/wmr-bridge/pi/install.sh",
                 "./opt/wmr-bridge/samples/controller_frames.txt",
+                "./usr/bin/wmr-bridge",
                 "./etc/systemd/system/wmr-bridge.service",
                 "./etc/udev/rules.d/99-wmr-bridge.rules",
                 "./etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf",
@@ -94,6 +95,33 @@ class DebPackagingTests(unittest.TestCase):
             )
             for script in ("postinst", "prerm", "postrm"):
                 self.assertTrue(os.access(control_dir / script, os.X_OK), script)
+
+    def test_installed_wrapper_prints_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "dist"
+            proc = subprocess.run(
+                [str(BUILD), "--out", str(out)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            root = Path(tmp) / "root"
+            subprocess.run(
+                ["dpkg-deb", "-x", str(out / f"wmr-bridge_{VERSION}_all.deb"), str(root)],
+                check=True,
+            )
+            wrapper = root / "usr" / "bin" / "wmr-bridge"
+            self.assertTrue(os.access(wrapper, os.X_OK))
+            run = subprocess.run(
+                [str(wrapper), "--version"],
+                env={**os.environ, "WMR_BRIDGE_PREFIX": str(root / "opt" / "wmr-bridge")},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(run.returncode, 0, msg=run.stderr)
+            self.assertIn(VERSION, run.stdout)
 
     def test_shipped_installer_runs_from_the_installed_tree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

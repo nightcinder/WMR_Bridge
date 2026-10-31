@@ -9,7 +9,7 @@
 #   curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 #
 # Pin a release or a mirror (also used by the host tests):
-#   WMR_BRIDGE_VERSION=0.2.2 WMR_BRIDGE_RELEASE_BASE_URL=https://example/pkg sh install.sh
+#   WMR_BRIDGE_VERSION=0.2.3 WMR_BRIDGE_RELEASE_BASE_URL=https://example/pkg sh install.sh
 #
 # Test / packaging staging mode (no root required when WMR_SKIP_PRIVILEGED=1):
 #   DESTDIR=/tmp/stage WMR_SKIP_PRIVILEGED=1 ./pi/install.sh
@@ -113,6 +113,7 @@ fi
 
 DESTDIR="${DESTDIR:-}"
 PREFIX="${PREFIX:-/opt/wmr-bridge}"
+BINDIR="${BINDIR:-/usr/bin}"
 ETC_DIR="${ETC_DIR:-/etc/wmr-bridge}"
 UDEV_DIR="${UDEV_DIR:-/etc/udev/rules.d}"
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
@@ -127,6 +128,7 @@ fi
 
 DEST_PREFIX="${DESTDIR}${PREFIX}"
 DEST_PI="${DEST_PREFIX}/pi"
+DEST_BINDIR="${DESTDIR}${BINDIR}"
 DEST_ETC="${DESTDIR}${ETC_DIR}"
 DEST_UDEV="${DESTDIR}${UDEV_DIR}"
 DEST_SYSTEMD="${DESTDIR}${SYSTEMD_DIR}"
@@ -146,6 +148,7 @@ mkdir -p \
     "${DEST_PI}/systemd" \
     "${DEST_PI}/udev" \
     "${DEST_PI}/networkmanager" \
+    "${DEST_BINDIR}" \
     "${DEST_ETC}" \
     "${DEST_UDEV}" \
     "${DEST_SYSTEMD}" \
@@ -162,6 +165,7 @@ install -m 0755 "${SCRIPT_DIR}/tools/wifi_probe.py" "${DEST_PI}/tools/wifi_probe
 install -m 0644 "${SCRIPT_DIR}/networkmanager/99-wmr-bridge-powersave.conf" \
     "${DEST_PI}/networkmanager/99-wmr-bridge-powersave.conf"
 install -m 0755 "${SCRIPT_DIR}/install.sh" "${DEST_PI}/install.sh"
+install -m 0644 "${SCRIPT_DIR}/wmr-bridge.in" "${DEST_PI}/wmr-bridge.in"
 install -m 0644 "${SCRIPT_DIR}/pyproject.toml" "${DEST_PI}/pyproject.toml"
 install -m 0644 "${SCRIPT_DIR}/README.md" "${DEST_PI}/README.md"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.service" "${DEST_PI}/systemd/wmr-bridge.service"
@@ -186,6 +190,11 @@ install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.service" "${DEST_SYSTEMD}/wmr-
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.env.example" "${DEST_ETC}/wmr-bridge.env.example"
 install -m 0644 "${SCRIPT_DIR}/networkmanager/99-wmr-bridge-powersave.conf" \
     "${DEST_NETWORKMANAGER}/99-wmr-bridge-powersave.conf"
+
+# Put the daemon on PATH: wmr-bridge --version/--list work without cd.
+sed "s|@PREFIX@|${PREFIX}|g" "${SCRIPT_DIR}/wmr-bridge.in" \
+    > "${DEST_BINDIR}/wmr-bridge"
+chmod 0755 "${DEST_BINDIR}/wmr-bridge"
 
 if [ ! -f "${DEST_ETC}/wmr-bridge.env" ]; then
     install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.env.example" "${DEST_ETC}/wmr-bridge.env"

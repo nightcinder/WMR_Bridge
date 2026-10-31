@@ -79,6 +79,7 @@ install -d -m 0755 \
     "${OPT}/docs" \
     "${OPT}/samples" \
     "${ETC}" \
+    "${ROOT}/usr/bin" \
     "${ROOT}/etc/systemd/system" \
     "${ROOT}/etc/udev/rules.d" \
     "${ROOT}/etc/NetworkManager/conf.d" \
@@ -94,6 +95,7 @@ install -m 0755 "${SCRIPT_DIR}/tools/wifi_probe.py" "${OPT}/pi/tools/wifi_probe.
 install -m 0644 "${SCRIPT_DIR}/networkmanager/99-wmr-bridge-powersave.conf" \
     "${OPT}/pi/networkmanager/99-wmr-bridge-powersave.conf"
 install -m 0755 "${SCRIPT_DIR}/install.sh" "${OPT}/pi/install.sh"
+install -m 0644 "${SCRIPT_DIR}/wmr-bridge.in" "${OPT}/pi/wmr-bridge.in"
 install -m 0644 "${SCRIPT_DIR}/pyproject.toml" "${OPT}/pi/pyproject.toml"
 install -m 0644 "${SCRIPT_DIR}/README.md" "${OPT}/pi/README.md"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.service" "${OPT}/pi/systemd/wmr-bridge.service"
@@ -101,6 +103,12 @@ install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.env.example" "${OPT}/pi/system
 install -m 0644 "${SCRIPT_DIR}/udev/99-wmr-bridge.rules" "${OPT}/pi/udev/99-wmr-bridge.rules"
 install -m 0644 "${REPO_ROOT}/docs/PI_BRIDGE.md" "${OPT}/docs/PI_BRIDGE.md"
 install -m 0644 "${REPO_ROOT}/samples/controller_frames.txt" "${OPT}/samples/controller_frames.txt"
+
+# /usr/bin/wmr-bridge runs `python3 -m wmr_bridge` from the installed tree so
+# testers do not need to cd into /opt/wmr-bridge/pi first.
+sed "s|@PREFIX@|/opt/wmr-bridge|g" "${SCRIPT_DIR}/wmr-bridge.in" \
+    > "${ROOT}/usr/bin/wmr-bridge"
+chmod 0755 "${ROOT}/usr/bin/wmr-bridge"
 
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.service" "${ROOT}/etc/systemd/system/wmr-bridge.service"
 install -m 0644 "${SCRIPT_DIR}/udev/99-wmr-bridge.rules" "${ROOT}/etc/udev/rules.d/99-wmr-bridge.rules"

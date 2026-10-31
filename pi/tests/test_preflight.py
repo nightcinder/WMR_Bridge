@@ -41,6 +41,7 @@ class PreflightTests(unittest.TestCase):
             prefix = f"wmr-bridge-{VERSION}/"
             for member in (
                 "pi/install.sh",
+                "pi/wmr-bridge.in",
                 "pi/wmr_bridge/__main__.py",
                 "pi/tools/wifi_probe.py",
                 "pi/systemd/wmr-bridge.service",

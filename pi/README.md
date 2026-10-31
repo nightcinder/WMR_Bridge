@@ -22,7 +22,7 @@ sheet is [`docs/runs/sheets/pi-bridge.md`](../docs/runs/sheets/pi-bridge.md).
 
 ```bash
 cd pi
-python3 -m unittest discover -s tests -v          # 116 host tests
+python3 -m unittest discover -s tests -v          # 123 host tests
 python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 
 # in a second terminal
@@ -56,6 +56,11 @@ sudo apt install ./wmr-bridge_<version>_all.deb   # enables and starts the unit
 # or: extract the tarball and run sudo wmr-bridge-<version>/pi/install.sh
 ```
 
+Both install methods put `/usr/bin/wmr-bridge` on `PATH`. It runs
+`python3 -m wmr_bridge` from `/opt/wmr-bridge`, so
+`wmr-bridge --version`, `wmr-bridge --list` and
+`wmr-bridge --replay …` work without a `cd` or `PYTHONPATH`.
+
 The `.deb` is `Architecture: all`, keeps `wmr-bridge.env` and the generated
 token across upgrades, and creates the `wmr` user and `/etc/wmr-bridge/token` in
 `postinst`. Removing the package stops and disables the unit but keeps the
@@ -81,11 +86,10 @@ bluetoothctl trust "AA:BB:CC:DD:EE:FF"
 bluetoothctl connect "AA:BB:CC:DD:EE:FF"
 
 sudo usermod -aG input "$USER"   # or run the bridge as a user in group input
-cd pi
-python3 -m wmr_bridge --list     # confirm both controllers are visible
+wmr-bridge --list                # confirm both controllers are visible
 
 # Pi on the LAN, phone connecting to it: a token is required.
-python3 -m wmr_bridge --bind 0.0.0.0 --token-file /etc/wmr-bridge/token
+wmr-bridge --bind 0.0.0.0 --token-file /etc/wmr-bridge/token
 ```
 
 Then point the companion app's Wi-Fi transport (or `tools/wifi_probe.py`) at
@@ -112,6 +116,7 @@ the probe do not send one.
 | `tools/verify_package.sh` | checks package layout, version and checksum |
 | `tools/dry_run.sh` | .deb install/reinstall/remove + replay dry run, no hardware |
 | `install.sh` | unattended installer; also works piped by fetching the release tarball |
+| `wmr-bridge.in` | `/usr/bin/wmr-bridge` launcher template installed by the `.deb` and `install.sh` |
 | `systemd/wmr-bridge.service` | unit file for an unattended bridge (`WMR_BRIDGE_ARGS` via `/etc/wmr-bridge/wmr-bridge.env`) |
 | `udev/99-wmr-bridge.rules` | udev rule granting `input` group access to `/dev/hidraw*` |
 | `networkmanager/99-wmr-bridge-powersave.conf` | persistent Wi-Fi power-save off (NetworkManager drop-in) |
@@ -119,7 +124,7 @@ the probe do not send one.
 
 ## Version
 
-Current package version: `0.2.2` (`wmr_bridge.__version__`).
+Current package version: `0.2.3` (`wmr_bridge.__version__`).
 
 ## Logs
 
