@@ -36,10 +36,10 @@ def build_bundle(destination, drop=(), edit=None, rename=None):
             if any(rel == name or rel.startswith(name.rstrip("/") + "/")
                    for name in drop):
                 continue
-            rel = (rename or {}).get(rel, rel)
             data = path.read_bytes()
             if edit is not None:
                 data = edit(rel, data)
+            rel = (rename or {}).get(rel, rel)
             archive.writestr(rel, data)
     return destination
 
@@ -195,8 +195,13 @@ class FailingBundleTest(unittest.TestCase):
                 return json.dumps(document).encode()
             return set_pose_span(29)(rel, data)
 
-        code, out, _err = run_main(
-            self.bundle(edit=occlusion, rename={old: new}))
+        bundle = self.bundle(edit=occlusion, rename={old: new})
+        with zipfile.ZipFile(bundle) as archive:
+            samples = json.loads(archive.read(new))["samples"]
+        span_ns = samples[-1]["host_ns"] - samples[0]["host_ns"]
+        self.assertLess(span_ns, 30_000_000_000)
+
+        code, out, _err = run_main(bundle)
         self.assertEqual(code, 0)
         self.assertNotIn("shorter than 30 s", out)
         self.assertIn("Problems: none", out)

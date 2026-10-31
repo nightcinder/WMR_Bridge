@@ -123,7 +123,7 @@ static inline void hci_event_connection_request_get_bd_addr(const uint8_t *packe
 }
 
 static inline uint8_t hci_event_connection_request_get_link_type(const uint8_t *packet){
-    return packet[8];
+    return packet[11];
 }
 
 static inline hci_con_handle_t hci_event_disconnection_complete_get_connection_handle(const uint8_t *packet){

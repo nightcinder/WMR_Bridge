@@ -15,10 +15,16 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$root"
 CC=${CC:-cc}
 CFLAGS=${CFLAGS:--O2}
-OUT_DIR=${OUT_DIR:-$(mktemp -d)}
+created_out_dir=0
+if [ -z "${OUT_DIR:-}" ]; then
+    OUT_DIR=$(mktemp -d)
+    created_out_dir=1
+fi
 mkdir -p "$OUT_DIR"
 cleanup() {
-    [ "${KEEP_OUT_DIR:-0}" = 1 ] || rm -rf "$OUT_DIR"
+    if [ "$created_out_dir" = 1 ] && [ "${KEEP_OUT_DIR:-0}" != 1 ]; then
+        rm -rf "$OUT_DIR"
+    fi
 }
 trap cleanup EXIT INT TERM
 
