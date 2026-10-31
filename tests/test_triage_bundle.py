@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import triage_bundle  # noqa: E402
 
 
-def build_bundle(destination, drop=(), edit=None, rename=None):
+def build_bundle(destination, drop=(), edit=None, rename=None, extra=None):
     """Zip the fixture, optionally dropping paths or rewriting a file."""
     with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(FIXTURE.rglob("*")):
@@ -40,6 +40,8 @@ def build_bundle(destination, drop=(), edit=None, rename=None):
             if edit is not None:
                 data = edit(rel, data)
             rel = (rename or {}).get(rel, rel)
+            archive.writestr(rel, data)
+        for rel, data in (extra or {}).items():
             archive.writestr(rel, data)
     return destination
 
@@ -205,6 +207,61 @@ class FailingBundleTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertNotIn("shorter than 30 s", out)
         self.assertIn("Problems: none", out)
+
+
+class MultiRunPoseTest(unittest.TestCase):
+    """Run 1 keeps the short name; runs 2..4 append a `_runN` suffix."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="wmr-triage-test-")
+        self.addCleanup(self._tmp.cleanup)
+        self.zip_path = os.path.join(self._tmp.name, "wmr-ext-20261030.zip")
+
+    def bundle(self, runs):
+        source_rel = "pose_capture_androidXr_left_still.json"
+        data = (FIXTURE / source_rel).read_bytes()
+        extra = {}
+        captures = []
+        for run in runs:
+            name = "pose_capture_androidXr_left_still%s.json" % (
+                "_run%d" % run if run > 1 else "")
+            if run > 1:
+                extra[name] = data
+            captures.append({
+                "file": name,
+                "runtime": "androidXr",
+                "hand": "left",
+                "segment": "still",
+                "run": run,
+            })
+
+        def edit(rel, content):
+            if rel != "diagnostics.json":
+                return content
+            document = json.loads(content)
+            document["pose_captures"] = captures
+            return json.dumps(document).encode()
+
+        return build_bundle(self.zip_path, edit=edit, extra=extra)
+
+    def test_runs_two_to_four_are_not_filename_mismatches(self):
+        code, out, err = run_main(self.bundle((1, 2, 3, 4)))
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("does not match runtime/hand/segment", out)
+        for run in (2, 3, 4):
+            self.assertIn(
+                "pose_capture_androidXr_left_still_run%d.json  "
+                "androidXr/left/still" % run, out)
+        self.assertIn("Problems: none", out)
+
+    def test_pose_segment_strips_run_suffix(self):
+        self.assertEqual(
+            triage_bundle._pose_segment(
+                "pose_capture_viture_left_slow_pan_run2.json"), "slow_pan")
+        self.assertEqual(
+            triage_bundle._pose_segment(
+                "pose_capture_xreal_right_occlusion_run4.json"), "occlusion")
+        self.assertIsNone(triage_bundle._pose_segment("not-a-pose-capture.txt"))
 
 
 if __name__ == "__main__":
