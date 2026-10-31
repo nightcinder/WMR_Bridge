@@ -49,15 +49,15 @@ python3 tools/firmware/build.py \
 ```
 
 `--idf-export` sources the script in bash and re-runs the build under the
-ESP-IDF Python environment. It is POSIX-only; on Windows, dot-source the
+ESP-IDF Python environment. It is POSIX-only. On Windows, dot-source the
 PowerShell profile as above. To build without flashing, omit `--flash`.
 
 ### Options
 
 | Option | Meaning |
 | --- | --- |
-| `--version VERSION` | Version written to the manifest, `build-info*.json` and the firmware (FF16/console `v`). At most 31 bytes; a longer value is refused. Default: `git describe --tags --always --dirty`, or `GITHUB_REF_NAME` when set to a `v*` tag. |
-| `--variant both\|left\|right` | Which hands the image serves. `both` (default) is today's build. `left` / `right` are compile-time single-hand images that advertise `WMR Bridge L` / `WMR Bridge R`; see [Two bridges](#two-bridges-one-hand-each). |
+| `--version VERSION` | Version written to the manifest, `build-info*.json` and the firmware (FF16/console `v`). At most 31 bytes. A longer value is refused. Default: `git describe --tags --always --dirty`, or `GITHUB_REF_NAME` when set to a `v*` tag. |
+| `--variant both\|left\|right` | Which hands the image serves. `both` (default) is today's build. `left` / `right` are compile-time single-hand images that advertise `WMR Bridge L` / `WMR Bridge R`. See [Two bridges](#two-bridges-one-hand-each). |
 | `--out DIR` | Artifact directory. Default `dist/`. |
 | `--work DIR` | Managed BTstack/build directory. Default `.fw-build/`. |
 | `--flash PORT` | Flash `COM5`, `/dev/ttyUSB0`, ... after a successful build. |
@@ -85,7 +85,7 @@ The `both` build keeps those exact names. `--variant left` and `--variant right`
 insert the variant before the role and in the manifest/build-info names:
 `wmr-bridge-left-factory.bin`, `manifest-left.json`, `build-info-left.json`,
 and likewise `-right`. That lets all three variants sit in one `dist/` without
-overwriting each other; the browser page uses the three manifests.
+overwriting each other. The browser page uses the three manifests.
 
 To use the installer locally, serve `dist/` over HTTP (Web Serial requires
 HTTPS or `localhost`):
@@ -118,7 +118,7 @@ python3 tools/firmware/build.py --variant right --idf-export ~/esp/esp-idf/expor
 ```
 
 The flags are compile-time defines only. The script appends them to
-`EXTRA_CFLAGS`; it never edits `src/wmr_config.h`:
+`EXTRA_CFLAGS`. It never edits `src/wmr_config.h`:
 
 | Variant | `WMR_CFG_BRIDGE_HANDS` | `WMR_CFG_BLE_NAME` | Advertised name |
 | --- | --- | --- | --- |
@@ -126,7 +126,7 @@ The flags are compile-time defines only. The script appends them to
 | `left` | 1 | `WMR_CFG_BLE_NAME_LEFT` | `WMR Bridge L` |
 | `right` | 2 | `WMR_CFG_BLE_NAME_RIGHT` | `WMR Bridge R` |
 
-The `WMR Bridge` prefix is load-bearing: clients find the bridge by prefix, so
+The `WMR Bridge` prefix is load-bearing. Clients find the bridge by prefix, so
 the single-hand names keep it.
 
 Each variant uses its own build directory (`build-wmr-bridge`,
@@ -139,14 +139,14 @@ today's artifact names.
 
 The same command works with a single board: `--variant left` flashes a board
 that serves only LEFT. That is the cheap route for the one-board validation
-sitting in plan M12.3' — no hand-edited rebuild and no second Classic ESP32.
+sitting in plan M12.3' ,  no hand-edited rebuild and no second Classic ESP32.
 Use `--variant right` if you want to validate the RIGHT path instead. The
 boot banner and `STREAM` line show which image is running
 (`WMR Bridge L`, `bridge_hands=1`).
 
 ### Build all three images for the browser installer
 
-Build each variant into the same output directory; order does not matter:
+Build each variant into the same output directory. Order does not matter:
 
 ```bash
 python3 tools/firmware/build.py --variant both  --idf-export ~/esp/esp-idf/export.sh --out dist
@@ -161,55 +161,54 @@ marks the others as not included in that build.
 
 ### PSVR2 support
 
-PSVR2 Sense controller support is **compiled into every image and searched for by
-default**, alongside WMR. `WMR_CFG_MAX_FRAME` is 80 bytes for every variant, which is the
-smallest value that carries both the 46-byte WMR report and the 79-byte PSVR2 report.
-There is nothing to enable at build time; the two hands search the same inquiry for both
-naming schemes.
+PSVR2 Sense controller support is compiled into every image and searched for by
+default, alongside WMR. `WMR_CFG_MAX_FRAME` is 80 bytes for every variant. That
+is the smallest value that carries both the 46-byte WMR report and the 79-byte
+PSVR2 report. There is nothing to enable at build time. The two hands search
+the same inquiry for both naming schemes.
 
-See [docs/PSVR2.md](PSVR2.md) for the implemented path, open hardware questions, and the
-remaining `WMR_CFG_PSVR2_WAKE` diagnostic switch.
+See [docs/PSVR2.md](PSVR2.md) for the implemented path, open hardware questions,
+and the remaining `WMR_CFG_PSVR2_WAKE` diagnostic switch.
 
 ## Browser flasher (end users)
 
 The flasher is a static page using ESP Web Tools. The user connects the board
-over USB, clicks the install button for the image they want (**Both hands**,
-**LEFT** or **RIGHT**), and picks the serial port; the browser writes that
-variant's merged image. There is no ESP-IDF, Arduino IDE or Python install.
+over USB, clicks the install button for the image they want (Both hands, LEFT or
+RIGHT), and picks the serial port. The browser writes that variant's merged
+image. There is no ESP-IDF, Arduino IDE or Python install.
 
 The source page lives in `docs/flasher/index.html` and is copied into `dist/`
 by the build script. It loads `manifest.json` / `manifest-left.json` /
 `manifest-right.json` plus the matching `wmr-bridge*-factory.bin` files from the
-same directory; `build-info*.json` is optional and only fills in the version
+same directory. `build-info*.json` is optional and only fills in the version
 labels.
 
 ### Hosting
 
-The installer is live at **<https://nightcinder.github.io/WMR_Bridge/>**,
-serving the latest tagged release's images (all three variants); the 0.3.0
-images appear there once `v0.3.0` is tagged.
+The installer is live at <https://nightcinder.github.io/WMR_Bridge/>, serving
+the latest tagged release's images (all three variants). The 0.3.0 images
+appear there once `v0.3.0` is tagged.
 
 `.github/workflows/firmware.yml` deploys `dist/` to GitHub Pages on a `v*`
 tag. This keeps the manifest and the images same-origin, which the browser
 requires. GitHub release assets do not send CORS headers, so the flasher
 cannot load images straight from a release. A manual dispatch only builds and
-uploads the workflow artifact; it never overwrites the live installer.
+uploads the workflow artifact. It never overwrites the live installer.
 
 Two repository settings have to be right, and both were only found by tagging:
 
-- **Settings -> Pages -> Build and deployment -> Source: GitHub Actions.** A
-  site left on the legacy branch source is not deployable by
-  `actions/deploy-pages`; `actions/configure-pages` only sets the build type
+- Settings -> Pages -> Build and deployment -> Source: GitHub Actions. A site
+  left on the legacy branch source is not deployable by
+  `actions/deploy-pages`. `actions/configure-pages` only sets the build type
   when it creates the site, so an already-enabled legacy site stays legacy.
-- **Settings -> Environments -> `github-pages` -> Deployment branches and
-  tags.** GitHub seeds this with the default branch only, so a run triggered by
-  a tag is refused before the deploy step. A `v*` entry of type *tag* is
-  required.
+- Settings -> Environments -> `github-pages` -> Deployment branches and tags.
+  GitHub seeds this with the default branch only, so a run triggered by a tag
+  is refused before the deploy step. A `v*` entry of type tag is required.
 
 If either is wrong the Pages job fails, but the release job still publishes the
 images.
 
-The page is intentionally kept out of the normal docs build: it is only useful
+The page is intentionally kept out of the normal docs build. It is only useful
 when a matching manifest and images are next to it.
 
 ### Limits
@@ -219,18 +218,18 @@ when a matching manifest and images are next to it.
 - Supported OS and CPU architectures:
   - Windows: x64, x86, and ARM64 (Windows on ARM) with appropriate USB-to-UART bridge drivers (CP210x, CH340, FTDI).
   - macOS: Intel (x64) and Apple Silicon (ARM64 / M1/M2/M3/M4+).
-  - Linux: x64 and ARM/ARM64 (Chromium builds) provided the user has permissions to access the serial device (e.g. `dialout` or `uucp` group membership / udev rules).
+  - Linux: x64 and ARM/ARM64 (Chromium builds) provided the user has permissions to access the serial device (for example `dialout` or `uucp` group membership / udev rules).
   - ChromeOS: Supported.
   - Mobile (Android / iOS): Not supported (Web Serial is not available on mobile browsers).
-- Classic ESP32 with at least 2 MB flash. ESP32-S3 has no Classic Bluetooth,
-  so it cannot run this firmware.
+- Classic ESP32 with at least 2 MB flash. ESP32-S3 has no Classic Bluetooth, so
+  it cannot run this firmware.
 - The manifest installs one merged image at offset 0 and asks the installer to
   erase first. The partition table is ESP-IDF's
-  `Single factory app, no OTA (large)` layout (application at `0x10000`); there
+  `Single factory app, no OTA (large)` layout (application at `0x10000`). There
   is no OTA partition, so updates are always over USB.
-- The build is not signed. There is no secure boot or flash encryption
-  (see [SECURITY.md](SECURITY.md)). Only flash images built by this
-  repository's workflow.
+- The build is not signed. There is no secure boot or flash encryption (see
+  [SECURITY.md](SECURITY.md)). Only flash images built by this repository's
+  workflow.
 
 ### Size budgets
 
@@ -246,11 +245,12 @@ packaged `.bin`, which has to fit the stock 1500 KiB factory partition. A build
 over either budget fails before its images are packaged, so a change that
 quietly eats the headroom cannot reach a flashing session.
 
-The limits live in `tools/firmware/size-budget.json`, one DRAM entry per variant
-and one shared image limit. When a change legitimately needs more, raise the
-number in that file in the same commit and explain why in the pull request; do
-not raise it just to make a failing build pass. `tests/test_firmware_size.py`
-proves the checker rejects a simulated 1 KiB overrun.
+The limits live in `tools/firmware/size-budget.json`, one DRAM entry per
+variant and one shared image limit. When a change legitimately needs more,
+raise the number in that file in the same commit and explain why in the pull
+request. Do not raise it just to make a failing build pass.
+`tests/test_firmware_size.py` proves the checker rejects a simulated 1 KiB
+overrun.
 
 ## Reproducibility
 
@@ -262,11 +262,12 @@ The framework pins the two moving pieces that caused most setup failures:
 | ESP-IDF | v6.1 everywhere: the `espressif/idf:v6.1` container for pull-request builds, a native v6.1 clone on the `liesa` runner for releases; v6.1 locally, as in [BUILD_WINDOWS.md](BUILD_WINDOWS.md) |
 | Partition table | stock BTstack `port/esp32/sdkconfig.defaults`: `CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y` |
 
-The same source, BTstack commit and ESP-IDF v6.1 are used for every release, whether it runs in the container or natively.
-The build is not claimed to be bit-for-bit reproducible: ESP-IDF embeds
-build-time metadata in the application image. A local Windows build can also
-differ byte-for-byte from the Linux CI image; the release artifact is the CI
-one, and `build-info.json` records exactly what went into it.
+The same source, BTstack commit and ESP-IDF v6.1 are used for every release,
+whether it runs in the container or natively. The build is not claimed to be
+bit-for-bit reproducible. ESP-IDF embeds build-time metadata in the application
+image. A local Windows build can also differ byte-for-byte from the Linux CI
+image. The release artifact is the CI one, and `build-info.json` records
+exactly what went into it.
 
 The source copied into BTstack is the working tree, not a git archive, so a
 developer can build uncommitted changes. The `commit` and `dirty` fields in
@@ -276,31 +277,30 @@ developer can build uncommitted changes. The `commit` and `dirty` fields in
 
 `.github/workflows/firmware.yml`:
 
-- **Pull requests** build the firmware in the `espressif/idf:v6.1` container on a
+- Pull requests build the firmware in the `espressif/idf:v6.1` container on a
   GitHub-hosted runner and upload `dist/` as a workflow artifact.
-- **Pushes to `main`**, tags and manual dispatch build natively on the
-  `liesa` runner, as described below. This catches integration breakage (a source file
-  missing from `integration/main-CMakeLists.txt`, for instance) without
-  touching a board.
-- **Tags `v*`** additionally attach every file in `dist/` to the GitHub
-  release and deploy `dist/` to GitHub Pages, which updates the browser
-  flasher. A tag with a suffix (`v0.1.0-rc1`) is published as a prerelease and
-  is not offered as "Latest"; a plain `v0.1.0` is. The tag name is also the
-  version the firmware reports over FF16, so `v0.1.0-rc1` boots as
-  `0.1.0-rc1`.
-- **Manual dispatch** builds and uploads the workflow artifact but does not
-  deploy to Pages. Serve `dist/` locally to test the installer before tagging.
+- Pushes to `main`, tags and manual dispatch build natively on the `liesa`
+  runner, as described below. This catches integration breakage (a source file
+  missing from `integration/main-CMakeLists.txt`, for instance) without touching
+  a board.
+- Tags `v*` additionally attach every file in `dist/` to the GitHub release and
+  deploy `dist/` to GitHub Pages, which updates the browser flasher. A tag with
+  a suffix (`v0.1.0-rc1`) is published as a prerelease and is not offered as
+  "Latest". A plain `v0.1.0` is. The tag name is also the version the firmware
+  reports over FF16, so `v0.1.0-rc1` boots as `0.1.0-rc1`.
+- Manual dispatch builds and uploads the workflow artifact but does not deploy
+  to Pages. Serve `dist/` locally to test the installer before tagging.
 
 Everything except pull requests builds on the self-hosted `liesa` runner
-(`[self-hosted, liesa, esp-idf]`), natively: the runner has no Docker socket, so
-the job clones ESP-IDF `v6.1` into `/opt/hostedtoolcache/esp-idf/v6.1` and
+(`[self-hosted, liesa, esp-idf]`), natively. The runner has no Docker socket,
+so the job clones ESP-IDF `v6.1` into `/opt/hostedtoolcache/esp-idf/v6.1` and
 installs its tools into `$HOME/.espressif` on the first run, and reuses both on
 later runs. If that checkout is ever left incomplete (a cancelled run can cut
 the clone short), the job re-clones it instead of building a broken tree. Pull
-requests never run on that host: their `Build firmware` check builds in the
-`espressif/idf:v6.1` container on a GitHub-hosted runner. No
-secrets are needed either way. `actions/checkout` uses full history so
-`git describe` can produce a version.
+requests never run on that host. Their `Build firmware` check builds in the
+`espressif/idf:v6.1` container on a GitHub-hosted runner. No secrets are needed
+either way. `actions/checkout` uses full history so `git describe` can produce a
+version.
 
 To publish a release, tag the intended `main` commit (for example, the `v0.2.4`
 release was published from `41a9e5f`; `0.3.0` is the current release):
@@ -311,26 +311,26 @@ git push origin vX.Y.Z
 ```
 
 The release job writes `manifest.json` (and the single-hand
-`manifest-left.json` / `manifest-right.json`) with `"version": "X.Y.Z"`
-(the leading `v` is stripped) and `build-info*.json` with the variant, flag
-values, source and toolchain commits. The same version is passed to
-ESP-IDF as `PROJECT_VER`, so the running firmware reports it on the console
-(`v`) and over the read-only FF16 characteristic; a client can compare it with
-the manifest without a serial log. CI builds all three variants into one
-`dist/` so the browser installer can offer them. Packaged releases are
-CI-built and hardware-unverified.
+`manifest-left.json` / `manifest-right.json`) with `"version": "X.Y.Z"` (the
+leading `v` is stripped) and `build-info*.json` with the variant, flag values,
+source and toolchain commits. The same version is passed to ESP-IDF as
+`PROJECT_VER`, so the running firmware reports it on the console (`v`) and over
+the read-only FF16 characteristic. A client can compare it with the manifest
+without a serial log. CI builds all three variants into one `dist/` so the
+browser installer can offer them. Packaged releases are CI-built and
+hardware-unverified.
 
 ## Tests
 
-`tests/test_firmware_package.py` covers the packaging logic without a
-toolchain: parsing `flasher_args.json`, ordering flash offsets, the
-`idf.py merge-bin` invocation, the manifest shape, version normalisation, the
-`PROJECT_VER` build argument, the repo-to-BTstack copy layout, the flasher page
-contract and JSON round trips. It also covers the variants: `both` keeps every
-original name and manifest field, `left`/`right` carry the variant in artifact,
-manifest and build-info names, the manifest label names the hand, `build-info`
-records the variant and flag values, and the build environment/build directory
-are per-variant. The host-tests workflow runs it on every push and pull request.
+`tests/test_firmware_package.py` covers the packaging logic without a toolchain:
+parsing `flasher_args.json`, ordering flash offsets, the `idf.py merge-bin`
+invocation, the manifest shape, version normalisation, the `PROJECT_VER` build
+argument, the repo-to-BTstack copy layout, the flasher page contract and JSON
+round trips. It also covers the variants: `both` keeps every original name and
+manifest field, `left`/`right` carry the variant in artifact, manifest and
+build-info names, the manifest label names the hand, `build-info` records the
+variant and flag values, and the build environment/build directory are
+per-variant. The host-tests workflow runs it on every push and pull request.
 
 `tests/test_firmware_size.py` covers the size budget without a toolchain: a
 build inside both limits passes, a simulated 1 KiB overrun of the DRAM budget
@@ -338,20 +338,20 @@ or of the image budget fails with the amount over, both violations are reported
 together, and a malformed report or budget is rejected. The checked-in budget is
 also asserted to cover all three variants.
 
-It does **not** prove that the firmware builds or that a board boots. Those
-still need the firmware CI job and a hardware report.
+It does not prove that the firmware builds or that a board boots. Those still
+need the firmware CI job and a hardware report.
 
 ## Troubleshooting
 
 | Symptom | Cause / fix |
 | --- | --- |
 | `idf.py is not on PATH` | Load ESP-IDF first (Windows profile script, or `--idf-export`). |
-| `Failed to connect` while flashing | Hold **BOOT** while it retries; use a data cable; close any serial monitor using the port. |
-| `No serial data received` | Same as above; check the port name. |
+| `Failed to connect` while flashing | Hold BOOT while it retries. Use a data cable. Close any serial monitor using the port. |
+| `No serial data received` | Same as above. Check the port name. |
 | Browser says Web Serial is unsupported | Use Chrome/Edge on desktop, over HTTPS or `localhost`. |
-| Installer cannot load the manifest | Serve the folder over HTTP; do not open `index.html` from disk. |
-| Link fails with `undefined wmr_*` symbols | A new source file is missing from `integration/main-CMakeLists.txt`. Add it there; the build script re-copies the file on every run. |
-| Pages job fails | Enable GitHub Pages with **Source: GitHub Actions** (Settings -> Pages). |
+| Installer cannot load the manifest | Serve the folder over HTTP. Do not open `index.html` from disk. |
+| Link fails with `undefined wmr_*` symbols | A new source file is missing from `integration/main-CMakeLists.txt`. Add it there. The build script re-copies the file on every run. |
+| Pages job fails | Enable GitHub Pages with Source: GitHub Actions (Settings -> Pages). |
 
 ## Next steps
 
@@ -360,5 +360,4 @@ The framework is deliberately the foundation, not the finished product:
 - the app reading FF16 and warning when it differs from the release it expects;
 - optional signing/verification of release images before wider distribution;
 - a small CLI (`esptool`) downloader for users who cannot use Web Serial;
-- deciding whether to support an ESP32-S3 plus external Classic dongle
-  (issue #20 mentions it; the S3 alone cannot work).
+- deciding whether to support an ESP32-S3 plus external Classic dongle (issue #20 mentions it; the S3 alone cannot work).

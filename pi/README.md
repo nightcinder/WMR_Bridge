@@ -1,22 +1,22 @@
 # WMR Bridge on Linux / Raspberry Pi (Wi-Fi transport)
 
-This directory is the **second supported first-class target** (ESP32-over-BLE is
-the default): a host-side replacement for the ESP32 for any Linux machine with
-Bluetooth Classic and a 5 GHz Wi-Fi adapter. A Raspberry Pi 4 or 5 is the
-reference target (dual-band Wi-Fi and BT 5.0); a Pi Zero 2 W is **not** suitable
-because its Wi-Fi is 2.4 GHz only, which shares the radio band with Bluetooth.
+This directory is the second supported first-class target. ESP32-over-BLE is the
+default. The host-side replacement runs on any Linux machine with Bluetooth
+Classic and a 5 GHz Wi-Fi adapter. A Raspberry Pi 4 or 5 is the reference target
+(dual-band Wi-Fi and BT 5.0). A Pi Zero 2 W is not suitable, because its Wi-Fi
+is 2.4 GHz only. That band shares the radio with Bluetooth.
 
 The host bridge:
 
-- uses BlueZ as the Classic Bluetooth HID **host** (controllers pair with the Pi
+- uses BlueZ as the Classic Bluetooth HID host (controllers pair with the Pi
   instead of the ESP32);
-- decodes reports and serves the **same FF11 raw, FF12 decoded and FF14 batched
-  payloads** as the firmware;
+- decodes reports and serves the same FF11 raw, FF12 decoded and FF14 batched
+  payloads as the firmware;
 - carries them over a WebSocket on Wi-Fi instead of BLE GATT.
 
 The full design, wire protocol, security notes, setup steps and hardware test
-plan are in [`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md), and the bring-up run
-sheet is [`docs/runs/sheets/pi-bridge.md`](../docs/runs/sheets/pi-bridge.md).
+plan are in [`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md). The bring-up run sheet
+is [`docs/runs/sheets/pi-bridge.md`](../docs/runs/sheets/pi-bridge.md).
 
 ## Quick start (replay, no controllers)
 
@@ -30,9 +30,9 @@ python3 tools/wifi_probe.py --stream batched --duration 10
 ```
 
 The replay path is a complete smoke test of the WebSocket transport, the
-decoder and the three stream formats. `--bind` defaults to `127.0.0.1`, so the
+decoder and the three stream formats. `--bind` defaults to `127.0.0.1`. The
 quick start needs no token and is not reachable from the LAN. `decoded` can
-trail `reports` by the time the daemon ran before the client subscribed; that is
+trail `reports` by the time the daemon ran before the client subscribed. That is
 not loss (see `docs/PI_BRIDGE.md`). To prove the installable package end to
 end on the desk (no Pi, no controller, no root):
 
@@ -57,19 +57,19 @@ sudo apt install ./wmr-bridge_<version>_all.deb   # enables and starts the unit
 ```
 
 Both install methods put `/usr/bin/wmr-bridge` on `PATH`. It runs
-`python3 -m wmr_bridge` from `/opt/wmr-bridge`, so
+`python3 -m wmr_bridge` from `/opt/wmr-bridge`. So
 `wmr-bridge --version`, `wmr-bridge --list` and
 `wmr-bridge --replay …` work without a `cd` or `PYTHONPATH`.
 
-The `.deb` is `Architecture: all`, keeps `wmr-bridge.env` and the generated
-token across upgrades, and creates the `wmr` user and `/etc/wmr-bridge/token` in
+The `.deb` is `Architecture: all`. It keeps `wmr-bridge.env` and the generated
+token across upgrades. It creates the `wmr` user and `/etc/wmr-bridge/token` in
 `postinst`. Removing the package stops and disables the unit but keeps the
-token; `apt purge wmr-bridge` removes it. `pi/tools/dry_run.sh` installs,
+token. `apt purge wmr-bridge` removes it. `pi/tools/dry_run.sh` installs,
 reinstalls, replays and removes the `.deb` in a staged rootfs with no root.
 
 When `pi/install.sh` is piped (`curl … | sudo bash`), it fetches the matching
 release tarball, verifies its `.sha256` and runs from the extracted tree. The
-release must carry `wmr-bridge-<version>.tar.gz`; set `WMR_BRIDGE_VERSION` to pin
+release must carry `wmr-bridge-<version>.tar.gz`. Set `WMR_BRIDGE_VERSION` to pin
 a version or `WMR_BRIDGE_RELEASE_BASE_URL` to use a mirror. See
 [`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md#installation).
 
@@ -94,7 +94,7 @@ wmr-bridge --bind 0.0.0.0 --token-file /etc/wmr-bridge/token
 
 Then point the companion app's Wi-Fi transport (or `tools/wifi_probe.py`) at
 `ws://<pi-address>:8765/wmr`. Requests carrying a browser `Origin` are rejected
-unless that origin is allow-listed with `--allow-origin`; the companion app and
+unless that origin is allow-listed with `--allow-origin`. The companion app and
 the probe do not send one.
 
 ## Files
@@ -129,6 +129,7 @@ Current package version: `0.2.3` (`wmr_bridge.__version__`).
 ## Logs
 
 The daemon logs hand and client events:
+
 - Hand connect/disconnect: `LEFT connected: /dev/hidraw0 (AA:BB:...)` and
   `LEFT disconnected: /dev/hidraw0 after 123 report(s)`.
 - Client connect/disconnect: `client connected: <peer>` / `client disconnected: <peer>`.
@@ -138,6 +139,6 @@ The daemon logs hand and client events:
 
 ## Status
 
-Host-tested only. It has **not** been run on a Raspberry Pi or with real
-controllers yet. The repository's existing hardware caveats still apply, and
-the Wi-Fi link has its own measurement plan in `docs/PI_BRIDGE.md`.
+Host-tested only. It has not been run on a Raspberry Pi or with real
+controllers yet. The repository's existing hardware caveats still apply. The
+Wi-Fi link has its own measurement plan in `docs/PI_BRIDGE.md`.
