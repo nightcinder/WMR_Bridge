@@ -166,6 +166,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # The runner workspace is empty apart from the downloaded artifacts, so
+      # the checkout is what makes tools/release/make_sums.sh available.
+      - uses: actions/checkout@v7
+
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
@@ -177,6 +181,13 @@ jobs:
         with:
           name: pi-package
           path: dist
+
+      # One digest list for all attached assets, written before the release
+      # globs dist/* so SHA256SUMS is uploaded with the firmware images, the
+      # .deb, the tarball, install.sh and the per-file .sha256 files. The
+      # script verifies the list against the files before the release runs.
+      - name: Write SHA256SUMS for every release asset
+        run: tools/release/make_sums.sh dist
 
       - name: Create release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
