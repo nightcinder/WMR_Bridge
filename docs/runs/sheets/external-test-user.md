@@ -1,20 +1,20 @@
-# External tester quickstart — WMR Bridge v0.3.0
+# External tester quickstart — WMR Bridge v0.3.2
 
-One tier, ~20 min. Android 14+ phone, both WMR controllers, board already on v0.3.0.
+One tier, ~20 min. Android 14+ phone, both WMR controllers, board already on v0.3.2.
 Private room: controller links are unauthenticated.
 
 ## 0. Prerequisites
 
 - Android 14 or newer. Android 13 and below is not supported.
-- Board flashed to v0.3.0 (flasher: https://nightcinder.github.io/WMR_Bridge/). Pre-flashed is fine; say so in the intake block.
+- Board flashed to v0.3.2 (flasher: https://nightcinder.github.io/WMR_Bridge/). Pre-flashed is fine; say so in the intake block.
 - If unsure of the version, reflash; flashing erases stored pairings (expected).
 
 ## 1. Get the APK
 
-https://github.com/nightcinder/wmr-companion/releases/download/v0.2.2/wmr-companion-0.2.2-unified-debug.apk
+https://github.com/nightcinder/wmr-companion/releases/download/v0.3.5/wmr-companion-0.3.5-unified-arm64-v8a.apk
 
-If an older WMR Companion is installed, uninstall it first (CI APKs are signed
-differently): `adb uninstall com.onyxlens.wmr_companion` or app settings.
+If a WMR Companion built before 0.3.3 is installed (debug or locally signed),
+uninstall it first: `adb uninstall com.onyxlens.wmr_companion` or app settings.
 
 ## 2. Install
 
@@ -26,7 +26,7 @@ differently): `adb uninstall com.onyxlens.wmr_companion` or app settings.
 1. Power the board. Status LED should be **red** (no controllers).
 2. Open the app; grant Bluetooth / Nearby-devices permission.
 3. On the **Connect** screen, scan for `WMR Bridge` and connect.
-4. If Android shows a pairing request for `WMR Bridge`, allow it. Firmware 0.3.0
+4. If Android shows a pairing request for `WMR Bridge`, allow it. Firmware 0.3.2
    bonds and encrypts the phone link.
 5. Confirm the screen says **connected, streaming** with negotiated **MTU** 517
    (>= 61 is usable). Record the MTU shown.
@@ -52,7 +52,7 @@ differently): `adb uninstall com.onyxlens.wmr_companion` or app settings.
 4. Tap **Export CSV + JSON** (or **Export CSV + JSON + echo**) and save/share
    the files.
 
-## 6. Guided bench (app build 0.2.2 or later)
+## 6. Guided bench (app build 0.3.5 or later)
 
 Optional alternative. From the **Connect** screen tap **Run guided bench** and pick
 a mode: **3DoF only** (bridge, full run), **6DoF only** (glasses, no bridge,
@@ -79,8 +79,8 @@ thread where you received this runbook.
 
 - Handle:
 - Date/timezone:
-- Firmware: 0.3.0
-- App: 0.2.2 unified (debug-signed)
+- Firmware: 0.3.2
+- App: 0.3.5 unified (signed)
 - Phone: make/model/Android
 - Controllers: make/model, LEFT/RIGHT
 - Result: PASS / PARTIAL / FAIL / BLOCKED
