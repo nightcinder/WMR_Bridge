@@ -194,7 +194,7 @@ the APK signature changes.
    if the app offers it.
 6. Open **Open 3D debug view**. Leave the app on the debug screen.
 
-> **HID / Gamepad Coexistence Warning:** Firmware 0.3.2 exposes a standard BLE HID gamepad (HOGP, service `0x1812`) directly to Android upon bonding. Do not enable app-level HID output in WMR Companion (`HidOutputPanel` / `BluetoothHidDevice`) at the same time: running both simultaneously creates duplicate, conflicting gamepad devices on Android. Leave Companion app HID output disabled.
+> **HID / Gamepad Coexistence Warning:** Firmware 0.3.2 exposes a standard BLE HID gamepad (HOGP, service `0x1812`) directly to Android upon bonding. Do not enable app-level HID output in WMR Companion (`HidOutputPanel` / `BluetoothHidDevice`) at the same time: registering `BluetoothHidDevice` disables Android's HID Host service (stopping bridge HOGP input reception) and causes radio contention on the phone. Leave Companion app HID output disabled.
 
 Already-paired controllers may connect on their own after the board boots. If both appear as
 `connected - WMR - HID ready`, record "already paired" in the manifest. That proves the stream,

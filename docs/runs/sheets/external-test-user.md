@@ -33,7 +33,7 @@ uninstall it first: `adb uninstall com.onyxlens.wmr_companion` or app settings.
    least 61 is usable). Record the MTU shown.
 6. Tap Open 3D debug view. Stay on the debug screen.
 
-> **HID / Gamepad Coexistence Warning:** Firmware 0.3.2 exposes a standard BLE HID gamepad (HOGP) directly to Android upon pairing. Do not enable app-level HID output in WMR Companion at the same time: running both simultaneously creates duplicate, conflicting gamepad inputs.
+> **HID / Gamepad Coexistence Warning:** Firmware 0.3.2 exposes a standard BLE HID gamepad (HOGP) directly to Android upon pairing. Do not enable app-level HID output (`BluetoothHidDevice`) in WMR Companion at the same time: registering `BluetoothHidDevice` disables Android's HID Host service (stopping bridge HOGP input reception) and causes radio contention on the phone. Leave Companion app HID output disabled.
 
 ## 4. Pair controllers
 

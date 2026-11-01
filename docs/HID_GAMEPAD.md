@@ -480,12 +480,12 @@ notes:
 
 The ESP32 bridge exposes standard BLE HID-over-GATT (HOGP, service `0x1812`) and the vendor `FF10` GATT service concurrently on the same LE link (`adv=on`, Appearance `0x03C4`). Android binds the bridge's HOGP gamepad profile directly at the OS level as an input device upon BLE bonding.
 
-The Companion app (`wmr-companion`) also provides an optional app-level HID gamepad output module (`BluetoothHidDevice` / `wmr_companion_hid_android`).
+The Companion app (`wmr-companion`) also provides an optional app-level HID gamepad output module (`BluetoothHidDevice` / `wmr_companion_hid_android`) designed to make the phone act as a HID peripheral sending gamepad reports to a remote PC, TV, or console host.
 
 ### Coexistence rule for testers:
-- **Do not pair or enable both simultaneously.** When the Android host is bonded to the bridge and receiving HOGP input, opening Companion app HID output (`HidOutputPanel` / `BluetoothHidDevice`) registers a second virtual gamepad on Android. This leads to duplicate controllers, conflicting inputs, and split button events in games and testers.
-- When testing the firmware BLE HID gamepad, keep Companion app HID output **disabled**.
-- If app-level HID output is explicitly needed (for example, to test app-side stick normalization or custom mapping profiles), do not bind the phone to the bridge's HOGP service, or unpair the bridge gamepad from Android's Bluetooth settings while leaving GATT communication active.
+- **Do not enable Companion app HID output while using bridge HOGP.** `BluetoothHidDevice` registers the Android phone as a HID peripheral and disables Android's internal HID Host service. Consequently, when Companion app HID output is active, Android stops receiving the bridge's HOGP input reports. Additionally, running the Classic HID peripheral link alongside the BLE GATT link causes phone-side radio contention and higher latency.
+- When testing the firmware BLE HID gamepad, keep Companion app HID output (`HidOutputPanel` / `BluetoothHidDevice`) **disabled**.
+- **Bonding coupling:** Because `FF11`, `FF12`, and `FF14` are `READ/WRITE_ENCRYPTED` and the bridge requires a bonded LESC connection, unpairing or forgetting the bridge device in Android Bluetooth settings deletes the bond and immediately terminates encrypted GATT communication; re-pairing re-establishes the bond and automatically re-registers HOGP. The two services cannot be decoupled on the same bonded Android host.
 
 ## Known gaps
 
@@ -504,8 +504,9 @@ The Companion app (`wmr-companion`) also provides an optional app-level HID game
   meaningful input.
 - **App HID output coexistence** (`BluetoothHidDevice`): as detailed in the
   coexistence section above, app-level HID output must be turned off when the
-  firmware HOGP device is used, otherwise Android registers two conflicting
-  gamepads simultaneously.
+  firmware HOGP device is used; registering `BluetoothHidDevice` disables
+  Android's HID Host service, which stops reception of the bridge's HOGP
+  input reports.
 - **Security.** Bonding behaviour is ONY-438's and is now merged: LESC with
   bonding, unbonded centrals refused. A HID build without it cannot pair on a
   current Android phone, so test only images built after that merge.
