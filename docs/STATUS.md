@@ -1,9 +1,10 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-10-31 (current release 0.3.2, a release-infrastructure and
-Pi-packaging release on top of 0.3.1: all-asset `SHA256SUMS` in the release job,
-repo checkout in the release job, Pi `wmr-bridge` on `PATH` with package `0.2.3`;
-no protocol change, firmware behaviour unchanged from 0.3.1; ESP32-over-BLE is
+Last updated: 2026-11-01 (current release 0.3.3, the ONY-699 review-pass release
+on top of 0.3.2: HID gamepad buttons mapped to Android usage slots, a 5 s
+Classic link supervision timeout for disconnect detection, and an idempotent
+FF17 CONNECT for an already-open hand; no protocol payload change, companions
+at 0.2.2 or later continue to work; ESP32-over-BLE is
 the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the
 second supported first-class target; Pi is host-tests-only until the Pi sitting
 runs, see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md) and
