@@ -151,11 +151,12 @@ LEDs?
 
 The ONY-734 tool captures 25 Hz frames and walks a fixed exposure ladder
 (0.1, 0.3, 1.0, 3.0 ms) at gain 6. A full capture is 12 s, so each of the
-four rungs gets about 3 s, roughly 75 frames at 25 Hz (about 300 total). The
-tool writes one PGM per channel per rung
+four rungs gets about 3 s, roughly 75 frames at 25 Hz (about 300 total) per
+capture. The tool writes one PGM per channel per rung
 (`carina-rung<N>-<channel>-<ms>ms.pgm`) plus `carina-diagnostics.json`. It
-retains one frame per rung per channel (16 stills per distance); the telemetry
-JSON carries the full frame counts.
+retains one frame per rung per channel (16 stills per capture, 48 per distance
+across the three orientations); the telemetry JSON carries the full frame
+counts.
 
 Procedure:
 
@@ -190,11 +191,11 @@ Record per distance:
 
 | Item | 0.3 m | 0.5 m | 0.8 m | 1.0 m |
 |---|---|---|---|---|
-| Frames captured (total, ~300) | | | | |
-| Frames per rung (~75) | | | | |
+| Frames captured (3 x ~300 per distance) | | | | |
+| Frames per rung (3 x ~75 per distance) | | | | |
 | FPS observed | | | | |
 | Width x height | | | | |
-| Retained stills (16 per distance) | | | | |
+| Retained stills (48 per distance) | | | | |
 | LEDs visible? (yes / no) | | | | |
 | Approximate LED blob count per retained still | | | | |
 | Distance at which LEDs disappear | | | | |
@@ -203,8 +204,9 @@ Pass and fail for ONY-736 scoring (amendment 3 from ONY-731):
 
 - Pass: at least 5 LED blobs in at least 90% of frames at 0.8 m. This
   threshold is unchanged.
-- The tool retains one frame per rung per channel (16 stills per distance), so
-  ONY-736 scores the retained stills plus the frame counts in the telemetry
+- The tool retains one frame per rung per channel (16 stills per capture, 48 per
+  distance), so ONY-736 scores the retained stills plus the frame counts in the
+  telemetry
   JSON. If a full frame series is needed, the harness must retain it; that is
   outside this sheet.
 - The tester does not have to count blobs by hand. ONY-736 scores the frames.
