@@ -12,7 +12,8 @@ Companion documents:
   speed on the Luma Ultra.
 - ONY-734: the debug capture tool (`VitureCarinaDiagnostics`).
 - ONY-736: the scorecard that uses what this sheet produces.
-- Companion `docs/tracking/GATES.md` and `docs/runs/sheets/pose-viture.md`.
+- Companion (wmr-companion): `docs/tracking/GATES.md` and `docs/runs/sheets/pose-viture.md`
+  (https://github.com/nightcinder/wmr-companion).
 
 Gates covered: **Gate 4** (hand tracking gripping a controller), **Gate 1**
 (8-bit stereo frame LED visibility), **Gate 9** (C-SDK head pose on a phone).
@@ -41,18 +42,36 @@ App builds:
 
 | Build | Flags | Used for |
 |---|---|---|
-| Companion debug APK | `--dart-define=WMR_VITURE_TRACKING=true` | Gate 4. The Unity `unityLibrary` AAR must be linked (export pinned by CI). |
-| Companion debug APK | `--dart-define=WMR_VITURE_CARINA_DIAG=true` | Gate 1 and Gate 9. The proprietary `libglasses.so` must be staged in `jniLibs/arm64-v8a/` (see the ONY-734 README). Without it the capture returns `sdkUnavailable`. |
-| Companion debug APK | both flags | If one APK is to cover all gates. |
+| Companion debug APK | `WMR_VITURE_TRACKING=true` | Gate 4. Needs the Unity `unityLibrary` AAR linked. |
+| Companion debug APK | `WMR_VITURE_CARINA_DIAG=true` | Gate 1 and Gate 9. Needs the proprietary `libglasses.so` staged in `jniLibs/arm64-v8a/` (ONY-734 README). Without it the capture returns `sdkUnavailable`. |
+| Companion debug APK | both flags | One APK covering all gates. |
 
-Build the APKs:
+Artifacts the tester must obtain before building (neither is in the
+repository):
+
+- Unity export zip for the `unified` flavor, installed with
+  `tool/install_unity_export.sh unified <zip>`. CI pins the export SHA; ask
+  the maintainer for the zip that matches it. Without the export the unified
+  build links no Unity runtime and `start()` reports `unavailable`.
+- Proprietary `libglasses.so`, placed in
+  `android/app/src/main/jniLibs/arm64-v8a/`. Without it the capture returns
+  `sdkUnavailable`.
+
+Build the APKs (single APK with both flags, recommended):
 
 ```bash
 cd apps/wmr_companion_app
-flutter build apk --debug --dart-define=WMR_VITURE_TRACKING=true
-flutter build apk --debug --dart-define=WMR_VITURE_CARINA_DIAG=true
-adb install -r build/app/outputs/flutter-apk/app-debug.apk
+tool/install_unity_export.sh unified <unity-export.zip>
+cp <path-to>/libglasses.so android/app/src/main/jniLibs/arm64-v8a/
+tool/build_flavor.sh unified --debug \
+  --dart-define=WMR_VITURE_TRACKING=true \
+  --dart-define=WMR_VITURE_CARINA_DIAG=true
+adb install -r build/app/outputs/flutter-apk/app-unified-debug.apk
 ```
+
+If you build the two flags separately, install each APK before starting the
+next build, because both write the same output path and the second overwrites
+the first.
 
 Record the app commit, the Unity export SHA, and the firmware SHA in the intake
 block.
@@ -130,16 +149,22 @@ Question: do the Luma Ultra stereo grayscale frames show the WMR controller
 LEDs?
 
 The ONY-734 tool captures 25 Hz frames and walks a fixed exposure ladder
-(0.1, 0.3, 1.0, 3.0 ms) at gain 6. Each rung records at least 250 frames
-(10 s). The tool writes one PGM per channel per rung
-(`carina-rung<N>-<channel>-<ms>ms.pgm`) plus `carina-diagnostics.json`.
+(0.1, 0.3, 1.0, 3.0 ms) at gain 6. A full capture is 12 s, so each of the
+four rungs gets about 3 s, roughly 75 frames at 25 Hz (about 300 total). The
+tool writes one PGM per channel per rung
+(`carina-rung<N>-<channel>-<ms>ms.pgm`) plus `carina-diagnostics.json`. It
+retains one frame per rung per channel (16 stills per distance); the telemetry
+JSON carries the full frame counts.
 
 Procedure:
 
 1. Power on both WMR controllers (LEDs active). Dim the room.
 2. Run the diagnostic capture at each distance. Use 0.3 m, 0.5 m, 0.8 m, and
-   1.0 m. Hold the controllers in three orientations at each distance.
-3. At each distance, trigger one 12 s capture:
+   1.0 m. At each distance, make three captures, one per orientation (front,
+   rotated, tilted), holding a single orientation for the whole capture. The
+   tool advances the exposure rung by elapsed time, so mixing orientations in
+   one capture confounds exposure with pose.
+3. At each distance and orientation, trigger one 12 s capture:
 
 ```dart
 final report = await VitureCarinaDiagnostics.capture(
@@ -160,17 +185,23 @@ Record per distance:
 
 | Item | 0.3 m | 0.5 m | 0.8 m | 1.0 m |
 |---|---|---|---|---|
-| Frames captured (>=250?) | | | | |
+| Frames captured (total, ~300) | | | | |
+| Frames per rung (~75) | | | | |
 | FPS observed | | | | |
 | Width x height | | | | |
-| Frames per rung | | | | |
+| Retained stills (16 per distance) | | | | |
 | LEDs visible? (yes / no) | | | | |
-| Approximate LED blob count per frame | | | | |
+| Approximate LED blob count per retained still | | | | |
 | Distance at which LEDs disappear | | | | |
 
 Pass and fail for ONY-736 scoring (amendment 3 from ONY-731):
 
-- Pass: at least 5 LED blobs in at least 90% of frames at 0.8 m.
+- Pass: at least 5 LED blobs in at least 90% of frames at 0.8 m. This
+  threshold is unchanged.
+- The tool retains one frame per rung per channel (16 stills per distance), so
+  ONY-736 scores the retained stills plus the frame counts in the telemetry
+  JSON. If a full frame series is needed, the harness must retain it; that is
+  outside this sheet.
 - The tester does not have to count blobs by hand. ONY-736 scores the frames.
   The tester must return the raw PGM frames and the telemetry JSON.
 
@@ -232,7 +263,9 @@ Record:
 | Errors | |
 
 Pass and fail for ONY-736 scoring: Gate 9 is worth having even if Gate 1 fails.
-Record the result either way.
+Record the result either way. Pass: pose rate of at least 30 Hz sustained over
+the 60 s run with a valid pose. Fail: no pose, or no USB. (ONY-735 does not
+state a numeric target; 30 Hz is the scoring target used here.)
 
 ## 7. What the tester must return
 
@@ -296,7 +329,7 @@ state which files are missing.
 |---|---|---|---|
 | Gate 4 (grip dropout) | under 5% | over 15% | 5% to 15% |
 | Gate 1 (LEDs at 0.8 m) | >=5 blobs in >=90% of frames | below that | n/a |
-| Gate 9 (pose rate) | usable rate recorded | no pose or no USB | n/a |
+| Gate 9 (pose rate) | >=30 Hz sustained, valid pose | no pose or no USB | n/a |
 
 ONY-736 uses these results and the decision table from ONY-731 amendment 5:
 grip dropout under 5% and Gate 1 pass promotes Route A; Gate 1 fail keeps the
