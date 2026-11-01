@@ -5,6 +5,61 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.3 — 2026-11-01
+
+The ONY-699 review-pass release on top of 0.3.2. FF10–FF17 keep their
+payloads, so companions at 0.2.2 or later continue to work, and the firmware
+reports the tag version over FF16 (0.3.3 when tagged). Two firmware
+behaviour fixes: the BLE HID gamepad now puts each control in its Android
+usage slot, and a controller link is declared down after a 5 s supervision
+timeout. Firmware and Pi artifacts remain CI-built and hardware-unverified.
+
+### Firmware
+
+- **HID gamepad button slots (#118, ONY-685).** Firmware 0.3.2 packed the
+  companion's model order straight into HID bits, but Android maps Button
+  usages 1–16 straight to `BTN_A`… and reserves usages 3 and 6, so every
+  control after B appeared one or two slots early. `src/wmr_hid.c` now
+  assigns bits by host usage number: A/B, X/Y, squeeze L1/R1, trigger
+  L2/R2, menu Select/Start, Home Mode, stick click L3/R3; C and Z stay
+  unused. The HID descriptor and report shape are unchanged.
+- **5 s disconnect detection and FF17 CONNECT ACK (#119, ONY-686).**
+  `HCI_Write_Link_Supervision_Timeout` now applies the 5 s
+  `WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT` per ACL while the bridge is master,
+  deferred and retried from `HCI_EVENT_ROLE_CHANGE` when a controller-
+  initiated reconnect arrives with the bridge as peripheral (where the
+  command is disallowed). FF17 CONNECT is idempotent for a hand that is
+  already open/opening and returns BUSY while a requested disconnect is
+  still closing. The FF17 CONNECT contract is updated in
+  [`docs/PROTOCOL.md`](docs/PROTOCOL.md) and the bench step is in
+  [`docs/RECONNECT_AND_QUEUE.md`](docs/RECONNECT_AND_QUEUE.md).
+
+### Triage
+
+- **Multi-run pose captures (#120, ONY-710).** `tools/triage_bundle.py`
+  accepts `pose_capture_<runtime>_<hand>_<segment>_runN.json` for repeats
+  beyond the first run, so occlusion runs and multi-word segment names are
+  no longer skipped. Regression tests cover runs 1–4.
+
+### Docs
+
+- **Companion pin and BLE HOGP coexistence (#121, ONY-711).** The tester
+  runbooks pin WMR Companion v0.3.6 (2011), and
+  [`docs/HID_GAMEPAD.md`](docs/HID_GAMEPAD.md) explains that the firmware's
+  HOGP gamepad (`0x1812`) and the companion's `BluetoothHidDevice` output
+  must not be paired at the same time.
+- **Docs refresh (#115–#117).** A single 0.3.2 no-reflash bench checklist,
+  run sheets retargeted to v0.3.2 / Pi 0.2.3 / Companion 0.3.5, and a
+  plain-English pass over the README and docs.
+
+### Verification
+
+- Host C tests and Python tests run in CI before tagging (PR/main); the
+  ESP-IDF build runs on the tag; firmware reports the tag version over FF16.
+- Both firmware changes are covered by host tests (`test_hid`, `test_ctrl`)
+  and the triage change by `tests/test_triage_bundle.py`; no packaged firmware
+  has been flashed to hardware.
+
 ## 0.3.2 — 2026-10-31
 
 A release-infrastructure and Pi-packaging release on top of 0.3.1. No

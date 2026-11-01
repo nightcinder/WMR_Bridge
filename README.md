@@ -121,11 +121,12 @@ python3 tools/firmware/build.py --idf-export ~/esp/esp-idf/export.sh --flash /de
 
 The first run clones the pinned BTstack commit into `.fw-build/`. Later runs
 reuse it. The output in `dist/` includes a merged factory image and a browser
-flasher page. `0.3.2` is the current release. It is a release-infrastructure and
-Pi-packaging release on top of 0.3.1 (an all-asset `SHA256SUMS` in the release
-job, the repo checkout that makes it possible, and `wmr-bridge` on `PATH` with
-the Pi package at `0.2.3`). No protocol change. Firmware behaviour unchanged
-from 0.3.1. Packaged releases are CI-built and hardware-unverified. See
+flasher page. `0.3.3` is the current release. It is the ONY-699 review-pass
+release on top of 0.3.2: the BLE HID gamepad now maps each control to its
+Android usage slot, a controller link is declared down after a 5 s supervision
+timeout, and FF17 CONNECT acknowledges a hand that is already open. No
+protocol payload change; companions at 0.2.2 or later continue to work.
+Packaged releases are CI-built and hardware-unverified. See
 [CHANGELOG.md](CHANGELOG.md) for the full notes. To install the current release
 without ESP-IDF, use the hosted browser installer at
 <https://nightcinder.github.io/WMR_Bridge/>, which serves all three variants. The
