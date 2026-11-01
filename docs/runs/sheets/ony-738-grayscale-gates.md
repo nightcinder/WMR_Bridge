@@ -10,13 +10,16 @@ Companion documents:
 - ONY-733 Gate 4: hand tracking while gripping a WMR controller (Pro Neckband).
 - ONY-735 Gates 1 and 9: LED visibility, checkerboard calibration, head-pose
   speed on the Luma Ultra.
-- ONY-734: the debug capture tool (`VitureCarinaDiagnostics`).
 - ONY-736: the scorecard that uses what this sheet produces.
-- Companion (wmr-companion): `docs/tracking/GATES.md` and `docs/runs/sheets/pose-viture.md`
-  (https://github.com/nightcinder/wmr-companion).
+- Companion (wmr-companion) v0.3.8: `docs/tracking/GATES.md` and the guided
+  bench (`apps/wmr_companion_app/lib/ui/bench/bench_run.dart`).
 
 Gates covered: **Gate 4** (hand tracking gripping a controller), **Gate 1**
 (8-bit stereo frame LED visibility), **Gate 9** (C-SDK head pose on a phone).
+
+This sheet runs the gates through the **guided bench** in Companion v0.3.8,
+not the debug capture tool. The bench records each step in the test bundle
+manifest and packs the capture directories into the export zip.
 
 ## 0. What this sheet settles
 
@@ -33,49 +36,25 @@ Gates covered: **Gate 4** (hand tracking gripping a controller), **Gate 1**
 | Glasses | Gate 1, Gate 9 | VITURE Luma Ultra. 3DoF models (`One`, `OneLite`, `Pro`, `Pro2`, `Luma`, `LumaPro`, `LumaCyber`, `Beast`) are rejected by the hand-tracking adapter and must not be used for Gate 4. |
 | Host | Gate 4 | VITURE Pro Neckband (Android, wireless ADB). The app runs on the Neckband, not on a paired phone. |
 | Phone | Gate 9 | Android phone with USB host (OTG) and a USB-C cable. |
-| Bridge | All gates | One board on `main`, both controllers paired and awake. Record firmware SHA and boot banner. |
+| Bridge | Gates in combined mode | One board on `main`, both controllers paired and awake. Record firmware SHA and boot banner. Gate 1, the checkerboard and Gate 9 run without a bridge. |
 | Controllers | All gates | Both WMR controllers, powered, LEDs active. |
 | Checkerboard | Gate 1 (calibration) | Printed checkerboard with known square size, flat and rigid, at least 8 by 6 inner corners. |
 | Tooling | All gates | `adb` (wireless for the Neckband), a terminal, logcat capture, a way to screenshot the debug overlay. |
 
-App builds:
+App build:
 
-| Build | Flags | Used for |
-|---|---|---|
-| Companion debug APK | `WMR_VITURE_TRACKING=true` | Gate 4. Needs the Unity `unityLibrary` AAR linked. |
-| Companion debug APK | `WMR_VITURE_CARINA_DIAG=true` | Gate 1 and Gate 9. Needs the proprietary `libglasses.so` staged in `jniLibs/arm64-v8a/` (ONY-734 README). Without it the capture returns `sdkUnavailable`. |
-| Companion debug APK | both flags | One APK covering all gates. |
+- Install the signed Companion **v0.3.8** unified APK (versionCode 2013) from
+  the GitHub release:
+  `https://github.com/nightcinder/wmr-companion/releases/download/v0.3.8/wmr-companion-0.3.8-unified-arm64-v8a.apk`
+- The release APK already carries `WMR_VITURE_CARINA_DIAG=true`, so the Carina
+  gate runs on a signed tester build. It also ships `libglasses.so` (VITURE XR
+  Glasses SDK for Android 2.4.1) under the VITURE licence; the EULA and the
+  third-party notices ship in the APK and are reachable from About.
+- No Unity export zip, no manual `jniLibs` staging, and no debug flags are
+  needed for a tester run.
 
-Artifacts the tester must obtain before building (neither is in the
-repository):
-
-- Unity export zip for the `unified` flavor, installed with
-  `tool/install_unity_export.sh unified <zip>`. CI pins the export SHA; ask
-  the maintainer for the zip that matches it. Without the export the unified
-  build links no Unity runtime and `start()` reports `unavailable`.
-- Proprietary `libglasses.so`, placed in
-  `android/app/src/main/jniLibs/arm64-v8a/`. Without it the capture returns
-  `sdkUnavailable`.
-
-Build the APKs (single APK with both flags, recommended):
-
-```bash
-cd apps/wmr_companion_app
-tool/install_unity_export.sh unified <unity-export.zip>
-mkdir -p android/app/src/main/jniLibs/arm64-v8a/
-cp <path-to>/libglasses.so android/app/src/main/jniLibs/arm64-v8a/
-tool/build_flavor.sh unified --debug \
-  --dart-define=WMR_VITURE_TRACKING=true \
-  --dart-define=WMR_VITURE_CARINA_DIAG=true
-adb install -r build/app/outputs/flutter-apk/app-unified-debug.apk
-```
-
-If you build the two flags separately, install each APK before starting the
-next build, because both write the same output path and the second overwrites
-the first.
-
-Record the app commit, the Unity export SHA, and the firmware SHA in the intake
-block.
+Record the app version (0.3.8), the Unity export SHA if known, and the
+firmware SHA in the intake block.
 
 ## 2. Setup, once per sitting
 
@@ -96,28 +75,36 @@ block.
    of `multiPass`, `singlePass`, or `singlePassInstanced`. If `stereoMode` is
    `unknown` or the stage stops early, record it and stop.
 
-## 3. Gate 4 — hand tracking while gripping a controller
+## 3. Run the guided bench
+
+Open the app, go to the Connect screen, tap **Run guided bench**, and pick
+**Combined** mode. Combined mode runs every gate in one pass:
+
+1. Bridge steps (connect, both hands, firmware config, still/move, capture,
+   latency, photo, serial log).
+2. Gate 4: `handEmpty` then `handGrip` (60 s each).
+3. Pose capture (filter-spec section 8 corpus).
+4. Gate 1: `carinaLeds`.
+5. Checkerboard: `carinaCheckerboard`.
+6. Gate 9: `carinaPose`.
+7. `export` writes the test bundle zip.
+
+For a glasses-only run (no bridge), use **6DoF only** mode; it skips the
+bridge steps but keeps Gate 4 and the pose capture. For a bridge-only run,
+use **3DoF only** mode; it keeps Gate 1, the checkerboard and Gate 9.
+
+## 4. Gate 4 — hand tracking while gripping a controller
 
 Question: does `VitureXR.HandTracking.Start()` deliver 26 joints, and is a hand
 tracked while gripping a WMR controller?
 
-Procedure:
+The bench runs two measured steps, 60 s each:
 
-1. Confirm the glasses model is `LumaUltra`.
-2. Start tracking from the debug overlay.
-3. With the hand empty and visible, log for 60 s.
-4. Record joint count and rate.
-5. Repeat with the hand gripping a WMR controller (controller awake, not
-   streaming). Record whether joints still arrive.
-6. Tap recenter. Confirm `VitureXR.HeadTracking.SetWorldOrigin()` recentres the
-   head pose.
-7. Stop and dispose. Confirm no leak on repeat.
-
-Capture logcat:
-
-```bash
-adb logcat -v threadtime > ony-738-gate4-<YYYYMMDD-HHMMSS>.log
-```
+- `handEmpty`: hold the hand empty and visible. The run records the joint rate
+  and the share of time with no hand joints.
+- `handGrip`: grip a powered WMR controller and keep the hand in view. Grip
+  dropout under 5% passes, over 15% fails, and 5-15% is marginal. ONY-736
+  scores the recorded percentage.
 
 Record:
 
@@ -134,6 +121,7 @@ Record:
 | `playerHosted` (true / false) | |
 | `stereoMode` | |
 | Highest stage reached | |
+| Gate 4 dropout (%) | |
 
 Pass and fail for ONY-736 scoring (amendment 5 from ONY-731):
 
@@ -144,48 +132,32 @@ Pass and fail for ONY-736 scoring (amendment 5 from ONY-731):
 Dropout means the share of the 60 s run in which no hand joints arrive while
 gripping. Record the dropout percentage, not only yes or no.
 
-## 4. Gate 1 — LED visibility in 8-bit grayscale frames
+## 5. Gate 1 — LED visibility in 8-bit grayscale frames
 
 Question: do the Luma Ultra stereo grayscale frames show the WMR controller
 LEDs?
 
-The ONY-734 tool captures 25 Hz frames and walks a fixed exposure ladder
-(0.1, 0.3, 1.0, 3.0 ms) at gain 6. A full capture is 12 s, so each of the
-four rungs gets about 3 s, roughly 75 frames at 25 Hz (about 300 total) per
-capture. The tool writes one PGM per channel per rung
+The bench runs 12 captures: 4 distances (0.3, 0.5, 0.8, 1.0 m) times 3
+orientations (front, rotated, tilted). Each capture runs 12 s. The capture
+walks a fixed exposure ladder (0.1, 0.3, 1.0, 3.0 ms) at gain 6, so each of
+the four rungs gets about 3 s, roughly 75 frames at 25 Hz (about 300 total)
+per capture. It writes one PGM per channel per rung
 (`carina-rung<N>-<channel>-<ms>ms.pgm`) plus `carina-diagnostics.json`. It
-retains one frame per rung per channel (16 stills per capture, 48 per distance
-across the three orientations); the telemetry JSON carries the full frame
-counts.
+retains one frame per rung per channel (16 stills per capture, 48 per
+distance across the three orientations); the telemetry JSON carries the full
+frame counts.
 
-Procedure:
+Hold one orientation for the whole capture. The tool advances the exposure
+rung by elapsed time, so mixing orientations in one capture confounds
+exposure with pose.
+
+Procedure the bench follows:
 
 1. Power on both WMR controllers (LEDs active). Dim the room.
-2. Run the diagnostic capture at each distance. Use 0.3 m, 0.5 m, 0.8 m, and
-   1.0 m. At each distance, make three captures, one per orientation (front,
-   rotated, tilted), holding a single orientation for the whole capture. The
-   tool advances the exposure rung by elapsed time, so mixing orientations in
-   one capture confounds exposure with pose.
-3. At each distance and orientation, trigger one 12 s capture:
-
-```dart
-final report = await VitureCarinaDiagnostics.capture(
-  outputDirectory: '/data/user/0/com.onyxlens.wmr_companion/cache/carina-<distance>-<orientation>',
-);
-```
-
-Use a distinct `<orientation>` per capture (`front`, `rotated`, `tilted`), so the
-three captures at one distance do not overwrite one another. The harness writes
-fixed filenames, so a shared directory loses two of the three captures.
-
-4. After each capture, pull the output directory:
-
-```bash
-adb pull /data/user/0/com.onyxlens.wmr_companion/cache/carina-<distance>-<orientation> ./carina-<distance>-<orientation>
-```
-
-5. Record the telemetry from `carina-diagnostics.json`: width, height, fps,
-   frames, frames per rung, pose rate, pose status.
+2. Connect the Luma Ultra over USB. Accept the USB permission prompt.
+3. Run the guided bench `carinaLeds` step. It creates one directory per
+   distance and orientation and runs one 12 s capture in each.
+4. After the run, the test bundle packs every directory.
 
 Record per distance:
 
@@ -204,30 +176,26 @@ Pass and fail for ONY-736 scoring (amendment 3 from ONY-731):
 
 - Pass: at least 5 LED blobs in at least 90% of frames at 0.8 m. This
   threshold is unchanged.
-- The tool retains one frame per rung per channel (16 stills per capture, 48 per
-  distance), so ONY-736 scores the retained stills plus the frame counts in the
-  telemetry
-  JSON. If a full frame series is needed, the harness must retain it; that is
-  outside this sheet.
+- The bench retains one frame per rung per channel (16 stills per capture, 48
+  per distance), so ONY-736 scores the retained stills plus the frame counts in
+  the telemetry JSON. If a full frame series is needed, the harness must retain
+  it; that is outside this sheet.
 - The tester does not have to count blobs by hand. ONY-736 scores the frames.
   The tester must return the raw PGM frames and the telemetry JSON.
 
-## 5. Checkerboard calibration captures
+## 6. Checkerboard calibration captures
 
-ONY-736 needs stereo pairs to recover intrinsics. The ONY-734 tool keeps one
-copied frame per rung per channel. For calibration, capture extra frames with
-the checkerboard in view.
+ONY-736 needs stereo pairs to recover intrinsics. The bench runs 10 captures:
+2 distances (0.5 m and 0.8 m) times 5 angles (fronto-parallel, left, right,
+up, down). Each capture runs 4 s. The controller LEDs stay off during these
+captures, so the blobs do not confuse the corner detector.
 
 Procedure:
 
 1. Print the checkerboard. Measure and record the square size in millimetres.
-2. Hold the checkerboard flat in front of the glasses at 0.3 m to 1.0 m.
-3. Tilt it in at least 5 angles (fronto-parallel, rotated left, rotated
-   right, tilted up, tilted down) at each of 2 distances.
-4. At each pose, trigger a short capture (or take screenshots of the camera
-   preview) so both left and right channels are saved.
-5. Keep the controller LEDs off during calibration captures, so the blobs do
-   not confuse the corner detector.
+2. Hold the checkerboard flat in front of the glasses.
+3. Run the guided bench `carinaCheckerboard` step.
+4. Record the square size in the intake block.
 
 Record:
 
@@ -242,7 +210,7 @@ Record:
 Return the images with their pose labels (for example
 `checkerboard-0.5m-fronto.pgm`).
 
-## 6. Gate 9 — head-pose speed on a phone (C SDK)
+## 7. Gate 9 — head-pose speed on a phone (C SDK)
 
 Question: does `get_gl_pose_carina` run at a usable rate on a plain Android
 phone over USB?
@@ -251,9 +219,9 @@ Procedure:
 
 1. Connect the Luma Ultra to the phone over USB (OTG). Accept the USB
    permission prompt.
-2. Run the diagnostic capture on the phone (same debug APK, same flag). The
-   capture polls `xr_device_provider_get_gl_pose_carina` every 10 ms.
-3. Record the pose rate, status flag, and USB permission behaviour for 60 s.
+2. Run the guided bench `carinaPose` step. It runs one 60 s capture and polls
+   `xr_device_provider_get_gl_pose_carina` every 10 ms.
+3. Record the pose rate, status flag, and USB permission behaviour.
 4. Record whether `set_dof_type_carina` (3DoF vs 6DoF) is required and what
    happens if it is skipped.
 
@@ -274,31 +242,34 @@ Record the result either way. Pass: pose rate of at least 30 Hz sustained over
 the 60 s run with a valid pose. Fail: no pose, or no USB. (ONY-735 does not
 state a numeric target; 30 Hz is the scoring target used here.)
 
-## 7. What the tester must return
+## 8. What the tester must return
 
-ONY-736 scores the result. Return all of the following:
+ONY-736 scores the result. The guided bench `export` step writes the same zip
+as Export test bundle: it contains this run's step results in the manifest
+and packs the capture directories. Return all of the following:
 
-1. Gate 4 logcat file and the filled Gate 4 table, including the dropout
+1. The test bundle zip from the `export` step, with its SHA-256.
+2. Gate 4 logcat file and the filled Gate 4 table, including the dropout
    percentage.
-2. Three directories per distance from Gate 1 (one per orientation:
-   `carina-<distance>-front`, `carina-<distance>-rotated`,
-   `carina-<distance>-tilted`), each containing:
+3. The Gate 1 capture directories (one per distance and orientation:
+   `carina-led-<distance>-<orientation>`), each containing:
    - The PGM frames (`carina-rung<N>-<channel>-<ms>ms.pgm`).
    - `carina-diagnostics.json`.
-3. The checkerboard stereo pairs with pose labels and the square size.
-4. Gate 9 telemetry (the same JSON covers pose rate and status).
-5. The intake block (section 8) filled in.
-6. Zip of all files, with SHA-256:
+4. The checkerboard stereo pairs with pose labels and the square size.
+5. Gate 9 telemetry (the same JSON covers pose rate and status).
+6. The intake block (section 9) filled in.
 
-```bash
-zip -r ony-738-<YYYYMMDD>.zip ony-738-<YYYYMMDD>/
-sha256sum ony-738-<YYYYMMDD>.zip
-```
+The manifest records, for each step: id, status, summary, and the captured
+data. For `carinaLeds` it lists 12 captures with distance, orientation,
+directory and the full diagnostic report. For `carinaCheckerboard` it lists 10
+captures with distance, pose, directory and report. For `carinaPose` it records
+pose rate, successes, polls, status and valid flag. ONY-736 uses these fields
+for the scorecard.
 
-If a file cannot be attached, paste the logcat excerpt and the `STREAM` lines and
-state which files are missing.
+If a file cannot be attached, paste the logcat excerpt and the `STREAM` lines
+and state which files are missing.
 
-## 8. Intake block
+## 9. Intake block
 
 ```markdown
 ### ONY-738 grayscale-camera gates
@@ -306,7 +277,7 @@ state which files are missing.
 - Handle:
 - Date / timezone:
 - Firmware SHA:
-- App commit:
+- App version: 0.3.8 (versionCode 2013)
 - Unity export SHA:
 - Glasses model: Luma Ultra
 - Phone (Gate 9): make / model / Android
@@ -321,7 +292,7 @@ state which files are missing.
 - What happened (3 lines max):
 ```
 
-## 9. Stop rules
+## 10. Stop rules
 
 - Board hot, smells, or LED goes dark: unplug and stop.
 - USB permission denied twice: stop and send what you have.
@@ -332,7 +303,7 @@ state which files are missing.
 - Pairing or tracking fails twice: stop and send what you have.
 - Do not flash firmware. Do not open the board.
 
-## 10. Pass and fail summary
+## 11. Pass and fail summary
 
 | Gate | Pass | Fail | Marginal |
 |---|---|---|---|

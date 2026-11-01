@@ -32,13 +32,13 @@ Paste these once at the top of the result block; every check below inherits them
 | Stream mode in use | App stream selector (`none`, `FF11`, `FF12`, `FF14`) |
 
 App target note (2026-10-30): this sheet keeps **wmr-companion 0.2.2** (versionCode 4) as the
-pinned app baseline. The current release is 0.3.7 (0.3.7+12); the FF16 display, stick settings
+pinned app baseline. The current release is 0.3.8 (0.3.8+13); the FF16 display, stick settings
 and FF17 control surfaces live in the app (debug_screen.dart, controller_panel.dart), which are
-unchanged between v0.2.2 and v0.3.3, and the Dart packages stay at 0.2.2 in v0.3.3 through v0.3.7,
+unchanged between v0.2.2 and v0.3.3, and the Dart packages stay at 0.2.2 in v0.3.3 through v0.3.8,
 so no check's behaviour or expected output changes between the two; retargeting would only
 relabel the version strings in §0. (The 0.2.4 sitting in §10 ran App 0.2.1, versionCode 3, so
-its §0 version line differs from this baseline.) Running the bench on 0.3.7 is acceptable —
-only the §0 version expectations differ (expect `0.3.7`, versionCode 12 / 2012) — but record which
+its §0 version line differs from this baseline.) Running the bench on 0.3.8 is acceptable —
+only the §0 version expectations differ (expect `0.3.8`, versionCode 13 / 2013) — but record which
 build was used in §9.
 If the bridge reports a version the app cannot parse (FF16 empty or `1`), stop: the board is not
 running a packaged build and the FF16 check cannot pass on it.
