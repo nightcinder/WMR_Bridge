@@ -83,14 +83,17 @@ a mode. No single run covers every gate: Gate 4 needs the VITURE Pro Neckband
 Run the bench twice and combine the two bundles for ONY-736.
 
 - **Combined** mode (Neckband host): bridge steps, then Gate 4 (`handEmpty`
-  then `handGrip`, 60 s each), then the pose capture, then Gate 1
-  (`carinaLeds`), then the checkerboard (`carinaCheckerboard`), then
-  `export` (test bundle zip). This covers Gate 4, Gate 1 and the checkerboard.
+  then `handGrip`, 60 s each), then the pose capture (`carinaPose`, on the
+  Neckband; skip it here, since Gate 9 is the phone run, or record it
+  labelled as the Neckband host), then Gate 1 (`carinaLeds`), then the
+  checkerboard (`carinaCheckerboard`), then `export` (test bundle zip). This
+  covers Gate 4, Gate 1 and the checkerboard.
 - **6DoF only** mode (glasses, no bridge): skips the bridge steps but keeps
   Gate 4 and the pose capture.
 - **3DoF only** mode (phone or bridge host): keeps Gate 1, the checkerboard
   and Gate 9 (`carinaPose`). Run this on a phone for Gate 9; the bridge
-  steps appear first but can be skipped (see below).
+  steps appear first but can be skipped with Skip step on the Connect screen,
+  which attaches the USB-only Carina session.
 
 `export` writes the test bundle zip for each run.
 
@@ -249,7 +252,10 @@ ONY-736 scores the result. The guided bench `export` step writes the same zip
 as Export test bundle: it contains this run's step results in the manifest
 and packs the capture directories. Return all of the following:
 
-1. The test bundle zip from the `export` step, with its SHA-256.
+1. Both test bundle zips from the `export` step, one per run, each with its
+   SHA-256 and labelled by host: the Neckband (Combined) bundle carrying
+   Gate 4, Gate 1 and the checkerboard, and the phone (3DoF only) bundle
+   carrying Gate 9. Do not send only one; ONY-736 needs both.
 2. Gate 4 logcat file and the filled Gate 4 table, including the dropout
    percentage.
 3. The Gate 1 capture directories (one per distance and orientation:
