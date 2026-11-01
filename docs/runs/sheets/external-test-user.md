@@ -12,7 +12,7 @@ on v0.3.2. Private room: controller links are unauthenticated.
 
 ## 1. Get the APK
 
-https://github.com/nightcinder/wmr-companion/releases/download/v0.3.5/wmr-companion-0.3.5-unified-arm64-v8a.apk
+https://github.com/nightcinder/wmr-companion/releases/download/v0.3.6/wmr-companion-0.3.6-unified-arm64-v8a.apk
 
 If a WMR Companion built before 0.3.3 is installed (debug or locally signed),
 uninstall it first: `adb uninstall com.onyxlens.wmr_companion` or app settings.
@@ -33,6 +33,8 @@ uninstall it first: `adb uninstall com.onyxlens.wmr_companion` or app settings.
    least 61 is usable). Record the MTU shown.
 6. Tap Open 3D debug view. Stay on the debug screen.
 
+> **HID / Gamepad Coexistence Warning:** Firmware 0.3.2 exposes a standard BLE HID gamepad (HOGP) directly to Android upon pairing. Do not enable app-level HID output in WMR Companion at the same time: running both simultaneously creates duplicate, conflicting gamepad inputs.
+
 ## 4. Pair controllers
 
 1. No other host connected to the controllers.
@@ -52,7 +54,7 @@ uninstall it first: `adb uninstall com.onyxlens.wmr_companion` or app settings.
 3. Tap Start. Do not touch anything for 120 s. Tap Stop.
 4. Tap Export CSV + JSON (or Export CSV + JSON + echo) and save/share the files.
 
-## 6. Guided bench (app build 0.3.5 or later)
+## 6. Guided bench (app build 0.3.6 or later)
 
 Optional alternative. From the Connect screen tap Run guided bench and pick a
 mode: 3DoF only (bridge, full run), 6DoF only (glasses, no bridge, shorter run),
@@ -81,7 +83,7 @@ thread where you received this runbook.
 - Handle:
 - Date/timezone:
 - Firmware: 0.3.2
-- App: 0.3.5 unified (signed)
+- App: 0.3.6 unified (signed)
 - Phone: make/model/Android
 - Controllers: make/model, LEFT/RIGHT
 - Result: PASS / PARTIAL / FAIL / BLOCKED

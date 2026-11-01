@@ -100,15 +100,15 @@ The last line is a consent statement, not a legal contract. You can stop at any 
 | Part | Version | Where it comes from |
 |---|---|---|
 | Firmware | **v0.3.2** (`b591e7a`) | Browser installer or GitHub release. This is the current tagged release, CI-built and hardware-unverified. |
-| App, Android 14+ | **v0.3.5 signed APK** (`0.3.5`, versionCode 2010) | GitHub release asset, arm64-v8a, signed by CI. This APK contains one shared Unity runtime for the VITURE and XREAL paths. It is large (about 408 MiB). |
+| App, Android 14+ | **v0.3.6 signed APK** (`0.3.6`, versionCode 2011) | GitHub release asset, arm64-v8a, signed by CI. This APK contains one shared Unity runtime for the VITURE and XREAL paths. It is large (about 408 MiB). |
 | Capture tools (desktop, optional) | WMR_Bridge `main` | `tools/capture_ble.py`, `tools/analyze_capture.py`. |
 
 ### 3.2 Links
 
 - Browser installer (all three firmware variants): <https://nightcinder.github.io/WMR_Bridge/>
 - Firmware release v0.3.2: <https://github.com/nightcinder/WMR_Bridge/releases/tag/v0.3.2>
-- Unified app APK (Android 14+): <https://github.com/nightcinder/wmr-companion/releases/download/v0.3.5/wmr-companion-0.3.5-unified-arm64-v8a.apk>
-- App release notes: <https://github.com/nightcinder/wmr-companion/releases/tag/v0.3.5>
+- Unified app APK (Android 14+): <https://github.com/nightcinder/wmr-companion/releases/download/v0.3.6/wmr-companion-0.3.6-unified-arm64-v8a.apk>
+- App release notes: <https://github.com/nightcinder/wmr-companion/releases/tag/v0.3.6>
 - Pairing/discovery reference: <https://github.com/nightcinder/WMR_Bridge/blob/main/docs/DISCOVERY.md>
 - Flashing reference: <https://github.com/nightcinder/WMR_Bridge/blob/main/docs/FLASHING.md>
 - PSVR2 reference: <https://github.com/nightcinder/WMR_Bridge/blob/main/docs/PSVR2.md>
@@ -176,7 +176,7 @@ board yourself, the installer screenshot shows what is available, not what is in
 ```bash
 adb devices
 adb uninstall com.onyxlens.wmr_companion
-adb install -r wmr-companion-0.3.5-unified-arm64-v8a.apk
+adb install -r wmr-companion-0.3.6-unified-arm64-v8a.apk
 ```
 
 `adb uninstall` clears app settings and captures. Do it only before the first install or when
@@ -193,6 +193,8 @@ the APK signature changes.
    at least 61). If it shows 23, FF14 batching will not work; record it and continue with FF12
    if the app offers it.
 6. Open **Open 3D debug view**. Leave the app on the debug screen.
+
+> **HID / Gamepad Coexistence Warning:** Firmware 0.3.2 exposes a standard BLE HID gamepad (HOGP, service `0x1812`) directly to Android upon bonding. Do not enable app-level HID output in WMR Companion (`HidOutputPanel` / `BluetoothHidDevice`) at the same time: running both simultaneously creates duplicate, conflicting gamepad devices on Android. Leave Companion app HID output disabled.
 
 Already-paired controllers may connect on their own after the board boots. If both appear as
 `connected - WMR - HID ready`, record "already paired" in the manifest. That proves the stream,
@@ -537,7 +539,7 @@ leave it out and say why in the paste-back; do not create an empty placeholder.
 - Board: ESP32 model, flash size, USB port
 - Firmware: 0.3.2 (source: browser installer / GitHub release / pre-flashed)
 - Firmware evidence: installer screenshot / serial `v` / both
-- App: wmr-companion 0.3.5 unified (signed)
+- App: wmr-companion 0.3.6 unified (signed)
 - Phone/host: make, model, Android version
 - Controllers: make/model, LEFT/RIGHT, batteries
 - Glasses: make/model, host, connection (USB-C / wireless)
@@ -681,7 +683,7 @@ Keep the short block in the message; put the full manifest in `manifest.md`.
 - Handle:
 - Date/timezone:
 - Firmware: 0.3.2 (installer screenshot attached)
-- App: 0.3.5 unified (signed)
+- App: 0.3.6 unified (signed)
 - Phone: make/model/Android
 - Controllers: make/model, LEFT/RIGHT
 - Result: PASS / PARTIAL / FAIL / BLOCKED

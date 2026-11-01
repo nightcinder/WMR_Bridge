@@ -476,6 +476,17 @@ FF12 rate before / with HID (reports/s):
 notes:
 ```
 
+## BLE HOGP vs Companion Android HID coexistence
+
+The ESP32 bridge exposes standard BLE HID-over-GATT (HOGP, service `0x1812`) and the vendor `FF10` GATT service concurrently on the same LE link (`adv=on`, Appearance `0x03C4`). Android binds the bridge's HOGP gamepad profile directly at the OS level as an input device upon BLE bonding.
+
+The Companion app (`wmr-companion`) also provides an optional app-level HID gamepad output module (`BluetoothHidDevice` / `wmr_companion_hid_android`).
+
+### Coexistence rule for testers:
+- **Do not pair or enable both simultaneously.** When the Android host is bonded to the bridge and receiving HOGP input, opening Companion app HID output (`HidOutputPanel` / `BluetoothHidDevice`) registers a second virtual gamepad on Android. This leads to duplicate controllers, conflicting inputs, and split button events in games and testers.
+- When testing the firmware BLE HID gamepad, keep Companion app HID output **disabled**.
+- If app-level HID output is explicitly needed (for example, to test app-side stick normalization or custom mapping profiles), do not bind the phone to the bridge's HOGP service, or unpair the bridge gamepad from Android's Bluetooth settings while leaving GATT communication active.
+
 ## Known gaps
 
 - **Phone pass complete, three gaps.** The 2026-10-28 `0.2.4-38` run passes
@@ -491,9 +502,10 @@ notes:
 - **Boot protocol** is not implemented. Android uses report protocol for
   gamepads; a host that switches the HID service to boot protocol will not get
   meaningful input.
-- **App HID output** (`BluetoothHidDevice`) must be turned off when the
-  firmware HID device is used, otherwise Android sees two gamepads. That is
-  app UI work and is out of scope here.
+- **App HID output coexistence** (`BluetoothHidDevice`): as detailed in the
+  coexistence section above, app-level HID output must be turned off when the
+  firmware HOGP device is used, otherwise Android registers two conflicting
+  gamepads simultaneously.
 - **Security.** Bonding behaviour is ONY-438's and is now merged: LESC with
   bonding, unbonded centrals refused. A HID build without it cannot pair on a
   current Android phone, so test only images built after that merge.
