@@ -16,13 +16,16 @@ timeout. Firmware and Pi artifacts remain CI-built and hardware-unverified.
 
 ### Firmware
 
-- **HID gamepad button slots (#118, ONY-685).** Firmware 0.3.2 packed the
-  companion's model order straight into HID bits, but Android maps Button
-  usages 1–16 straight to `BTN_A`… and reserves usages 3 and 6, so every
-  control after B appeared one or two slots early. `src/wmr_hid.c` now
-  assigns bits by host usage number: A/B, X/Y, squeeze L1/R1, trigger
-  L2/R2, menu Select/Start, Home Mode, stick click L3/R3; C and Z stay
-  unused. The HID descriptor and report shape are unchanged.
+- **HID gamepad button slots (#118, ONY-685).** Firmware 0.3.0–0.3.2 packed
+  the companion's model order straight into HID bits, but Android maps Button
+  usages 1–16 straight to `BTN_A`… and reserves usages 3 and 6, so X/Y landed
+  one usage early, squeeze L1/R1 and trigger L2/R2 two, and the stick clicks
+  L3/R3 five (bits 8/9 arrived as L2/R2); Select/Start/Mode were already
+  correct. `src/wmr_hid.c` now assigns bits by host usage number: A/B, X/Y,
+  squeeze L1/R1, trigger L2/R2, menu Select/Start, Home Mode, stick click
+  L3/R3; C and Z stay unused. The HID descriptor and report shape are
+  unchanged. The file is the same from 0.3.0 through 0.3.2, so the mis-mapping
+  was shipped in all three releases.
 - **5 s disconnect detection and FF17 CONNECT ACK (#119, ONY-686).**
   `HCI_Write_Link_Supervision_Timeout` now applies the 5 s
   `WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT` per ACL while the bridge is master,
@@ -56,9 +59,12 @@ timeout. Firmware and Pi artifacts remain CI-built and hardware-unverified.
 
 - Host C tests and Python tests run in CI before tagging (PR/main); the
   ESP-IDF build runs on the tag; firmware reports the tag version over FF16.
-- Both firmware changes are covered by host tests (`test_hid`, `test_ctrl`)
-  and the triage change by `tests/test_triage_bundle.py`; no packaged firmware
-  has been flashed to hardware.
+- `test_hid` covers the HID button-slot remap and `test_ctrl` the FF17
+  CONNECT OK/BUSY gate; no host test exercises the 5 s supervision-timeout
+  write, so that half of #119 is checked by review only and stays
+  hardware-unverified. The triage change is covered by
+  `tests/test_triage_bundle.py`. No packaged firmware has been flashed to
+  hardware.
 
 ## 0.3.2 — 2026-10-31
 
