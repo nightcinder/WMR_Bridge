@@ -83,17 +83,17 @@ a mode. No single run covers every gate: Gate 4 needs the VITURE Pro Neckband
 Run the bench twice and combine the two bundles for ONY-736.
 
 - **Combined** mode (Neckband host): bridge steps, then Gate 4 (`handEmpty`
-  then `handGrip`, 60 s each), then the pose capture (`carinaPose`, on the
-  Neckband; skip it here, since Gate 9 is the phone run, or record it
-  labelled as the Neckband host), then Gate 1 (`carinaLeds`), then the
-  checkerboard (`carinaCheckerboard`), then `export` (test bundle zip). This
-  covers Gate 4, Gate 1 and the checkerboard.
+  then `handGrip`, 60 s each), then the 6DoF pose capture (`poseCapture`),
+  then Gate 1 (`carinaLeds`), then the checkerboard (`carinaCheckerboard`),
+  then Gate 9 (`carinaPose`; skip it here, since Gate 9 is the phone run,
+  or record it labelled as the Neckband host), then `export` (test bundle
+  zip). This covers Gate 4, Gate 1 and the checkerboard.
 - **6DoF only** mode (glasses, no bridge): skips the bridge steps but keeps
   Gate 4 and the pose capture.
 - **3DoF only** mode (phone or bridge host): keeps Gate 1, the checkerboard
   and Gate 9 (`carinaPose`). Run this on a phone for Gate 9; the bridge
-  steps appear first but can be skipped with Skip step on the Connect screen,
-  which attaches the USB-only Carina session.
+  steps appear first but can be skipped with Skip step on each bench step
+  screen, which attaches the USB-only Carina session.
 
 `export` writes the test bundle zip for each run.
 
@@ -295,7 +295,7 @@ and state which files are missing.
 - Gate 4 dropout (%): ____
 - Gate 1 frames at 0.8 m with >=5 blobs: ____ / ____
 - Gate 9 pose rate (Hz): ____
-- Files: zip name, SHA-256
+- Files: zip name(s), SHA-256 (one per run, two bundles)
 - What happened (3 lines max):
 ```
 
