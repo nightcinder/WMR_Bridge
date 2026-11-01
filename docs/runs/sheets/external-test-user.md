@@ -12,11 +12,18 @@ on v0.3.3. Private room: controller links are unauthenticated.
 
 ## 1. Get the APK
 
-https://github.com/nightcinder/wmr-companion/releases/download/v0.3.8/wmr-companion-0.3.8-unified-arm64-v8a.apk
+https://github.com/nightcinder/wmr-companion/releases/download/v0.3.10/wmr-companion-0.3.10-unified-arm64-v8a.apk
 
 The release APK ships `libglasses.so` (VITURE XR Glasses SDK for Android 2.4.1)
 under the VITURE licence. Its EULA and third-party notices ship in the APK and
-are reachable from About.
+are reachable from About. SHA256SUMS:
+https://github.com/nightcinder/wmr-companion/releases/download/v0.3.10/SHA256SUMS
+
+Do not run an older build for this pass. v0.3.10 fixes a crash: selecting
+AndroidXR as the hand-tracking source on a Galaxy XR no longer crashes the
+app (ONY-758). A crash on v0.3.7 through v0.3.9 is known older behaviour;
+a crash on v0.3.10 is a regression worth recording. v0.3.9 also fixed a
+black right eye on the Luma Ultra + Pro Neckband 3D view.
 
 If a WMR Companion built before 0.3.3 is installed (debug or locally signed),
 uninstall it first: `adb uninstall com.onyxlens.wmr_companion` or app settings.
@@ -58,7 +65,7 @@ uninstall it first: `adb uninstall com.onyxlens.wmr_companion` or app settings.
 3. Tap Start. Do not touch anything for 120 s. Tap Stop.
 4. Tap Export CSV + JSON (or Export CSV + JSON + echo) and save/share the files.
 
-## 6. Guided bench (app build 0.3.8 or later)
+## 6. Guided bench (app build 0.3.10 or later)
 
 Optional alternative. From the Connect screen tap Run guided bench and pick a
 mode: 3DoF only (bridge, full run), 6DoF only (glasses, no bridge, shorter run),
@@ -87,7 +94,7 @@ thread where you received this runbook.
 - Handle:
 - Date/timezone:
 - Firmware: 0.3.3
-- App: 0.3.8 unified (signed)
+- App: 0.3.10 unified (signed)
 - Phone: make/model/Android
 - Controllers: make/model, LEFT/RIGHT
 - Result: PASS / PARTIAL / FAIL / BLOCKED

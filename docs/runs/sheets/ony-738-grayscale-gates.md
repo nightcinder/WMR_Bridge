@@ -11,13 +11,13 @@ Companion documents:
 - ONY-735 Gates 1 and 9: LED visibility, checkerboard calibration, head-pose
   speed on the Luma Ultra.
 - ONY-736: the scorecard that uses what this sheet produces.
-- Companion (wmr-companion) v0.3.8: `docs/tracking/GATES.md` and the guided
+- Companion (wmr-companion) v0.3.10: `docs/tracking/GATES.md` and the guided
   bench (`apps/wmr_companion_app/lib/ui/bench/bench_run.dart`).
 
 Gates covered: **Gate 4** (hand tracking gripping a controller), **Gate 1**
 (8-bit stereo frame LED visibility), **Gate 9** (C-SDK head pose on a phone).
 
-This sheet runs the gates through the **guided bench** in Companion v0.3.8,
+This sheet runs the gates through the **guided bench** in Companion v0.3.10,
 not the debug capture tool. The bench records each step in the test bundle
 manifest and packs the capture directories into the export zip.
 
@@ -43,9 +43,9 @@ manifest and packs the capture directories into the export zip.
 
 App build:
 
-- Install the signed Companion **v0.3.8** unified APK (versionCode 2013) from
+- Install the signed Companion **v0.3.10** unified APK (versionCode 2015) from
   the GitHub release:
-  `https://github.com/nightcinder/wmr-companion/releases/download/v0.3.8/wmr-companion-0.3.8-unified-arm64-v8a.apk`
+  `https://github.com/nightcinder/wmr-companion/releases/download/v0.3.10/wmr-companion-0.3.10-unified-arm64-v8a.apk`
 - The release APK already carries `WMR_VITURE_CARINA_DIAG=true`, so the Carina
   gate runs on a signed tester build. It also ships `libglasses.so` (VITURE XR
   Glasses SDK for Android 2.4.1) under the VITURE licence; the EULA and the
@@ -53,7 +53,7 @@ App build:
 - No Unity export zip, no manual `jniLibs` staging, and no debug flags are
   needed for a tester run.
 
-Record the app version (0.3.8), the Unity export SHA if known, and the
+Record the app version (0.3.10), the Unity export SHA if known, and the
 firmware SHA in the intake block.
 
 ## 2. Setup, once per sitting
@@ -284,7 +284,7 @@ and state which files are missing.
 - Handle:
 - Date / timezone:
 - Firmware SHA:
-- App version: 0.3.8 (versionCode 2013)
+- App version: 0.3.10 (versionCode 2015)
 - Unity export SHA:
 - Glasses model: Luma Ultra
 - Phone (Gate 9): make / model / Android
