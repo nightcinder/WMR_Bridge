@@ -100,7 +100,7 @@ The last line is a consent statement, not a legal contract. You can stop at any 
 | Part | Version | Where it comes from |
 |---|---|---|
 | Firmware | **v0.3.3** (`89892ad`) | Browser installer or GitHub release. This is the current tagged release, CI-built and hardware-unverified. |
-| App, Android 14+ | **v0.3.8 signed APK** (`0.3.8`, versionCode 2013) | GitHub release asset, arm64-v8a, signed by CI. This APK contains one shared Unity runtime for the VITURE and XREAL paths. It is large (about 408 MiB). |
+| App, Android 14+ | **v0.3.8 signed APK** (`0.3.8`, versionCode 2013) | GitHub release asset, arm64-v8a, signed by CI. This APK contains one shared Unity runtime for the VITURE and XREAL paths. It is large (410.6 MiB). |
 | Capture tools (desktop, optional) | WMR_Bridge `main` | `tools/capture_ble.py`, `tools/analyze_capture.py`. |
 
 ### 3.2 Links

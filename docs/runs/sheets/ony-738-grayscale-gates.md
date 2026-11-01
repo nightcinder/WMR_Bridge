@@ -36,7 +36,7 @@ manifest and packs the capture directories into the export zip.
 | Glasses | Gate 1, Gate 9 | VITURE Luma Ultra. 3DoF models (`One`, `OneLite`, `Pro`, `Pro2`, `Luma`, `LumaPro`, `LumaCyber`, `Beast`) are rejected by the hand-tracking adapter and must not be used for Gate 4. |
 | Host | Gate 4 | VITURE Pro Neckband (Android, wireless ADB). The app runs on the Neckband, not on a paired phone. |
 | Phone | Gate 9 | Android phone with USB host (OTG) and a USB-C cable. |
-| Bridge | Gates in combined mode | One board on `main`, both controllers paired and awake. Record firmware SHA and boot banner. Gate 1, the checkerboard and Gate 9 run without a bridge. |
+| Bridge | Combined / 3DoF only | One board on `main`, both controllers paired and awake. Record firmware SHA and boot banner. Gate 1, the checkerboard and Gate 9 run without a bridge: in 3DoF only mode the bridge steps come first but can be skipped with Skip step, which attaches the USB-only Carina session. |
 | Controllers | All gates | Both WMR controllers, powered, LEDs active. |
 | Checkerboard | Gate 1 (calibration) | Printed checkerboard with known square size, flat and rigid, at least 8 by 6 inner corners. |
 | Tooling | All gates | `adb` (wireless for the Neckband), a terminal, logcat capture, a way to screenshot the debug overlay. |
@@ -78,20 +78,21 @@ firmware SHA in the intake block.
 ## 3. Run the guided bench
 
 Open the app, go to the Connect screen, tap **Run guided bench**, and pick
-**Combined** mode. Combined mode runs every gate in one pass:
+a mode. No single run covers every gate: Gate 4 needs the VITURE Pro Neckband
+(hosts the app), while Gate 9 needs a plain Android phone over USB (section 7).
+Run the bench twice and combine the two bundles for ONY-736.
 
-1. Bridge steps (connect, both hands, firmware config, still/move, capture,
-   latency, photo, serial log).
-2. Gate 4: `handEmpty` then `handGrip` (60 s each).
-3. Pose capture (filter-spec section 8 corpus).
-4. Gate 1: `carinaLeds`.
-5. Checkerboard: `carinaCheckerboard`.
-6. Gate 9: `carinaPose`.
-7. `export` writes the test bundle zip.
+- **Combined** mode (Neckband host): bridge steps, then Gate 4 (`handEmpty`
+  then `handGrip`, 60 s each), then the pose capture, then Gate 1
+  (`carinaLeds`), then the checkerboard (`carinaCheckerboard`), then
+  `export` (test bundle zip). This covers Gate 4, Gate 1 and the checkerboard.
+- **6DoF only** mode (glasses, no bridge): skips the bridge steps but keeps
+  Gate 4 and the pose capture.
+- **3DoF only** mode (phone or bridge host): keeps Gate 1, the checkerboard
+  and Gate 9 (`carinaPose`). Run this on a phone for Gate 9; the bridge
+  steps appear first but can be skipped (see below).
 
-For a glasses-only run (no bridge), use **6DoF only** mode; it skips the
-bridge steps but keeps Gate 4 and the pose capture. For a bridge-only run,
-use **3DoF only** mode; it keeps Gate 1, the checkerboard and Gate 9.
+`export` writes the test bundle zip for each run.
 
 ## 4. Gate 4 — hand tracking while gripping a controller
 
@@ -116,7 +117,6 @@ Record:
 | Joint rate, gripping controller (Hz) | |
 | Hand tracked while gripping? (yes / no / partial) | |
 | Joints present (count of 26) | |
-| Recenter works? | |
 | Errors or exceptions | |
 | `playerHosted` (true / false) | |
 | `stereoMode` | |
@@ -187,8 +187,9 @@ Pass and fail for ONY-736 scoring (amendment 3 from ONY-731):
 
 ONY-736 needs stereo pairs to recover intrinsics. The bench runs 10 captures:
 2 distances (0.5 m and 0.8 m) times 5 angles (fronto-parallel, left, right,
-up, down). Each capture runs 4 s. The controller LEDs stay off during these
-captures, so the blobs do not confuse the corner detector.
+up, down). Each capture runs 4 s. Keep the controller LEDs off during these
+captures (power the controllers down; the bench does not switch them off), so
+the blobs do not confuse the corner detector.
 
 Procedure:
 
