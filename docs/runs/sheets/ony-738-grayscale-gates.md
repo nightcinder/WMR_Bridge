@@ -62,6 +62,7 @@ Build the APKs (single APK with both flags, recommended):
 ```bash
 cd apps/wmr_companion_app
 tool/install_unity_export.sh unified <unity-export.zip>
+mkdir -p android/app/src/main/jniLibs/arm64-v8a/
 cp <path-to>/libglasses.so android/app/src/main/jniLibs/arm64-v8a/
 tool/build_flavor.sh unified --debug \
   --dart-define=WMR_VITURE_TRACKING=true \
@@ -168,14 +169,18 @@ Procedure:
 
 ```dart
 final report = await VitureCarinaDiagnostics.capture(
-  outputDirectory: '/data/user/0/com.onyxlens.wmr_companion/cache/carina-<distance>',
+  outputDirectory: '/data/user/0/com.onyxlens.wmr_companion/cache/carina-<distance>-<orientation>',
 );
 ```
+
+Use a distinct `<orientation>` per capture (`front`, `rotated`, `tilted`), so the
+three captures at one distance do not overwrite one another. The harness writes
+fixed filenames, so a shared directory loses two of the three captures.
 
 4. After each capture, pull the output directory:
 
 ```bash
-adb pull /data/user/0/com.onyxlens.wmr_companion/cache/carina-<distance> ./carina-<distance>
+adb pull /data/user/0/com.onyxlens.wmr_companion/cache/carina-<distance>-<orientation> ./carina-<distance>-<orientation>
 ```
 
 5. Record the telemetry from `carina-diagnostics.json`: width, height, fps,
@@ -273,7 +278,9 @@ ONY-736 scores the result. Return all of the following:
 
 1. Gate 4 logcat file and the filled Gate 4 table, including the dropout
    percentage.
-2. One directory per distance from Gate 1, each containing:
+2. Three directories per distance from Gate 1 (one per orientation:
+   `carina-<distance>-front`, `carina-<distance>-rotated`,
+   `carina-<distance>-tilted`), each containing:
    - The PGM frames (`carina-rung<N>-<channel>-<ms>ms.pgm`).
    - `carina-diagnostics.json`.
 3. The checkerboard stereo pairs with pose labels and the square size.
