@@ -406,6 +406,45 @@ def test_flasher_page_contract():
     check('crossorigin="anonymous"' in page, "SRI fetch is CORS-enabled")
 
 
+def test_flasher_controller_panel():
+    path = os.path.join(HERE, "..", "docs", "flasher", "index.html")
+    with open(path, encoding="utf-8") as fh:
+        page = fh.read()
+    check('id="pair-panel"' in page, "the controller panel is part of the page")
+    check("Pair your controllers" in page, "the panel says what it does")
+    check('id="serial-connect"' in page and "Connect to bridge" in page,
+          "the panel offers one Web Serial connect button")
+    check("navigator.serial.requestPort()" in page,
+          "the page opens the bridge's serial port itself")
+    check("BAUD_RATE = 115200" in page and "baudRate: BAUD_RATE" in page,
+          "the console is opened at the firmware's 115200 baud")
+    for hand in ("left", "right"):
+        check('data-hand="%s"' % hand in page,
+              "the panel has a %s controller card" % hand)
+        for action in ("pair", "disconnect", "retry"):
+            check(page.count('data-action="%s"' % action) >= 2,
+                  "both cards offer %s" % action)
+    for name, key in (("discover", "d"), ("connectLeft", "l"),
+                      ("connectRight", "r"), ("disconnectLeft", "L"),
+                      ("disconnectRight", "R"), ("forgetLeftBond", "k"),
+                      ("forgetRightBond", "K"), ("forgetAddresses", "F"),
+                      ("status", "s")):
+        check('%s: "%s"' % (name, key) in page,
+              "the page sends the %r console key" % key)
+    check(r"rx=(\d+) tx=(\d+)" in page,
+          "packet counters are parsed from the firmware's status line")
+    check('data-live' in page and "receiving" in page,
+          "each card has a receiving indicator")
+    check('id="serial-log" class="hidden"' in page,
+          "the raw log is hidden until the user opens it")
+    check('id="log-toggle"' in page and ">Open log</button>" in page,
+          "an Open log button reveals the raw log")
+    check("Windows button" in page and "LEDs pulse" in page,
+          "the instructions say how to put a controller in pairing mode")
+    check("not discovered yet" in page,
+          "the status parser uses the firmware's address-source wording")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
