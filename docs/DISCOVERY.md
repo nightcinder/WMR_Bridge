@@ -305,17 +305,24 @@ the **Pair your controllers** panel.
    115200 baud. Chrome or Edge on a desktop is required.
 2. Turn the controller on.
 3. Put the controller in pairing mode. Hold the Windows button under the battery
-   cover until the LEDs pulse slowly.
+   cover or on the grip until the LEDs pulse slowly.
 4. Click **Pair** on the matching card, Left or Right.
 5. Wait for the badge to say **Connected** and for the packet counter to climb.
 6. Repeat steps 2 to 5 for the other hand.
 7. Read the packet counter on each card. It shows packets received from that
    controller. The **receiving** dot lights up while packets arrive.
-8. If a card shows **Not paired** or **Needs attention**, press **Retry**.
+8. If a card shows **Not paired** or **Not connected**, press **Retry**. If it
+   shows **Needs attention**, follow the note on that card: disconnect the
+   controller and press **Pair** again, or click **Open log**.
 9. If the bridge still has an older controller saved for that hand, press
    **Forget saved controllers**, then pair the new controller.
 10. Click **Open log** to show the raw serial output for troubleshooting. Click
     **Hide log** to collapse it again. Click **Clear** to empty it.
+
+**Disconnect.** To drop one hand, click **Disconnect** on its card. The
+**Disconnect** button in the serial bar disconnects the browser from the
+bridge's USB port. In the serial console, `L` and `R` disconnect the left and
+right hands.
 
 The panel sends the same console keys as the serial monitor: `d` discovers, `l`
 and `r` connect, `L` and `R` disconnect, `k` and `K` drop one hand's link key,

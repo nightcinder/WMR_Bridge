@@ -178,10 +178,12 @@ CMake file already does this.
    the web flasher page. Click **Connect to bridge** (Chrome or Edge, over USB at
    115200 baud), then click **Pair** on the Left card and on the Right card.
    Before you click Pair, put the controller in pairing mode: turn it on, then
-   hold the Windows button under the battery cover until the LEDs pulse slowly.
-   The packet counter on each card must start to climb. The bridge finds the
-   controllers by name, stores their addresses, and later they reconnect on their
-   own. If a card shows **Not paired** or **Needs attention**, press **Retry**.
+   hold the Windows button under the battery cover or on the grip until the LEDs
+   pulse slowly. The packet counter on each card must start to climb. The bridge
+   finds the controllers by name, stores their addresses, and later they
+   reconnect on their own. If a card shows **Not paired** or **Not connected**,
+   press **Retry**. If it shows **Needs attention**, follow the note on that
+   card: disconnect the controller and press **Pair** again, or click **Open log**.
    If the bridge still has an older controller saved for that hand, press
    **Forget saved controllers** and pair again. The raw log stays hidden behind
    the **Open log** button. Without Web Serial, open a serial monitor at 115200
