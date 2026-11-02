@@ -173,13 +173,24 @@ CMake file already does this.
 ## Using it
 
 1. Flash and open the monitor. You should see `BLE advertising: WMR Bridge (FF11 raw stream, FF12 decoded stream, FF14 batched decoded stream)`.
-2. Power on the controllers (already paired). They connect on their own. The log
-   shows `Incoming HID ... accepting` and `descriptor status=0x00` for each.
-   First flash: put the controllers in pairing mode within a minute of boot.
-   Discovery finds them by name, stores their addresses and pairs
-   ([docs/DISCOVERY.md](docs/DISCOVERY.md)).
-   Later: `d` runs discovery again for a hand without an address. `F` forgets the
-   stored addresses. `l`/`r` reconnect a known controller.
+2. Pair the controllers. Already paired controllers connect on their own when you
+   power them on. For a first flash, use the **Pair your controllers** panel on
+   the web flasher page. Click **Connect to bridge** (Chrome or Edge, over USB at
+   115200 baud), then click **Pair** on the Left card and on the Right card.
+   Before you click Pair, put the controller in pairing mode: turn it on, then
+   hold the Windows button under the battery cover or on the grip until the LEDs
+   pulse slowly. The packet counter on each card must start to climb. The bridge
+   finds the controllers by name, stores their addresses, and later they
+   reconnect on their own. If a card shows **Not paired** or **Not connected**,
+   press **Retry**. If it shows **Needs attention**, follow the note on that
+   card: disconnect the controller and press **Pair** again, or click **Open log**.
+   If the bridge still has an older controller saved for that hand, press
+   **Forget saved controllers** and pair again. The raw log stays hidden behind
+   the **Open log** button. Without Web Serial, open a serial monitor at 115200
+   baud instead: put the controllers in pairing mode within a minute of first
+   boot; later, `d` starts discovery for a hand without an address, `F` forgets
+   the stored addresses, and `l`/`r` reconnect a known controller. See
+   [docs/DISCOVERY.md](docs/DISCOVERY.md).
 3. On the Android phone: connect to `WMR Bridge` and accept the pairing dialog
    (the bridge requires LE Secure Connections and bonding; it appears once per
    phone, then the phone re-encrypts on later connections). Then request the MTU
