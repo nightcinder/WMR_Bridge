@@ -9,6 +9,7 @@ idf.py writes, not that a particular firmware builds. Run:
 
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -404,6 +405,52 @@ def test_flasher_page_contract():
     check("esp-web-tools@10.4.0" in page, "ESP Web Tools is version-pinned")
     check('integrity="sha384-' in page, "the CDN module has an SRI hash")
     check('crossorigin="anonymous"' in page, "SRI fetch is CORS-enabled")
+
+
+def test_flasher_controller_panel():
+    path = os.path.join(HERE, "..", "docs", "flasher", "index.html")
+    with open(path, encoding="utf-8") as fh:
+        page = fh.read()
+    check('id="pair-panel"' in page, "the controller panel is part of the page")
+    check("Pair your controllers" in page, "the panel says what it does")
+    check('id="serial-connect"' in page and "Connect to bridge" in page,
+          "the panel offers one Web Serial connect button")
+    check("navigator.serial.requestPort()" in page,
+          "the page opens the bridge's serial port itself")
+    check("BAUD_RATE = 115200" in page and "baudRate: BAUD_RATE" in page,
+          "the console is opened at the firmware's 115200 baud")
+    for hand in ("left", "right"):
+        check('data-hand="%s"' % hand in page,
+              "the panel has a %s controller card" % hand)
+        for action in ("pair", "disconnect", "retry"):
+            check(page.count('data-action="%s"' % action) >= 2,
+                  "both cards offer %s" % action)
+    for name, key in (("discover", "d"), ("connectLeft", "l"),
+                      ("connectRight", "r"), ("disconnectLeft", "L"),
+                      ("disconnectRight", "R"), ("forgetLeftBond", "k"),
+                      ("forgetRightBond", "K"), ("forgetAddresses", "F"),
+                      ("status", "s")):
+        check('%s: "%s"' % (name, key) in page,
+              "the page sends the %r console key" % key)
+    counters = re.search(r"var COUNTERS = /(.+?)/;", page)
+    check(counters is not None, "the page defines a counter parser")
+    if counters:
+        fields = re.match(counters.group(1),
+                          "  LEFT rx=1234 tx=56 drop=0 offline=0")
+        check(fields is not None and fields.groups() == ("LEFT", "1234", "56"),
+              "the counter parser reads the firmware's LEFT rx=... tx=... line")
+    check('indexOf("BOND RESET")' in page and "hand.connected === false" in page,
+          "Pair waits for the link to close and reports a refused bond reset")
+    check('data-live' in page and "receiving" in page,
+          "each card has a receiving indicator")
+    check('id="serial-log" class="hidden"' in page,
+          "the raw log is hidden until the user opens it")
+    check('id="log-toggle"' in page and ">Open log</button>" in page,
+          "an Open log button reveals the raw log")
+    check("Windows button" in page and "LEDs pulse" in page,
+          "the instructions say how to put a controller in pairing mode")
+    check("not discovered yet" in page,
+          "the status parser uses the firmware's address-source wording")
 
 
 def main():

@@ -83,6 +83,99 @@
   summary { cursor: pointer; color: var(--text); }
   .footer { margin-top: 40px; font-size: 0.85rem; }
   .hidden { display: none; }
+  .panel-title { margin: 0 0 6px; }
+  .serial-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin: 16px 0 8px;
+  }
+  .btn {
+    font: inherit;
+    color: var(--text);
+    background: #232b36;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 9px 16px;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary {
+    color: #06121f;
+    background: var(--accent);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .btn[disabled] { opacity: 0.45; cursor: default; }
+  .btn[disabled]:hover { border-color: var(--line); }
+  .serial-status { font-size: 0.85rem; color: var(--muted); }
+  .serial-status[data-tone="ok"] { color: #7ee787; }
+  .serial-status[data-tone="bad"] { color: var(--danger); }
+  .hint { margin: 0; font-size: 0.85rem; }
+  .hands { display: grid; gap: 14px; margin: 18px 0 0; }
+  @media (min-width: 620px) { .hands { grid-template-columns: 1fr 1fr; } }
+  .hand {
+    background: #141920;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .hand-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .hand h3 { margin: 0; font-size: 1rem; }
+  .badge {
+    font-size: 0.74rem;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 10px;
+    white-space: nowrap;
+  }
+  .badge[data-tone="ok"] { color: #7ee787; border-color: #2ea043; }
+  .badge[data-tone="busy"] { color: var(--warn); border-color: #9e6a03; }
+  .badge[data-tone="bad"] { color: var(--danger); border-color: #da3633; }
+  .packets { margin: 12px 0 2px; font-size: 0.95rem; }
+  .packets strong {
+    color: var(--text);
+    font-size: 1.35rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .live {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #7ee787;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .live::before { content: "\25CF "; }
+  .live.on { opacity: 1; }
+  .packet-note { margin: 0; font-size: 0.8rem; }
+  .hand-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .hand-actions .btn { padding: 7px 12px; font-size: 0.88rem; }
+  .pair-steps { margin: 20px 0 8px; }
+  .log { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+  .log-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .log pre {
+    max-height: 320px;
+    overflow: auto;
+    margin: 10px 0 0;
+    padding: 12px;
+    background: #0b0e13;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
 </style>
 <script type="module"
         src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"
@@ -186,6 +279,91 @@
     </p>
   </div>
 
+  <div class="panel" id="pair-panel">
+    <h2 class="panel-title">Pair your controllers</h2>
+    <p>
+      Leave the board plugged in after flashing, then pair each controller here.
+      You do not need a serial monitor.
+    </p>
+
+    <div class="serial-bar">
+      <button id="serial-connect" class="btn primary" type="button">Connect to bridge</button>
+      <button id="serial-close" class="btn" type="button" disabled>Disconnect</button>
+      <span id="serial-status" class="serial-status">Not connected</span>
+    </div>
+    <p id="serial-hint" class="hint">
+      Close the install dialog first, then choose the board's USB port.
+    </p>
+    <p id="serial-unsupported" class="warn hidden">
+      This browser cannot talk to the board over USB. Use Chrome or Edge on a
+      desktop, over HTTPS or from <code>localhost</code>.
+    </p>
+
+    <div class="hands">
+      <section class="hand" data-hand="left">
+        <div class="hand-head">
+          <h3>Left controller</h3>
+          <span class="badge" data-badge>Not checked</span>
+        </div>
+        <p class="packets">
+          <strong data-packets>0</strong> packets received
+          <span class="live" data-live>receiving</span>
+        </p>
+        <p class="packet-note" data-note>Waiting for the first status line from the bridge.</p>
+        <div class="hand-actions">
+          <button class="btn" type="button" data-action="pair" disabled>Pair</button>
+          <button class="btn" type="button" data-action="disconnect" disabled>Disconnect</button>
+          <button class="btn" type="button" data-action="retry" disabled>Retry</button>
+        </div>
+      </section>
+
+      <section class="hand" data-hand="right">
+        <div class="hand-head">
+          <h3>Right controller</h3>
+          <span class="badge" data-badge>Not checked</span>
+        </div>
+        <p class="packets">
+          <strong data-packets>0</strong> packets received
+          <span class="live" data-live>receiving</span>
+        </p>
+        <p class="packet-note" data-note>Waiting for the first status line from the bridge.</p>
+        <div class="hand-actions">
+          <button class="btn" type="button" data-action="pair" disabled>Pair</button>
+          <button class="btn" type="button" data-action="disconnect" disabled>Disconnect</button>
+          <button class="btn" type="button" data-action="retry" disabled>Retry</button>
+        </div>
+      </section>
+    </div>
+
+    <ol class="pair-steps">
+      <li>Turn the controller on.</li>
+      <li>Put it in pairing mode: hold the <strong>Windows button</strong>,
+        under the battery cover or on the grip, until the LEDs pulse
+        slowly.</li>
+      <li>Click <strong>Pair</strong> on the matching card and wait for the badge
+        to say <strong>Connected</strong>. The packet counter should start
+        climbing as soon as you press a button or move the stick.</li>
+    </ol>
+    <p class="hint">
+      Pair one controller at a time. If it does not connect, press
+      <strong>Retry</strong>. If the bridge still has an older controller saved
+      for that hand, use <strong>Forget saved controllers</strong> and pair the
+      new one.
+    </p>
+    <div class="hand-actions">
+      <button id="forget-saved" class="btn" type="button" disabled>Forget saved controllers</button>
+    </div>
+
+    <div class="log">
+      <div class="log-bar">
+        <button id="log-toggle" class="btn" type="button" aria-expanded="false">Open log</button>
+        <button id="log-clear" class="btn hidden" type="button">Clear</button>
+        <span class="hint">Raw output from the bridge, only needed for troubleshooting.</span>
+      </div>
+      <pre id="serial-log" class="hidden" aria-live="polite"></pre>
+    </div>
+  </div>
+
   <h2>What you need</h2>
   <ul>
     <li>An ESP32 board with 2 MB flash and a USB <strong>data</strong> cable.</li>
@@ -211,13 +389,16 @@
     <li>Let the installer erase and flash the board. This takes about a minute.
       If it says "Failed to connect", hold the board's <strong>BOOT</strong>
       button while it retries, and make sure no serial monitor has the port open.</li>
-    <li>Open a serial monitor at <strong>115200</strong> baud to check the boot
-      log. The advertised name tells you which image is running:
-      <code>BLE advertising: WMR Bridge</code> (both hands),
-      <code>WMR Bridge L</code> or <code>WMR Bridge R</code>.</li>
-    <li>On first boot, put the controller(s) this image serves into pairing
-      mode within a minute. The bridge finds them by name and stores their
-      addresses. Later they reconnect on their own.</li>
+    <li>Use <strong>Pair your controllers</strong> above: pair the LEFT and/or
+      RIGHT controller and watch its packet counter climb. The bridge finds
+      them by name and stores their addresses, so later they reconnect on their
+      own. Open the log if you need the boot banner: the advertised name tells
+      you which image is running, <code>BLE advertising: WMR Bridge</code>
+      (both hands), <code>WMR Bridge L</code> or <code>WMR Bridge R</code>.</li>
+    <li>If this browser has no Web Serial, open a serial monitor at
+      <strong>115200</strong> baud instead and put the controller(s) in pairing
+      mode within a minute of first boot; the bridge finds and stores their
+      addresses, and pressing <code>d</code> starts another search.</li>
   </ol>
 
   <div class="panel">
@@ -290,6 +471,510 @@
             variant + ".";
         });
     });
+  })();
+</script>
+<script>
+  /* In-page controller pairing over the bridge's 115200-baud console.
+   *
+   * The firmware console keys (src/wmr_console.c) are the whole protocol:
+   * d discovers, l/r connect, L/R disconnect, k/K drop one hand's link key,
+   * F forgets both stored addresses, and s prints the per-hand status and
+   * packet counters. Nothing here needs a firmware change.
+   */
+  (function () {
+    "use strict";
+
+    var BAUD_RATE = 115200;
+    var POLL_MS = 3000;
+    var RECEIVING_MS = 4500;
+    var COMMAND_GAP_MS = 700;
+    var DISCONNECT_TIMEOUT_MS = 2500;
+    var BOND_TIMEOUT_MS = 2500;
+    var MAX_LOG_LINES = 500;
+    var KEY = {
+      discover: "d",
+      connectLeft: "l",
+      connectRight: "r",
+      disconnectLeft: "L",
+      disconnectRight: "R",
+      forgetLeftBond: "k",
+      forgetRightBond: "K",
+      forgetAddresses: "F",
+      status: "s"
+    };
+    /* The trailing parenthesis is wmr_controller_address_source_name(): "not
+     * discovered yet", "discovered, stored" or "compile-time override". */
+    var SNAPSHOT = /^\s*(LEFT|RIGHT) cid=\d+ connected=(\d) descriptor=\d model=\S+ reports=(\d+) other=\d+ address=(\S+) \(([^)]*)\)/;
+    var COUNTERS = /^\s*(LEFT|RIGHT) rx=(\d+) tx=(\d+) /;
+
+    var encoder = new TextEncoder();
+    var decoder = new TextDecoder();
+    var port = null;
+    var writer = null;
+    var reader = null;
+    var readDone = null;
+    var reading = false;
+    var pollTimer = null;
+    var renderTimer = null;
+    var logLines = [];
+    var logOpen = false;
+    var logDirty = false;
+
+    var hands = {
+      LEFT: newHand(),
+      RIGHT: newHand()
+    };
+
+    var cards = {
+      LEFT: document.querySelector('.hand[data-hand="left"]'),
+      RIGHT: document.querySelector('.hand[data-hand="right"]')
+    };
+    var connectButton = document.getElementById("serial-connect");
+    var closeButton = document.getElementById("serial-close");
+    var forgetButton = document.getElementById("forget-saved");
+    var serialStatus = document.getElementById("serial-status");
+    var serialHint = document.getElementById("serial-hint");
+    var unsupported = document.getElementById("serial-unsupported");
+    var logToggle = document.getElementById("log-toggle");
+    var logClear = document.getElementById("log-clear");
+    var logView = document.getElementById("serial-log");
+
+    function newHand() {
+      return {
+        rx: 0,
+        tx: 0,
+        reports: 0,
+        connected: null,
+        source: null,
+        address: "",
+        state: "",
+        lastRxAt: 0,
+        bondStatus: "",
+        bondError: ""
+      };
+    }
+
+    function pause(ms) {
+      return new Promise(function (resolve) { setTimeout(resolve, ms); });
+    }
+
+    function setSerialStatus(text, tone) {
+      serialStatus.textContent = text;
+      if (tone) serialStatus.setAttribute("data-tone", tone);
+      else serialStatus.removeAttribute("data-tone");
+    }
+
+    function hasAddress(hand) {
+      return !!hand.source && hand.source !== "not discovered yet";
+    }
+
+    function statusOf(hand) {
+      if (hand.bondError) return { text: "Needs attention", tone: "bad" };
+      if (hand.connected === true) return { text: "Connected", tone: "ok" };
+      if (hand.state === "searching") return { text: "Searching", tone: "busy" };
+      if (hand.state === "pairing") return { text: "Pairing", tone: "busy" };
+      if (hand.connected === false) {
+        return {
+          text: hasAddress(hand) ? "Not connected" : "Not paired",
+          tone: ""
+        };
+      }
+      return { text: "Not checked", tone: "" };
+    }
+
+    function renderHand(name) {
+      var hand = hands[name];
+      var card = cards[name];
+      if (!card) return;
+      var status = statusOf(hand);
+      var badge = card.querySelector("[data-badge]");
+      badge.textContent = status.text;
+      badge.setAttribute("data-tone", status.tone);
+      card.querySelector("[data-packets]").textContent = hand.rx.toLocaleString();
+      var live = card.querySelector("[data-live]");
+      var receiving = hand.connected === true &&
+        hand.lastRxAt > 0 && (Date.now() - hand.lastRxAt) < RECEIVING_MS;
+      live.classList.toggle("on", receiving);
+      var note = card.querySelector("[data-note]");
+      if (hand.bondError) {
+        note.textContent = hand.bondError;
+      } else if (hand.connected === null) {
+        note.textContent = "Waiting for the first status line from the bridge.";
+      } else {
+        note.textContent = hand.tx.toLocaleString() + " sent to the app \u00b7 " +
+          hand.reports.toLocaleString() + " input reports";
+      }
+      var ready = !!writer;
+      var busy = hand.state === "searching" || hand.state === "pairing";
+      card.querySelector('[data-action="pair"]').disabled = !ready || busy;
+      card.querySelector('[data-action="disconnect"]').disabled = !ready ||
+        hand.connected === false;
+      card.querySelector('[data-action="retry"]').disabled = !ready || busy;
+    }
+
+    function render() {
+      renderHand("LEFT");
+      renderHand("RIGHT");
+      forgetButton.disabled = !writer;
+    }
+
+    function appendLog(line) {
+      logLines.push(line);
+      if (logLines.length > MAX_LOG_LINES) {
+        logLines.splice(0, logLines.length - MAX_LOG_LINES);
+      }
+      if (logDirty) return;
+      logDirty = true;
+      setTimeout(flushLog, 100);
+    }
+
+    function flushLog() {
+      logDirty = false;
+      if (!logOpen) return;
+      logView.textContent = logLines.join("\n");
+      logView.scrollTop = logView.scrollHeight;
+    }
+
+    function updateLogButton() {
+      logToggle.textContent = logOpen ? "Hide log" : "Open log";
+      logToggle.setAttribute("aria-expanded", logOpen ? "true" : "false");
+      logView.classList.toggle("hidden", !logOpen);
+      logClear.classList.toggle("hidden", !logOpen);
+      if (logOpen) flushLog();
+    }
+
+    function handleLine(line) {
+      if (!line) return;
+      appendLog(line);
+
+      var match = SNAPSHOT.exec(line);
+      if (match) {
+        var snapped = hands[match[1]];
+        snapped.connected = match[2] === "1";
+        snapped.reports = parseInt(match[3], 10);
+        snapped.address = match[4] === "unknown" ? "" : match[4];
+        snapped.source = match[5];
+        snapped.state = "";
+        render();
+        return;
+      }
+
+      match = COUNTERS.exec(line);
+      if (match) {
+        var counted = hands[match[1]];
+        var rx = parseInt(match[2], 10);
+        counted.tx = parseInt(match[3], 10);
+        if (rx > counted.rx) counted.lastRxAt = Date.now();
+        counted.rx = rx;
+        render();
+        return;
+      }
+
+      if (line.indexOf("FORGET:") >= 0) {
+        hands.LEFT = newHand();
+        hands.RIGHT = newHand();
+      }
+      ["LEFT", "RIGHT"].forEach(function (name) {
+        var hand = hands[name];
+        if (line.indexOf(name) < 0) return;
+        if (line.indexOf("BOND RESET") >= 0) {
+          hand.bondStatus = line.indexOf("refused") >= 0 ? "refused" : "ok";
+          if (hand.bondStatus === "refused") {
+            hand.bondError = "The bridge refused to reset the old pairing. Disconnect the controller, then press Pair again.";
+          }
+          render();
+          return;
+        }
+        if (line.indexOf(name + " ready at") >= 0 ||
+            line.indexOf(name + " pairing completed") >= 0) {
+          hand.connected = true;
+          hand.state = "";
+        } else if (line.indexOf(name + " was found but did not pair") >= 0 ||
+                   line.indexOf(name + " link closed") >= 0 ||
+                   line.indexOf(name + " was not found") >= 0) {
+          hand.connected = false;
+          hand.state = "";
+        } else if (line.indexOf(name + " did not pair") >= 0) {
+          hand.connected = false;
+          hand.source = "not discovered yet";
+          hand.address = "";
+          hand.state = "";
+        } else if (line.indexOf("found " + name) >= 0 ||
+                   line.indexOf("connecting " + name) >= 0 ||
+                   line.indexOf("looking for " + name) >= 0 ||
+                   line.indexOf("Pairing: " + name + " attempt") >= 0) {
+          hand.state = "pairing";
+        }
+      });
+      render();
+    }
+
+    function write(command, quiet) {
+      if (!writer) return Promise.resolve();
+      if (!quiet) appendLog("> " + command);
+      return writer.write(encoder.encode(command)).catch(function (err) {
+        appendLog("! could not send the command: " + (err && err.message ? err.message : err));
+      });
+    }
+
+    function sequence(commands) {
+      return commands.reduce(function (chain, command) {
+        return chain.then(function () {
+          return pause(COMMAND_GAP_MS);
+        }).then(function () {
+          return write(command);
+        });
+      }, Promise.resolve());
+    }
+
+    function waitFor(condition, timeoutMs) {
+      var deadline = Date.now() + timeoutMs;
+      return new Promise(function (resolve) {
+        function check() {
+          if (condition()) return resolve(true);
+          if (Date.now() >= deadline) return resolve(false);
+          setTimeout(check, 100);
+        }
+        check();
+      });
+    }
+
+    function resetBondThenConnect(name) {
+      var hand = hands[name];
+      var connectKey = name === "LEFT" ? KEY.connectLeft : KEY.connectRight;
+      var bondKey = name === "LEFT" ? KEY.forgetLeftBond : KEY.forgetRightBond;
+      hand.bondStatus = "";
+      hand.bondError = "";
+      return write(bondKey).then(function () {
+        return waitFor(function () {
+          return hand.bondStatus === "ok" || hand.bondStatus === "refused";
+        }, BOND_TIMEOUT_MS);
+      }).then(function (answered) {
+        if (!answered) {
+          hand.state = "";
+          hand.bondError = "The bridge did not answer the pairing reset. Open the log and try again.";
+          render();
+          return;
+        }
+        if (hand.bondStatus === "refused") {
+          hand.state = "";
+          render();
+          return;
+        }
+        return write(connectKey);
+      });
+    }
+
+    function pair(name) {
+      var hand = hands[name];
+      var disconnectKey = name === "LEFT" ? KEY.disconnectLeft : KEY.disconnectRight;
+      hand.state = "searching";
+      hand.bondError = "";
+      render();
+      if (!hasAddress(hand)) {
+        sequence([KEY.discover]);
+      } else if (hand.connected) {
+        /* The firmware refuses a bond reset while the link is up, so wait for
+         * the link-closed line before deleting the old key. */
+        write(disconnectKey).then(function () {
+          return waitFor(function () { return hand.connected === false; },
+                         DISCONNECT_TIMEOUT_MS);
+        }).then(function (closed) {
+          if (!closed) {
+            hand.state = "";
+            hand.bondError = "The controller did not disconnect. Turn it off, then press Pair again.";
+            render();
+            return;
+          }
+          return resetBondThenConnect(name);
+        });
+      } else {
+        resetBondThenConnect(name);
+      }
+    }
+
+    function disconnect(name) {
+      var key = name === "LEFT" ? KEY.disconnectLeft : KEY.disconnectRight;
+      hands[name].state = "";
+      render();
+      sequence([key]);
+    }
+
+    function retry(name) {
+      var hand = hands[name];
+      var connectKey = name === "LEFT" ? KEY.connectLeft : KEY.connectRight;
+      var disconnectKey = name === "LEFT" ? KEY.disconnectLeft : KEY.disconnectRight;
+      var commands;
+      if (hand.connected) {
+        commands = [disconnectKey, connectKey];
+      } else if (hasAddress(hand)) {
+        commands = [connectKey];
+      } else {
+        commands = [KEY.discover];
+      }
+      hand.state = "searching";
+      render();
+      sequence(commands);
+    }
+
+    function forgetSaved() {
+      if (!window.confirm("Forget both controllers saved on the bridge? " +
+                          "You will pair them again from this page.")) {
+        return;
+      }
+      hands.LEFT.state = "searching";
+      hands.RIGHT.state = "searching";
+      render();
+      write(KEY.forgetAddresses);
+    }
+
+    function connectAction(button) {
+      var card = button.closest("[data-hand]");
+      if (!card) return;
+      var hand = card.getAttribute("data-hand").toUpperCase();
+      var kind = button.getAttribute("data-action");
+      if (kind === "pair") pair(hand);
+      else if (kind === "disconnect") disconnect(hand);
+      else if (kind === "retry") retry(hand);
+    }
+
+    Object.keys(cards).forEach(function (name) {
+      cards[name].addEventListener("click", function (event) {
+        var button = event.target.closest("[data-action]");
+        if (button) connectAction(button);
+      });
+    });
+    forgetButton.addEventListener("click", forgetSaved);
+
+    async function openPort() {
+      if (!("serial" in navigator)) return;
+      connectButton.disabled = true;
+      setSerialStatus("Connecting\u2026", "");
+      serialHint.textContent = "Choose the board's USB port in the browser dialog.";
+      try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: BAUD_RATE });
+        writer = port.writable.getWriter();
+        hands.LEFT = newHand();
+        hands.RIGHT = newHand();
+        reading = true;
+        readDone = readLoop();
+        setSerialStatus("Connected to the bridge", "ok");
+        serialHint.textContent = "Disconnect here before installing another image.";
+        closeButton.disabled = false;
+        pollTimer = setInterval(function () {
+          if (!document.hidden) write(KEY.status, true);
+        }, POLL_MS);
+        renderTimer = setInterval(render, 1000);
+        await write(KEY.status, true);
+        render();
+      } catch (err) {
+        reading = false;
+        try { if (writer) writer.releaseLock(); } catch (releaseErr) { /* no writer */ }
+        try { if (port && port.readable) await port.close(); } catch (closeErr) { /* not open */ }
+        connectButton.disabled = false;
+        writer = null;
+        port = null;
+        setSerialStatus("Not connected", "");
+        if (err && (err.name === "NotFoundError" || err.name === "AbortError")) {
+          serialHint.textContent = "No port was chosen. Connect the board with a " +
+            "USB data cable and try again.";
+        } else {
+          serialHint.textContent = "Could not open the port. Close the install " +
+            "dialog or another serial monitor using it, then try again. (" +
+            (err && err.message ? err.message : err) + ")";
+        }
+      }
+    }
+
+    async function readLoop() {
+      var buffer = "";
+      while (reading && port && port.readable) {
+        var current;
+        try {
+          current = port.readable.getReader();
+        } catch (err) {
+          break;
+        }
+        reader = current;
+        try {
+          while (reading) {
+            var result = await current.read();
+            if (result.done) break;
+            buffer += decoder.decode(result.value, { stream: true });
+            var index;
+            while ((index = buffer.indexOf("\n")) >= 0) {
+              handleLine(buffer.slice(0, index).replace(/\r$/, ""));
+              buffer = buffer.slice(index + 1);
+            }
+          }
+        } catch (err) {
+          if (reading) {
+            appendLog("! serial read stopped: " +
+              (err && err.message ? err.message : err));
+          }
+        } finally {
+          try { current.releaseLock(); } catch (err) { /* already released */ }
+          reader = null;
+        }
+        if (reading && (!port || !port.readable)) {
+          await closePort("The board was unplugged.", "bad", true);
+          break;
+        }
+      }
+    }
+
+    function stopTimers() {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      if (renderTimer) { clearInterval(renderTimer); renderTimer = null; }
+    }
+
+    async function closePort(message, tone, fromReader) {
+      if (!port && !writer) return;
+      reading = false;
+      stopTimers();
+      try { if (reader) await reader.cancel(); } catch (err) { /* closing */ }
+      if (readDone && !fromReader) await Promise.race([readDone, pause(2000)]);
+      try { if (writer) writer.releaseLock(); } catch (err) { /* closing */ }
+      writer = null;
+      try { if (port) await port.close(); } catch (err) { /* already gone */ }
+      port = null;
+      hands.LEFT = newHand();
+      hands.RIGHT = newHand();
+      connectButton.disabled = false;
+      closeButton.disabled = true;
+      setSerialStatus(message || "Not connected", tone || "");
+      serialHint.textContent = message
+        ? message + " Plug it back in and connect again."
+        : "Close the install dialog first, then choose the board's USB port.";
+      render();
+    }
+
+    connectButton.addEventListener("click", openPort);
+    closeButton.addEventListener("click", function () { closePort(); });
+
+    logToggle.addEventListener("click", function () {
+      logOpen = !logOpen;
+      updateLogButton();
+    });
+    logClear.addEventListener("click", function () {
+      logLines = [];
+      logView.textContent = "";
+    });
+
+    if ("serial" in navigator) {
+      navigator.serial.addEventListener("disconnect", function (event) {
+        if ((event.port || event.target) === port) {
+          closePort("The board was unplugged.", "bad");
+        }
+      });
+    } else {
+      unsupported.classList.remove("hidden");
+      connectButton.disabled = true;
+      serialHint.classList.add("hidden");
+    }
+
+    render();
   })();
 </script>
 </body>
