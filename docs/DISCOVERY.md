@@ -295,6 +295,34 @@ shows such a link sitting idle while `connecting LEFT` failed with HCI `0x09`
 
 See [SECURITY.md](SECURITY.md).
 
+## Pairing from the web flasher page
+
+The web flasher page at `docs/flasher/index.html` pairs and checks the controllers
+without a serial monitor. Flash the board first, leave it plugged in, then use
+the **Pair your controllers** panel.
+
+1. Click **Connect to bridge**. The browser opens the board's USB serial port at
+   115200 baud. Chrome or Edge on a desktop is required.
+2. Turn the controller on.
+3. Put the controller in pairing mode. Hold the Windows button under the battery
+   cover until the LEDs pulse slowly.
+4. Click **Pair** on the matching card, Left or Right.
+5. Wait for the badge to say **Connected** and for the packet counter to climb.
+6. Repeat steps 2 to 5 for the other hand.
+7. Read the packet counter on each card. It shows packets received from that
+   controller. The **receiving** dot lights up while packets arrive.
+8. If a card shows **Not paired** or **Needs attention**, press **Retry**.
+9. If the bridge still has an older controller saved for that hand, press
+   **Forget saved controllers**, then pair the new controller.
+10. Click **Open log** to show the raw serial output for troubleshooting. Click
+    **Hide log** to collapse it again. Click **Clear** to empty it.
+
+The panel sends the same console keys as the serial monitor: `d` discovers, `l`
+and `r` connect, `L` and `R` disconnect, `k` and `K` drop one hand's link key,
+`F` forgets both stored addresses, and `s` prints status and counters. The
+serial monitor at 115200 baud stays the advanced fallback for browsers without
+Web Serial.
+
 ## Reading the monitor: pairing walkthrough (ONY-313)
 
 Firmware logs one format:
