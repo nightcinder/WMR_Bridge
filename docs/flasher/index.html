@@ -395,6 +395,10 @@
       own. Open the log if you need the boot banner: the advertised name tells
       you which image is running, <code>BLE advertising: WMR Bridge</code>
       (both hands), <code>WMR Bridge L</code> or <code>WMR Bridge R</code>.</li>
+    <li>If this browser has no Web Serial, open a serial monitor at
+      <strong>115200</strong> baud instead and put the controller(s) in pairing
+      mode within a minute of first boot; the bridge finds and stores their
+      addresses, and pressing <code>d</code> starts another search.</li>
   </ol>
 
   <div class="panel">
@@ -484,6 +488,8 @@
     var POLL_MS = 3000;
     var RECEIVING_MS = 4500;
     var COMMAND_GAP_MS = 700;
+    var DISCONNECT_TIMEOUT_MS = 2500;
+    var BOND_TIMEOUT_MS = 2500;
     var MAX_LOG_LINES = 500;
     var KEY = {
       discover: "d",
@@ -542,7 +548,9 @@
         source: null,
         address: "",
         state: "",
-        lastRxAt: 0
+        lastRxAt: 0,
+        bondStatus: "",
+        bondError: ""
       };
     }
 
@@ -561,6 +569,7 @@
     }
 
     function statusOf(hand) {
+      if (hand.bondError) return { text: "Needs attention", tone: "bad" };
       if (hand.connected === true) return { text: "Connected", tone: "ok" };
       if (hand.state === "searching") return { text: "Searching", tone: "busy" };
       if (hand.state === "pairing") return { text: "Pairing", tone: "busy" };
@@ -587,7 +596,9 @@
         hand.lastRxAt > 0 && (Date.now() - hand.lastRxAt) < RECEIVING_MS;
       live.classList.toggle("on", receiving);
       var note = card.querySelector("[data-note]");
-      if (hand.connected === null) {
+      if (hand.bondError) {
+        note.textContent = hand.bondError;
+      } else if (hand.connected === null) {
         note.textContent = "Waiting for the first status line from the bridge.";
       } else {
         note.textContent = hand.tx.toLocaleString() + " sent to the app \u00b7 " +
@@ -666,6 +677,14 @@
       ["LEFT", "RIGHT"].forEach(function (name) {
         var hand = hands[name];
         if (line.indexOf(name) < 0) return;
+        if (line.indexOf("BOND RESET") >= 0) {
+          hand.bondStatus = line.indexOf("refused") >= 0 ? "refused" : "ok";
+          if (hand.bondStatus === "refused") {
+            hand.bondError = "The bridge refused to reset the old pairing. Disconnect the controller, then press Pair again.";
+          }
+          render();
+          return;
+        }
         if (line.indexOf(name + " ready at") >= 0 ||
             line.indexOf(name + " pairing completed") >= 0) {
           hand.connected = true;
@@ -708,22 +727,69 @@
       }, Promise.resolve());
     }
 
-    function pair(name) {
+    function waitFor(condition, timeoutMs) {
+      var deadline = Date.now() + timeoutMs;
+      return new Promise(function (resolve) {
+        function check() {
+          if (condition()) return resolve(true);
+          if (Date.now() >= deadline) return resolve(false);
+          setTimeout(check, 100);
+        }
+        check();
+      });
+    }
+
+    function resetBondThenConnect(name) {
       var hand = hands[name];
       var connectKey = name === "LEFT" ? KEY.connectLeft : KEY.connectRight;
-      var disconnectKey = name === "LEFT" ? KEY.disconnectLeft : KEY.disconnectRight;
       var bondKey = name === "LEFT" ? KEY.forgetLeftBond : KEY.forgetRightBond;
+      hand.bondStatus = "";
+      hand.bondError = "";
+      return write(bondKey).then(function () {
+        return waitFor(function () {
+          return hand.bondStatus === "ok" || hand.bondStatus === "refused";
+        }, BOND_TIMEOUT_MS);
+      }).then(function (answered) {
+        if (!answered) {
+          hand.state = "";
+          hand.bondError = "The bridge did not answer the pairing reset. Open the log and try again.";
+          render();
+          return;
+        }
+        if (hand.bondStatus === "refused") {
+          hand.state = "";
+          render();
+          return;
+        }
+        return write(connectKey);
+      });
+    }
+
+    function pair(name) {
+      var hand = hands[name];
+      var disconnectKey = name === "LEFT" ? KEY.disconnectLeft : KEY.disconnectRight;
       hand.state = "searching";
+      hand.bondError = "";
       render();
       if (!hasAddress(hand)) {
         sequence([KEY.discover]);
       } else if (hand.connected) {
-        /* Give the link time to close before the link key is deleted. */
-        sequence([disconnectKey]).then(function () {
-          sequence([bondKey, connectKey]);
+        /* The firmware refuses a bond reset while the link is up, so wait for
+         * the link-closed line before deleting the old key. */
+        write(disconnectKey).then(function () {
+          return waitFor(function () { return hand.connected === false; },
+                         DISCONNECT_TIMEOUT_MS);
+        }).then(function (closed) {
+          if (!closed) {
+            hand.state = "";
+            hand.bondError = "The controller did not disconnect. Turn it off, then press Pair again.";
+            render();
+            return;
+          }
+          return resetBondThenConnect(name);
         });
       } else {
-        sequence([bondKey, connectKey]);
+        resetBondThenConnect(name);
       }
     }
 

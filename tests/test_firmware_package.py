@@ -9,6 +9,7 @@ idf.py writes, not that a particular firmware builds. Run:
 
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -431,8 +432,15 @@ def test_flasher_controller_panel():
                       ("status", "s")):
         check('%s: "%s"' % (name, key) in page,
               "the page sends the %r console key" % key)
-    check(r"rx=(\d+) tx=(\d+)" in page,
-          "packet counters are parsed from the firmware's status line")
+    counters = re.search(r"var COUNTERS = /(.+?)/;", page)
+    check(counters is not None, "the page defines a counter parser")
+    if counters:
+        fields = re.match(counters.group(1),
+                          "  LEFT rx=1234 tx=56 drop=0 offline=0")
+        check(fields is not None and fields.groups() == ("LEFT", "1234", "56"),
+              "the counter parser reads the firmware's LEFT rx=... tx=... line")
+    check('indexOf("BOND RESET")' in page and "hand.connected === false" in page,
+          "Pair waits for the link to close and reports a refused bond reset")
     check('data-live' in page and "receiving" in page,
           "each card has a receiving indicator")
     check('id="serial-log" class="hidden"' in page,
