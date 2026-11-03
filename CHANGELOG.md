@@ -5,6 +5,14 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## Unreleased
+
+- **Triage accepts the 6-run pose protocol (#129, ONY-870).**
+  `tools/triage_bundle.py` accepts non-occlusion pose runs of 14 s or longer
+  (15 s bench timer with boundary tolerance) and treats a six-run,
+  one-run-per-motion bundle as complete. The pose-filter sheet moves from the
+  42-run schedule in filter-spec rev 4 §8 to ONY-868 Option A.
+
 ## 0.3.3 — 2026-11-01
 
 The ONY-699 review-pass release on top of 0.3.2. FF10–FF17 keep their

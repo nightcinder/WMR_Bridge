@@ -215,7 +215,7 @@ class FailingBundleTest(unittest.TestCase):
 
 
 class SixRunPoseTest(unittest.TestCase):
-    """Option A: one run per motion per hand, so no `_runN` suffix exists."""
+    """Option A: six runs, one per motion, alternating hands."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory(prefix="wmr-triage-test-")
@@ -225,24 +225,30 @@ class SixRunPoseTest(unittest.TestCase):
     def bundle(self):
         source_rel = "pose_capture_androidXr_left_still.json"
         data = (FIXTURE / source_rel).read_bytes()
-        motions = ("still", "slow_pan", "fast_flick")
+        runs = (
+            ("left", "still", 15),
+            ("right", "drifting", 15),
+            ("left", "slow_pan", 18),
+            ("right", "medium_pan", 15),
+            ("left", "fast_flick", 20),
+            ("right", "occlusion", 15),
+        )
         captures, extra = [], {}
-        for hand in ("left", "right"):
-            for segment in motions:
-                name = "pose_capture_androidXr_%s_%s.json" % (hand, segment)
-                if name != source_rel:
-                    extra[name] = pose_span(data, 14)
-                captures.append({
-                    "file": name,
-                    "runtime": "androidXr",
-                    "hand": hand,
-                    "segment": segment,
-                    "run": 1,
-                })
+        for hand, segment, seconds in runs:
+            name = "pose_capture_androidXr_%s_%s.json" % (hand, segment)
+            if name != source_rel:
+                extra[name] = pose_span(data, seconds)
+            captures.append({
+                "file": name,
+                "runtime": "androidXr",
+                "hand": hand,
+                "segment": segment,
+                "run": 1,
+            })
 
         def edit(rel, content):
             if rel == source_rel:
-                return pose_span(content, 14)
+                return pose_span(content, 15)
             if rel != "diagnostics.json":
                 return content
             document = json.loads(content)
@@ -256,6 +262,9 @@ class SixRunPoseTest(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertIn(
             "Pose captures: 6 listed in diagnostics.json, 6 file(s)", out)
+        self.assertIn("pose_capture_androidXr_left_slow_pan.json", out)
+        self.assertIn("2 samples over 18.0 s", out)
+        self.assertIn("2 samples over 20.0 s", out)
         self.assertNotIn("does not match runtime/hand/segment", out)
         self.assertNotIn("listed more than once", out)
         self.assertNotIn("missing from the bundle", out)

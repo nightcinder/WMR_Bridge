@@ -4,9 +4,10 @@ Internal procedure for the optional **Capture 6DoF pose** step offered by the
 guided bench wizard. Tester-facing summary lives in
 [`external-test-user.md`](external-test-user.md) §6.
 
-Source of truth for segments, durations and acceptance: **filter-spec rev 4,
-section 8**. This sheet restates them for operators; if they disagree, the spec
-wins.
+Source of truth for segments, durations and acceptance: **ONY-868 Option A**
+(the 6-run alternating-hand protocol, 2026-11-03), which supersedes the
+42-run schedule in filter-spec rev 4, section 8. The search grid remains
+filter-spec rev 4, section 7.
 
 ## Search grid (filter-spec rev 4, section 7)
 
@@ -30,37 +31,45 @@ early stop and no coarse-to-fine pruning.
 - Otherwise the wizard records `unavailable: no 6DoF hand-tracking source`,
   marks the step skipped, and continues. It never blocks bundle export.
 
-## Segments (per hand, one screen each)
+## Runs (6 total, alternating hands)
 
-Plain-language prompt plus countdown. Durations and motions are fixed by the
-spec; do not improvise.
+The guided bench records one run per motion class plus one occlusion diagnostic
+run: six runs, about 98 s of active recording. Alternating hands exercises both
+hands while keeping one capture per motion for the pooled runtime tuner.
 
-1. **Still** — cycle length 10 s. Controller rested in the hand, arm braced.
-2. **Held, drifting** — cycle length 10 s. Hold as if aiming and let it wander slowly.
-3. **Slow pan** — cycle length 18 s (30 cm sideways over 3 s, back and forth, 3 times).
-4. **Medium pan** — cycle length 10 s (50 cm sideways in 1 s, back and forth).
-5. **Fast flick** — cycle length 20 s (45 cm flick in 0.3 s, pause, return; 10 reps).
+| Run | Hand | Segment (`PoseMotion`) | Duration |
+|---|---|---|---|
+| 1 | left | Still | 15 s |
+| 2 | right | Held, drifting | 15 s |
+| 3 | left | Slow pan | 18 s |
+| 4 | right | Medium pan | 15 s |
+| 5 | left | Fast flick | 20 s |
+| 6 | right | Occlusion | 15 s |
 
-Run >= 30 s: each segment cycle repeats until the timer ends.
+The bench timer holds each run for its listed duration; triage accepts
+non-occlusion runs of **14 s or longer** to tolerate timer boundary rounding.
+Each run covers one full cycle (1.5 cycles of the 10 s still, drifting and
+medium-pan cycles). The legacy 42-run corpus remains available only through
+the `--full` bench preset.
 
 ## Output
 
-- One ONY-249 `PoseRecording` JSON per hand per segment, written into the same
-  bundle zip.
-- Filename: `pose_capture_<runtime>_<hand>_<segment>.json`.
+- One ONY-249 `PoseRecording` JSON per run, written into the same bundle zip.
+- Filename: `pose_capture_<runtime>_<hand>_<segment>.json`; a `_runN` suffix
+  still marks repeat runs from the legacy `--full` preset.
 - Manifest records runtime, segment, app commit and firmware SHA for each file.
 - Reuses the existing recorder and storage; no new format.
 
 ## Skip / fail handling
 
-- Skipped or failed segments are recorded as skipped with the reason.
-- Skipping all five still produces a complete bundle.
+- Skipped or failed runs are recorded as skipped with the reason.
+- Skipping all six still produces a complete bundle.
 
 ## Notes
 
-- Tester language only in the external sheet: "five short movements -- still,
-  drifting, slow pan, medium pan, fast flick"; ~2 min per hand; files already
-  in the bundle; safe to skip.
+- Tester language only in the external sheet: "six short recordings -- still,
+  drifting, slow pan, medium pan, fast flick, and one occlusion run"; about
+  1.5-2 min total; files already in the bundle; safe to skip.
 - No device SDK detail, no filter jargon, no mention of One Euro in the
   tester-facing copy.
 - Filter parameters and tuning are out of scope here; see filter-spec rev 4.
