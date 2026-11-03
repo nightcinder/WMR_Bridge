@@ -53,19 +53,24 @@ def run_main(zip_path):
     return code, out.getvalue(), err.getvalue()
 
 
+def pose_span(data, seconds):
+    """Return pose JSON bytes whose samples span `seconds`."""
+    document = json.loads(data)
+    first = document["samples"][0]
+    last = document["samples"][-1]
+    last["host_ns"] = first["host_ns"] + int(seconds * 1_000_000_000)
+    for key in ("left", "right"):
+        last[key]["host_time_ns"] = last["host_ns"]
+    last["tracking"]["time_ns"] = last["host_ns"]
+    return json.dumps(document).encode()
+
+
 def set_pose_span(seconds):
     """Rewrite the fixture's pose file so its samples span `seconds`."""
     def edit(rel, data):
         if rel != "pose_capture_androidXr_left_still.json":
             return data
-        document = json.loads(data)
-        first = document["samples"][0]
-        last = document["samples"][-1]
-        last["host_ns"] = first["host_ns"] + int(seconds * 1_000_000_000)
-        for key in ("left", "right"):
-            last[key]["host_time_ns"] = last["host_ns"]
-        last["tracking"]["time_ns"] = last["host_ns"]
-        return json.dumps(document).encode()
+        return pose_span(data, seconds)
     return edit
 
 
@@ -161,15 +166,15 @@ class FailingBundleTest(unittest.TestCase):
         _code, out, _err = run_main(self.bundle(edit=wrong_count))
         self.assertIn("manifest says 2 bridge(s); diagnostics.json has 1", out)
 
-    def test_run_shorter_than_30_seconds_is_flagged(self):
-        code, out, _err = run_main(self.bundle(edit=set_pose_span(29)))
+    def test_run_shorter_than_14_seconds_is_flagged(self):
+        code, out, _err = run_main(self.bundle(edit=set_pose_span(13)))
         self.assertEqual(code, 0)
-        self.assertIn("run is 29.0 s, shorter than 30 s", out)
+        self.assertIn("run is 13.0 s, shorter than 14 s", out)
 
-    def test_run_at_30_seconds_passes(self):
-        code, out, _err = run_main(self.bundle(edit=set_pose_span(30)))
+    def test_run_at_14_seconds_passes(self):
+        code, out, _err = run_main(self.bundle(edit=set_pose_span(14)))
         self.assertEqual(code, 0)
-        self.assertNotIn("shorter than 30 s", out)
+        self.assertNotIn("shorter than 14 s", out)
         self.assertIn("Problems: none", out)
 
     def test_one_sample_run_is_flagged_as_short(self):
@@ -182,10 +187,10 @@ class FailingBundleTest(unittest.TestCase):
 
         code, out, _err = run_main(self.bundle(edit=one_sample))
         self.assertEqual(code, 0)
-        self.assertIn("run is 0.0 s, shorter than 30 s", out)
+        self.assertIn("run is 0.0 s, shorter than 14 s", out)
         self.assertNotIn("no readable host_ns timestamps", out)
 
-    def test_occlusion_run_shorter_than_30_seconds_is_not_flagged(self):
+    def test_occlusion_run_shorter_than_14_seconds_is_not_flagged(self):
         old = "pose_capture_androidXr_left_still.json"
         new = "pose_capture_androidXr_left_occlusion.json"
 
@@ -195,17 +200,75 @@ class FailingBundleTest(unittest.TestCase):
                 document["pose_captures"][0].update(
                     file=new, segment="occlusion")
                 return json.dumps(document).encode()
-            return set_pose_span(29)(rel, data)
+            return set_pose_span(13)(rel, data)
 
         bundle = self.bundle(edit=occlusion, rename={old: new})
         with zipfile.ZipFile(bundle) as archive:
             samples = json.loads(archive.read(new))["samples"]
         span_ns = samples[-1]["host_ns"] - samples[0]["host_ns"]
-        self.assertLess(span_ns, 30_000_000_000)
+        self.assertLess(span_ns, 14_000_000_000)
 
         code, out, _err = run_main(bundle)
         self.assertEqual(code, 0)
-        self.assertNotIn("shorter than 30 s", out)
+        self.assertNotIn("shorter than 14 s", out)
+        self.assertIn("Problems: none", out)
+
+
+class SixRunPoseTest(unittest.TestCase):
+    """Option A: six runs, one per motion, alternating hands."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="wmr-triage-test-")
+        self.addCleanup(self._tmp.cleanup)
+        self.zip_path = os.path.join(self._tmp.name, "wmr-ext-20261030.zip")
+
+    def bundle(self):
+        source_rel = "pose_capture_androidXr_left_still.json"
+        data = (FIXTURE / source_rel).read_bytes()
+        runs = (
+            ("left", "still", 15),
+            ("right", "drifting", 15),
+            ("left", "slow_pan", 18),
+            ("right", "medium_pan", 15),
+            ("left", "fast_flick", 20),
+            ("right", "occlusion", 15),
+        )
+        captures, extra = [], {}
+        for hand, segment, seconds in runs:
+            name = "pose_capture_androidXr_%s_%s.json" % (hand, segment)
+            if name != source_rel:
+                extra[name] = pose_span(data, seconds)
+            captures.append({
+                "file": name,
+                "runtime": "androidXr",
+                "hand": hand,
+                "segment": segment,
+                "run": 1,
+            })
+
+        def edit(rel, content):
+            if rel == source_rel:
+                return pose_span(content, 15)
+            if rel != "diagnostics.json":
+                return content
+            document = json.loads(content)
+            document["pose_captures"] = captures
+            return json.dumps(document).encode()
+
+        return build_bundle(self.zip_path, edit=edit, extra=extra)
+
+    def test_six_single_runs_are_accepted(self):
+        code, out, err = run_main(self.bundle())
+        self.assertEqual(code, 0, err)
+        self.assertIn(
+            "Pose captures: 6 listed in diagnostics.json, 6 file(s)", out)
+        self.assertIn("pose_capture_androidXr_left_slow_pan.json", out)
+        self.assertIn("2 samples over 18.0 s", out)
+        self.assertIn("2 samples over 20.0 s", out)
+        self.assertNotIn("does not match runtime/hand/segment", out)
+        self.assertNotIn("listed more than once", out)
+        self.assertNotIn("missing from the bundle", out)
+        self.assertNotIn("shorter than 14 s", out)
         self.assertIn("Problems: none", out)
 
 

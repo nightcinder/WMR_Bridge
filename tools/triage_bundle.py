@@ -28,7 +28,8 @@ POSE_PREFIX = "pose_capture_"
 POSE_FORMAT = "wmr-pose-recording"
 POSE_NAME = re.compile(
     r"^pose_capture_([A-Za-z0-9]+)_(left|right)_(.+?)(?:_run(\d+))?\.json$")
-minimumRunSeconds = 30
+# The guided bench timer stops at 15 s; accept the boundary with tolerance.
+minimumRunSeconds = 14
 
 
 class BundleError(Exception):
