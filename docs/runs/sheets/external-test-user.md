@@ -76,8 +76,9 @@ deploying and running with a Raspberry Pi bridge, see the
 bundle.
 
 Capture 6DoF pose appears only when your glasses' hand tracking is active. It
-asks for five short movements per hand: hold still, let it drift, slow pan,
-medium pan, fast flick. That takes about two minutes per hand. Skipping it
+asks for six short recordings, alternating hands: hold still (15 s), let it
+drift (15 s), slow pan (18 s), medium pan (15 s), fast flick (20 s), and one
+occlusion run (15 s). That takes about 1.5-2 minutes in total. Skipping it
 (whole or per segment) is fine and does not break the run. Its files are already
 inside the bundle you send.
 
