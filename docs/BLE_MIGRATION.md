@@ -67,7 +67,12 @@ on the existing FF10 service). Phases A–C are follow-ups: A belongs to
 ## Pairing rollout (already in 0.3.0 firmware)
 
 0.3 firmware refuses legacy pairing and requires a bonded LESC link before any
-characteristic except the device name and FF16 is served:
+FF10 motion, echo, configuration or control characteristic is served. The
+plaintext-accessible set is GAP device name, appearance and preferred connection
+parameters, the GATT database hash, the DIS fields, HID protocol mode, report
+map, HID information, control point, boot reports and the HID boot-report CCCs;
+none of it carries motion or configuration, and the boot reports return zero
+length. See [SECURITY.md](SECURITY.md) for the full list.
 
 - A fresh phone connects, the bridge sends a Security Request, Android shows its
   pairing dialog, and the phone bonds. The first access after bonding is served.
