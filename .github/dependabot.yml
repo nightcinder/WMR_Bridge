@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # The Pi host bridge is the only package manager manifest in the repo
+  # (pi/pyproject.toml). The firmware builds from ESP-IDF components checked
+  # into src/, not from a package manifest.
+  - package-ecosystem: pip
+    directory: /pi
+    schedule:
+      interval: weekly
+
+  # Workflow actions are pinned to major tags, so Dependabot keeps them current
+  # one grouped PR at a time instead of one PR per action.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
