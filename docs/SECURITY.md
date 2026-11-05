@@ -25,7 +25,7 @@ build do not prove radio behavior.
 | # | Attacker | Capability | 0.3 mitigation | Residual risk |
 | --- | --- | --- | --- | --- |
 | T1 | Passive observer in radio range | Sniffs BLE advertising and data | Data characteristics require an encrypted bonded link. LESC key exchange is not derivable from traffic | Advertising still reveals the bridge's presence and name. Traffic volume/timing is visible |
-| T2 | Unbonded central in range | Connects, reads FF11, subscribes, blocks the phone | Every data characteristic and CCC requires encryption. The bridge requests security on connect and disconnects a central that is not bonded within 30 s | A central can still connect, pair (Just Works) and become the bonded phone if it is first in range during a pairing window |
+| T2 | Unbonded central in range | Connects, reads FF11, subscribes, blocks the phone | Every FF10 data characteristic and its CCC requires an encrypted link with a 16-byte key. The bridge requests security on connect and disconnects a central that is not bonded within 30 s | A central can still connect, pair (Just Works) and become the bonded phone if it is first in range during a pairing window |
 | T3 | Active MITM during pairing | Relays the LESC exchange | LESC resists passive key recovery, but the bridge has no display/keypad, so pairing is Just Works and is not MITM-protected | A determined relay during the first pairing can impersonate the bridge. Pair in a private place. Check the phone's "paired device" entry afterwards |
 | T4 | Any BLE device | Spoofs a controller name during discovery | Unchanged from 0.2: a name is not authentication. Discovery is bounded, and stored addresses are never replaced automatically | A spoofed controller can claim a hand while that hand has no stored address |
 | T5 | On-path attacker on the Wi-Fi LAN | Sniffs the Pi WebSocket | Bearer token + loopback default + origin rejection. TLS is terminated externally (below) | Plaintext `ws://` on a hostile LAN is readable. The token is replayable by anyone who sees it |
@@ -44,14 +44,21 @@ build do not prove radio behavior.
 - `sm_set_request_security(true)`: the bridge sends a Security Request as soon as
   a central connects, so a fresh phone gets the pairing dialog without the app
   needing a special call.
-- Every data characteristic except FF16 is `WRITE_ENCRYPTED` in
-  `wmr_bridge.gatt`. The readable ones (FF11, FF13, FF17) are also
-  `READ_ENCRYPTED`. FF12 and FF14 are notify-only and FF15 is
+- Every FF10 data characteristic is `WRITE_ENCRYPTED` and names
+  `ENCRYPTION_KEY_SIZE_16` in `wmr_bridge.gatt`. The readable ones (FF11, FF13,
+  FF17) are also `READ_ENCRYPTED`. FF12 and FF14 are notify-only and FF15 is
   write-without-response plus notify (the phone writes the 4-byte ping), so
   none of them has a read permission. The CCC descriptors inherit the write
-  requirement, so notifications cannot be enabled on an unencrypted link either.
-  FF16 (firmware version) stays readable so a client can check compatibility
-  before pairing.
+  requirement and the 16-byte key size, so notifications cannot be enabled on
+  an unencrypted link, or on one with a shorter key, either.
+- FF16 (firmware version) stays readable so a client can check compatibility
+  before pairing. The plaintext-accessible set is wider than FF16 alone: the
+  GAP device name, appearance and preferred connection parameters, the
+  GATT database hash, the DIS manufacturer/model/firmware/PNP fields, and the
+  HID protocol mode, report map, HID information, control point and boot
+  reports. The HID boot-report CCCs are plaintext as well; the FF10 CCCs above
+  are not. None of it carries motion or controller configuration, and the HID
+  boot reports return zero length.
 - After a pairing or re-encryption result, the bridge requires both success and
   a stored bond (`sm_le_device_index`). A central that pairs "encrypt only",
   fails pairing, or fails re-encryption for any reason other than a stale key is
@@ -61,7 +68,9 @@ build do not prove radio behavior.
   `WMR_CFG_BLE_PAIR_TIMEOUT_MS` (30 s) bound applies, and a central that still
   produces no bonded link is disconnected.
 - Only one phone is served at a time. A second central is disconnected on
-  connect, so it cannot block the intended phone by subscribing first.
+  connect, but the first central keeps the slot until it bonds or the 30 s
+  pairing bound expires, so an unbonded first central can delay the intended
+  phone by up to that bound before it is dropped.
 - Bonds are stored in the LE device DB in NVS. `P` on the console deletes all
   phone bonds (refused while connected). `k`/`K`/`b` are the controller
   (Classic) resets and do not touch the phone bond.
