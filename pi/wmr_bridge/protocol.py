@@ -18,7 +18,9 @@ Pure Python, no dependencies. All multi-byte integers are little-endian.
 from __future__ import annotations
 
 import struct
+import zlib
 from dataclasses import dataclass
+from enum import IntEnum
 from typing import Iterable, Sequence
 
 PROTO_MAGIC = 0x52
@@ -39,6 +41,26 @@ BATCH_MAX_COUNT = 9
 # Keeping the ceiling means the companion's reference reassembler sees a shape
 # it already handles.
 DEFAULT_FRAGMENT_CAPACITY = 244
+
+# FF13 controller config block. The layout is the firmware's
+# ``wmr_cfg_pack_window`` value, so a phone can reuse the BLE parser unchanged.
+CALIBRATION_VERSION = 1
+CALIBRATION_HEADER_SIZE = 16
+CALIBRATION_WINDOW_MAX = 496
+CALIBRATION_MAX_BLOB = 16 * 1024
+CALIBRATION_CURSOR_SIZE = 5
+
+
+class CalibrationState(IntEnum):
+    """FF13 ``state`` values (docs/PROTOCOL.md, "FF13 characteristic")."""
+
+    NOT_READ = 0
+    READING = 1
+    READY = 2
+    FAILED = 3
+
+
+CALIBRATION_STATE_NAMES = ("not_read", "reading", "ready", "failed")
 
 
 class ProtocolError(ValueError):
@@ -304,3 +326,187 @@ def iter_records(batch: bytes) -> Iterable[bytes]:
     """Convenience wrapper used by the probe and tests."""
 
     return iter(parse_batch(batch))
+
+
+def _check_hand(hand: int) -> int:
+    if not isinstance(hand, int) or isinstance(hand, bool) or not 0 <= hand < NUM_HANDS:
+        raise ProtocolError(f"hand out of range: {hand!r}")
+    return hand
+
+
+def _check_offset(offset: int) -> int:
+    if not isinstance(offset, int) or isinstance(offset, bool) or not 0 <= offset <= 0xFFFFFFFF:
+        raise ProtocolError(f"offset out of range: {offset!r}")
+    return offset
+
+
+def calibration_crc32(blob: bytes) -> int:
+    """CRC-32 IEEE 802.3 of a whole config block, matching ``wmr_cfg_crc32``."""
+
+    return zlib.crc32(blob) & 0xFFFFFFFF
+
+
+_CALIBRATION_HEADER = struct.Struct("<BBBBI I I")
+
+
+@dataclass(frozen=True)
+class CalibrationWindow:
+    """One FF13 read/notify value: a 16-byte header plus up to 496 data bytes."""
+
+    hand: int
+    state: CalibrationState
+    total_len: int
+    offset: int
+    crc32: int
+    data: bytes = b""
+
+    @property
+    def ready(self) -> bool:
+        return self.state is CalibrationState.READY
+
+
+def encode_calibration_window(
+    hand: int,
+    state: CalibrationState | int,
+    blob: bytes = b"",
+    offset: int = 0,
+) -> bytes:
+    """Encode the FF13 value for ``blob`` at ``offset``.
+
+    A non-READY state carries no data, ``total_len`` or CRC, exactly like the
+    firmware. A READY state carries at most ``CALIBRATION_WINDOW_MAX`` bytes.
+    """
+
+    hand = _check_hand(hand)
+    offset = _check_offset(offset)
+    try:
+        state = CalibrationState(state)
+    except ValueError as exc:
+        raise ProtocolError(f"bad calibration state {state!r}") from exc
+    blob = bytes(blob)
+    if len(blob) > CALIBRATION_MAX_BLOB:
+        raise ProtocolError(f"config block is {len(blob)} bytes, limit is {CALIBRATION_MAX_BLOB}")
+
+    ready = state is CalibrationState.READY
+    if ready and not blob:
+        raise ProtocolError("READY requires a non-empty config block")
+    total = len(blob) if ready else 0
+    crc = calibration_crc32(blob) if ready else 0
+    data = b""
+    if ready and offset < total:
+        data = blob[offset : offset + CALIBRATION_WINDOW_MAX]
+    header = _CALIBRATION_HEADER.pack(
+        CALIBRATION_VERSION, hand, int(state), 0, total, offset, crc
+    )
+    return header + data
+
+
+def parse_calibration_window(packet: bytes) -> CalibrationWindow:
+    """Parse one FF13 value. Raises :class:`ProtocolError` when malformed."""
+
+    if len(packet) < CALIBRATION_HEADER_SIZE:
+        raise ProtocolError("calibration window is shorter than its header")
+    if len(packet) > CALIBRATION_HEADER_SIZE + CALIBRATION_WINDOW_MAX:
+        raise ProtocolError("calibration window is longer than the maximum")
+    version, hand, state_value, _reserved, total, offset, crc = _CALIBRATION_HEADER.unpack_from(packet)
+    if version != CALIBRATION_VERSION:
+        raise ProtocolError(f"unknown calibration version {version}")
+    hand = _check_hand(hand)
+    try:
+        state = CalibrationState(state_value)
+    except ValueError as exc:
+        raise ProtocolError(f"bad calibration state {state_value}") from exc
+    data = bytes(packet[CALIBRATION_HEADER_SIZE:])
+    if state is not CalibrationState.READY:
+        if total != 0 or crc != 0 or data:
+            raise ProtocolError("a non-READY calibration window must be empty")
+        return CalibrationWindow(hand, state, 0, offset, 0, b"")
+    if total == 0 or total > CALIBRATION_MAX_BLOB:
+        raise ProtocolError(f"bad calibration blob length {total}")
+    expected = 0 if offset >= total else min(total - offset, CALIBRATION_WINDOW_MAX)
+    if len(data) != expected:
+        raise ProtocolError(f"calibration window has {len(data)} bytes, expected {expected}")
+    return CalibrationWindow(hand, state, total, offset, crc, data)
+
+
+def parse_calibration_cursor(value: bytes) -> tuple[int, int]:
+    """Parse the FF13 cursor write: ``hand`` u8 followed by ``offset`` u32 LE."""
+
+    if len(value) != CALIBRATION_CURSOR_SIZE:
+        raise ProtocolError(f"calibration cursor is {len(value)} bytes, expected 5")
+    hand, offset = struct.unpack("<BI", value)
+    return _check_hand(hand), _check_offset(offset)
+
+
+class CalibrationCache:
+    """Per-hand FF13 config-block cache.
+
+    The cache stores the controller block exactly as received (including the
+    leading two bytes and the obfuscation); it never parses or rewrites it. An
+    ingest layer marks a read in progress with :meth:`set_state` and publishes a
+    completed block with :meth:`set_blob`.
+    """
+
+    def __init__(self, max_blob: int = CALIBRATION_MAX_BLOB) -> None:
+        if max_blob < 1:
+            raise ValueError("max_blob must be positive")
+        self.max_blob = min(max_blob, CALIBRATION_MAX_BLOB)
+        self._state = [CalibrationState.NOT_READ] * NUM_HANDS
+        self._blob = [b""] * NUM_HANDS
+        self._crc = [0] * NUM_HANDS
+
+    def state(self, hand: int) -> CalibrationState:
+        return self._state[_check_hand(hand)]
+
+    def blob(self, hand: int) -> bytes:
+        return self._blob[_check_hand(hand)]
+
+    def total(self, hand: int) -> int:
+        hand = _check_hand(hand)
+        return len(self._blob[hand]) if self._state[hand] is CalibrationState.READY else 0
+
+    def crc32(self, hand: int) -> int:
+        hand = _check_hand(hand)
+        return self._crc[hand] if self._state[hand] is CalibrationState.READY else 0
+
+    @property
+    def ready(self) -> bool:
+        return any(state is CalibrationState.READY for state in self._state)
+
+    def set_state(self, hand: int, state: CalibrationState | int) -> None:
+        hand = _check_hand(hand)
+        try:
+            state = CalibrationState(state)
+        except ValueError as exc:
+            raise ProtocolError(f"bad calibration state {state!r}") from exc
+        if state is CalibrationState.READY:
+            if not self._blob[hand]:
+                raise ProtocolError("READY requires a cached blob; use set_blob")
+        else:
+            self._blob[hand] = b""
+            self._crc[hand] = 0
+        self._state[hand] = state
+
+    def set_blob(self, hand: int, blob: bytes) -> None:
+        hand = _check_hand(hand)
+        blob = bytes(blob)
+        if not blob:
+            raise ProtocolError("config block is empty")
+        if len(blob) > self.max_blob:
+            raise ProtocolError(f"config block is {len(blob)} bytes, limit is {self.max_blob}")
+        self._blob[hand] = blob
+        self._crc[hand] = calibration_crc32(blob)
+        self._state[hand] = CalibrationState.READY
+
+    def window(self, hand: int, offset: int = 0) -> bytes:
+        hand = _check_hand(hand)
+        blob = self._blob[hand] if self._state[hand] is CalibrationState.READY else b""
+        return encode_calibration_window(hand, self._state[hand], blob, offset)
+
+    def describe(self, hand: int) -> dict[str, int | str]:
+        hand = _check_hand(hand)
+        return {
+            "state": CALIBRATION_STATE_NAMES[int(self._state[hand])],
+            "totalLen": self.total(hand),
+            "crc32": self.crc32(hand),
+        }
