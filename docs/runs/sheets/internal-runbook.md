@@ -106,7 +106,7 @@ The last line is a consent statement, not a legal contract. You can stop at any 
 ### 3.2 Links
 
 - Browser installer (all three firmware variants): <https://nightcinder.github.io/WMR_Bridge/>
-- Firmware release v0.3.5: <https://github.com/nightcinder/WMR_Bridge/releases/latest>
+- Firmware release v0.3.5: <https://github.com/nightcinder/WMR_Bridge/releases/tag/v0.3.5>
 - Unified app APK (Android 14+): <https://github.com/nightcinder/wmr-companion/releases/download/v0.3.17/wmr-companion-0.3.17-unified-arm64-v8a.apk>
 - The release APK ships `libglasses.so` (VITURE XR Glasses SDK for Android 2.4.1)
   under the VITURE licence; the EULA and third-party notices ship in the APK
