@@ -18,15 +18,16 @@ could drift.
 ## Important Status Notices (Stated Explicitly)
 
 1. The client library is not published.
-   All seven `wmr-companion` Dart packages (`wmr_core`, `wmr_companion`, `wmr_ble`,
-   `wmr_ws`, `wmr_fusion`, `wmr_companion_ui`, and `wmr_companion_hid_android`) are at
-   version `0.2.2` in git source within a Dart pub workspace. The rows below for
-   older bridges list the minimum source version that works. Publication to pub.dev
-   is on hold by the owner's decision (2026-10-23, ONY-41; see the
-   `wmr-companion` repository docs `docs/PUBLISHING.md` section 5 and
-   `docs/LIBRARY.md`). The package versions in this matrix refer strictly to
-   source/git checkout versions, not pub.dev releases. None of these packages are
-   available on pub.dev.
+   The Companion Android app is `v0.3.17` and it builds against `wmr_companion`
+   `^0.2.2`. The Dart package breakdown below lists seven packages:
+   `wmr_core`, `wmr_companion`, `wmr_ble`, `wmr_ws`, `wmr_fusion`,
+   `wmr_companion_ui`, and `wmr_companion_hid_android`. All seven are at version
+   `0.2.2` in git source within a Dart pub workspace. The rows below for older
+   bridges list the minimum source version that works. Publication to pub.dev is
+   on hold by the owner's decision (2026-10-23, ONY-41). See the `wmr-companion`
+   repository docs `docs/PUBLISHING.md` section 5 and `docs/LIBRARY.md`. The
+   package versions in this matrix refer to source and git checkout versions,
+   not to pub.dev releases. None of these packages are available on pub.dev.
 
 2. The firmware releases `v0.1.0-rc1`, `v0.1.0` and `v0.2.0` through `v0.3.5` are
    CI-built and hardware-unverified, and the Pi bridge is host-tests-only.
@@ -105,18 +106,18 @@ rather than inferred solely from the version string:
 
 ---
 
-## Dart Package Breakdown (Source `0.1.0`)
+## Dart Package Breakdown (Source `0.2.2`)
 
-All seven Dart packages in `wmr-companion` are maintained in a unified pub
-workspace at version `0.1.0`. All seven speak to the bridge targets in the
-matrix:
+The seven client packages listed below are maintained in a unified pub workspace
+at version `0.2.2`. The Companion app `v0.3.17` builds against them. All seven
+speak to the bridge targets in the matrix:
 
 | Package | Kind | Git Source Version | pub.dev Status | Role |
 | --- | --- | --- | --- | --- |
-| `wmr_fusion` | Pure Dart | `0.1.0` | On hold (not published) | 6-axis Madgwick and Mahony sensor fusion filters. Zero dependencies. |
-| `wmr_core` | Pure Dart | `0.1.0` | On hold (not published) | GATT UUIDs, packet parsers, tick-timing maths, domain models, controller pipelines, and abstract `BleTransport` seam. |
-| `wmr_companion` | Dart / Flutter | `0.1.0` | On hold (not published) | Public facade (`WmrCompanion`). Reads FF16 on connect, exposes protocol version and features, and manages streams. |
-| `wmr_ble` | Flutter Plugin | `0.1.0` | On hold (not published) | Concrete `UniversalBleTransport` using `universal_ble` for the ESP32-over-BLE bridge, connection lifecycle, and adapter state. |
-| `wmr_ws` | Pure Dart | `0.1.0` | On hold (not published) | Concrete `WmrWsTransport` implementing `BleTransport` over WebSocket (`wmr-wifi-v1`) for the Linux/Raspberry Pi Wi-Fi host bridge. |
-| `wmr_companion_ui` | Flutter (Optional) | `0.1.0` | On hold (not published) | Reusable diagnostic widgets: 3D controller orientation view, link quality stats, and gamepad visualization. |
-| `wmr_companion_hid_android` | Flutter Plugin (Optional) | `0.1.0` | On hold (not published) | Optional Android-only Bluetooth HID device output (`BluetoothHidDevice`) for phone-as-gamepad routing. |
+| `wmr_fusion` | Pure Dart | `0.2.2` | On hold (not published) | 6-axis Madgwick and Mahony sensor fusion filters. Zero dependencies. |
+| `wmr_core` | Pure Dart | `0.2.2` | On hold (not published) | GATT UUIDs, packet parsers, tick-timing maths, domain models, controller pipelines, and abstract `BleTransport` seam. |
+| `wmr_companion` | Dart / Flutter | `0.2.2` | On hold (not published) | Public facade (`WmrCompanion`). Reads FF16 on connect, exposes protocol version and features, and manages streams. |
+| `wmr_ble` | Flutter Plugin | `0.2.2` | On hold (not published) | Concrete `UniversalBleTransport` using `universal_ble` for the ESP32-over-BLE bridge, connection lifecycle, and adapter state. |
+| `wmr_ws` | Pure Dart | `0.2.2` | On hold (not published) | Concrete `WmrWsTransport` implementing `BleTransport` over WebSocket (`wmr-wifi-v1`) for the Linux/Raspberry Pi Wi-Fi host bridge. |
+| `wmr_companion_ui` | Flutter (Optional) | `0.2.2` | On hold (not published) | Reusable diagnostic widgets: 3D controller orientation view, link quality stats, and gamepad visualization. |
+| `wmr_companion_hid_android` | Flutter Plugin (Optional) | `0.2.2` | On hold (not published) | Optional Android-only Bluetooth HID device output (`BluetoothHidDevice`) for phone-as-gamepad routing. |
