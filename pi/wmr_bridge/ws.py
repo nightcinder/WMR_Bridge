@@ -58,7 +58,8 @@ class WebSocketClosed(Exception):
 
 
 def _accept_key(key: str) -> str:
-    digest = hashlib.sha1((key + GUID).encode("ascii")).digest()
+    # RFC 6455 section 4.2.2 mandates SHA-1 for the handshake accept key.
+    digest = hashlib.sha1((key + GUID).encode("ascii")).digest()  # nosemgrep
     return base64.b64encode(digest).decode("ascii")
 
 
