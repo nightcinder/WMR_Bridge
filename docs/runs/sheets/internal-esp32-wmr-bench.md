@@ -49,7 +49,8 @@ Use the browser installer or the release image, not a local build:
 2. Choose **Both hands** and install `v0.3.5`. If the board will not enter the
    bootloader, hold **BOOT** while the installer retries.
 3. Open the serial monitor and confirm before touching the controllers:
-   - boot banner prints `bridge_hands=0`;
+   - boot banner prints `WMR Bridge firmware 0.3.5 ...` and
+     `serving LEFT and RIGHT`;
    - `LED: WS2812 on GPIO 4 27` (the prebuilt image drives both pins);
    - console `v` prints `0.3.5`.
 4. Connect the app and confirm the Debug screen shows `firmware 0.3.5` and
@@ -93,7 +94,7 @@ Paste this at the top of the result block; every block inherits it.
 | Field | Where from | Expected |
 |---|---|---|
 | Bridge firmware + hash | Console `v`; `git describe --tags --always` of the flashed commit; release `build-info.json` `version` | `0.3.5` |
-| `bridge_hands=` | First boot-banner line | `0` (both hands) unless the block says otherwise |
+| `bridge_hands=` | `STREAM` line (console `s` or the periodic stats) | `0` (both hands) unless the block says otherwise |
 | App version + commit | Debug screen → About | `0.3.18` |
 | Probe version + commit | APK filename / build output | `0.3.18` |
 | Phone model + Android | Settings → About phone | record |
@@ -438,7 +439,7 @@ One row per check. Fill only from §10 figures; `not run` is the honest default.
 ```text
 Build: firmware 0.3.5 / <hash> / build-info version <...>;
        app 0.3.18 / <commit>; probe 0.3.18 / <commit>
-Phone: <model>, Android <version>; bridge_hands=<0|1>; position <distance/photo>
+Phone: <model>, Android <version>; STREAM bridge_hands=<0|1>; position <distance/photo>
 
 A latency-2 session <1|2>: position=<...> photo=<...>
   run 1 App none:  mtu=  conn=  rssi=  p50=  stalls L/R=  file=
