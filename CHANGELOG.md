@@ -80,8 +80,8 @@ hardware-unverified.
   and [`docs/DISCOVERY.md`](docs/DISCOVERY.md) document the in-page pairing
   steps and what to check when a hand does not bind.
 - **Tester docs.** The external-tester sheet and runbooks pin Companion
-  v0.3.8 and v0.3.10 as those releases ship (#124–#126; ONY-738, ONY-743,
-  ONY-762).
+  v0.3.7, v0.3.8 and v0.3.10 and Bridge v0.3.3 as those releases ship
+  (#123–#126; ONY-724, ONY-738, ONY-743, ONY-762).
 
 ## 0.3.3 — 2026-11-01
 
