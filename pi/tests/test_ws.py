@@ -7,6 +7,13 @@ import base64
 import unittest
 
 from wmr_bridge import ws as wsmod
+from wmr_bridge.bridge import Bridge
+from wmr_bridge.protocol import (
+    CALIBRATION_WINDOW_MAX,
+    calibration_crc32,
+    parse_calibration_window,
+)
+from wmr_bridge.server import BridgeServer
 
 
 class WebSocketTests(unittest.IsolatedAsyncioTestCase):
@@ -219,6 +226,123 @@ class HandshakeTimeoutTests(unittest.IsolatedAsyncioTestCase):
         finally:
             server.close()
             await server.wait_closed()
+
+
+class CalibrationForwardingTests(unittest.IsolatedAsyncioTestCase):
+    BLOB = bytes(range(256)) + bytes(344)
+
+    async def asyncSetUp(self) -> None:
+        self.bridge = Bridge()
+        self.server = BridgeServer(self.bridge, host="127.0.0.1", port=0)
+        await self.server.start()
+        self.clients: list[wsmod.WebSocket] = []
+
+    async def asyncTearDown(self) -> None:
+        for client in self.clients:
+            await client.close()
+        await self.server.close()
+
+    async def connect(self) -> tuple[wsmod.WebSocket, dict]:
+        client = await wsmod.connect("127.0.0.1", self.server.port, "/wmr", timeout=5)
+        self.clients.append(client)
+        hello = await asyncio.wait_for(client.recv_json(), 2)
+        return client, hello
+
+    async def read_window(
+        self, client: wsmod.WebSocket, hand: str | int, offset: int
+    ) -> bytes:
+        await client.send_json({"type": "calibration", "hand": hand, "offset": offset})
+        message = await asyncio.wait_for(client.recv_binary(), 2)
+        self.assertEqual(message[0], wsmod.CALIBRATION_MESSAGE_TAG)
+        return wsmod.unpack_calibration_message(message) or b""
+
+    async def test_message_tag_round_trip(self) -> None:
+        value = bytes(CALIBRATION_WINDOW_MAX + 16)
+        self.assertEqual(
+            wsmod.unpack_calibration_message(wsmod.pack_calibration_message(value)),
+            value,
+        )
+        self.assertIsNone(wsmod.unpack_calibration_message(value))
+        self.assertIsNone(
+            wsmod.unpack_calibration_message(bytes((wsmod.CALIBRATION_MESSAGE_TAG,)))
+        )
+        with self.assertRaises(ValueError):
+            wsmod.pack_calibration_message(bytes(15))
+        with self.assertRaises(ValueError):
+            wsmod.pack_calibration_message(bytes(CALIBRATION_WINDOW_MAX + 17))
+
+    async def test_hello_advertises_calibration(self) -> None:
+        _client, hello = await self.connect()
+        info = hello["calibration"]
+        self.assertEqual(info["version"], 1)
+        self.assertEqual(info["headerSize"], 16)
+        self.assertEqual(info["windowMax"], CALIBRATION_WINDOW_MAX)
+        self.assertEqual(info["messageTag"], wsmod.CALIBRATION_MESSAGE_TAG)
+        self.assertEqual(
+            [(item["hand"], item["state"]) for item in info["hands"]],
+            [("LEFT", "not_read"), ("RIGHT", "not_read")],
+        )
+
+    async def test_reads_cached_blob_in_windows(self) -> None:
+        client, _hello = await self.connect()
+        self.bridge.set_calibration_blob(0, self.BLOB)
+
+        first = parse_calibration_window(await self.read_window(client, "LEFT", 0))
+        self.assertEqual(first.hand, 0)
+        self.assertTrue(first.ready)
+        self.assertEqual(first.total_len, 600)
+        self.assertEqual(first.crc32, calibration_crc32(self.BLOB))
+        self.assertEqual(first.data, self.BLOB[:CALIBRATION_WINDOW_MAX])
+
+        tail = parse_calibration_window(await self.read_window(client, 0, 496))
+        self.assertEqual((tail.offset, len(tail.data)), (496, 104))
+        self.assertEqual(tail.data, self.BLOB[496:])
+
+        empty = parse_calibration_window(await self.read_window(client, "RIGHT", 0))
+        self.assertFalse(empty.ready)
+        self.assertEqual((empty.total_len, empty.data), (0, b""))
+
+    async def test_calibration_coexists_with_a_stream(self) -> None:
+        client, _hello = await self.connect()
+        await client.send_json({"type": "subscribe", "stream": "raw"})
+        self.assertEqual((await asyncio.wait_for(client.recv_json(), 2))["type"], "subscribed")
+        self.bridge.set_calibration_blob(1, self.BLOB[:64])
+        window = parse_calibration_window(await self.read_window(client, "RIGHT", 0))
+        self.assertEqual(window.data, self.BLOB[:64])
+
+    async def test_status_reports_calibration_state(self) -> None:
+        client, _hello = await self.connect()
+        self.bridge.set_calibration_state(1, 1)
+        await client.send_json({"type": "status"})
+        status = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(status["calibration"]["hands"][1]["state"], "reading")
+        self.bridge.set_calibration_blob(1, self.BLOB)
+        await client.send_json({"type": "status"})
+        status = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(status["calibration"]["hands"][1]["totalLen"], 600)
+
+    async def test_bad_calibration_requests(self) -> None:
+        client, _hello = await self.connect()
+        for message, code in (
+            ({"type": "calibration", "hand": "MIDDLE"}, "bad_hand"),
+            ({"type": "calibration"}, "bad_hand"),
+            ({"type": "calibration", "hand": "LEFT", "offset": -1}, "bad_offset"),
+            ({"type": "calibration", "hand": "LEFT", "offset": "0"}, "bad_offset"),
+        ):
+            await client.send_json(message)
+            reply = await asyncio.wait_for(client.recv_json(), 2)
+            self.assertEqual(reply, {"type": "error", "code": code})
+
+    async def test_disabled_calibration_is_not_advertised(self) -> None:
+        await self.server.close()
+        self.bridge = Bridge(calibration=False)
+        self.server = BridgeServer(self.bridge, host="127.0.0.1", port=0)
+        await self.server.start()
+        client, hello = await self.connect()
+        self.assertNotIn("calibration", hello)
+        await client.send_json({"type": "calibration", "hand": "LEFT", "offset": 0})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "error", "code": "calibration_unavailable"})
 
 
 if __name__ == "__main__":

@@ -24,8 +24,15 @@ from . import __version__
 from .decode import record_from_frame
 from .protocol import (
     BATCH_MAX_COUNT,
+    CALIBRATION_HEADER_SIZE,
+    CALIBRATION_MAX_BLOB,
+    CALIBRATION_STATE_NAMES,
+    CALIBRATION_VERSION,
+    CALIBRATION_WINDOW_MAX,
     DECODED_SIZE,
     DEFAULT_FRAGMENT_CAPACITY,
+    CalibrationCache,
+    CalibrationState,
     DecodedRecord,
     Frame,
     ProtocolError,
@@ -71,6 +78,22 @@ def _parse_json(text: str) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         return None
     return value if isinstance(value, dict) else None
+
+
+def _calibration_hand(value: Any, allowed: tuple[int, ...]) -> int | None:
+    """Resolve a control-message hand (``"LEFT"`` or ``0``) from the filter."""
+
+    if isinstance(value, str):
+        folded = value.strip().casefold()
+        hand = next(
+            (index for index, name in enumerate(HAND_NAMES) if name.casefold() == folded),
+            None,
+        )
+    elif isinstance(value, int) and not isinstance(value, bool):
+        hand = value
+    else:
+        return None
+    return hand if hand in allowed else None
 
 
 def _tokens_equal(candidate: str, expected: str) -> bool:
@@ -217,6 +240,7 @@ class Bridge:
         fragment_capacity: int = DEFAULT_FRAGMENT_CAPACITY,
         auth_timeout_s: float = 5.0,
         allowed_hands: tuple[int, ...] | list[int] = (0, 1),
+        calibration: bool | CalibrationCache = True,
     ) -> None:
         if not 1 <= batch_max <= BATCH_MAX_COUNT:
             raise ValueError(f"batch_max must be 1..{BATCH_MAX_COUNT}")
@@ -238,6 +262,12 @@ class Bridge:
         self.started_us = time.monotonic_ns() // 1000
         self.stats_dropped = 0
         self.stats_batches = 0
+        if calibration is False:
+            self.calibration: CalibrationCache | None = None
+        elif isinstance(calibration, CalibrationCache):
+            self.calibration = calibration
+        else:
+            self.calibration = CalibrationCache()
 
     # ---- ingest ----------------------------------------------------------
 
@@ -279,6 +309,41 @@ class Bridge:
         if address:
             self.hands[hand].address = address
 
+    # ---- calibration -----------------------------------------------------
+
+    def set_calibration_state(self, hand: int, state: CalibrationState | int) -> None:
+        """Mark a hand's config-block read in progress, failed, or cleared."""
+
+        if self.calibration is not None:
+            self.calibration.set_state(hand, state)
+
+    def set_calibration_blob(self, hand: int, blob: bytes) -> None:
+        """Cache a completed controller config block for FF13 forwarding."""
+
+        if self.calibration is not None:
+            self.calibration.set_blob(hand, blob)
+
+    def calibration_window(self, hand: int, offset: int = 0) -> bytes:
+        if self.calibration is None:
+            raise ProtocolError("calibration is disabled")
+        return self.calibration.window(hand, offset)
+
+    def _calibration_info(self) -> dict[str, Any] | None:
+        if self.calibration is None:
+            return None
+        return {
+            "version": CALIBRATION_VERSION,
+            "headerSize": CALIBRATION_HEADER_SIZE,
+            "windowMax": CALIBRATION_WINDOW_MAX,
+            "maxBlob": CALIBRATION_MAX_BLOB,
+            "messageTag": wsmod.CALIBRATION_MESSAGE_TAG,
+            "states": list(CALIBRATION_STATE_NAMES),
+            "hands": [
+                {"hand": HAND_NAMES[hand], **self.calibration.describe(hand)}
+                for hand in range(2)
+            ],
+        }
+
     # ---- status ----------------------------------------------------------
 
     @property
@@ -297,7 +362,7 @@ class Bridge:
             item = stats.to_json(self.sequence[index], now)
             item["hand"] = HAND_NAMES[index]
             hands.append(item)
-        return {
+        payload: dict[str, Any] = {
             "type": "status",
             "version": __version__,
             "handFilter": self.hand_filter,
@@ -309,9 +374,13 @@ class Bridge:
             "dropped": self.stats_dropped,
             "batches": self.stats_batches,
         }
+        calibration = self._calibration_info()
+        if calibration is not None:
+            payload["calibration"] = calibration
+        return payload
 
     def hello(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "type": "hello",
             "protocol": 1,
             "transport": "wifi",
@@ -325,6 +394,10 @@ class Bridge:
             "batchMax": BATCH_MAX_COUNT,
             "fragmentCapacity": self.fragment_capacity,
         }
+        calibration = self._calibration_info()
+        if calibration is not None:
+            payload["calibration"] = calibration
+        return payload
 
     # ---- client session --------------------------------------------------
 
@@ -442,6 +515,26 @@ class Bridge:
                 await subscriber.send_json({"type": "auth_ok"})
             else:
                 await subscriber.send_json({"type": "error", "code": "auth_failed"})
+            return True
+
+        if kind == "calibration":
+            if self.calibration is None:
+                await subscriber.send_json({"type": "error", "code": "calibration_unavailable"})
+                return True
+            hand = _calibration_hand(message.get("hand"), self.allowed_hands)
+            if hand is None:
+                await subscriber.send_json({"type": "error", "code": "bad_hand"})
+                return True
+            offset = message.get("offset", 0)
+            if (
+                not isinstance(offset, int)
+                or isinstance(offset, bool)
+                or not 0 <= offset <= 0xFFFFFFFF
+            ):
+                await subscriber.send_json({"type": "error", "code": "bad_offset"})
+                return True
+            window = self.calibration.window(hand, offset)
+            await subscriber.websocket.send_binary(wsmod.pack_calibration_message(window))
             return True
 
         if kind == "close":

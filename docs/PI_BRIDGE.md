@@ -55,7 +55,7 @@ test plan).
 | Batched stream | FF14 version 2 | same 2-byte header + records |
 | Sequence numbers | per hand, every report | per hand, every report; reset only on daemon restart |
 | `rx_time_us` | ESP32 `esp_timer` since boot | Linux monotonic clock (since boot, not daemon start); diagnostics only |
-| Calibration FF13 | read from controllers | not implemented (future work) |
+| Calibration FF13 | read from controllers | cached blob served in 496-byte windows over WebSocket; controller read not implemented yet |
 | Echo FF15 | GATT characteristic | JSON `ping`/`pong` control messages |
 | Firmware version FF16 | GATT characteristic | `version` in `hello`/`status` |
 | BLE MTU | 23..517 | no MTU; one raw fragment by default |
@@ -355,20 +355,34 @@ JSON examples below use the current 0.2.3 package version.
   "streams": ["raw", "decoded", "batched"],
   "recordSize": 56,
   "batchMax": 9,
-  "fragmentCapacity": 244
+  "fragmentCapacity": 244,
+  "calibration": {
+    "version": 1,
+    "headerSize": 16,
+    "windowMax": 496,
+    "maxBlob": 16384,
+    "messageTag": 19,
+    "states": ["not_read", "reading", "ready", "failed"],
+    "hands": [
+      {"hand": "LEFT", "state": "not_read", "totalLen": 0, "crc32": 0},
+      {"hand": "RIGHT", "state": "not_read", "totalLen": 0, "crc32": 0}
+    ]
+  }
 }
 ```
 
 Text messages are JSON control messages. Binary messages from the server are
-stream payloads. Binary messages from the client are rejected with
-`{"type":"error","code":"binary_not_accepted"}`.
+stream payloads or tagged FF13 calibration windows. Binary messages from the
+client are rejected with `{"type":"error","code":"binary_not_accepted"}`.
 
 `version` is the bridge's FF16 analogue: the daemon/package version, not the
 controller firmware. `handFilter` is the configured hand selector (`--hand`):
 `["LEFT", "RIGHT"]` for a both-hand daemon, `["LEFT"]` or `["RIGHT"]` for a
 single-hand Pi. A client that expects one hand per bridge can use it to confirm
 the daemon is in the mode the deployment intended. The same two fields are
-present in every `status` reply.
+present in every `status` reply. `calibration` is present when the daemon runs
+with FF13 forwarding (the default); a daemon started with calibration disabled
+omits it and answers calibration requests with `calibration_unavailable`.
 
 ### Service discovery (optional)
 
@@ -421,6 +435,7 @@ port can subscribe. With no token on loopback, only local clients can connect.
 | `{"type":"ping","id":N,"t":ms}` | `{"type":"pong","id":N,"t":ms,"serverTimeUs":...}` |
 | `{"type":"hello"}` | another `hello` |
 | `{"type":"auth","token":"..."}` | `auth_ok` or `auth_failed` |
+| `{"type":"calibration","hand":"LEFT"\|"RIGHT"\|0\|1,"offset":N}` | one tagged binary FF13 window (below) |
 | `{"type":"close"}` | close frame, then disconnect |
 
 Rules:
@@ -430,6 +445,10 @@ Rules:
   This mirrors the FF11/FF12/FF14 mutual exclusion in the firmware, so a client
   cannot believe it is receiving two streams when only one is active.
   Re-subscribing to the same stream is idempotent.
+- Calibration reads are independent of the stream subscription, like FF13 and
+  FF12 on BLE. A calibration request is answered without changing the
+  subscription. `hand` may be a name or an index; a hand outside `handFilter`
+  or a malformed offset returns `bad_hand` or `bad_offset`.
 - An unknown stream is `bad_stream`. Malformed JSON is `bad_json`. An unknown
   `type` is `unknown_type`.
 - Multiple clients are allowed (default: no explicit cap). Each has its own
@@ -487,6 +506,35 @@ Batched, one FF14 version 2 batch. Two-byte header (`version = 2`,
 partial batch is flushed after `--batch-hold-ms` (default 5 ms) or when full.
 Records of both hands may share a batch. Each carries its own hand.
 
+Calibration, one FF13 window. A binary reply starts with the one-byte message
+tag `0x13`, followed by the characteristic value. The tag keeps calibration
+replies distinguishable from stream payloads, whose first byte is `0x52`
+(raw), `0x01` (decoded record) or `0x02` (batch), so a client can read
+calibration while subscribed. The value is the same layout the ESP32 serves on
+FF13 (see [PROTOCOL.md](PROTOCOL.md)):
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| 0 | u8 | version `1` |
+| 1 | u8 | hand, 0 LEFT / 1 RIGHT |
+| 2 | u8 | state: 0 not read, 1 reading, 2 ready, 3 failed |
+| 3 | u8 | reserved, 0 |
+| 4 | u32 | blob length in bytes, 0 unless ready |
+| 8 | u32 | offset of this window |
+| 12 | u32 | CRC-32 of the whole blob, 0 unless ready |
+| 16 | `n` | `blob[offset .. offset+n)`, `n = min(total_len - offset, 496)`; empty unless ready |
+
+The largest message is 513 bytes (tag, header and 496 data bytes), well inside
+the WebSocket limit. The blob is the controller config block exactly as read,
+still obfuscated; the client checks the CRC-32 and de-obfuscates it as for BLE
+FF13.
+
+The daemon caches the blob per hand through `Bridge.set_calibration_blob()` and
+tracks `set_calibration_state()` for in-progress or failed reads. The Pi-side
+read from the controller over hidraw is not implemented yet, so on a fresh
+daemon both hands report `not_read` and a calibration request returns a
+header-only window until an ingest layer fills the cache.
+
 ### Status
 
 ```json
@@ -525,7 +573,19 @@ Records of both hands may share a batch. Each carries its own hand.
   "clients": 1,
   "subscribed": 1,
   "dropped": 0,
-  "batches": 811
+  "batches": 811,
+  "calibration": {
+    "version": 1,
+    "headerSize": 16,
+    "windowMax": 496,
+    "maxBlob": 16384,
+    "messageTag": 19,
+    "states": ["not_read", "reading", "ready", "failed"],
+    "hands": [
+      {"hand": "LEFT", "state": "ready", "totalLen": 600, "crc32": 123456789},
+      {"hand": "RIGHT", "state": "not_read", "totalLen": 0, "crc32": 0}
+    ]
+  }
 }
 ```
 
@@ -541,6 +601,8 @@ message).
 
 `version` and `handFilter` mirror the `hello` fields. `hands` remains the
 per-hand statistics array. For the configured selector read `handFilter`.
+`calibration.hands` reports each hand's FF13 state, blob length and CRC-32 so a
+client can tell a not-yet-read hand from a ready one without issuing a read.
 
 ### Sequence and timing semantics
 
@@ -567,7 +629,8 @@ The intended companion change is small:
 1. Add a Wi-Fi transport that connects to `ws://<host>:8765/wmr`, performs the
    handshake/auth, and subscribes to `batched` (or `decoded` for debug).
 2. Feed each binary message into the existing FF11 reassembler / FF12 parser /
-   FF14 batch parser, based on the stream.
+   FF14 batch parser, based on the stream. A message whose first byte is `0x13`
+   is a tagged FF13 calibration window, not stream data.
 3. Map the JSON `status` into the existing link-status model and the JSON
    `ping`/`pong` into the latency screen (or keep FF15 semantics for BLE).
 4. Reconnect with backoff. Re-subscribe after a reconnect. Sequence numbers
@@ -577,10 +640,13 @@ The intended companion change is small:
 5. Treat the bridge as one source per Pi. Multi-bridge setups (one Pi per hand)
    work the same way as multiple ESP32 bridges: connect one WebSocket per Pi,
    each carrying its own LEFT or RIGHT hand.
+6. Read calibration with `{"type":"calibration","hand":...,"offset":...}` and
+   collect 496-byte windows until `total_len` bytes, then verify the CRC-32.
+   The request works while a stream is subscribed.
 
-FF13 (calibration blobs) has no WebSocket equivalent yet. The FF16 analogue is
-the bridge `version` in `hello` and `status`. Calibration is a documented
-follow-up rather than silently pretending to support it.
+The FF16 analogue is the bridge `version` in `hello` and `status`. FF13 is
+advertised in `hello.calibration`; a bridge with calibration disabled omits the
+field rather than pretending to support it.
 
 ## Security
 
@@ -798,7 +864,8 @@ INFO/WARNING:
 - Companion app Wi-Fi transport (`wmr_ws` and connect UI in `wmr-companion`).
 - Native TLS in the daemon itself (external termination is documented in
   [TLS termination](#tls-termination)).
-- FF13 calibration-blob forwarding.
+- Pi-side FF13 controller read over hidraw (the cache and WebSocket forwarding
+  are in place; a fresh daemon starts `not_read`).
 - Native system packaging beyond the released `.deb`/tarball (`pip install`,
   APT repository, signing, image).
 - Bench-validate `--hand` single-hand mode and `--advertise-mdns` discovery on

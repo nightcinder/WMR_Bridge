@@ -43,6 +43,33 @@ CLOSE_POLICY = 1008
 CLOSE_TOO_LARGE = 1009
 CLOSE_INTERNAL = 1011
 
+# FF13 calibration values are binary replies that can share a connection with a
+# stream subscription. Their first byte is the FF13 characteristic number so a
+# client can tell them apart from raw (0x52), decoded (version 1) and batched
+# (version 2) payloads.
+CALIBRATION_MESSAGE_TAG = 0x13
+CALIBRATION_MESSAGE_MIN = 16
+CALIBRATION_MESSAGE_MAX = 16 + 496
+
+
+def pack_calibration_message(value: bytes) -> bytes:
+    """Tag an FF13 characteristic value for the WebSocket binary channel."""
+
+    if not CALIBRATION_MESSAGE_MIN <= len(value) <= CALIBRATION_MESSAGE_MAX:
+        raise ValueError(f"calibration value must be 16..512 bytes, got {len(value)}")
+    return bytes((CALIBRATION_MESSAGE_TAG,)) + bytes(value)
+
+
+def unpack_calibration_message(message: bytes) -> bytes | None:
+    """Return the FF13 value inside a tagged binary message, or ``None``."""
+
+    if not message or message[0] != CALIBRATION_MESSAGE_TAG:
+        return None
+    value = bytes(message[1:])
+    if not CALIBRATION_MESSAGE_MIN <= len(value) <= CALIBRATION_MESSAGE_MAX:
+        return None
+    return value
+
 
 class WebSocketError(Exception):
     """Handshake or protocol failure."""

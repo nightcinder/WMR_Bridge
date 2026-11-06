@@ -8,15 +8,23 @@ from pathlib import Path
 
 from wmr_bridge.protocol import (
     BATCH_VERSION,
+    CALIBRATION_HEADER_SIZE,
+    CALIBRATION_WINDOW_MAX,
+    CalibrationCache,
+    CalibrationState,
     Frame,
     ProtocolError,
     Reassembler,
     DecodedRecord,
+    calibration_crc32,
     encode_batch,
+    encode_calibration_window,
     encode_fragment,
     encode_raw_messages,
     pack_record,
     parse_batch,
+    parse_calibration_cursor,
+    parse_calibration_window,
     unpack_record,
 )
 
@@ -218,6 +226,141 @@ class BatchTests(unittest.TestCase):
             parse_batch(bytes((3, 2)) + bytes(packet[2:]))
         with self.assertRaises(ProtocolError):
             parse_batch(bytes((BATCH_VERSION, 0)) + bytes(56))
+
+
+class CalibrationTests(unittest.TestCase):
+    def test_crc32_check_values(self) -> None:
+        self.assertEqual(calibration_crc32(b"123456789"), 0xCBF43926)
+        self.assertEqual(calibration_crc32(b"\x00\x00\x00\x00"), 0x2144DF1C)
+
+    def test_golden_window(self) -> None:
+        blob = bytes(range(256)) + bytes(344)
+        self.assertEqual(len(blob), 600)
+        window = encode_calibration_window(1, CalibrationState.READY, blob)
+        self.assertEqual(
+            window[:12],
+            bytes.fromhex("01 01 02 00 58 02 00 00 00 00 00 00"),
+        )
+        self.assertEqual(
+            struct.unpack_from("<I", window, 12)[0], calibration_crc32(blob)
+        )
+        self.assertEqual(len(window), CALIBRATION_HEADER_SIZE + CALIBRATION_WINDOW_MAX)
+        self.assertEqual(window[CALIBRATION_HEADER_SIZE:], blob[:CALIBRATION_WINDOW_MAX])
+
+        parsed = parse_calibration_window(window)
+        self.assertEqual(parsed.hand, 1)
+        self.assertTrue(parsed.ready)
+        self.assertEqual(parsed.total_len, 600)
+        self.assertEqual(parsed.offset, 0)
+        self.assertEqual(parsed.crc32, calibration_crc32(blob))
+        self.assertEqual(parsed.data, blob[:CALIBRATION_WINDOW_MAX])
+
+        tail = parse_calibration_window(
+            encode_calibration_window(1, CalibrationState.READY, blob, 496)
+        )
+        self.assertEqual((tail.offset, len(tail.data)), (496, 104))
+        self.assertEqual(tail.data, blob[496:])
+
+        past_end = parse_calibration_window(
+            encode_calibration_window(1, CalibrationState.READY, blob, 600)
+        )
+        self.assertEqual(len(encode_calibration_window(1, CalibrationState.READY, blob, 600)), CALIBRATION_HEADER_SIZE)
+
+    def test_non_ready_header_only(self) -> None:
+        window = encode_calibration_window(1, CalibrationState.FAILED, b"ignored")
+        self.assertEqual(
+            window,
+            bytes.fromhex(
+                "01 01 03 00 00 00 00 00 00 00 00 00 00 00 00 00"
+            ),
+        )
+        parsed = parse_calibration_window(window)
+        self.assertFalse(parsed.ready)
+        self.assertEqual((parsed.total_len, parsed.crc32, parsed.data), (0, 0, b""))
+
+    def test_parse_rejects(self) -> None:
+        blob = bytes(32)
+        good = encode_calibration_window(0, CalibrationState.READY, blob)
+        bad_packets = [
+            b"",
+            good[:-1],
+            bytes((2,)) + good[1:],
+            good[:1] + bytes((2,)) + good[2:],
+            good[:2] + bytes((9,)) + good[3:],
+            encode_calibration_window(0, CalibrationState.READY, blob) + bytes(496),
+            encode_calibration_window(0, CalibrationState.READY, blob)[:16]
+            + bytes(1),
+        ]
+        for packet in bad_packets:
+            with self.subTest(packet=packet[:8].hex()):
+                with self.assertRaises(ProtocolError):
+                    parse_calibration_window(packet)
+
+    def test_cursor(self) -> None:
+        self.assertEqual(
+            parse_calibration_cursor(bytes.fromhex("01 04 03 02 01")),
+            (1, 0x01020304),
+        )
+        for value in (b"", b"\x00", bytes.fromhex("00 01 02 03 04") + b"\x00", b"\x02\x00\x00\x00\x00"):
+            with self.subTest(value=value.hex()):
+                with self.assertRaises(ProtocolError):
+                    parse_calibration_cursor(value)
+
+    def test_cache_states_and_windows(self) -> None:
+        cache = CalibrationCache()
+        self.assertFalse(cache.ready)
+        self.assertEqual(
+            cache.window(0),
+            encode_calibration_window(0, CalibrationState.NOT_READ, b""),
+        )
+        cache.set_state(0, CalibrationState.READING)
+        self.assertEqual(cache.state(0), CalibrationState.READING)
+        self.assertEqual(cache.total(0), 0)
+        cache.set_state(0, CalibrationState.FAILED)
+        self.assertEqual(cache.state(0), CalibrationState.FAILED)
+
+        blob = bytes(range(256)) + bytes(344)
+        cache.set_blob(0, blob)
+        self.assertTrue(cache.ready)
+        self.assertEqual(cache.state(0), CalibrationState.READY)
+        self.assertEqual(cache.blob(0), blob)
+        self.assertEqual(cache.total(0), 600)
+        self.assertEqual(cache.crc32(0), calibration_crc32(blob))
+        self.assertEqual(
+            cache.describe(0),
+            {"state": "ready", "totalLen": 600, "crc32": calibration_crc32(blob)},
+        )
+        self.assertEqual(
+            cache.window(0, 496),
+            encode_calibration_window(0, CalibrationState.READY, blob, 496),
+        )
+        # The other hand is independent.
+        self.assertEqual(cache.state(1), CalibrationState.NOT_READ)
+
+        cache.set_state(0, CalibrationState.NOT_READ)
+        self.assertFalse(cache.ready)
+        self.assertEqual(cache.window(0), encode_calibration_window(0, CalibrationState.NOT_READ, b""))
+
+    def test_cache_rejects(self) -> None:
+        cache = CalibrationCache()
+        with self.assertRaises(ProtocolError):
+            cache.set_state(0, CalibrationState.READY)
+        with self.assertRaises(ProtocolError):
+            cache.set_blob(0, b"")
+        with self.assertRaises(ProtocolError):
+            cache.set_blob(0, bytes(16 * 1024 + 1))
+        with self.assertRaises(ProtocolError):
+            cache.set_state(2, CalibrationState.READING)
+        with self.assertRaises(ProtocolError):
+            cache.window(2)
+        with self.assertRaises(ProtocolError):
+            cache.window(0, -1)
+        with self.assertRaises(ProtocolError):
+            encode_calibration_window(0, CalibrationState.READY, bytes(16 * 1024 + 1))
+        with self.assertRaises(ProtocolError):
+            encode_calibration_window(0, CalibrationState.READY, b"")
+        with self.assertRaises(ProtocolError):
+            encode_calibration_window(0, 9)
 
 
 class SampleParityTests(unittest.TestCase):
