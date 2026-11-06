@@ -40,6 +40,12 @@ jobs:
       - name: Run Linux/Pi host-bridge tests
         working-directory: pi
         run: python3 -m unittest discover -s tests -v
+      - name: Build and verify Pi packages
+        run: |
+          ./pi/build_package.sh
+          version="$(cd pi && python3 -c 'import wmr_bridge; print(wmr_bridge.__version__)')"
+          ./pi/tools/verify_package.sh "dist/wmr-bridge-${version}.tar.gz"
+          ./pi/build_deb.sh
       - name: Pi package and daemon dry run
         run: ./pi/tools/dry_run.sh
       - name: Run release checksum tests
