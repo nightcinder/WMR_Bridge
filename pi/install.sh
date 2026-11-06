@@ -8,7 +8,9 @@
 # and run the installer from the extracted tree.
 #   curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 #
-# Pin a release or a mirror (also used by the host tests):
+# Pin a release or a mirror (also used by the host tests). The Pi package
+# version and the firmware tag are independent, so name the tag too:
+#   WMR_BRIDGE_VERSION=0.2.3 WMR_BRIDGE_TAG=v0.3.5 sh install.sh
 #   WMR_BRIDGE_VERSION=0.2.3 WMR_BRIDGE_RELEASE_BASE_URL=https://example/pkg sh install.sh
 #
 # Test / packaging staging mode (no root required when WMR_SKIP_PRIVILEGED=1):

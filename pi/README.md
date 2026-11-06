@@ -3,8 +3,10 @@
 This directory is the second supported first-class target. ESP32-over-BLE is the
 default. The host-side replacement runs on any Linux machine with Bluetooth
 Classic and a 5 GHz Wi-Fi adapter. A Raspberry Pi 4 or 5 is the reference target
-(dual-band Wi-Fi and BT 5.0). A Pi Zero 2 W is not suitable, because its Wi-Fi
-is 2.4 GHz only. That band shares the radio with Bluetooth.
+(dual-band Wi-Fi and BT 5.0). A Raspberry Pi 3 Model B+ is expected to work
+(dual-band Wi-Fi and BT 4.2 Classic, with less CPU headroom and 1 GB RAM). A Pi
+Zero 2 W is not suitable, because its Wi-Fi is 2.4 GHz only. That band shares
+the radio with Bluetooth.
 
 The host bridge:
 
@@ -48,8 +50,8 @@ pi/build_deb.sh                              # dist/wmr-bridge_<version>_all.deb
 pi/tools/verify_package.sh dist/wmr-bridge-<version>.tar.gz
 ```
 
-On a Raspberry Pi OS Bookworm 64-bit host, install either the `.deb` or the
-tarball:
+On a Raspberry Pi OS 64-bit host (Bookworm or Trixie), install either the `.deb`
+or the tarball:
 
 ```bash
 sudo apt install ./wmr-bridge_<version>_all.deb   # enables and starts the unit
