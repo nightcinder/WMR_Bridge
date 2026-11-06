@@ -31,15 +31,13 @@ Paste these once at the top of the result block; every check below inherits them
 | Phone model and Android version | Settings → About phone |
 | Stream mode in use | App stream selector (`none`, `FF11`, `FF12`, `FF14`) |
 
-App target note (2026-10-30): this sheet keeps **wmr-companion 0.2.2** (versionCode 4) as the
-pinned app baseline. The current release is 0.3.10 (0.3.10+15); the FF16 display, stick settings
-and FF17 control surfaces live in the app (debug_screen.dart, controller_panel.dart), which are
-unchanged between v0.2.2 and v0.3.3, and the Dart packages stay at 0.2.2 in v0.3.3 through v0.3.10,
-so no check's behaviour or expected output changes between the two; retargeting would only
-relabel the version strings in §0. (The 0.2.4 sitting in §10 ran App 0.2.1, versionCode 3, so
-its §0 version line differs from this baseline.) Running the bench on 0.3.10 is acceptable —
-only the §0 version expectations differ (expect `0.3.10`, versionCode 15 / 2015) — but record which
-build was used in §9.
+App target note (2026-11-06): this sheet keeps **wmr-companion 0.2.2** (versionCode 4) as the
+pinned app baseline. The current release is 0.3.17 (0.3.17+22). The FF16 display, stick settings
+and FF17 control surfaces stay in the app (`debug_screen.dart`, `controller_panel.dart`). The
+Dart packages stay at 0.2.2. Running the bench on 0.3.17 is acceptable. Only the §0 version
+expectations differ (expect `0.3.17`, versionCode 22 / 2022). Record which build was used in §9.
+The 0.2.4 sitting in §10 ran App 0.2.1 (versionCode 3), so its §0 version line differs from
+this baseline.
 If the bridge reports a version the app cannot parse (FF16 empty or `1`), stop: the board is not
 running a packaged build and the FF16 check cannot pass on it.
 
