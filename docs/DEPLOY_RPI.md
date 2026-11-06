@@ -1,7 +1,8 @@
 # Deploying WMR Bridge to a Raspberry Pi (Tester Runbook)
 
 This runbook guides testers through deploying and updating the WMR Bridge
-software on a Raspberry Pi (Raspberry Pi 4 Model B or Raspberry Pi 5).
+software on a Raspberry Pi (Raspberry Pi 3 Model B+, Raspberry Pi 4 Model B, or
+Raspberry Pi 5).
 
 The Pi host bridge runs under stock Raspberry Pi OS Lite and bridges WMR
 controllers over Classic Bluetooth to the phone/PC via WebSocket over 5 GHz
@@ -15,13 +16,56 @@ Wi-Fi.
 
 ---
 
+## 0. Bench checklist for 2026-11-07 (Raspberry Pi 3B+)
+
+Short path for tomorrow's sitting. Tick each line; the section in brackets has
+the related procedure and its commands.
+
+- [ ] Flash Raspberry Pi OS Lite **64-bit** to the 3B+ card. In Imager choose
+      device `Raspberry Pi 3` and the current `Raspberry Pi OS Lite (64-bit)`
+      release (Trixie 2026-10-06). [§2]
+- [ ] Use a 5 V / 2.5 A micro-USB supply; after boot
+      `vcgencmd get_throttled` must print `throttled=0x0`. [§8.5]
+- [ ] Join the dedicated **5 GHz** SSID; `iw dev wlan0 link` shows
+      `freq: 5xxx`. [§3]
+- [ ] `uname -m` prints `aarch64` and `systemctl is-active bluetooth` prints
+      `active`. [§2]
+- [ ] Install the released package and check `wmr-bridge --version` prints
+      `wmr_bridge 0.2.3`. [§4]
+- [ ] `systemctl is-enabled wmr-bridge` reports `enabled` and
+      `systemctl is-active wmr-bridge` reports `active`. [§4]
+- [ ] Pair, trust, and connect both controllers; both appear in
+      `/sys/class/hidraw/*/device/uevent`. [§5]
+- [ ] Replay smoke test from the installed tree passes with zero gaps
+      ([PI_BRIDGE.md § Pre-flight kit](PI_BRIDGE.md#pre-flight-kit-no-hardware)).
+- [ ] Live `wifi_probe` batched run shows both hands above 0 records/s and
+      `dropped = 0`. [§6]
+- [ ] Record the paste-back block from
+      [the Pi bring-up sheet](runs/sheets/pi-bridge.md#5-what-to-paste-back),
+      including board model, image date, kernel, BlueZ, and Python versions.
+
+Known 3B+ limits for this sitting: less CPU headroom than a Pi 4/5 (Cortex-A53
+at 1.4 GHz, 1 GB RAM) and Bluetooth 4.2 Classic instead of 5.0. Run only the
+bridge and the probe on the board during timing, and record 3B+ results
+separately from Pi 4/5 data.
+
+---
+
 ## 1. Hardware Prerequisites
 
-- **Raspberry Pi 4 Model B** or **Raspberry Pi 5**
-  *(Raspberry Pi 3 Model B+ is expected to work with lower CPU headroom.
-  **Raspberry Pi Zero 2 W is not supported** because it lacks 5 GHz Wi-Fi).*
+- **Raspberry Pi 3 Model B+**, **Raspberry Pi 4 Model B**, or
+  **Raspberry Pi 5**.
+  - The 3B+ has dual-band 2.4/5 GHz Wi-Fi and Bluetooth 4.2 Classic, so it
+    meets the transport requirement; it has less CPU headroom and 1 GB RAM.
+  - The Pi 4 and Pi 5 are the reference targets (Bluetooth 5.0 Classic).
+  - **Raspberry Pi Zero 2 W is not supported** because it lacks 5 GHz Wi-Fi.
+  - Stock Raspberry Pi OS already carries `bluez-firmware` and
+    `firmware-brcm80211`, the Bluetooth and Wi-Fi firmware for the 3B+'s
+    CYW43455 combo. No extra firmware package is needed.
 - MicroSD card (8 GB or larger) and card reader.
-- Power supply for your Raspberry Pi.
+- Power supply for your Raspberry Pi. Use the supply for the board: 5 V /
+  2.5 A micro-USB for the 3B+, 5 V / 3 A USB-C for the Pi 4, and the official
+  Pi 5 supply for a Pi 5.
 - Dedicated **5 GHz Wi-Fi network**.
   - **Requirement**: The Pi and client device (phone or PC) MUST connect to a
     5 GHz Wi-Fi SSID. Bluetooth Classic operates in the 2.4 GHz spectrum;
@@ -39,8 +83,12 @@ Use Raspberry Pi Imager to write the stock operating system and pre-configure
 networking and authentication:
 
 1. Launch **Raspberry Pi Imager**.
-2. **Choose Device**: Select `Raspberry Pi 4` or `Raspberry Pi 5`.
-3. **Choose OS**: Select `Raspberry Pi OS (other)` -> **`Raspberry Pi OS Lite (64-bit)`** (Bookworm).
+2. **Choose Device**: Select your board. For a 3B+ choose `Raspberry Pi 3`
+   (Imager groups the 3B and 3B+ under that entry). For a Pi 4 or Pi 5 choose
+   that model.
+3. **Choose OS**: Select `Raspberry Pi OS (other)` -> **`Raspberry Pi OS Lite (64-bit)`**.
+   The current release is Trixie (2026-10-06); the previous Bookworm reference
+   (2025-05-13) is also supported. Both are 64-bit and boot on the 3B+.
 4. **Choose Storage**: Select your microSD card.
 5. Click **Next**. When prompted to apply OS customization settings, choose **Edit Settings**:
    - **Hostname**: Enter a unique name, e.g., `wmr-pi` (resolves as `wmr-pi.local`).
@@ -54,6 +102,39 @@ networking and authentication:
      - Choose **Allow public-key authentication only** and provide your SSH public key (or use password authentication).
 6. Save the settings, click **Yes** to apply customizations, and write the card.
 7. Insert the microSD card into the Pi and power it on. Wait 1–2 minutes for first boot.
+
+### Confirm the 64-bit OS and Bluetooth Stack
+
+Once the Pi is up (SSH works in §3), confirm the image architecture and that
+BlueZ is running before installing anything:
+
+```bash
+uname -m                      # must print aarch64
+systemctl is-active bluetooth # must print active
+```
+
+If `uname -m` prints `armv7l`, the 32-bit image was flashed; re-flash the
+64-bit Lite release. If Bluetooth is inactive, start it with
+`sudo systemctl enable --now bluetooth`.
+
+### Pinned images for the 2026-11-07 sitting
+
+Raspberry Pi publishes the `.img.xz` and its SHA-256 side by side. The two
+supported 64-bit Lite releases are:
+
+| Release | Image | SHA-256 (`.img.xz`) |
+| --- | --- | --- |
+| Trixie, 2026-10-06 (current) | [2026-10-06-raspios-trixie-arm64-lite.img.xz](https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2026-10-06/2026-10-06-raspios-trixie-arm64-lite.img.xz) | `483db18a48da399b5b7022ffae9a07bc6d99daab30e593aedac09b69ff422843` |
+| Bookworm, 2025-05-13 (previous reference) | [2025-05-13-raspios-bookworm-arm64-lite.img.xz](https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2025-05-13/2025-05-13-raspios-bookworm-arm64-lite.img.xz) | `62d025b9bc7ca0e1facfec74ae56ac13978b6745c58177f081d39fbb8041ed45` |
+
+Verify the download before flashing:
+
+```bash
+sha256sum 2026-10-06-raspios-trixie-arm64-lite.img.xz
+```
+
+If Imager offers a newer release than the table, record its date and SHA-256 in
+the paste-back instead of pinning an older image.
 
 ---
 
@@ -91,13 +172,13 @@ to disable Wi-Fi power saving permanently).*
 ## 4. Step 3: Install WMR Bridge
 
 > **Release Asset Availability**:
-> CI release packaging workflows that publish `install.sh`, `wmr-bridge_<version>_all.deb`,
-> and `wmr-bridge-<version>.tar.gz` were introduced in PRs #103 and #104. These assets
-> are attached to GitHub releases starting with the first `v*` tag cut after #104.
-> Existing tags cut prior to #104 (such as `v0.3.0`) only contain ESP32 firmware assets;
-> querying those tags returns 404 or installer fetch errors.
+> Every `v*` tag since the packaging change (PR #104) publishes `install.sh`,
+> `wmr-bridge_<version>_all.deb`, and `wmr-bridge-<version>.tar.gz`. The
+> current release is `v0.3.5`, which carries Pi package `0.2.3`. Tags before
+> #104 (such as `v0.3.0`) only contain ESP32 firmware assets.
 >
-> Until the next release tag is cut, use the **Git Checkout Path** (Method 1).
+> Use Method 1 only for a checkout you built yourself or for a pre-release
+> change that has no tag yet.
 
 ### Method 1: Git Checkout Path (Current / Pre-release)
 
@@ -123,17 +204,32 @@ sudo ./pi/install.sh
 
 ---
 
-### Method 2: Released Artifacts (Available from first release tag after #104)
+### Method 2: Released Artifacts (`v0.3.5` and later)
 
-Once a new `v*` release is published containing the packaging assets, you can install
-using the one-line installer or downloaded package.
+Install from the release using the one-line installer or a downloaded package.
+
+#### Pinned package for the 2026-11-07 sitting
+
+| Artifact | Link | SHA-256 |
+| --- | --- | --- |
+| `wmr-bridge-0.2.3.tar.gz` | [download](https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.5/wmr-bridge-0.2.3.tar.gz) | `04b7742b4357702c0eeb318879257dd097f8bc0d7c0cd929ddd77aa8486b8129` |
+| `wmr-bridge_0.2.3_all.deb` | [download](https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.5/wmr-bridge_0.2.3_all.deb) | `311bbd7d990402b84feb3d4dbb505541d7ab9e7a1acff0fd93224567297d4e75` |
+| `install.sh` | [download](https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.5/install.sh) | `bff2fa26fe3f4fb48a16dfdd9c61fff85c52a90cbae92f9a2aaf884dc2e4d6fa` |
+
+The release also carries `SHA256SUMS` for every asset. Verify the files you
+downloaded (the list covers all assets, so ignore the ones you did not fetch):
+
+```bash
+sha256sum -c SHA256SUMS --ignore-missing
+```
 
 #### Option A: One-line installer (pinned version)
 
-To install a specific released version (must be a release tag cut after #104), run:
+The Pi package version and the firmware release tag are independent: package
+`0.2.3` ships in tag `v0.3.5`. To pin both, set the package version and the tag:
 
 ```bash
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | WMR_BRIDGE_VERSION=<version> sudo -E bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.5/install.sh | WMR_BRIDGE_VERSION=0.2.3 WMR_BRIDGE_TAG=v0.3.5 sudo -E bash
 ```
 
 To install the latest release without pinning:
@@ -157,8 +253,8 @@ The installer:
 Download the `.deb` asset from the [GitHub Releases](https://github.com/nightcinder/WMR_Bridge/releases) page:
 
 ```bash
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/<release-tag>/wmr-bridge_<version>_all.deb
-sudo apt install ./wmr-bridge_<version>_all.deb
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.5/wmr-bridge_0.2.3_all.deb
+sudo apt install ./wmr-bridge_0.2.3_all.deb
 ```
 
 ---
@@ -185,6 +281,8 @@ Check the service status:
 
 ```bash
 systemctl status wmr-bridge
+systemctl is-enabled wmr-bridge   # enabled
+systemctl is-active wmr-bridge    # active
 journalctl -u wmr-bridge -n 50 --no-pager
 ```
 
@@ -402,13 +500,19 @@ sudo apt install ./dist/*.deb
 When upgrading against published release tags:
 
 ```bash
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | WMR_BRIDGE_VERSION=<new-version> sudo -E bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
+```
+
+To pin a release, name both the Pi package version and the firmware tag:
+
+```bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/<tag>/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=<tag> sudo -E bash
 ```
 
 Or for a downloaded `.deb` package:
 
 ```bash
-sudo apt install ./wmr-bridge_<new-version>_all.deb
+sudo apt install ./wmr-bridge_<pi-version>_all.deb
 ```
 
 ### Confirm Persistence
@@ -472,3 +576,12 @@ button presses or re-pairing.
   ```bash
   bluetoothctl trust <MAC-ADDRESS>
   ```
+
+### 5. Pi 3B+ Under-Voltage or Thermal Throttling
+- **Symptom**: `vcgencmd get_throttled` prints anything other than
+  `throttled=0x0`, or the stream stalls while the board is busy.
+- **Cause**: The 3B+ draws more current than a weak micro-USB supply can
+  deliver, or the SoC is thermally throttled.
+- **Fix**: Use a 5 V / 2.5 A supply and a heatsink or fan. Run only the bridge
+  and `wifi_probe.py` on the board during P5/P6, then re-check
+  `vcgencmd get_throttled` and `vcgencmd measure_temp`.

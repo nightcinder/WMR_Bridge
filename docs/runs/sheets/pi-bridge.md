@@ -64,7 +64,10 @@ Before purchasing, consult the canonical suitability table in
 [docs/PI_BRIDGE.md § Why a Pi, and why 5 GHz](../../PI_BRIDGE.md#why-a-pi-and-why-5-ghz):
 
 - **Raspberry Pi 5** or **Raspberry Pi 4 Model B:** **Yes (Reference targets)** — BT 5.0 Classic + dual-band Wi-Fi.
-- **Raspberry Pi 3 Model B+:** **Expected** — dual-band Wi-Fi; tighter CPU headroom.
+- **Raspberry Pi 3 Model B+:** **Expected** — dual-band Wi-Fi + BT 4.2 Classic; 64-bit OS
+  supported; tighter CPU headroom and 1 GB RAM. This is the board for the 2026-11-07
+  sitting; the short checklist and pinned image/package checksums are in
+  [DEPLOY_RPI.md §0](../../DEPLOY_RPI.md#0-bench-checklist-for-2026-11-07-raspberry-pi-3b).
 - **Raspberry Pi Zero 2 W:** **Strictly NO** — 2.4 GHz Wi-Fi only. Sharing 2.4 GHz between Wi-Fi and Bluetooth
   causes severe on-chip coexistence contention, defeating the entire purpose of the Wi-Fi bridge.
 
@@ -72,7 +75,8 @@ Before purchasing, consult the canonical suitability table in
 
 The host daemon requires:
 
-- **OS:** Raspberry Pi OS Bookworm (64-bit) reference image.
+- **OS:** Raspberry Pi OS 64-bit. Bookworm (2025-05-13) is the reference; the current
+  Trixie (2026-10-06) release is also supported. Record the image date and kernel.
 - **Python:** Version `>= 3.10` (uses standard library only: `asyncio`, `socket`, `struct`, `json`, `hashlib`).
 - **BlueZ:** Bluetooth daemon with the `input` plugin enabled (Raspberry Pi OS default).
 - **Kernel:** `hidp` module loaded (`echo hidp | sudo tee /etc/modules-load.d/wmr-bridge.conf`).
@@ -116,8 +120,9 @@ The package and the daemon can be validated before the Pi exists. These are
 | Installer staging | `DESTDIR=<tmp> WMR_SKIP_PRIVILEGED=1 pi/install.sh` | pass (`/opt/wmr-bridge`, systemd unit, udev rule, power-save drop-in, token mode `0600`) |
 | Replay end to end from the installed tree | `pi/tools/dry_run.sh` | pass for the `.deb` (staged install, reinstall keeps token and edited env, 480 records, 300 LEFT / 180 RIGHT, `gaps=(0,0)`, `missing=(0,0)`, `dropped=0`, `clients=1`, `errors=0`, remove/purge exit 0). Pass `dist/wmr-bridge-0.2.3.tar.gz` for the tarball path |
 
-The image is Raspberry Pi OS Bookworm 64-bit from Raspberry Pi Imager plus this
-package; there is no custom image. Re-run `pi/tools/dry_run.sh` after any change
+The image is stock Raspberry Pi OS 64-bit (Bookworm or Trixie) from Raspberry Pi
+Imager plus this package; there is no custom image. Re-run
+`pi/tools/dry_run.sh` after any change
 to `pi/` before a hardware sitting. Hardware-only checks (BlueZ input plugin,
 `hidp`, hidraw permissions, 5 GHz, radio loss) remain P1–P10 below.
 

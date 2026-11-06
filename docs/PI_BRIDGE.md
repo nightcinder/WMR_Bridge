@@ -31,7 +31,7 @@ at 2.4 GHz, and away from the Pi's own 2.4 GHz Wi-Fi/BT coexistence machinery.
 | --- | --- | --- |
 | Raspberry Pi 5 | Yes | BT 5.0 Classic + dual-band Wi-Fi; reference target |
 | Raspberry Pi 4 Model B | Yes | BT 5.0 Classic + dual-band Wi-Fi |
-| Raspberry Pi 3 Model B+ | Expected | dual-band Wi-Fi; less CPU headroom |
+| Raspberry Pi 3 Model B+ | Expected | dual-band Wi-Fi + BT 4.2 Classic; 64-bit OS supported; less CPU headroom and 1 GB RAM |
 | Raspberry Pi Zero 2 W | No | 2.4 GHz Wi-Fi only, shares the band with BT |
 | Generic x86/ARM Linux | Expected | needs BlueZ HID host + a 5 GHz adapter |
 | Pi with a USB BT dongle | Expected | kernel must expose HID input as `/dev/hidraw*` |
@@ -68,7 +68,8 @@ and FF14 batch parser. Only the transport changes.
 
 ### Host prerequisites
 
-Raspberry Pi OS Bookworm (64-bit) is the reference. You need:
+Raspberry Pi OS Bookworm (64-bit) is the reference; the current Trixie (64-bit)
+release is also supported. You need:
 
 - BlueZ with the `input` plugin enabled (the Raspberry Pi OS default);
 - the kernel `hidp` module;
@@ -183,7 +184,7 @@ For a step-by-step tester guide covering OS flashing with Raspberry Pi Imager,
 5 GHz Wi-Fi setup, controller pairing, `wifi_probe` validation, upgrades, and
 troubleshooting, see the [Raspberry Pi Deployment and Update Runbook](DEPLOY_RPI.md).
 
-On Raspberry Pi OS Bookworm 64-bit, install the Debian package:
+On Raspberry Pi OS 64-bit (Bookworm or Trixie), install the Debian package:
 
 ```bash
 sudo apt install ./wmr-bridge_<version>_all.deb
@@ -214,8 +215,10 @@ sudo systemctl enable --now wmr-bridge
 When `install.sh` is piped, `$0` is the shell, so it downloads the matching
 `wmr-bridge-<version>.tar.gz` and `.sha256` from the same release, verifies the
 checksum and runs the installer from the extracted tree. Set
-`WMR_BRIDGE_VERSION=<version>` to pin a release (the tag defaults to
-`v<version>`) and `WMR_BRIDGE_RELEASE_BASE_URL` to use a mirror. The tarball
+`WMR_BRIDGE_VERSION=<version>` to pin the Pi package version and
+`WMR_BRIDGE_TAG=<tag>` to name the release tag it comes from (the tag defaults
+to `v<version>`, which only matches when the package version equals the tag).
+Set `WMR_BRIDGE_RELEASE_BASE_URL` to use a mirror. The tarball
 installer creates the same user, udev rule, token and env file but does not
 enable the service. The `.deb` does.
 
@@ -253,8 +256,9 @@ the uid it runs as.
 
 ### Pre-flight kit (no hardware)
 
-The image is Raspberry Pi OS Bookworm 64-bit (Lite or Desktop) written with
-Raspberry Pi Imager, plus this package. No custom `pi-gen` image is maintained.
+The image is stock Raspberry Pi OS 64-bit (Lite or Desktop; Bookworm or Trixie)
+written with Raspberry Pi Imager, plus this package. No custom `pi-gen` image is
+maintained.
 The daemon is one dependency-free Python tree, so a bespoke image would only
 duplicate Raspberry Pi OS and add another artifact to keep current. Record the
 image date and kernel in the sitting record (section 5.1 of the run sheet).
@@ -691,6 +695,10 @@ whatever BlueZ paired, and assigns hands by HID name.
   The event loop should keep up with 2 x about 180 reports/s on a Pi 4.
   Batching reduces WebSocket writes but adds at most the hold time (5 ms
   default).
+- The Pi 3B+ has less CPU headroom than a Pi 4 (Cortex-A53 at 1.4 GHz, 1 GB
+  RAM). The event loop should still fit 2 x about 180 reports/s, but run only
+  the bridge and the probe on the board during P5/P6 and record CPU load and
+  `vcgencmd get_throttled` with the results.
 - The default 512-message queue absorbs scheduling hiccups for roughly 1.5 s at
   320 records/s per client. A slower client drops the newest messages. It does
   not stall the controllers.
@@ -733,6 +741,10 @@ subscriber is attached (`pi/wmr_bridge/bridge.py` `ingest`). That difference
 is not loss. Use sequence gaps and `dropped` to judge loss.
 
 ### Hardware checklist (not yet run)
+
+First target: **Raspberry Pi 3 Model B+**, bench scheduled 2026-11-07. The
+tester checklist and pinned image/package checksums are in
+[DEPLOY_RPI.md](DEPLOY_RPI.md#0-bench-checklist-for-2026-11-07-raspberry-pi-3b).
 
 | ID | Check | Pass criterion |
 | --- | --- | --- |
