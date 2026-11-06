@@ -5,13 +5,83 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
-## Unreleased
+## 0.3.5 — 2026-11-06
 
-- **Triage accepts the 6-run pose protocol (#129, ONY-870).**
-  `tools/triage_bundle.py` accepts non-occlusion pose runs of 14 s or longer
-  (15 s bench timer with boundary tolerance) and treats a six-run,
-  one-run-per-motion bundle as complete. The pose-filter sheet moves from the
-  42-run schedule in filter-spec rev 4 §8 to ONY-868 Option A.
+The FF10 encryption-enforcement release on top of 0.3.4. FF10–FF17 keep their
+payloads, so companions at 0.2.2 or later continue to work, and the firmware
+reports the tag version over FF16 (0.3.5 when tagged). The FF10 data
+characteristics now name a 16-byte encryption key size, so BTstack rejects an
+unencrypted or shorter-key access; the bridge already required a bonded LESC
+link. Triage also moves to the 6-run pose protocol, and the repository gains
+report-only secret and static-analysis scans. Firmware and Pi artifacts remain
+CI-built and hardware-unverified.
+
+### Firmware
+
+- **FF10 encryption enforcement (#132, ONY-889).** `wmr_bridge.gatt` now marks
+  every FF10 data characteristic and its CCC `ENCRYPTION_KEY_SIZE_16` as well
+  as `WRITE_ENCRYPTED`/`READ_ENCRYPTED`. BTstack rejects an unencrypted access
+  only when the attribute's key-size nibble is non-zero, so the earlier
+  encryption flags (firmware 0.3.0–0.3.4) did not by themselves enforce
+  encryption. FF16, the GAP/GATT attributes, the DIS fields and the HID boot
+  reports stay readable before pairing; none carries motion or controller
+  configuration. [`docs/SECURITY.md`](docs/SECURITY.md) records the wider
+  plaintext surface and the 16-byte requirement, and
+  [`docs/PROTOCOL.md`](docs/PROTOCOL.md) matches the attribute flags.
+  `tests/test_gatt_encryption.py` checks the compiled attribute table against
+  the GATT source; no host test replaces a radio run.
+
+### Triage
+
+- **6-run pose bundles (#129, ONY-870).** `tools/triage_bundle.py` accepts
+  non-occlusion pose runs of 14 s or longer (15 s bench timer with boundary
+  tolerance) and treats a six-run, one-run-per-motion bundle as complete. The
+  pose-filter sheet moves from the 42-run schedule in filter-spec rev 4 §8 to
+  ONY-868 Option A. Regression tests cover the floor and the bundle shape in
+  `tests/test_triage_bundle.py`.
+
+### CI
+
+- **Secret and static-analysis scans (#130, ONY-886).** `security.yml` runs
+  gitleaks and Semgrep on pull requests and pushes to `main`, and Dependabot
+  covers the GitHub Actions and pip ecosystems. Both scanners are report-only
+  (`continue-on-error`), so a finding is visible in the checks list without
+  blocking a merge.
+
+### Verification
+
+- Host C tests and Python tests run in CI before tagging; the ESP-IDF build
+  runs on the tag, and firmware reports the tag version over FF16.
+  `test_gatt_encryption` covers the key-size and encryption flags on all FF10
+  data attributes and their CCCs, and `test_triage_bundle` covers the 14 s
+  floor and 6-run bundle. No packaged firmware has been flashed to hardware.
+
+## 0.3.4 — 2026-11-02
+
+The in-page flasher release on top of 0.3.3. No firmware payload or protocol
+change: the hosted browser flasher can pair controllers and show packet
+counters without a serial console, and the tester docs pin the Companion
+releases that match. Firmware and Pi artifacts remain CI-built and
+hardware-unverified.
+
+### Flasher
+
+- **In-page controller pairing and packet counters (#127, ONY-799).**
+  `docs/flasher/index.html` can request the controller bonds from the running
+  firmware and shows per-hand packet counters, so a controller can be paired
+  from the browser instead of a serial console. The flasher keeps the existing
+  three-variant images and only resets a bond after the link closes.
+  `tests/test_firmware_package.py` covers the counter parser and the packaged
+  page.
+
+### Docs
+
+- **Web flasher pairing workflow (#128, ONY-800).** [`README.md`](README.md)
+  and [`docs/DISCOVERY.md`](docs/DISCOVERY.md) document the in-page pairing
+  steps and what to check when a hand does not bind.
+- **Tester docs.** The external-tester sheet and runbooks pin Companion
+  v0.3.8 and v0.3.10 as those releases ship (#124–#126; ONY-738, ONY-743,
+  ONY-762).
 
 ## 0.3.3 — 2026-11-01
 
