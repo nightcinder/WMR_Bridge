@@ -38,7 +38,12 @@ Security is part of the wire contract from 0.3.0, not an app-side option.
 
 | Item | Access without a bond |
 | --- | --- |
-| GAP device name (0x2A00) | readable |
+| GAP device name (0x2A00), appearance (0x2A01) and preferred connection parameters (0x2A04) | readable |
+| GATT database hash (0x2B2A) | readable |
+| DIS manufacturer, model, firmware revision and PnP ID | readable |
+| HID protocol mode, report map, HID information and boot reports | readable; boot reports return zero length |
+| HID control point | writable (write without response) |
+| HID boot-report CCCs | readable and writable |
 | FF16 firmware version | readable |
 | FF11, FF12, FF13, FF14, FF15, FF17 values | refused |
 | CCC descriptor of every stream/echo/config/control characteristic | refused |
