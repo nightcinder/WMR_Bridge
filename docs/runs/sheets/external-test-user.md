@@ -1,29 +1,30 @@
-# External tester quickstart for WMR Bridge v0.3.3
+# External tester quickstart for WMR Bridge v0.3.5
 
 One tier, about 20 min. Android 14+ phone, both WMR controllers, board already
-on v0.3.3. Private room: controller links are unauthenticated.
+on v0.3.5. Private room: controller links are unauthenticated.
 
 ## 0. Prerequisites
 
 - Android 14 or newer. Android 13 and below is not supported.
-- Board flashed to v0.3.3 (flasher: https://nightcinder.github.io/WMR_Bridge/).
+- Board flashed to v0.3.5 (flasher: https://nightcinder.github.io/WMR_Bridge/).
   Pre-flashed is fine; say so in the intake block.
 - If unsure of the version, reflash. Flashing erases stored pairings (expected).
 
 ## 1. Get the APK
 
-https://github.com/nightcinder/wmr-companion/releases/download/v0.3.10/wmr-companion-0.3.10-unified-arm64-v8a.apk
+https://github.com/nightcinder/wmr-companion/releases/download/v0.3.17/wmr-companion-0.3.17-unified-arm64-v8a.apk
 
 The release APK ships `libglasses.so` (VITURE XR Glasses SDK for Android 2.4.1)
 under the VITURE licence. Its EULA and third-party notices ship in the APK and
 are reachable from About. SHA256SUMS:
-https://github.com/nightcinder/wmr-companion/releases/download/v0.3.10/SHA256SUMS
+https://github.com/nightcinder/wmr-companion/releases/download/v0.3.17/SHA256SUMS
 
-Do not run an older build for this pass. v0.3.10 fixes a crash: selecting
-AndroidXR as the hand-tracking source on a Galaxy XR no longer crashes the
-app (ONY-758). A crash on v0.3.7 through v0.3.9 is known older behaviour;
-a crash on v0.3.10 is a regression worth recording. v0.3.9 also fixed a
-black right eye on the Luma Ultra + Pro Neckband 3D view.
+Do not run an older build for this pass. v0.3.17 adds report-only Semgrep,
+gitleaks and Dependabot scans. It also adds the six-run pose-filter corpus.
+v0.3.16 detects Android XR before USB IDs. v0.3.15 documents the six-run pose
+capture protocol. A crash on v0.3.17 is a regression worth recording. A crash on
+v0.3.7 through v0.3.9 is known older behaviour. v0.3.9 also fixed a black right
+eye on the Luma Ultra + Pro Neckband 3D view.
 
 If a WMR Companion built before 0.3.3 is installed (debug or locally signed),
 uninstall it first: `adb uninstall com.onyxlens.wmr_companion` or app settings.
@@ -38,13 +39,13 @@ uninstall it first: `adb uninstall com.onyxlens.wmr_companion` or app settings.
 1. Power the board. Status LED should be red (no controllers).
 2. Open the app. Grant Bluetooth / Nearby-devices permission.
 3. On the Connect screen, scan for `WMR Bridge` and connect.
-4. If Android shows a pairing request for `WMR Bridge`, allow it. Firmware 0.3.3
+4. If Android shows a pairing request for `WMR Bridge`, allow it. Firmware 0.3.5
    bonds and encrypts the phone link.
 5. Confirm the screen says connected, streaming with negotiated MTU 517 (at
    least 61 is usable). Record the MTU shown.
 6. Tap Open 3D debug view. Stay on the debug screen.
 
-> **HID / Gamepad Coexistence Warning:** Firmware 0.3.3 exposes a standard BLE HID gamepad (HOGP) directly to Android upon pairing. Do not enable app-level HID output (`BluetoothHidDevice`) in WMR Companion at the same time: registering `BluetoothHidDevice` disables Android's HID Host service (stopping bridge HOGP input reception) and causes radio contention on the phone. Leave Companion app HID output disabled.
+> **HID / Gamepad Coexistence Warning:** Firmware 0.3.5 exposes a standard BLE HID gamepad (HOGP) directly to Android upon pairing. Do not enable app-level HID output (`BluetoothHidDevice`) in WMR Companion at the same time: registering `BluetoothHidDevice` disables Android's HID Host service (stopping bridge HOGP input reception) and causes radio contention on the phone. Leave Companion app HID output disabled.
 
 ## 4. Pair controllers
 
@@ -65,7 +66,7 @@ uninstall it first: `adb uninstall com.onyxlens.wmr_companion` or app settings.
 3. Tap Start. Do not touch anything for 120 s. Tap Stop.
 4. Tap Export CSV + JSON (or Export CSV + JSON + echo) and save/share the files.
 
-## 6. Guided bench (app build 0.3.10 or later)
+## 6. Guided bench (app build 0.3.17 or later)
 
 Optional alternative. From the Connect screen tap Run guided bench and pick a
 mode: 3DoF only (bridge, full run), 6DoF only (glasses, no bridge, shorter run),
@@ -94,8 +95,8 @@ thread where you received this runbook.
 
 - Handle:
 - Date/timezone:
-- Firmware: 0.3.3
-- App: 0.3.10 unified (signed)
+- Firmware: 0.3.5
+- App: 0.3.17 unified (signed)
 - Phone: make/model/Android
 - Controllers: make/model, LEFT/RIGHT
 - Result: PASS / PARTIAL / FAIL / BLOCKED
