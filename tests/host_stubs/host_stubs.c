@@ -12,6 +12,7 @@
 #include "esp_app_desc.h"
 #include "esp_timer.h"
 #include "host_stubs.h"
+#include "wmr_host_version.h"
 
 host_fake_t host;
 host_hid_t  host_hid;
@@ -239,7 +240,7 @@ void le_device_db_remove(int index){
 /* ---- ESP-IDF application description ------------------------------------- */
 
 static const esp_app_desc_t app_desc = {
-    .version = "0.3.4-hosttest",
+    .version = WMR_HOST_TEST_VERSION,
     .project_name = "wmr_bridge",
     .time = "12:00:00",
     .date = "Oct 31 2026",

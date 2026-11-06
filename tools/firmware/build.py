@@ -287,9 +287,19 @@ def idf_version(port_dir, env):
 
 
 def repo_state(repo):
+    if not (Path(repo) / ".git").exists():
+        return "", False
     commit = git(repo, "rev-parse", "--short", "HEAD")
     dirty = bool(git(repo, "status", "--porcelain"))
     return commit, dirty
+
+
+def read_version_file(repo):
+    """Version from the root VERSION file, used when git has no tree to describe."""
+    try:
+        return (Path(repo) / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 def pick_version(repo, override):
@@ -298,10 +308,14 @@ def pick_version(repo, override):
     tag = os.environ.get("GITHUB_REF_NAME", "")
     if tag.startswith("v"):
         return fwpackage.normalise_version(tag)
-    try:
-        described = git(repo, "describe", "--tags", "--always", "--dirty")
-    except SystemExit:
-        described = ""
+    described = ""
+    if (Path(repo) / ".git").exists():
+        try:
+            described = git(repo, "describe", "--tags", "--always", "--dirty")
+        except SystemExit:
+            pass
+    if not described:
+        described = read_version_file(repo)
     return fwpackage.normalise_version(described)
 
 
@@ -505,7 +519,8 @@ def main():
         epilog=__doc__,
     )
     parser.add_argument("--version", help="version string for the manifest "
-                        "(default: git describe, or GITHUB_REF_NAME on a tag)")
+                        "(default: git describe, or GITHUB_REF_NAME on a tag; "
+                        "falls back to the VERSION file outside a git checkout)")
     parser.add_argument("--variant", choices=fwpackage.VARIANTS, default="both",
                         help="firmware variant: both hands (default), or a "
                              "single-hand image for two bridges / one-board "
