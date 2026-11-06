@@ -19,17 +19,17 @@ Wi-Fi.
 ## 0. Bench checklist for 2026-11-07 (Raspberry Pi 3B+)
 
 Short path for tomorrow's sitting. Tick each line; the section in brackets has
-the full commands.
+the related procedure and its commands.
 
 - [ ] Flash Raspberry Pi OS Lite **64-bit** to the 3B+ card. In Imager choose
       device `Raspberry Pi 3` and the current `Raspberry Pi OS Lite (64-bit)`
       release (Trixie 2026-10-06). [§2]
 - [ ] Use a 5 V / 2.5 A micro-USB supply; after boot
-      `vcgencmd get_throttled` must print `throttled=0x0`. [§1]
+      `vcgencmd get_throttled` must print `throttled=0x0`. [§8.5]
 - [ ] Join the dedicated **5 GHz** SSID; `iw dev wlan0 link` shows
       `freq: 5xxx`. [§3]
 - [ ] `uname -m` prints `aarch64` and `systemctl is-active bluetooth` prints
-      `active`. [§5]
+      `active`. [§2]
 - [ ] Install the released package and check `wmr-bridge --version` prints
       `wmr_bridge 0.2.3`. [§4]
 - [ ] `systemctl is-enabled wmr-bridge` reports `enabled` and
@@ -102,6 +102,20 @@ networking and authentication:
      - Choose **Allow public-key authentication only** and provide your SSH public key (or use password authentication).
 6. Save the settings, click **Yes** to apply customizations, and write the card.
 7. Insert the microSD card into the Pi and power it on. Wait 1–2 minutes for first boot.
+
+### Confirm the 64-bit OS and Bluetooth Stack
+
+Once the Pi is up (SSH works in §3), confirm the image architecture and that
+BlueZ is running before installing anything:
+
+```bash
+uname -m                      # must print aarch64
+systemctl is-active bluetooth # must print active
+```
+
+If `uname -m` prints `armv7l`, the 32-bit image was flashed; re-flash the
+64-bit Lite release. If Bluetooth is inactive, start it with
+`sudo systemctl enable --now bluetooth`.
 
 ### Pinned images for the 2026-11-07 sitting
 
@@ -267,6 +281,8 @@ Check the service status:
 
 ```bash
 systemctl status wmr-bridge
+systemctl is-enabled wmr-bridge   # enabled
+systemctl is-active wmr-bridge    # active
 journalctl -u wmr-bridge -n 50 --no-pager
 ```
 
