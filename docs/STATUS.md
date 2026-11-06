@@ -1,10 +1,12 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-01 (current release 0.3.3, the ONY-699 review-pass release
-on top of 0.3.2: HID gamepad buttons mapped to Android usage slots, a 5 s
-Classic link supervision timeout for disconnect detection, and an idempotent
-FF17 CONNECT for an already-open hand; no protocol payload change, companions
-at 0.2.2 or later continue to work; ESP32-over-BLE is
+Last updated: 2026-11-06 (current release 0.3.5, the FF10 encryption-enforcement
+release on top of 0.3.4: every FF10 data characteristic and its CCC now names
+`ENCRYPTION_KEY_SIZE_16`, so BTstack rejects an unencrypted or shorter-key
+access on the bonded LESC link the bridge already required; triage accepts the
+6-run pose protocol and the repository gains report-only Semgrep, gitleaks and
+Dependabot scans; no protocol payload change, companions at 0.2.2 or later
+continue to work; ESP32-over-BLE is
 the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the
 second supported first-class target; Pi is host-tests-only until the Pi sitting
 runs, see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md) and

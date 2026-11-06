@@ -303,7 +303,7 @@ either way. `actions/checkout` uses full history so `git describe` can produce a
 version.
 
 To publish a release, tag the intended `main` commit (for example, the `v0.2.4`
-release was published from `41a9e5f`; `0.3.0` is the current release):
+release was published from `41a9e5f`; `0.3.5` is the current release):
 
 ```bash
 git tag -a vX.Y.Z -m "WMR Bridge vX.Y.Z"
