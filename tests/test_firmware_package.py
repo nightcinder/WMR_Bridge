@@ -203,6 +203,18 @@ def test_sync_source_into_btstack_layout():
               "port/esp32/main/CMakeLists.txt is replaced with the integration file")
 
 
+def test_pick_version_falls_back_to_version_file():
+    with tempfile.TemporaryDirectory() as root:
+        Path(root, "VERSION").write_text("0.3.5\n", encoding="utf-8")
+        saved = os.environ.pop("GITHUB_REF_NAME", None)
+        try:
+            got = build.pick_version(Path(root), None)
+        finally:
+            if saved is not None:
+                os.environ["GITHUB_REF_NAME"] = saved
+        check(got == "0.3.5", "VERSION is used when there is no git checkout")
+
+
 def test_build_argv_sets_project_version():
     argv = build.build_argv("/tmp/build", "0.2.0")
     check("-DPROJECT_VER=0.2.0" in argv,
