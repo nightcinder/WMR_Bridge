@@ -46,13 +46,14 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/semgrep-venv"
           "$RUNNER_TEMP/semgrep-venv/bin/pip" install --quiet semgrep
       - name: Scan
-        # semgrep exits non-zero when it reports findings, which fails this job
-        # and holds the merge. The SARIF step still runs via `if: always()` so
-        # the findings stay published as an artifact.
+        # `--error` makes semgrep exit 1 when it reports findings, so this job
+        # fails and holds the merge. The SARIF step still runs via
+        # `if: always()` so the findings stay published as an artifact.
         run: |
           "$RUNNER_TEMP/semgrep-venv/bin/semgrep" scan \
             --config p/security-audit \
             --config p/c \
+            --error \
             --sarif \
             --output semgrep.sarif
       - name: Upload SARIF
