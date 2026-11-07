@@ -130,6 +130,15 @@ These apply to every block unless the block says otherwise.
 - **One phone client at a time.** The firmware serves one central (`phone=1`).
   Force-stop the Companion before running the probe, and disconnect the probe
   before opening the Companion.
+- **The gamepad link hides the probe.** The bridge stops advertising while the
+  phone holds its BLE HID gamepad link, so a scan cannot see it even though the
+  link is up. Probes before ONY-973 (including the `0.3.18` APK pinned in §1.2)
+  only scan: remove the `WMR Bridge` bond in Android Bluetooth settings
+  (Settings → Bluetooth → `WMR Bridge` → Forget) before the probe block. That
+  drops the HID link and the bridge advertises again; the probe pairs on
+  connect. Pair the gamepad again after the probe block. Probes from `main`
+  after ONY-973 also fall back to the bonded Bridge, so the gamepad can stay
+  connected.
 - **Fixed position.** Mark the bridge, phone stand and controller spots with
   tape before the first timed run. Do not move them inside a block. A photo at
   the start and end is the position record.
