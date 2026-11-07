@@ -251,8 +251,9 @@ The installer:
    the udev rule and the NetworkManager power-save drop-in, generates
    `/etc/wmr-bridge/token` and configures `wmr-bridge.service`.
 3. Enables and starts `wmr-bridge.service`.
-4. On a host without `apt-get`, falls back to the release tarball and runs its
-   installer.
+4. Needs `apt-get`; without it, install from a checkout or an extracted
+   `pi/build_package.sh` tarball instead (see the
+   [Pi bridge guide](PI_BRIDGE.md#installation)).
 
 #### Option B: Standalone Debian package (`.deb`)
 

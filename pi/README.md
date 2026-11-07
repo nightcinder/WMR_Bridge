@@ -74,9 +74,10 @@ reinstalls, replays and removes the `.deb` in a staged rootfs with no root.
 
 When `pi/install.sh` is piped (`curl … | sudo bash`), it fetches the matching
 `wmr-bridge_<version>_all.deb`, verifies it against the release `SHA256SUMS`,
-installs it with `apt-get` and enables/starts `wmr-bridge.service`. On a host
-without `apt-get` it falls back to the release tarball and runs the installer
-from the extracted tree. Set `WMR_BRIDGE_VERSION` to pin a version or
+installs it with `apt-get` and enables/starts `wmr-bridge.service`. The release
+attaches no tarball, so piped mode needs `apt-get`; without it, install from a
+checkout or from the tarball built locally with `pi/build_package.sh`. Set
+`WMR_BRIDGE_VERSION` to pin a version or
 `WMR_BRIDGE_RELEASE_BASE_URL` to use a mirror. See
 [`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md#installation).
 
@@ -122,7 +123,7 @@ the probe do not send one.
 | `debian/` | Debian control, conffiles and `postinst`/`prerm`/`postrm` templates |
 | `tools/verify_package.sh` | checks package layout, version and checksum |
 | `tools/dry_run.sh` | .deb install/reinstall/remove + replay dry run, no hardware |
-| `install.sh` | unattended installer; also works piped by fetching the release `.deb` (or the tarball without `apt-get`) |
+| `install.sh` | unattended installer; also works piped by fetching and verifying the release `.deb` |
 | `wmr-bridge.in` | `/usr/bin/wmr-bridge` launcher template installed by the `.deb` and `install.sh` |
 | `systemd/wmr-bridge.service` | unit file for an unattended bridge (`WMR_BRIDGE_ARGS` via `/etc/wmr-bridge/wmr-bridge.env`) |
 | `udev/99-wmr-bridge.rules` | udev rule granting `input` group access to `/dev/hidraw*` |

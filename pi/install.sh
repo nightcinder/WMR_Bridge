@@ -6,15 +6,14 @@
 #
 # One-line install (no checkout): fetch the release .deb, verify it against the
 # release SHA256SUMS, install it with apt-get and enable/start the service.
-# On a host without apt-get it falls back to the release tarball.
+# A host without apt-get installs from a checkout or from a locally built
+# release tarball instead (see docs/PI_BRIDGE.md).
 #   curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 #
 # Pin a release or a mirror (also used by the host tests). The Pi package
 # version and the firmware tag are independent, so name the tag too:
 #   WMR_BRIDGE_VERSION=0.2.4 WMR_BRIDGE_TAG=v0.3.11 sh install.sh
 #   WMR_BRIDGE_VERSION=0.2.4 WMR_BRIDGE_RELEASE_BASE_URL=https://example/pkg sh install.sh
-# Force a package type instead of auto-detecting apt-get (host tests use this):
-#   WMR_BRIDGE_INSTALL_METHOD=deb|tarball sh install.sh
 #
 # Test / packaging staging mode (no root required when WMR_SKIP_PRIVILEGED=1):
 #   DESTDIR=/tmp/stage WMR_SKIP_PRIVILEGED=1 ./pi/install.sh
@@ -49,8 +48,9 @@ fetch_stdout() {
     fi
 }
 
-# When piped (`curl ... | sudo bash`) $0 is the shell, not this file. Fetch the
-# matching release tarball and run the installer from the extracted tree.
+# When piped (`curl ... | sudo bash`) $0 is the shell, not this file. Detect a
+# checkout or extracted package tree here; without one, install the release
+# .deb further down.
 SELF="$0"
 SCRIPT_DIR=""
 case "$SELF" in
@@ -74,7 +74,6 @@ enable_service() {
 if [ -z "$SCRIPT_DIR" ]; then
     PINNED_VERSION="${WMR_BRIDGE_VERSION:-}"
     VERSION="$PINNED_VERSION"
-    METHOD="${WMR_BRIDGE_INSTALL_METHOD:-auto}"
 
     if [ -z "$VERSION" ]; then
         release_json="$(fetch_stdout "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null || true)"
@@ -114,48 +113,20 @@ if [ -z "$SCRIPT_DIR" ]; then
             die "sha256 verification failed for ${name}"
     }
 
-    if [ "$METHOD" = "auto" ]; then
-        if command -v apt-get >/dev/null 2>&1; then
-            METHOD="deb"
-        else
-            METHOD="tarball"
-        fi
-    fi
+    # Releases attach no tarball, so the no-checkout path installs the .deb.
+    # Without apt-get, point at the two paths that still work instead of
+    # failing on a missing asset.
+    command -v apt-get >/dev/null 2>&1 ||
+        die "the piped install needs apt-get; install from a checkout (git clone https://github.com/${REPO} && sudo WMR_Bridge/pi/install.sh) or extract a tarball built with pi/build_package.sh and run its pi/install.sh"
 
-    if [ "$METHOD" = "deb" ]; then
-        DEB="wmr-bridge_${VERSION}_all.deb"
-        fetch_url "${BASE_URL}/${DEB}" "${TMP_DIR}/${DEB}" ||
-            die "could not fetch ${BASE_URL}/${DEB}"
-        verify_from_sums "$DEB"
-        echo "install.sh: installing ${DEB} from ${BASE_URL}"
-        DEBIAN_FRONTEND=noninteractive apt-get install -y "${TMP_DIR}/${DEB}"
-        enable_service
-        exit 0
-    fi
-
-    # No apt-get (or an explicit tarball request): install from the release
-    # tarball with the same tree the .deb carries.
-    TARBALL="wmr-bridge-${VERSION}.tar.gz"
-    fetch_url "${BASE_URL}/${TARBALL}" "${TMP_DIR}/${TARBALL}" ||
-        die "could not fetch ${BASE_URL}/${TARBALL}"
-    verify_from_sums "$TARBALL"
-
-    tar -xzf "${TMP_DIR}/${TARBALL}" -C "$TMP_DIR"
-    EXTRACTED="${TMP_DIR}/wmr-bridge-${VERSION}"
-    INNER="${EXTRACTED}/pi/install.sh"
-    [ -f "$INNER" ] || die "release tarball has no pi/install.sh"
-    EXTRACTED_VERSION="$(
-        sed -n 's/^__version__ = "\(.*\)"$/\1/p' "${EXTRACTED}/pi/wmr_bridge/__init__.py"
-    )"
-    [ "$EXTRACTED_VERSION" = "$VERSION" ] ||
-        die "tarball is $EXTRACTED_VERSION but requested $VERSION"
-    echo "install.sh: using release ${VERSION} from ${BASE_URL}"
-    status=0
-    WMR_BRIDGE_PIPED=1 sh "$INNER" "$@" || status=$?
-    if [ "$status" -eq 0 ]; then
-        enable_service
-    fi
-    exit "$status"
+    DEB="wmr-bridge_${VERSION}_all.deb"
+    fetch_url "${BASE_URL}/${DEB}" "${TMP_DIR}/${DEB}" ||
+        die "could not fetch ${BASE_URL}/${DEB}"
+    verify_from_sums "$DEB"
+    echo "install.sh: installing ${DEB} from ${BASE_URL}"
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "${TMP_DIR}/${DEB}"
+    enable_service
+    exit 0
 fi
 
 DESTDIR="${DESTDIR:-}"

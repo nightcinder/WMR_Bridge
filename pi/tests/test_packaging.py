@@ -236,34 +236,28 @@ class PackagingTests(unittest.TestCase):
             self.assertIn("sha256 verification failed", proc.stderr)
             self.assertEqual(calls.read_text(encoding="utf-8"), "")
 
-    def test_installer_falls_back_to_tarball_without_apt(self) -> None:
+    def test_installer_requires_apt_for_piped_install(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             release = tmp_path / "release"
-            build = subprocess.run(
-                [str(BUILD_PACKAGE), "--out", str(release)],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(build.returncode, 0, msg=build.stderr)
+            release.mkdir()
+            # The release carries no tarball, so piped mode must fail with a
+            # usable pointer instead of fetching a missing asset.
+            (release / "SHA256SUMS").write_text("", encoding="utf-8")
             shutil.copy(INSTALL_SH, release / "install.sh")
-            sums = subprocess.run(
-                ["/bin/sh", str(MAKE_SUMS), str(release)],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(sums.returncode, 0, msg=sums.stderr)
 
-            rootfs = tmp_path / "rootfs"
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            for name in ("curl", "wget", "mktemp", "rm", "sha256sum", "awk", "sed", "grep", "head"):
+                found = shutil.which(name)
+                if found is not None:
+                    (bin_dir / name).symlink_to(found)
+
             env = {
                 **os.environ,
                 "WMR_BRIDGE_VERSION": VERSION,
                 "WMR_BRIDGE_RELEASE_BASE_URL": release.as_uri(),
-                "WMR_BRIDGE_INSTALL_METHOD": "tarball",
-                "DESTDIR": str(rootfs),
-                "WMR_SKIP_PRIVILEGED": "1",
+                "PATH": str(bin_dir),
             }
             proc = subprocess.run(
                 ["/bin/sh", "-s"],
@@ -274,12 +268,9 @@ class PackagingTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
-            self.assertIn(f"using release {VERSION}", proc.stdout)
-            self.assertTrue(
-                (rootfs / "opt" / "wmr-bridge" / "pi" / "wmr_bridge" / "__main__.py").is_file()
-            )
-            self.assertTrue((rootfs / "etc" / "wmr-bridge" / "token").is_file())
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("needs apt-get", proc.stderr)
+            self.assertIn("pi/build_package.sh", proc.stderr)
 
 
 if __name__ == "__main__":

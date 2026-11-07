@@ -199,30 +199,27 @@ upgrade keeps local edits. The generated token is not a package file and
 survives reinstall and upgrade. `apt remove wmr-bridge` stops and disables the
 unit and keeps the token. `apt purge wmr-bridge` removes the token.
 
-The release tarball and the piped installer carry the same tree; the piped
-installer installs the `.deb` and enables the unit for you:
+The piped installer installs the `.deb` and enables the unit for you:
 
 ```bash
-# release tarball (the installer does not enable the unit)
-tar -xzf wmr-bridge-<version>.tar.gz
-sudo wmr-bridge-<version>/pi/install.sh
-sudo systemctl enable --now wmr-bridge
-
 # one line, no checkout: installs the .deb and enables/starts the unit
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
+
+# or from a checkout or an extracted locally built tarball
+sudo pi/install.sh
+sudo systemctl enable --now wmr-bridge
 ```
 
-When `install.sh` is piped, `$0` is the shell, so it downloads the matching
-`wmr-bridge_<version>_all.deb` from the same release, verifies it against the
-release `SHA256SUMS`, installs it with `apt-get` and enables/starts the unit.
-On a host without `apt-get` it falls back to `wmr-bridge-<version>.tar.gz` and
-runs the installer from the extracted tree. Set
-`WMR_BRIDGE_VERSION=<version>` to pin the Pi package version and
-`WMR_BRIDGE_TAG=<tag>` to name the release tag it comes from (the tag defaults
-to `v<version>`, which only matches when the package version equals the tag).
-Set `WMR_BRIDGE_RELEASE_BASE_URL` to use a mirror. The tarball fallback runs
-the same installer as a checkout; the piped installer enables the service in
-both cases.
+The release attaches no tarball, so the piped mode needs `apt-get`. Without it,
+use a checkout or the `wmr-bridge-<version>.tar.gz` that `pi/build_package.sh`
+produces on any Linux host. When `install.sh` is piped, `$0` is the shell, so it
+downloads the matching `wmr-bridge_<version>_all.deb` from the same release,
+verifies it against the release `SHA256SUMS`, installs it with `apt-get` and
+enables/starts the unit. Set `WMR_BRIDGE_VERSION=<version>` to pin the Pi
+package version and `WMR_BRIDGE_TAG=<tag>` to name the release tag it comes
+from (the tag defaults to `v<version>`, which only matches when the package
+version equals the tag). Set `WMR_BRIDGE_RELEASE_BASE_URL` to use a mirror. A
+checkout install does not enable the unit; enable it as shown above.
 
 Every `v*` release attaches six files: `wmr-bridge-factory.bin`,
 `wmr-bridge-left-factory.bin`, `wmr-bridge-right-factory.bin`,
@@ -869,7 +866,7 @@ INFO/WARNING:
   [TLS termination](#tls-termination)).
 - Pi-side FF13 controller read over hidraw (the cache and WebSocket forwarding
   are in place; a fresh daemon starts `not_read`).
-- Native system packaging beyond the released `.deb`/tarball (`pip install`,
+- Native system packaging beyond the released `.deb` (`pip install`,
   APT repository, signing, image).
 - Bench-validate `--hand` single-hand mode and `--advertise-mdns` discovery on
   real hardware.
@@ -884,7 +881,7 @@ INFO/WARNING:
 | `pi/build_deb.sh` | builds `dist/wmr-bridge_<version>_all.deb` and its `.sha256` (no root; maintainer scripts in `pi/debian/`) |
 | `pi/tools/verify_package.sh` | checks package layout, version and checksum |
 | `pi/tools/dry_run.sh` | stages the `.deb`, checks reinstall/remove, runs replay (no hardware) |
-| `pi/install.sh` | unattended installer; piped mode fetches and verifies the release `.deb` (or tarball without `apt-get`) |
+| `pi/install.sh` | unattended installer; piped mode fetches and verifies the release `.deb` |
 | `pi/systemd/` | service unit and environment example (`WMR_BRIDGE_ARGS`) |
 | `pi/udev/` | udev rule (`99-wmr-bridge.rules`) granting `input` group access to `/dev/hidraw*` |
 | `pi/networkmanager/` | NetworkManager drop-in disabling Wi-Fi power save persistently |
