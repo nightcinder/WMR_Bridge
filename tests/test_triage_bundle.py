@@ -65,6 +65,56 @@ def pose_span(data, seconds):
     return json.dumps(document).encode()
 
 
+def repeated_pose(data, samples, seconds):
+    """Rewrite a pose file with `samples` copies of one tracking frame."""
+    document = json.loads(data)
+    first = document["samples"][0]
+    start = first["host_ns"]
+    step = int(seconds * 1_000_000_000) // (samples - 1)
+    rewritten = []
+    for index in range(samples):
+        sample = json.loads(json.dumps(first))
+        sample["host_ns"] = start + index * step
+        sample["tracking"] = {
+            "v": 1,
+            "time_ns": start + index * step,
+            "host_time_ns": start + index * step,
+            "head": {"pose": {"t": [0.0, 0.0, 0.0], "q": [0.0, 0.0, 0.0, 1.0]}},
+        }
+        rewritten.append(sample)
+    document["samples"] = rewritten
+    return json.dumps(document).encode()
+
+
+def repeated_hand_pose(data, samples, seconds):
+    """Rewrite a pose file whose recorded hand repeats but head/other hand move."""
+    document = json.loads(data)
+    first = document["samples"][0]
+    start = first["host_ns"]
+    step = int(seconds * 1_000_000_000) // (samples - 1)
+    anchor = {"joints": {"palm": {"pose": {
+        "t": [0.1, 0.2, 0.3], "q": [0.0, 0.0, 0.0, 1.0]}}}}
+    rewritten = []
+    for index in range(samples):
+        sample = json.loads(json.dumps(first))
+        sample["host_ns"] = start + index * step
+        sample["tracking"] = {
+            "v": 1,
+            "time_ns": start + index * step,
+            "host_time_ns": start + index * step,
+            "head": {"pose": {"t": [0.0, 0.0, float(index)],
+                              "q": [0.0, 0.0, 0.0, 1.0]}},
+            "hands": {
+                "left": anchor,
+                "right": {"pose": {"t": [0.0, float(index), 0.0],
+                                   "q": [0.0, 0.0, 0.0, 1.0]}},
+            },
+        }
+        rewritten.append(sample)
+    document["samples"] = rewritten
+    return json.dumps(document).encode()
+
+
 def set_pose_span(seconds):
     """Rewrite the fixture's pose file so its samples span `seconds`."""
     def edit(rel, data):
@@ -128,11 +178,13 @@ class FailingBundleTest(unittest.TestCase):
         self.assertEqual(out, "")
         self.assertIn("manifest.md", err)
 
-    def test_missing_capture_exits_nonzero_naming_it(self):
-        code, out, err = run_main(self.bundle(drop=("captures",)))
+    def test_missing_captures_and_poses_exits_nonzero_naming_them(self):
+        code, out, err = run_main(self.bundle(
+            drop=("captures", "pose_capture_androidXr_left_still.json")))
         self.assertEqual(code, 1)
         self.assertEqual(out, "")
         self.assertIn("capture", err.lower())
+        self.assertIn("pose", err.lower())
 
     def test_missing_diagnostics_exits_nonzero_naming_it(self):
         code, out, err = run_main(self.bundle(drop=("diagnostics.json",)))
@@ -175,6 +227,57 @@ class FailingBundleTest(unittest.TestCase):
         code, out, _err = run_main(self.bundle(edit=set_pose_span(14)))
         self.assertEqual(code, 0)
         self.assertNotIn("shorter than 14 s", out)
+        self.assertIn("Problems: none", out)
+
+    def test_repeated_tracking_frames_are_flagged(self):
+        def repeated(rel, data):
+            if rel != "pose_capture_androidXr_left_still.json":
+                return data
+            return repeated_pose(data, 4, 15)
+
+        code, out, _err = run_main(self.bundle(edit=repeated))
+        self.assertEqual(code, 0)
+        self.assertIn(
+            "4 samples over 15.0 s (1 distinct tracking frame)", out)
+        self.assertIn(
+            "3 of 4 samples repeat the preceding tracking frame", out)
+
+    def test_repeated_recorded_hand_frames_are_flagged(self):
+        def repeated(rel, data):
+            if rel != "pose_capture_androidXr_left_still.json":
+                return data
+            return repeated_hand_pose(data, 4, 15)
+
+        code, out, _err = run_main(self.bundle(edit=repeated))
+        self.assertEqual(code, 0)
+        self.assertIn(
+            "4 samples over 15.0 s (1 distinct tracking frame)", out)
+        self.assertIn(
+            "3 of 4 samples repeat the preceding tracking frame", out)
+
+    def test_missing_recorded_hand_falls_back_to_head(self):
+        def repeated(rel, data):
+            if rel != "pose_capture_androidXr_left_still.json":
+                return data
+            document = json.loads(data)
+            samples = document["samples"]
+            step = int(15.0 * 1_000_000_000) // (len(samples) - 1)
+            for index, sample in enumerate(samples):
+                sample["host_ns"] = samples[0]["host_ns"] + index * step
+                sample["tracking"] = {
+                    "v": 1,
+                    "time_ns": sample["host_ns"],
+                    "host_time_ns": sample["host_ns"],
+                    "head": {"pose": {"t": [0.0, 0.0, float(index)],
+                                      "q": [0.0, 0.0, 0.0, 1.0]}},
+                    "hands": {"right": {"pose": {"t": [0.0, 0.0, 0.0],
+                                                 "q": [0.0, 0.0, 0.0, 1.0]}}},
+                }
+            return json.dumps(document).encode()
+
+        code, out, _err = run_main(self.bundle(edit=repeated))
+        self.assertEqual(code, 0)
+        self.assertNotIn("distinct tracking frame", out)
         self.assertIn("Problems: none", out)
 
     def test_one_sample_run_is_flagged_as_short(self):
@@ -270,6 +373,62 @@ class SixRunPoseTest(unittest.TestCase):
         self.assertNotIn("missing from the bundle", out)
         self.assertNotIn("shorter than 14 s", out)
         self.assertIn("Problems: none", out)
+
+
+class SixDofOnlyBundleTest(unittest.TestCase):
+    """A 6DoF-only bench has poses, but no captures, bridge or latency run."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="wmr-triage-test-")
+        self.addCleanup(self._tmp.cleanup)
+        self.zip_path = os.path.join(self._tmp.name, "wmr-ext-20261030.zip")
+
+    def bundle(self, drop=("captures", "latency")):
+        steps = [
+            {"id": "device_summary", "status": "done"},
+            {"id": "connect", "status": "skipped"},
+        ]
+
+        def edit(rel, data):
+            if rel == "manifest.md":
+                return (data
+                        .replace(b"- Bridges: 1", b"- Bridges: 0")
+                        .replace(b"- Bench mode: 3dof_only",
+                                 b"- Bench mode: 6dof_only"))
+            if rel == "diagnostics.json":
+                document = json.loads(data)
+                document["bridges"] = []
+                document["bench_mode"] = "6dof_only"
+                document["bench"] = {"mode": "6dof_only", "steps": steps}
+                return json.dumps(document).encode()
+            return set_pose_span(15)(rel, data)
+
+        return build_bundle(self.zip_path, drop=drop, edit=edit)
+
+    def test_pose_only_bundle_is_accepted(self):
+        code, out, err = run_main(self.bundle())
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("nothing to analyse", err)
+        for expected in (
+            "Bench: 6dof_only, runtime androidXr",
+            "Bench steps: 1 done, 1 skipped, 0 failed (2)",
+            "Bridges: 0",
+            "Captures: 0",
+            "pose_capture_androidXr_left_still.json  androidXr/left/still",
+            "Problems: none",
+        ):
+            self.assertIn(expected, out)
+        self.assertNotIn("lists no bridge", out)
+        self.assertNotIn("no latency/", out)
+
+    def test_pose_only_bundle_without_poses_is_rejected(self):
+        bundle = self.bundle(
+            drop=("captures", "latency",
+                  "pose_capture_androidXr_left_still.json"))
+        code, out, err = run_main(bundle)
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("no pose captures", err)
 
 
 class MultiRunPoseTest(unittest.TestCase):

@@ -5,6 +5,16 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## Unreleased
+
+- **Triage accepts 6DoF-only pose bundles and flags repeated anchor frames
+  (ONY-990).** `tools/triage_bundle.py` no longer requires `captures/` when the
+  bundle carries pose recordings, treats a zero bridge count and a missing
+  `latency/` as expected in `6dof_only` mode, and reports a pose file whose
+  recorded hand repeats the preceding anchor frame. The fresh external bundle
+  is recorded in
+  [`docs/runs/sheets/android-xr-6dof-20261107.md`](docs/runs/sheets/android-xr-6dof-20261107.md).
+
 ## 0.3.11 — 2026-11-07
 
 The controller-family release on top of 0.3.5. Firmware gains a per-model

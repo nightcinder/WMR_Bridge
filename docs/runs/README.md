@@ -48,6 +48,7 @@ explicitly declined, then the #18 disposition, M7 decision, M8 defaults and
 | [robustness.md](sheets/robustness.md) | Remaining TESTING.md items plus the folded close-out checks | not run |
 | [single-esp32-levers.md](sheets/single-esp32-levers.md) | V1 stagger, Sitting R phases 1-2, BLE interval/hold | not run |
 | [tracking-quality.md](sheets/tracking-quality.md) | Static calibration, 90° turns, yaw drift, #19 unknowns | not run |
+| [android-xr-6dof-20261107.md](sheets/android-xr-6dof-20261107.md) | External Android XR 6DoF-only bench bundle: triage, pose inventory, repeated anchor frames, and why it is not a tuning corpus | run (external bundle) |
 
 ## Logs (`logs/`)
 
