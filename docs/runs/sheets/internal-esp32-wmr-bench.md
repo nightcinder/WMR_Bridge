@@ -199,6 +199,11 @@ connection parameters?
 Each run is **120 s** at **250 ms** ping interval. Do not run all app runs and
 then all probe runs; follow this order.
 
+**Skip the Companion `none` runs.** The app's `none` latency mode is known
+broken (ONY-980): runs 1, 6 and 9 do not record properly and may be skipped.
+The verdict uses the FF14 pair only; the probe `none` runs stay as optional RTT
+context.
+
 | Block | # | Client | Stream |
 |---|---|---|---|
 | 1 | 1 | App | none |
@@ -396,8 +401,9 @@ Run sheet context: [`single-esp32-levers.md`](single-esp32-levers.md) §3.
 
 **Question:** does RIGHT's ~10.8 % loss alone follow the physical controller,
 the table position, or the firmware RIGHT hand slot? This block needs no
-reflash. Phase 3 (address swap) and the V1/30 ms/hold-2 lever images are **out
-of scope**; they need custom builds.
+reflash. Phase 3 (address swap) is **not needed**. The V1 stagger, 30 ms
+interval and two-interval FF14 hold images were already tested (ONY-980) and
+are **out of scope** of this sitting.
 
 ### 8.1 Isolation rule
 
@@ -499,11 +505,13 @@ A check with no figures is `not run`, even if it "seemed fine".
 
 ## 11. What this runbook deliberately does not cover
 
-- **Phase 3 of Sitting R** (physical RIGHT in the LEFT hand slot) needs the
-  address-override build; it is a separate reflash.
-- **V1 stagger, 30 ms interval request and the two-interval FF14 hold** need the
-  ONY-176/ONY-476 images built with `EXTRA_CFLAGS`; see
-  [`single-esp32-levers.md`](single-esp32-levers.md) §2 and §4.
+- **Phase 3 of Sitting R** (physical RIGHT in the LEFT hand slot, address
+  override) was determined to be unnecessary; phases 1–2 above are all that is
+  run.
+- **V1 stagger, 30 ms interval request and the two-interval FF14 hold** were
+  already tested per the owner (ONY-980) and are not re-benched here. See
+  [`single-esp32-levers.md`](single-esp32-levers.md) §2 and §4 for the lever
+  definitions; this sheet carries no figures for them.
 - **The Pi Wi-Fi bridge** (Sitting P) needs a Raspberry Pi and is a separate
   sheet.
 - **PSVR2 and glasses runtimes** are external-tester coverage; this sitting is
