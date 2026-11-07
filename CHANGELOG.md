@@ -5,15 +5,66 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
-## Unreleased
+## 0.3.12 — 2026-11-07
 
-- **Triage accepts 6DoF-only pose bundles and flags repeated anchor frames
-  (ONY-990).** `tools/triage_bundle.py` no longer requires `captures/` when the
-  bundle carries pose recordings, treats a zero bridge count and a missing
+The release-layout release on top of 0.3.11. A GitHub Release now carries six
+user-facing assets instead of 28, the Pi install is one command, and the
+Raspberry Pi setup guide is a page on the GitHub Pages site. Firmware payloads
+are unchanged from 0.3.11: FF10–FF17 keep their payloads, companions at 0.2.2
+or later continue to work, and the firmware reports the tag version over FF16
+(0.3.12 when tagged). The Pi package stays `0.2.4`; only `install.sh` changed.
+Firmware and Pi artifacts remain CI-built and hardware-unverified.
+
+### Release assets
+
+- **Six assets per release (#155, ONY-997).** The `release` job in
+  `.github/workflows/firmware.yml` stages only `wmr-bridge-factory.bin`,
+  `wmr-bridge-left-factory.bin`, `wmr-bridge-right-factory.bin`,
+  `wmr-bridge_<pi-version>_all.deb`, `install.sh` and `SHA256SUMS`. The
+  per-variant app, bootloader and partition images, manifests, build-info
+  JSON, tarball and per-file `.sha256` files stay in the workflow artifacts.
+  Piped `pi/install.sh` fetches the `.deb`, verifies it against `SHA256SUMS`,
+  installs it with `apt-get`, and enables and restarts `wmr-bridge.service`;
+  releases attach no tarball, so a host without `apt-get` installs from a
+  checkout or a locally built tarball. `tests/test_release_sums.py` and
+  `pi/tests/test_packaging.py` cover the digest list and the installer URLs.
+
+### Raspberry Pi Pages site
+
+- **Pi setup page (#156, ONY-998).** `docs/flasher/pi.html` is a three-step
+  guide (Pi Imager, one-line install, `bluetoothctl` pairing) with copy
+  buttons in the flasher's dark theme; `docs/flasher/index.html` links it.
+  The tag-time `pages` job publishes `index.html`, `pi.html` and `install.sh`,
+  and `tools/firmware/build.py` copies every `docs/flasher/*.html` into
+  `dist/`. `tests/test_firmware_package.py` checks the payload and the
+  cross-links on every pull request.
+
+### Triage
+
+- **6DoF-only pose bundles and repeated anchor frames (#154, ONY-990).**
+  `tools/triage_bundle.py` no longer requires `captures/` when the bundle
+  carries pose recordings, treats a zero bridge count and a missing
   `latency/` as expected in `6dof_only` mode, and reports a pose file whose
   recorded hand repeats the preceding anchor frame. The fresh external bundle
   is recorded in
   [`docs/runs/sheets/android-xr-6dof-20261107.md`](docs/runs/sheets/android-xr-6dof-20261107.md).
+
+### Docs
+
+- Simple-English Raspberry Pi install guide (#153, ONY-993), Raspberry Pi and
+  ESP32 flashing docs leading with the one-line installer and one factory
+  image per variant (#158, ONY-999), run sheets trimmed and consolidated
+  (#151 ONY-979, #152 ONY-983, #157 ONY-1006), and current-release lines
+  refreshed for 0.3.11 (#149 ONY-972, #150 ONY-980).
+
+### Verification
+
+- Host C tests and Python tests run in CI before tagging; the ESP-IDF build
+  runs on the tag, and firmware reports the tag version over FF16. The
+  release job stages exactly the six assets above and the Pages job publishes
+  `index.html`, `pi.html` and `install.sh`. No packaged firmware has been
+  flashed to hardware, and the Switch path has never run on a controller
+  ([#145](https://github.com/nightcinder/WMR_Bridge/issues/145)).
 
 ## 0.3.11 — 2026-11-07
 
