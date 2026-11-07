@@ -383,7 +383,7 @@ def paragraph_claims(
                 )
                 for match in parenthetical.finditer(flat):
                     ids = ids_in(match.group("subj"), chars)
-                    # docs/runs/sheets/ff14-ab.md uses shorthand
+                    # run sheets in docs/runs/sheets use shorthand
                     # "FF11, FF12, FF14 (notify only)" for a group whose
                     # individual properties are stated elsewhere.
                     if len(ids) > 1 and "runs" in Path(path).parts:

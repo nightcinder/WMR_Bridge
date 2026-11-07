@@ -82,7 +82,7 @@ WMR RIGHT -- Classic BR/EDR ACL --> ESP32 ----> BLE GATT --> phone
 
 The single-controller and no-phone rows are from
 [`STATUS.md`](STATUS.md) and
-[`runs/sheets/contention-2-results.md`](runs/sheets/contention-2-results.md).
+[`CONTENTION_LEVERS.md`](CONTENTION_LEVERS.md).
 The dual-controller row is the run analysed here. The no-phone baseline is the
 important qualifier. Even with the BLE link idle, each controller already
 loses about a tenth of its reports. Turning the phone link off, or moving it to
@@ -224,7 +224,7 @@ Status of each option:
 | --- | --- |
 | Classic role: ESP32 already master; force-master variant (V3) | No-op. Both links establish as master, so slave scheduling is not the cause |
 | Disable Classic sniff (`WMR_CFG_CLASSIC_NO_SNIFF=1`, V2) | 17.55 % / 23.19 % in one 120 s run, inside the 14-20 % / 19-26 % baseline spread. No effect shown. Not proof of no effect |
-| BLE auto latency on (`CONFIG_BTDM_CTRL_AUTO_LATENCY=y`) | A/B/A session against baseline. No effect shown ([`runs/sheets/left-coex.md`](runs/sheets/left-coex.md)) |
+| BLE auto latency on (`CONFIG_BTDM_CTRL_AUTO_LATENCY=y`) | A/B/A session against baseline. No effect shown ([`CONTENTION_LEVERS.md`](CONTENTION_LEVERS.md)) |
 | Bluetooth modem sleep off (`CONFIG_BTDM_CTRL_MODEM_SLEEP=n`) | Same A/B/A session. No effect shown |
 | Fewer BLE notifications: FF12 decimation N=2/N=4 | LEFT stayed about 18-20 %. RIGHT was lower at N=2/N=4 (about 14-15 % / 12-13 %) than at N=1 (28-36 %), but the runs were not interleaved and the change could not be separated from session drift ([`PROTOCOL.md`](PROTOCOL.md)) |
 | FF14 batching (about 48 notifications/s instead of about 300/s) | No clear loss gain. The FF14 run sat inside the FF12 run-to-run spread, and LEFT rose through the session ([`STATUS.md`](STATUS.md)) |
@@ -249,10 +249,10 @@ FF14 at MTU 517, the granted 15 ms interval and a one-interval batch hold, with
 
 Not tested, and practical:
 
-- Physical separation / antenna geometry. The right-asymmetry sheet swaps the
+- Physical separation / antenna geometry. Sitting R in the bench sheet swaps the
   controller between hand slots and positions, then swaps the board, to separate
   controller, position and antenna. Its phases 1-2 have not run, and they need
-  no reflash ([`runs/sheets/right-asymmetry.md`](runs/sheets/right-asymmetry.md),
+  no reflash ([`runs/sheets/internal-esp32-wmr-bench.md`](runs/sheets/internal-esp32-wmr-bench.md),
   [`runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)
   section 3). This is the cheapest way to find out whether part of the loss is
   RF geometry rather than scheduling.
@@ -298,7 +298,7 @@ lever worked perfectly, the no-phone baseline is 9-11 %, and RIGHT loses about
 10.8 % with no second controller. A single ESP32 therefore cannot reach a 3-5 %
 bar by contention tuning alone. The untested work is worth doing to find where
 the remaining loss belongs, not because a hidden switch is likely to fix it.
-The highest-value next steps are V1, the right-asymmetry sitting, and DLE
+The highest-value next steps are V1, the Sitting R, and DLE
 logging, in that order. Multi-bridge remains the architecture that could remove
 the pair-contention component, and it is still unrun.
 
@@ -601,7 +601,7 @@ Until those exist, this is a design recommendation, not a shipped feature.
   bridges are justified for that target but not yet measured, and even they
   may not remove RIGHT's own about 10.8 %.
 - The single-ESP32 contention search is not exhausted, but every remaining
-  lever is now either run-ready or ruled out. V1 stagger, right-asymmetry
+  lever is now either run-ready or ruled out. V1 stagger, Sitting R
   phases 1-2, current-build DLE capture, a 30 ms interval request and a
   two-interval FF14 hold have not run. The core/priority and HCI-buffer lever
   is ruled out by zero drop/error counters. 2M PHY and Classic-vs-BLE priority
@@ -640,7 +640,7 @@ Until those exist, this is a design recommendation, not a shipped feature.
   The same definition is in [`COUNTERS.md`](COUNTERS.md) and the companion
   `TickTimer`.
 - Single-controller and no-phone loss: [`STATUS.md`](STATUS.md) and
-  [`runs/sheets/contention-2-results.md`](runs/sheets/contention-2-results.md),
+  [`CONTENTION_LEVERS.md`](CONTENTION_LEVERS.md),
   user-reported.
 - The runs had one phone each, an unrecorded position and RSSI sampled only at
   the start and end of each run (-69 to -48 dBm on 2026-10-22; -80 to -88 dBm

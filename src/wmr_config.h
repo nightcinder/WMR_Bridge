@@ -55,7 +55,7 @@
  * only, 2 = RIGHT only. The excluded hand is ignored by discovery, refused by the outgoing
  * connect, declined on an incoming connection and never written to NVS. Compile-time so one
  * commit can build the REF and the two single-hand images; see
- * docs/runs/sheets/two-bridge-hands.md for the EXTRA_CFLAGS route. */
+ * docs/runs/sheets/multi-bridge.md for the EXTRA_CFLAGS route. */
 #ifndef WMR_CFG_BRIDGE_HANDS
 #define WMR_CFG_BRIDGE_HANDS              0
 #endif
@@ -396,7 +396,7 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_STATUS_LED_POLL_MS  250
 #endif
 
-/* ---- Classic contention variants (docs/runs/sheets/contention-2.md) ------ */
+/* ---- Classic contention variants (docs/CONTENTION_LEVERS.md) ------ */
 
 /* The three variants below are pre-implemented so one can be selected at build time
  * without touching source. Each defaults to 0, which leaves the current `main` behaviour
@@ -407,7 +407,7 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 
 /* V1: hold the second hand's HID connection until the first hand has delivered input
  * reports for 30 s. 0 = off, 1 = LEFT first (RIGHT held), 2 = RIGHT first (LEFT held).
- * The gate is on report flow, not on the ACL; see docs/runs/sheets/contention-2.md. */
+ * The gate is on report flow, not on the ACL; see docs/CONTENTION_LEVERS.md. */
 #ifndef WMR_CFG_STAGGER_FIRST_HAND
 #define WMR_CFG_STAGGER_FIRST_HAND        0
 #endif

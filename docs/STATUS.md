@@ -146,7 +146,7 @@ registers controls. Details in `HID_GAMEPAD.md` §0.2.4-38 field run.
 ## Android verification campaign (ONY-439, 0.3.5 pass)
 
 Scope: phone + one ESP32 only. Sheet:
-[`docs/runs/sheets/ony-439-android-verification.md`](runs/sheets/ony-439-android-verification.md).
+[`docs/runs/sheets/internal-esp32-wmr-bench.md`](runs/sheets/internal-esp32-wmr-bench.md).
 The 0.3.5 bench pass has four gate checks: FF16 on Companion `0.2.2`, ONY-446
 RIGHT reconnect, status LED colours, and the Android HID gamepad. All four are
 `not run`. The rows below are the 0.2.4 sitting. A row leaves `not run`
@@ -174,7 +174,7 @@ and 5 stay `partial`. Details in sheet §10.
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 
 Full run sheet and figures:
-[`docs/runs/sheets/contention-2-results.md`](runs/sheets/contention-2-results.md).
+[`docs/CONTENTION_LEVERS.md`](CONTENTION_LEVERS.md).
 
 ### 1. Classic ACL Master Role Confirmed (Variant V3 No-Op)
 
@@ -254,7 +254,7 @@ evidence.
 | Lever | Status | Result / prerequisite |
 |---|---|---|
 | V1 staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`) | Not run | Code on `main`. Needs the two V1 images and the A/B/A block at one fixed position |
-| RIGHT asymmetry, phases 1-2 | Not run | No reflash. Use [`docs/runs/sheets/right-asymmetry.md`](runs/sheets/right-asymmetry.md) section 4 with one controller powered at a time |
+| RIGHT asymmetry, phases 1-2 | Not run | No reflash. Use [`docs/runs/sheets/internal-esp32-wmr-bench.md`](runs/sheets/internal-esp32-wmr-bench.md) section 6 with one controller powered at a time |
 | DLE confirmation, current build | Not run on the current build; 2026-10-22 log shows 251/2120 accepted | `tx 251 octets / 2120 us, rx 251 octets / 2120 us`. Capture the line again on this build |
 | Longer BLE interval (30 ms request) | Not run | Existing `WMR_CFG_CONN_INTERVAL_MIN/MAX`. Phone must grant it and the granted value must be recorded |
 | Longer FF14 hold (2 intervals) | Not run | New `WMR_CFG_BATCH_HOLD_INTERVALS=2`. Default 1 leaves current behaviour unchanged |
