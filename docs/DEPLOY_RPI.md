@@ -111,7 +111,7 @@ Pinned 2026-11-07 assets:
 | `wmr-bridge-factory.bin` | (see SHA256SUMS) |
 | `wmr-bridge-left-factory.bin` | (see SHA256SUMS) |
 | `wmr-bridge-right-factory.bin` | (see SHA256SUMS) |
-| `wmr-bridge_<version>_all.deb` | `8c54616806ba7cddb78f0e68a71f2f3503e23c4e4d16625129ea220c3a841eba` |
+| `wmr-bridge_<version>_all.deb` | (see SHA256SUMS) |
 | `install.sh` | `7f738a4a084965de99a02819f459b64f893b21b2178eeea10555f7186ed94d28` |
 | `SHA256SUMS` | (shared digest list) |
 
@@ -138,13 +138,12 @@ curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/i
 
 ```bash
 wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/wmr-bridge_<version>_all.deb
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
 sudo apt install ./wmr-bridge_<version>_all.deb
 ```
 
-Replace `<version>` with the Pi package version. Verify the file with
-`sha256sum -c SHA256SUMS --ignore-missing`.
-
-Verify release files with `sha256sum -c SHA256SUMS --ignore-missing`.
+Replace `<version>` with the Pi package version.
 
 The installer downloads the release `.deb` and verifies it against
 `SHA256SUMS`, then installs with `apt-get`. The package creates the `wmr`
