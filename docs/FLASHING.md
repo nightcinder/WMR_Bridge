@@ -186,8 +186,8 @@ labels.
 ### Hosting
 
 The installer is live at <https://nightcinder.github.io/WMR_Bridge/>, serving
-the latest tagged release's images (all three variants). The 0.3.0 images
-appear there once `v0.3.0` is tagged.
+the latest tagged release's images (all three variants). The `v0.3.5` tag
+published the 0.3.5 images to that page.
 
 `.github/workflows/firmware.yml` deploys `dist/` to GitHub Pages on a `v*`
 tag. This keeps the manifest and the images same-origin, which the browser

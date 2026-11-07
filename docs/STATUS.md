@@ -141,20 +141,20 @@ run at about 68/s with `errors=0`. The phone reconnects to the bond after a
 bridge reboot and no Classic entry appears. The user confirms the tester
 registers controls. Details in `HID_GAMEPAD.md` §0.2.4-38 field run.
 
-## Android verification campaign (ONY-439, retargeted to 0.3.0)
+## Android verification campaign (ONY-439, 0.3.5 pass)
 
 Scope: phone + one ESP32 only. Sheet:
 [`docs/runs/sheets/ony-439-android-verification.md`](runs/sheets/ony-439-android-verification.md).
-The 0.3.0 bench pass has four gate checks, FF16 on companion 0.2.2, ONY-446
-RIGHT reconnect, status LED colours and the Android HID gamepad, and all four
-are `not run`. The rows below are the 0.2.4 sitting. A row leaves `not run`
+The 0.3.5 bench pass has four gate checks: FF16 on Companion `0.2.2`, ONY-446
+RIGHT reconnect, status LED colours, and the Android HID gamepad. All four are
+`not run`. The rows below are the 0.2.4 sitting. A row leaves `not run`
 only when that check's figures arrive, from the sheet's §9 paste-back block or
 from the evidence collected in sheet §10. Rows that name a device and build do
 so because a run exists. `, ` means nothing has run yet.
 
 | Check | Result | Device / build | Where the procedure lives |
 |---|---|---|---|
-| FF16 live read | `partial`, app 0.2.1 had no FF16 display (wmr-companion #107); companion 0.2.2 adds it and the 0.3.0 recheck is open. Console `v` settles the 0.2.4 build half (`0.2.4`, `ESP-IDF v6.1`); reconnect half not run | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | sheet §1, §10 |
+| FF16 live read | `partial`, app 0.2.1 had no FF16 display (wmr-companion #107); Companion 0.2.2 adds it and the 0.3.5 recheck is open. Console `v` settles the 0.2.4 build half (`0.2.4`, `ESP-IDF v6.1`); reconnect half not run | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | sheet §1, §10 |
 | FF17 scan/connect | `partial`, status v2 captured from FF17 notifications: version 1, both hands `addr_source` 2 (NVS) with distinct tails, discovery idle / round 4, `flags` 0 on both (taken disconnected). DISCOVER `0x01` → `last_result` `0x03` NOTHING_TO_DO; `0x05 0x01` FORGET_BOND RIGHT → `last_result` `0x00` OK with RIGHT disconnected, which explains the earlier `05/06` as a >2-byte write and makes a `134` consistent with ATT `0x86`. Connected-state status, connect/disconnect, double disconnect, `0x7f` and step 6 as written (BUSY while RIGHT connected) unrun; RIGHT link key cleared, so it must be re-paired | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | sheet §2, §10 |
 | Stick dead zone | `partial`, normalized rest `0.0000, 0.0000` both hands at dead zone 0.05, centres LEFT `-0.0227, 0.0090` / RIGHT `-0.1119, 0.0819`; three sittings: RIGHT stable at about `-0.112, +0.085` (real bias), LEFT moved `-0.030, -0.011` → `-0.008, +0.021` → `+0.017, +0.025`, still learning. Dead zone 0 set but saved settings read `learn true` after the switch was reported off (toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair; end stops, held offset and a confirmed learning-off run missing | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | sheet §3, §10 |
 | Latency stream ladder | `partial`, one 120 s run per stream: p50 `none` 63.4 / 62.3, FF11 34.3, FF12 34.5, FF14 39.3 ms, 479/479 answered; one session, so no ladder verdict (`latency-2` §3.3) | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/runs/sheets/latency-2.md` §3–§5 |
