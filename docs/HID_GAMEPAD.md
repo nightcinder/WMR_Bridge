@@ -192,7 +192,8 @@ Run the C side:
 
 ```bash
 gcc -std=c99 -Wall -Wextra -Wconversion -Werror -Isrc \
-  tests/test_hid.c src/wmr_hid.c src/wmr_decoded.c src/wmr_decode.c -lm -o test_hid
+  tests/test_hid.c src/wmr_hid.c src/wmr_decoded.c src/wmr_decode.c \
+  src/wmr_controller_driver.c -lm -o test_hid
 ./test_hid tests/vectors/hid_gamepad.txt tests/vectors/hid_report_descriptor.txt
 ```
 

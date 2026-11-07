@@ -9,7 +9,7 @@ and ONY-176 Sitting R (RIGHT asymmetry, phases 1–2, no reflash).
 Nothing here is a hardware result until the figures are pasted back. A check
 with no figures is `not run`.
 
-Plan: ONY-926. Runbook owner: Nick. Firmware: **WMR_Bridge v0.3.5**. Phone
+Plan: ONY-926. Runbook owner: Nick. Firmware: **WMR_Bridge v0.3.11**. Phone
 apps: **Companion 0.3.18** and **GATT probe 0.3.18**.
 
 ---
@@ -19,9 +19,9 @@ apps: **Companion 0.3.18** and **GATT probe 0.3.18**.
 | Block | Check | Gate / decision | Time |
 |---|---|---|---|
 | **A** | ONY-23 latency-2: app vs native GATT probe | Milestone 5: Stay Flutter / move the receive hot path native / in between. Needs three interleaved blocks in **two sessions** | 75–90 min per session |
-| **B** | FF16 live read, FF17 `DebugScreen`, stick calibration | 0.3.5 protocol and app controls | 30–40 min |
-| **C** | ONY-446 RIGHT reconnect after discovery | Packaged 0.3.5 fixes the 0.2.4 RIGHT stall | 30 min |
-| **D** | ONY-441 HID gamepad | 0.3.5 HID recheck; the only pass so far is on `0.2.4-38` | 20 min |
+| **B** | FF16 live read, FF17 `DebugScreen`, stick calibration | 0.3.11 protocol and app controls | 30–40 min |
+| **C** | ONY-446 RIGHT reconnect after discovery | Packaged 0.3.11 fixes the 0.2.4 RIGHT stall | 30 min |
+| **D** | ONY-441 HID gamepad | 0.3.11 HID recheck; the only pass so far is on `0.2.4-38` | 20 min |
 | **E** | GPIO 4 status LED | red / yellow / blue / green mapping | 5 min |
 | **F** | ONY-176 Sitting R, phases 1–2 | Does RIGHT's ~10.8 % alone-loss follow the controller, the hand slot, or the position? | 45–60 min |
 
@@ -38,22 +38,22 @@ Session 1 (functional) is about 1.5–2 h. The two latency sessions are about
 
 ## 1. Install
 
-### 1.1 Firmware v0.3.5
+### 1.1 Firmware v0.3.11
 
 Use the browser installer or the release image, not a local build:
 
 - Installer: <https://nightcinder.github.io/WMR_Bridge/>
-- Release: <https://github.com/nightcinder/WMR_Bridge/releases/tag/v0.3.5>
+- Release: <https://github.com/nightcinder/WMR_Bridge/releases/tag/v0.3.11>
 
 1. Open the installer in desktop Chrome or Edge with a USB **data** cable.
-2. Choose **Both hands** and install `v0.3.5`. If the board will not enter the
+2. Choose **Both hands** and install `v0.3.11`. If the board will not enter the
    bootloader, hold **BOOT** while the installer retries.
 3. Open the serial monitor and confirm before touching the controllers:
-   - boot banner prints `WMR Bridge firmware 0.3.5 ...` and
+   - boot banner prints `WMR Bridge firmware 0.3.11 ...` and
      `serving LEFT and RIGHT`;
    - `LED: WS2812 on GPIO 4 27` (the prebuilt image drives both pins);
-   - console `v` prints `0.3.5`.
-4. Connect the app and confirm the Debug screen shows `firmware 0.3.5` and
+   - console `v` prints `0.3.11`.
+4. Connect the app and confirm the Debug screen shows `firmware 0.3.11` and
    `FF11+ FF12+ FF13+ FF14+ FF15+ FF16+ FF17+`.
 
 A full factory flash erases the stored controller addresses and the bridge's
@@ -61,7 +61,7 @@ phone bond. Pair both controllers again. If the phone still holds an old
 `WMR Bridge` bond from a 0.2.x build, forget that entry once in Android
 Bluetooth settings before pairing.
 
-If the board already reports `0.3.5` (console `v` and FF16 agree), do not
+If the board already reports `0.3.11` (console `v` and FF16 agree), do not
 reflash just for this sitting; record both reads in §2.
 
 ### 1.2 Phone APKs
@@ -81,9 +81,30 @@ report it there; do not substitute a CI artifact or an older APK. Install both
 while the phone is on Wi-Fi:
 
 ```bash
+adb devices                       # the phone must appear as "device", not "unauthorized"
 adb install -r wmr-companion-0.3.18-unified-arm64-v8a.apk
 adb install -r wmr-gatt-probe-0.3.18-debug.apk
 ```
+
+If the probe install stops with **"App not installed"** / the generic
+**"Something went wrong"** dialog, or `adb` says
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE`, the phone already holds a probe signed
+with a different debug key. The `v0.3.18` probe is debug-signed by the CI
+runner, and every runner mints a new key, so an earlier probe from a CI
+artifact, a local build or ONY-195/467 cannot be updated in place. Remove it
+once, then install:
+
+```bash
+adb uninstall com.onyxlens.wmr.gattprobe   # ignore "Unknown package" on a fresh phone
+adb install wmr-gatt-probe-0.3.18-debug.apk
+adb shell pm list packages | grep com.onyxlens.wmr.gattprobe
+```
+
+`adb push` only copies the APK to the device; it does not install it. Do not
+push to `/sdcard` and tap the file as a workaround — use `adb install`. From
+0.3.19 the probe is signed with the project release key, so later probes update
+in place; installing the first release-signed probe over the debug-signed
+`0.3.18` build also needs the one-time `adb uninstall`.
 
 The probe is the bare-Kotlin client: no Flutter, no plugin, no platform channel.
 
@@ -93,7 +114,7 @@ Paste this at the top of the result block; every block inherits it.
 
 | Field | Where from | Expected |
 |---|---|---|
-| Bridge firmware + hash | Console `v`; `git describe --tags --always` of the flashed commit; release `build-info.json` `version` | `0.3.5` |
+| Bridge firmware + hash | Console `v`; `git describe --tags --always` of the flashed commit; release `build-info.json` `version` | `0.3.11` |
 | `bridge_hands=` | `STREAM` line (console `s` or the periodic stats) | `0` (both hands) unless the block says otherwise |
 | App version + commit | Debug screen → About | `0.3.18` |
 | Probe version + commit | APK filename / build output | `0.3.18` |
@@ -109,6 +130,15 @@ These apply to every block unless the block says otherwise.
 - **One phone client at a time.** The firmware serves one central (`phone=1`).
   Force-stop the Companion before running the probe, and disconnect the probe
   before opening the Companion.
+- **The gamepad link hides the probe.** The bridge stops advertising while the
+  phone holds its BLE HID gamepad link, so a scan cannot see it even though the
+  link is up. Probes before ONY-973 (including the `0.3.18` APK pinned in §1.2)
+  only scan: remove the `WMR Bridge` bond in Android Bluetooth settings
+  (Settings → Bluetooth → `WMR Bridge` → Forget) before the probe block. That
+  drops the HID link and the bridge advertises again; the probe pairs on
+  connect. Pair the gamepad again after the probe block. Probes from `main`
+  after ONY-973 also fall back to the bonded Bridge, so the gamepad can stay
+  connected.
 - **Fixed position.** Mark the bridge, phone stand and controller spots with
   tape before the first timed run. Do not move them inside a block. A photo at
   the start and end is the position record.
@@ -164,10 +194,15 @@ connection parameters?
   no other BLE app running.
 - Fresh connection per run; one client connected at a time.
 
-### 3.2 Main blocks — 12 runs, interleaved
+### 3.2 Main blocks — 12 runs (9 with the Companion `none` runs skipped)
 
 Each run is **120 s** at **250 ms** ping interval. Do not run all app runs and
 then all probe runs; follow this order.
+
+**Skip the Companion `none` runs.** The app's `none` latency mode is known
+broken (ONY-980): runs 1, 6 and 9 do not record properly, so skip them. The
+verdict uses the FF14 pair only; the probe `none` runs stay as optional RTT
+context.
 
 | Block | # | Client | Stream |
 |---|---|---|---|
@@ -215,8 +250,9 @@ percentiles are coarse. That is expected, not a failure.
 
 ### 3.4 Session 2
 
-Repeat **all 18 runs** on another power-up (ideally another day), at the same
-taped position, with the same bridge/app/probe builds. If the rig is rebuilt,
+Repeat the same **15 runs** on another power-up (ideally another day), at the
+same taped position, with the same bridge/app/probe builds — the 18-run list
+minus Companion `none` runs 1, 6 and 9. If the rig is rebuilt,
 that is a new position and the sessions cannot be paired. If the two sessions
 disagree, the result is **not shown**; repeat rather than choosing a session.
 
@@ -240,8 +276,8 @@ disagree, the result is **not shown**; repeat rather than choosing a session.
 
 | Step | Pass | Fail |
 |---|---|---|
-| 1 | `firmware 0.3.5` and `FF11+ FF12+ FF13+ FF14+ FF15+ FF16+ FF17+` | `n/a (no FF16)`, `malformed`, or a different version |
-| 2 | One line matching the release `build-info.json` `version` (`0.3.5`), not `1` or empty | `1` or empty |
+| 1 | `firmware 0.3.11` and `FF11+ FF12+ FF13+ FF14+ FF15+ FF16+ FF17+` | `n/a (no FF16)`, `malformed`, or a different version |
+| 2 | One line matching the release `build-info.json` `version` (`0.3.11`), not `1` or empty | `1` or empty |
 | 3 | Same string after reconnect, with `none` and `FF14` | String changes or disappears when the stream changes |
 
 Record: app string, bit row, console line, `build-info.json` version, stream used.
@@ -294,7 +330,7 @@ outcome, and the `learn`/centre values from the file.
 
 Spec: [`docs/DISCOVERY.md`](../../DISCOVERY.md). The 0.2.4 failure: RIGHT's ACL
 came up about 2 s after `discovery finished`, nothing encrypted it, and neither
-hand produced a report for 18 s until reset. 0.3.5 encrypts that ACL after
+hand produced a report for 18 s until reset. 0.3.11 encrypts that ACL after
 750 ms and drops it after 4 s without a HID channel so the controller pages
 again.
 
@@ -316,7 +352,7 @@ the power-cycle lines.
 ## 6. Block D — ONY-441 HID gamepad
 
 Spec: [`docs/HID_GAMEPAD.md`](../../HID_GAMEPAD.md). The only pass so far is on
-the pre-0.3.0 build `0.2.4-38-g4bcf01c`; this block is the v0.3.5 recheck.
+the pre-0.3.0 build `0.2.4-38-g4bcf01c`; this block is the v0.3.11 recheck.
 
 Setup: bridge booted and advertising (`adv=on`, no discovery round), both hands
 connected, phone ready. If the phone held a 0.2.x bond, forget `WMR Bridge`
@@ -366,8 +402,12 @@ Run sheet context: [`single-esp32-levers.md`](single-esp32-levers.md) §3.
 
 **Question:** does RIGHT's ~10.8 % loss alone follow the physical controller,
 the table position, or the firmware RIGHT hand slot? This block needs no
-reflash. Phase 3 (address swap) and the V1/30 ms/hold-2 lever images are **out
-of scope**; they need custom builds.
+reflash. Phase 3 (address swap) is **not needed for this sitting**; run it only
+if phases 1–2 do not separate the controller from the position — the condition
+in [`single-esp32-levers.md`](single-esp32-levers.md) §3 and
+[`right-asymmetry.md`](right-asymmetry.md) §5. The V1 stagger, 30 ms interval
+and two-interval FF14 hold were tested by the owner (ONY-980) and are **out of
+scope** here.
 
 ### 8.1 Isolation rule
 
@@ -437,14 +477,14 @@ One row per check. Fill only from §10 figures; `not run` is the honest default.
 ## 10. Paste-back block
 
 ```text
-Build: firmware 0.3.5 / <hash> / build-info version <...>;
+Build: firmware 0.3.11 / <hash> / build-info version <...>;
        app 0.3.18 / <commit>; probe 0.3.18 / <commit>
 Phone: <model>, Android <version>; STREAM bridge_hands=<0|1>; position <distance/photo>
 
 A latency-2 session <1|2>: position=<...> photo=<...>
   run 1 App none:  mtu=  conn=  rssi=  p50=  stalls L/R=  file=
   run 2 Probe none: ...
-  ... 18 rows ...
+  ... 15 rows (App `none` rows marked skipped) ...
   session outcome: <Stay / Move / In between / not shown>
 
 B1 FF16: app="<...>" bits="<...>" console v="<...>" reconnect="<...>"  -> PASS/FAIL
@@ -469,11 +509,16 @@ A check with no figures is `not run`, even if it "seemed fine".
 
 ## 11. What this runbook deliberately does not cover
 
-- **Phase 3 of Sitting R** (physical RIGHT in the LEFT hand slot) needs the
-  address-override build; it is a separate reflash.
-- **V1 stagger, 30 ms interval request and the two-interval FF14 hold** need the
-  ONY-176/ONY-476 images built with `EXTRA_CFLAGS`; see
-  [`single-esp32-levers.md`](single-esp32-levers.md) §2 and §4.
+- **Phase 3 of Sitting R** (physical RIGHT in the LEFT hand slot) is not needed
+  for this sitting; it is the conditional hand-slot swap in
+  [`right-asymmetry.md`](right-asymmetry.md) §5 and is skipped unless phases 1–2
+  do not separate the controller from the position.
+- **V1 stagger, 30 ms interval request and the two-interval FF14 hold** were
+  tested by the owner (report on ONY-980, 2026-11-07) and are not re-benched
+  here; see [`single-esp32-levers.md`](single-esp32-levers.md) §2 and §4 for the
+  lever definitions. The lever sheet §6, `STATUS.md` and `PREDICTION.md` still
+  list them as not run and carry no figures, so this sheet makes no measurement
+  claim for them.
 - **The Pi Wi-Fi bridge** (Sitting P) needs a Raspberry Pi and is a separate
   sheet.
 - **PSVR2 and glasses runtimes** are external-tester coverage; this sitting is

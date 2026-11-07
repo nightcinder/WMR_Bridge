@@ -265,6 +265,22 @@ static void test_invalid_hand(void){
     CHECK(blob == NULL && total == 0);
 }
 
+static void test_external_blob(void){
+    printf("cfgmgr: external blob is READY and can be cleared on a controller change\n");
+    setup(WMR_HAND_LEFT);
+    const uint8_t blob[42] = { 1, 2, 3 };
+    wmr_cfgmgr_set_blob(WMR_HAND_LEFT, blob, sizeof(blob));
+    const uint8_t *got = NULL;
+    uint32_t total = 0;
+    CHECK(wmr_cfgmgr_get(WMR_HAND_LEFT, &got, &total) == WMR_CFG_READY);
+    CHECK(total == sizeof(blob) && got && memcmp(got, blob, sizeof(blob)) == 0);
+    wmr_cfgmgr_clear_blob(WMR_HAND_LEFT);
+    CHECK(wmr_cfgmgr_get(WMR_HAND_LEFT, &got, &total) == WMR_CFG_NOT_READ);
+    CHECK(total == 0);
+    wmr_cfgmgr_clear_blob(2);               /* out of range is a no-op */
+    wmr_cfgmgr_clear_blob(WMR_HAND_RIGHT);
+}
+
 int main(void){
     test_full_read();
     test_disconnect_mid_read();
@@ -273,6 +289,7 @@ int main(void){
     test_failures();
     test_send_error();
     test_invalid_hand();
+    test_external_blob();
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

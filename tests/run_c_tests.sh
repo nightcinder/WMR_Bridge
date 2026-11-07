@@ -57,12 +57,18 @@ step() {
 
 step test_protocol
 build test_protocol "" tests/test_protocol.c src/wmr_protocol.c src/wmr_queue.c \
-    src/wmr_decoded.c src/wmr_decode.c
+    src/wmr_decoded.c src/wmr_decode.c src/wmr_controller_driver.c src/wmr_switch.c
 run test_protocol "$root/samples/controller_frames.txt"
 
 step test_decode
-build test_decode "" tests/test_decode.c src/wmr_decode.c -lm
+build test_decode "" tests/test_decode.c src/wmr_decode.c src/wmr_decoded.c \
+    src/wmr_controller_driver.c src/wmr_switch.c -lm
 run test_decode "$root/samples/controller_frames.txt"
+
+step test_switch
+build test_switch "" tests/test_switch.c src/wmr_switch.c src/wmr_decoded.c \
+    src/wmr_decode.c src/wmr_controller_driver.c src/wmr_discovery.c -lm
+run test_switch
 
 step test_link
 build test_link "" tests/test_link.c src/wmr_link.c
@@ -70,17 +76,19 @@ run test_link
 
 step test_stream_mode
 build test_stream_mode "" tests/test_stream_mode.c src/wmr_stream_mode.c \
-    src/wmr_decoded.c src/wmr_decode.c
+    src/wmr_decoded.c src/wmr_decode.c src/wmr_controller_driver.c src/wmr_switch.c
 run test_stream_mode "$root/samples/controller_frames.txt"
 
 step test_batch
 build test_batch "" tests/test_batch.c src/wmr_batch.c src/wmr_levers.c \
-    src/wmr_stream_mode.c src/wmr_queue.c src/wmr_decoded.c src/wmr_decode.c
+    src/wmr_stream_mode.c src/wmr_queue.c src/wmr_decoded.c src/wmr_decode.c \
+    src/wmr_controller_driver.c src/wmr_switch.c
 run test_batch
 
 step test_batch_on
 build test_batch_on "-DWMR_CFG_TEST_LEVERS=1" tests/test_batch.c src/wmr_batch.c \
-    src/wmr_levers.c src/wmr_stream_mode.c src/wmr_queue.c src/wmr_decoded.c src/wmr_decode.c
+    src/wmr_levers.c src/wmr_stream_mode.c src/wmr_queue.c src/wmr_decoded.c src/wmr_decode.c \
+    src/wmr_controller_driver.c src/wmr_switch.c
 run test_batch_on
 
 step test_levers
@@ -100,15 +108,18 @@ build test_cfg "" tests/test_cfg.c src/wmr_cfg.c
 run test_cfg
 
 step test_discovery
-build test_discovery "" tests/test_discovery.c src/wmr_discovery.c
+build test_discovery "" tests/test_discovery.c src/wmr_discovery.c \
+    src/wmr_controller_driver.c src/wmr_switch.c src/wmr_decoded.c src/wmr_decode.c
 run test_discovery
 
 step test_discovery_h1
-build test_discovery_h1 "-DWMR_CFG_BRIDGE_HANDS=1" tests/test_discovery.c src/wmr_discovery.c
+build test_discovery_h1 "-DWMR_CFG_BRIDGE_HANDS=1" tests/test_discovery.c src/wmr_discovery.c \
+    src/wmr_controller_driver.c src/wmr_switch.c src/wmr_decoded.c src/wmr_decode.c
 run test_discovery_h1
 
 step test_discovery_h2
-build test_discovery_h2 "-DWMR_CFG_BRIDGE_HANDS=2" tests/test_discovery.c src/wmr_discovery.c
+build test_discovery_h2 "-DWMR_CFG_BRIDGE_HANDS=2" tests/test_discovery.c src/wmr_discovery.c \
+    src/wmr_controller_driver.c src/wmr_switch.c src/wmr_decoded.c src/wmr_decode.c
 run test_discovery_h2
 
 step test_log
@@ -128,7 +139,8 @@ build test_status_led "" tests/test_status_led.c src/wmr_status_led.c
 run test_status_led
 
 step test_hid
-build test_hid "" tests/test_hid.c src/wmr_hid.c src/wmr_decoded.c src/wmr_decode.c -lm
+build test_hid "" tests/test_hid.c src/wmr_hid.c src/wmr_decoded.c src/wmr_decode.c \
+    src/wmr_controller_driver.c src/wmr_switch.c -lm
 run test_hid "$root/tests/vectors/hid_gamepad.txt" "$root/tests/vectors/hid_report_descriptor.txt"
 
 step test_ctrl
@@ -159,5 +171,6 @@ step test_console
 build test_console "" tests/test_console.c tests/host_stubs/host_stubs.c \
     src/wmr_console.c src/wmr_cfgmgr.c src/wmr_cfg.c src/wmr_linkdiag.c \
     src/wmr_devloss.c src/wmr_diag.c src/wmr_log.c src/wmr_link.c \
-    src/wmr_stream_mode.c src/wmr_discovery.c
+    src/wmr_stream_mode.c src/wmr_discovery.c src/wmr_controller_driver.c src/wmr_switch.c \
+    src/wmr_decoded.c src/wmr_decode.c
 run test_console

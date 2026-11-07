@@ -47,12 +47,9 @@
 #define WMR_CONFIG_H
 
 #include <stdbool.h>
+#include "wmr_codec.h"
 
 /* ---- Controllers ------------------------------------------------------- */
-
-#define WMR_HAND_LEFT        0
-#define WMR_HAND_RIGHT       1
-#define WMR_NUM_CONTROLLERS  2
 
 /* Which controllers this build serves. 0 = both (default, current behaviour), 1 = LEFT
  * only, 2 = RIGHT only. The excluded hand is ignored by discovery, refused by the outgoing
@@ -242,24 +239,19 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 
 /* The bridge also recognises Sony's PSVR2 Sense controllers by name (see
  * wmr_discovery.h for the names and the per-hand model). Their input reports are 0x31
- * frames of up to WMR_PSVR2_INPUT_FRAME_MAX bytes (A1, report ID, 77 payload bytes),
- * forwarded on the raw stream (FF11). They send no input until the host reads HID
- * Feature Report 0x05 over the control channel, and they do not speak Microsoft's FF13
- * config protocol; both are handled per controller model in wmr_controller.c. There is
- * no PSVR2 parser in the decoded stream yet, so FF12/FF14 count those frames as decode
- * errors. PSVR2 discovery, frames and wake are always compiled in; every hand is
- * searched for both models by default. Scope and open questions: docs/PSVR2.md.
+ * frames of WMR_PSVR2_INPUT_FRAME_MAX bytes (A1, report ID, 77 payload bytes). They send
+ * no input until the host reads HID Feature Report 0x05 over the control channel, and
+ * they do not speak Microsoft's FF13 config protocol. The controller driver table
+ * (wmr_controller_driver.c) owns the per-model names, report predicate, decoder, wake
+ * read and config support; FF12/FF14 decode 0x31 frames through its PSVR2 entry.
+ * PSVR2 discovery, frames and wake are always compiled in; every hand is searched for
+ * all supported models by default. Scope and open questions: docs/PSVR2.md.
  *
  *   -DWMR_CFG_PSVR2_WAKE=0      recognise PSVR2 but send no wake request (diagnostics) */
 #ifndef WMR_CFG_PSVR2_WAKE
 #define WMR_CFG_PSVR2_WAKE         1
 #endif
 
-/* HID transaction header, input report ID and largest complete frame (A1 + report ID +
- * payload). 0x31 reports carry 77 payload bytes, so the frame is 79 bytes. */
-#define WMR_PSVR2_HID_HEADER       0xA1
-#define WMR_PSVR2_INPUT_REPORT_ID  0x31
-#define WMR_PSVR2_INPUT_FRAME_MAX  79
 /* HID Feature Report read that wakes a PSVR2 Sense controller (unverified on hardware). */
 #define WMR_PSVR2_WAKE_FEATURE_ID  0x05
 /* Delay between DESCRIPTOR_AVAILABLE and that read. On incoming/reconnect links BTstack
@@ -270,39 +262,27 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_PSVR2_WAKE_DELAY_MS 250
 #endif
 
-/* ---- Frames, queue and wire format ------------------------------------- */
+/* ---- Nintendo Switch Joy-Con / Pro controllers ------------------------- */
 
-/* Largest controller frame (A1 + report ID + payload) that is forwarded.
- * WMR frames are 46 bytes; PSVR2 input frames are up to 79. 80 is the smallest
- * value that carries both and still fits the static queue in ESP32 DRAM (96
- * overflows dram0_0_seg; see docs/PSVR2.md). Longer frames are counted as
- * drops. */
-#ifndef WMR_CFG_MAX_FRAME
-#define WMR_CFG_MAX_FRAME          80
+/* The bridge also recognises Joy-Con (L)/(R) and the Pro Controller by name. After the
+ * HID descriptor arrives it runs the Classic BT output-report 0x01 handshake in
+ * wmr_switch.c: enable the IMU, read the factory calibration from SPI (published over
+ * FF13) and select 60 Hz full input mode. The calibration is applied to FF12/FF14.
+ * Discovery, frames and the handshake are always compiled in; scope and open questions:
+ * docs/SWITCH.md.
+ *
+ *   -DWMR_CFG_SWITCH_HANDSHAKE=0   recognise Switch controllers but send no subcommands */
+#ifndef WMR_CFG_SWITCH_HANDSHAKE
+#define WMR_CFG_SWITCH_HANDSHAKE 1
 #endif
-#if WMR_CFG_MAX_FRAME < WMR_PSVR2_INPUT_FRAME_MAX
-#error "WMR_CFG_MAX_FRAME must be >= WMR_PSVR2_INPUT_FRAME_MAX (79)"
-#endif
+
+/* ---- Frames and queue -------------------------------------------------- */
 
 /* Bounded FIFO shared by both hands, in whole frames. When full, new
  * frames are dropped (drop-newest) and counted. */
 #ifndef WMR_CFG_QUEUE_CAPACITY
 #define WMR_CFG_QUEUE_CAPACITY     256
 #endif
-
-/* wire: size of the fragment header preceding each payload chunk. */
-#define WMR_PROTO_HEADER_SIZE      12
-
-/* wire: first byte of every notification ('R'). */
-#define WMR_PROTO_MAGIC            0x52
-
-/* Upper bound on one ATT notification value, whatever the MTU allows. */
-#ifndef WMR_CFG_MAX_NOTIFICATION
-#define WMR_CFG_MAX_NOTIFICATION   244
-#endif
-
-/* ATT opcode + handle overhead inside an ATT_MTU-sized PDU. */
-#define WMR_ATT_NOTIFY_OVERHEAD    3
 
 /* ---- BLE peripheral ---------------------------------------------------- */
 

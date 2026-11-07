@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "wmr_config.h"
 #include "wmr_protocol.h"
 #include "wmr_queue.h"
 #include "wmr_decoded.h"
@@ -351,10 +352,13 @@ static void test_psvr2_frame(void){
         CHECK(frames_equal(&f, &out) && count >= 1);
     }
 
-    /* The decoded stream has no PSVR2 parser yet: FF12/FF14 must reject the frame
-     * rather than half-decode it. It is counted as a decode error there. */
+    /* The decoded stream carries the PSVR2 report now: it must decode, not be
+     * rejected as a short WMR frame. */
     uint8_t record[WMR_DECODED_SIZE];
-    CHECK(!wmr_decoded_from_frame(&f, record));
+    CHECK(wmr_decoded_from_frame(&f, record));
+    wmr_decoded_t d;
+    CHECK(wmr_decoded_unpack(record, sizeof(record), &d));
+    CHECK(d.hand == WMR_HAND_RIGHT && d.sequence == 7);
 }
 
 static void test_queue(void){

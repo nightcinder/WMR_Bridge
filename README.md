@@ -1,9 +1,9 @@
 # WMR_Bridge
 
 The default bridge is ESP32 firmware built on [BTstack](https://github.com/bluekitchen/btstack).
-It connects to two Windows Mixed Reality motion controllers or
-PlayStation VR2 Sense controllers (searched for by default; never run on a
-controller) over Classic Bluetooth. It forwards their input to an Android phone
+It connects to two Windows Mixed Reality motion controllers,
+PlayStation VR2 Sense controllers or Nintendo Switch Joy-Con/Pro controllers
+(searched for by default; never run on a controller) over Classic Bluetooth. It forwards their input to an Android phone
 over a custom BLE GATT service. The input can go as raw frames (FF11), as decoded
 IMU and input records (FF12), or as batches of those records (FF14). The phone side
 is the companion app [wmr-companion](https://github.com/nightcinder/wmr-companion).
@@ -50,14 +50,17 @@ implemented. See [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 - Controllers. The firmware acts as the Bluetooth HID host for two controllers
   (LEFT and RIGHT). They are found by their Bluetooth names (`Motion controller - Left` /
-  `- Right` or `PlayStation VR2 Sense Controller (L)` / `(R)`) and remembered by
+  `- Right`, `PlayStation VR2 Sense Controller (L)` / `(R)`, or `Joy-Con (L)` /
+  `(R)`; a `Pro Controller` pairs as LEFT) and remembered by
   address and model in NVS ([docs/DISCOVERY.md](docs/DISCOVERY.md); not yet run on
   hardware). Controllers reconnect to the ESP32 on their own (incoming connection).
   The console can also connect outwards. Each hand has its own connection state.
 - Frames. A WMR controller sends 46-byte input reports (`A1`, report ID `01`,
   44 payload bytes) at roughly 150-180 reports per second per hand in the one
-  run that was measured. A PSVR2 Sense controller sends `A1 31` reports of up to
-  79 bytes. These are forwarded raw only for now ([docs/PSVR2.md](docs/PSVR2.md)).
+  run that was measured. A PSVR2 Sense controller sends `A1 31` reports of
+  exactly 79 bytes. A Switch controller sends `A1 30` reports of 50 bytes, each
+  with three IMU samples. All are forwarded raw, and all decode into FF12/FF14
+  ([docs/PSVR2.md](docs/PSVR2.md), [docs/SWITCH.md](docs/SWITCH.md)).
 - Queue. Frames from both hands go into one bounded FIFO (256 frames). If it
   fills, the newest frame is dropped and counted.
 - BLE. The ESP32 advertises as `WMR Bridge`. The phone must pair and bond
@@ -95,7 +98,7 @@ identical. See [docs/PROTOCOL.md](docs/PROTOCOL.md).
 | `tools/firmware/` | One-command build, packaging and flash (`build.py`) plus the browser-flasher manifest logic; see [docs/FLASHING.md](docs/FLASHING.md) |
 | `pi/` | Linux / Raspberry Pi host bridge over Wi-Fi: BlueZ hidraw source, WebSocket transport, decoder and host tests; see [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) |
 | `integration/` | The one BTstack file that must be replaced to build this (`main-CMakeLists.txt`, plus a diff) |
-| `docs/` | Build, flashing, protocol, Android, counters, security, BLE UUID migration, reconnect/queue, controller discovery, PSVR2, battery life and packet-loss/prediction investigations, testing, refactor notes |
+| `docs/` | Build, flashing, protocol, Android, counters, security, BLE UUID migration, reconnect/queue, controller discovery, PSVR2, Switch, battery life and packet-loss/prediction investigations, testing, refactor notes |
 
 Module responsibilities, in brief: `wmr_controller` (HID side), `wmr_transport`
 (BLE side, queue pump), `wmr_protocol` and `wmr_queue` (pure C, no BTstack,
@@ -121,14 +124,15 @@ python3 tools/firmware/build.py --idf-export ~/esp/esp-idf/export.sh --flash /de
 
 The first run clones the pinned BTstack commit into `.fw-build/`. Later runs
 reuse it. The output in `dist/` includes a merged factory image and a browser
-flasher page. `0.3.5` is the current release. It is the FF10
-encryption-enforcement release on top of 0.3.4: every FF10 data characteristic
-now names `ENCRYPTION_KEY_SIZE_16`, so BTstack rejects an unencrypted or
-shorter-key access on the bonded LESC link the bridge already required.
-Triage accepts the 6-run pose protocol, and the repository gains report-only
-Semgrep, gitleaks and Dependabot scans. No protocol payload change; companions
-at 0.2.2 or later continue to work. Packaged releases are CI-built and
-hardware-unverified. See
+flasher page. `0.3.11` is the current release. It is the controller-family
+release on top of 0.3.5: one driver table per model, PSVR2 FF12/FF14 decoding,
+and Nintendo Switch Joy-Con/Pro handshake and `0x30` decoding. Switch support
+is host-tested and firmware-build-tested only and has never run on a
+controller ([#145](https://github.com/nightcinder/WMR_Bridge/issues/145)).
+FF10–FF17 keep their payloads, so companions at 0.2.2 or later continue to
+work. The Raspberry Pi host bridge is package `0.2.4`: it forwards FF13
+calibration blobs but does not yet read calibration from controllers. Packaged
+releases are CI-built and hardware-unverified. See
 [CHANGELOG.md](CHANGELOG.md) for the full notes. To install the current release
 without ESP-IDF, use the hosted browser installer at
 <https://nightcinder.github.io/WMR_Bridge/>, which serves all three variants. The
@@ -258,7 +262,7 @@ builds two installable artifacts: `wmr-bridge_<version>_all.deb` and
 `wmr-bridge-<version>.tar.gz`, plus a piped `install.sh` that fetches and
 verifies the matching release tarball. The `wmr-pi-bridge-0.1.0.tar.gz` asset on
 the v0.1.0 GitHub release is the only old packaged Pi tarball. The `pi/` tree in
-this repository is package `0.2.3`. Every `v*` release now attaches the current
+this repository is package `0.2.4`. Every `v*` release now attaches the current
 `.deb`, tarball, both `.sha256` files and `install.sh`. The one-line install
 works from `releases/latest/download/install.sh`.
 
@@ -285,7 +289,7 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 | What | Result |
 | --- | --- |
 | Firmware build (ESP-IDF v6.1, ESP32) | Passes, no warnings from this code |
-| Host unit tests of the protocol encoder, reassembler and queue (6127 checks) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
+| Host unit tests of the protocol encoder, reassembler and queue (6129 checks) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
 | Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 122 tests) | Pass (host tests only; never run on a Raspberry Pi or with real controllers) |
 | Flash and boot on a real ESP32 | Passes; advertises; stats print every 5 s; no debug spam |
 | One bench run, about 15 s, both controllers and a phone (log pasted by the user, not instrumented on the phone) | Both controllers connected on their own; ATT MTU went 23 to 517; about 174/s (LEFT) and 154/s (RIGHT); sent = received for both hands; 0 drops, 0 offline, 0 purged, 0 send errors; queue back to 0 after a startup peak of 11; counter accounting added up exactly |
@@ -311,10 +315,15 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
   earlier bring-up sessions where LEFT/RIGHT was not recorded.
 - Regression comparison against the original single-file version under identical
   conditions.
-- PSVR2 Sense controllers. The recognition, model storage, raw forwarding and HID
-  wake path are host-tested and build-tested but have never run on a PSVR2
-  controller. They are searched for by default alongside WMR
-  ([docs/PSVR2.md](docs/PSVR2.md)).
+- PSVR2 Sense controllers. The recognition, model storage, raw forwarding,
+  decoded FF12/FF14 stream and HID wake path are host-tested and build-tested
+  but have never run on a PSVR2 controller. They are searched for by default
+  alongside WMR ([docs/PSVR2.md](docs/PSVR2.md)).
+- Switch Joy-Con and Pro controllers. The discovery names, output report `0x01`
+  handshake, SPI calibration packing into FF13 and the three-sample `0x30`
+  decoder are host-tested and build-tested but have never run on a Switch
+  controller. Hardware may need axis/button corrections
+  ([docs/SWITCH.md](docs/SWITCH.md)).
 - Linux / Raspberry Pi Wi-Fi host bridge (`pi/`). Second supported target, but
   host-tests-only until the Pi sitting runs
   ([docs/PI_BRIDGE.md](docs/PI_BRIDGE.md),
@@ -338,10 +347,17 @@ Full list and details: [docs/TESTING.md](docs/TESTING.md).
 - Single phone, exactly two controllers. Controllers are recognised by name until
   their addresses are stored. A name can be spoofed (see
   [docs/DISCOVERY.md](docs/DISCOVERY.md)).
-- PSVR2 Sense controllers are raw-only today. FF12/FF14 have no PSVR2 decoder.
-  FF13 is not read. The wake request is unverified and has never run on a
-  controller (see [docs/PSVR2.md](docs/PSVR2.md)). Each hand's model is
-  independent, but the decoded stream remains WMR-only.
+- PSVR2 Sense controllers decode into FF12/FF14 with uncalibrated Monado
+  scales, but only PS, Share/Options, L1/R1 and L3/R3 reach the WMR button byte;
+  face buttons and capacitive touch are not represented. FF13 is not read. The
+  wake request and decoder have never run on a controller (see
+  [docs/PSVR2.md](docs/PSVR2.md)). Each hand's model is independent.
+- Switch controllers decode into FF12/FF14 with the factory calibration read
+  over the handshake, but only Home, Minus/Plus, Capture, stick click and
+  ZL/ZR/L/R reach the WMR button byte; the D-pad and face buttons are not
+  represented. A Pro Controller pairs as LEFT and exposes its right stick as
+  the trackpad pair. The handshake and decoder have never run on a controller
+  (see [docs/SWITCH.md](docs/SWITCH.md)).
 - `tx` means "accepted by the Bluetooth stack", not "received by the phone".
 
 Details and hardening suggestions: [docs/SECURITY.md](docs/SECURITY.md).

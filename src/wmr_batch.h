@@ -96,12 +96,14 @@ typedef enum {
 } wmr_batch_flush_t;
 
 /* How long the oldest queued record may wait before a partial batch is sent:
- * WMR_CFG_BATCH_HOLD_INTERVALS connection intervals (1 by default), or the same multiple of
- * WMR_CFG_BATCH_HOLD_DEFAULT_US while the interval is unknown (0). With
- * WMR_CFG_TEST_LEVERS=1 the interval count is the runtime LEVERS value instead. The bound
- * documented is
- * this plus one controller report period (about 5 ms), which covers the next arrival check. */
-uint32_t wmr_batch_hold_us(uint32_t conn_interval_us);
+ * `hold_intervals` connection intervals, where the caller passes the compile-time
+ * WMR_CFG_BATCH_HOLD_INTERVALS (1 by default) or the runtime LEVERS value.
+ * `default_interval_us` (WMR_CFG_BATCH_HOLD_DEFAULT_US) is the interval used while the
+ * phone's connection interval is not yet known (`conn_interval_us` is 0). The bound
+ * documented is this plus one controller report period (about 5 ms), which covers the next
+ * arrival check. */
+uint32_t wmr_batch_hold_us(uint32_t conn_interval_us, uint32_t default_interval_us,
+                           unsigned hold_intervals);
 
 /* Flush when `queued` records fill a notification (`max_count` > 0), or when the oldest
  * has waited `hold_us`. A zero `max_count` (MTU too small) flushes at once so the pump

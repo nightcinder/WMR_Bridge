@@ -4,9 +4,10 @@ wmr_bridge is a bench and test bridge. 0.3 hardens the phone link, but the bridg
 is still not a hardened product. The trusted environment is the owner's own room
 and LAN, and the remaining gaps below are deliberate.
 
-Status of this page: describes the 0.3.0 firmware (LESC + bonding, encrypted
-characteristics). The pairing run on Nick's phone + ESP32 is the acceptance test
-and is recorded in [STATUS.md](STATUS.md) once done. Host tests and the firmware
+Status of this page: describes the 0.3.11 firmware. The phone link uses LE Secure
+Connections with bonding. Every FF10 data characteristic requires an encrypted
+link with a 16-byte key. The pairing run on Nick's phone + ESP32 is the acceptance
+test and is recorded in [STATUS.md](STATUS.md) once done. Host tests and the firmware
 build do not prove radio behavior.
 
 ## What is protected

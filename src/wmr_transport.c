@@ -256,7 +256,9 @@ static bool batch_due(void){
     const uint64_t now = (uint64_t) esp_timer_get_time();
     const uint64_t age64 = now > oldest->rx_time_us ? now - oldest->rx_time_us : 0;
     const uint32_t age = age64 > UINT32_MAX ? UINT32_MAX : (uint32_t) age64;
-    const uint32_t hold = wmr_batch_hold_us(conn_known ? wmr_conn_interval_us(conn_now.interval) : 0);
+    const uint32_t hold = wmr_batch_hold_us(conn_known ? wmr_conn_interval_us(conn_now.interval) : 0,
+                                            WMR_CFG_BATCH_HOLD_DEFAULT_US,
+                                            wmr_levers_hold_intervals());
     const unsigned max_count = wmr_batch_max_count(att_server_get_mtu(phone_handle));
     if (wmr_batch_flush_reason(queue.count, max_count, age, hold) != WMR_BATCH_FLUSH_NO) return true;
     btstack_run_loop_remove_timer(&batch_timer);
@@ -352,9 +354,14 @@ void wmr_transport_submit_report(unsigned hand, const uint8_t *report, uint16_t 
     pump_kick();
 }
 
-/* FF12: decode the head frame now (not in the HID callback) and send one
- * 56-byte record. A frame that cannot be sent or decoded is removed and counted,
- * so it never blocks the queue; a failed notify keeps it for the retry timer. */
+/* FF12: decode the head frame now (not in the HID callback) and send its records. A model
+ * may carry several records per frame (a Switch 0x30 report carries three IMU samples);
+ * a frame that cannot be sent or decoded is removed and counted, so it never blocks the
+ * queue; a failed notify keeps the unset records for the retry timer. */
+static uint8_t  decoded_cursor_hand;
+static uint32_t decoded_cursor_sequence;
+static unsigned decoded_cursor;
+
 static void pump_send_decoded(const wmr_frame_t *frame){
     if (!wmr_decoded_mtu_ok(att_server_get_mtu(phone_handle))){
         /* Queued before the MTU was known to be too small. */
@@ -363,28 +370,47 @@ static void pump_send_decoded(const wmr_frame_t *frame){
         pump_kick();
         return;
     }
-    uint8_t record[WMR_DECODED_SIZE];
-    if (!wmr_decoded_from_frame(frame, record)){
+    uint8_t records[WMR_DECODED_MAX_SAMPLES][WMR_DECODED_SIZE];
+    const unsigned count = wmr_decoded_samples_from_frame(frame, records,
+                                                          WMR_DECODED_MAX_SAMPLES);
+    if (!count){
         stats.decode_errors[frame->hand]++;
         wmr_queue_pop(&queue);
         pump_kick();
         return;
     }
-    uint8_t result = att_server_notify(phone_handle, DECODED_VALUE_HANDLE, record, sizeof(record));
-    if (result != ERROR_CODE_SUCCESS){
-        stats.errors++;
-        return;     /* The retry timer tries again; a send error never discards a frame. */
+    if (decoded_cursor_hand != frame->hand || decoded_cursor_sequence != frame->sequence){
+        decoded_cursor_hand = frame->hand;
+        decoded_cursor_sequence = frame->sequence;
+        decoded_cursor = 0;
     }
-    stats.notifications++;
-    stats.tx[frame->hand]++;
+    while (decoded_cursor < count){
+        uint8_t result = att_server_notify(phone_handle, DECODED_VALUE_HANDLE,
+                                           records[decoded_cursor], WMR_DECODED_SIZE);
+        if (result != ERROR_CODE_SUCCESS){
+            stats.errors++;
+            return;     /* The retry timer tries again; a send error never discards a frame. */
+        }
+        stats.notifications++;
+        stats.tx[frame->hand]++;
+        decoded_cursor++;
+    }
     wmr_queue_pop(&queue);
+    decoded_cursor = 0;
+    decoded_cursor_hand = 0;
+    decoded_cursor_sequence = 0;
     pump_kick();
 }
 
 /* FF14: decode up to a notification's worth of queued frames and send them as one batch.
- * Nothing leaves the queue until the notification is accepted, so a send error loses
- * nothing and the retry sends the same records again. A frame that is not a valid input
- * report is removed and counted (dec_err) and does not occupy a slot in the batch. */
+ * A frame may carry several records (three for a Switch 0x30 report); a frame is added
+ * whole and the batch stops before the next frame that does not fit, so nothing leaves the
+ * queue until the notification is accepted. A frame that is not a valid input report is
+ * removed and counted (dec_err) and does not occupy a slot in the batch.
+ *
+ * When the MTU fits fewer records than one frame carries, the newest records are sent
+ * and the older ones are discarded and counted in mtu_skip. A Switch frame needs an ATT
+ * MTU of 173 for all three samples; below that the stream is lossy by construction. */
 static void pump_send_batch(void){
     const unsigned max_count = wmr_batch_max_count(att_server_get_mtu(phone_handle));
     if (!max_count){
@@ -395,12 +421,30 @@ static void pump_send_batch(void){
     }
     wmr_batch_t batch;
     wmr_batch_init(&batch, max_count);
-    bool valid[WMR_BATCH_MAX_COUNT];
+    unsigned added[WMR_BATCH_MAX_COUNT];
+    unsigned skipped[WMR_BATCH_MAX_COUNT];
     const unsigned take = queue.count < max_count ? queue.count : max_count;
+    unsigned processed = 0;
     for (unsigned i = 0; i < take; i++){
-        uint8_t record[WMR_DECODED_SIZE];
+        uint8_t records[WMR_DECODED_MAX_SAMPLES][WMR_DECODED_SIZE];
         const wmr_frame_t *frame = wmr_queue_peek_at(&queue, i);
-        valid[i] = wmr_decoded_from_frame(frame, record) && wmr_batch_add(&batch, record);
+        unsigned count = wmr_decoded_samples_from_frame(frame, records,
+                                                        WMR_DECODED_MAX_SAMPLES);
+        if (!count){
+            added[i] = 0;
+            skipped[i] = 0;
+            processed = i + 1;
+            continue;
+        }
+        /* At an MTU that fits fewer records than one frame carries, keep the newest ones
+         * rather than stalling the queue forever; the older samples go stale first. */
+        unsigned first = count > max_count ? count - max_count : 0;
+        if (first) count = max_count;
+        if (batch.count + count > max_count) break;
+        for (unsigned j = 0; j < count; j++) wmr_batch_add(&batch, records[first + j]);
+        added[i] = count;
+        skipped[i] = first;
+        processed = i + 1;
     }
     if (batch.count){
         uint8_t result = att_server_notify(phone_handle, BATCHED_VALUE_HANDLE, batch.data, wmr_batch_size(&batch));
@@ -414,10 +458,11 @@ static void pump_send_batch(void){
         if (batch.count > stats.batch_max) stats.batch_max = batch.count;
         if (take == max_count) stats.batch_full_flushes++;
     }
-    for (unsigned i = 0; i < take; i++){
+    for (unsigned i = 0; i < processed; i++){
         const wmr_frame_t *frame = wmr_queue_peek(&queue);
-        if (valid[i]) stats.tx[frame->hand]++;
+        if (added[i]) stats.tx[frame->hand] += added[i];
         else          stats.decode_errors[frame->hand]++;
+        stats.mtu_skipped[frame->hand] += skipped[i];
         wmr_queue_pop(&queue);
     }
     pump_kick();

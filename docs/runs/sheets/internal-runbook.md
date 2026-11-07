@@ -1,4 +1,4 @@
-# External tester runbook: WMR Bridge v0.3.5
+# External tester runbook: WMR Bridge v0.3.11
 
 **Status: template, not run.** This is the first external-tester runbook. Nothing here is a
 result. It tells you what to install, what to do in what order, and which files to send back.
@@ -8,8 +8,8 @@ The project owner fills in the result tables after your run.
 60–90 minutes per device.
 
 **What this run is for.** The first tester was blocked by controller pairing on firmware
-`0.2.0`. The pairing fixes are in `0.2.1`–`0.2.4`; this run uses **`0.3.5`**. If pairing
-still fails on `0.3.5`, that is a new and important result, not a reason to go back to
+`0.2.0`. The pairing fixes are in `0.2.1`–`0.2.4`; this run uses **`0.3.11`**. If pairing
+still fails on `0.3.11`, that is a new and important result, not a reason to go back to
 `0.2.0`.
 
 **The one thing to do first.** Complete Tier 0 on an Android phone with both WMR controllers.
@@ -17,7 +17,7 @@ Do not start with the glasses. Pairing is the gate for every other device.
 
 **Quick start:**
 
-1. Flash v0.3.5 (or confirm it is already installed).
+1. Flash v0.3.11 (or confirm it is already installed).
 2. Install the app on an Android 14+ phone (Android 13 and below is not supported).
 3. Connect to `WMR Bridge`, then pair BOTH controllers together: put both in pairing
    mode at the same time and scan once.
@@ -40,12 +40,13 @@ Do not start with the glasses. Pairing is the gate for every other device.
 | Both WMR controllers, charged | Tier 0 | LEFT and RIGHT. Know which is which; the ring/trigger orientation is in the capture steps. |
 | VITURE Pro Neckband + glasses | device 2 | Optional. The Neckband is an Android host; the glasses are the display. |
 | XREAL glasses + Beam Pro (or S24/S25-class phone) | device 3 | Optional. Air 2 Ultra is the only XREAL model with hand tracking; other models are display/3DoF only. |
-| PSVR2 Sense controllers | device 4 | Optional. Raw FF11 only; see §10.4. |
+| PSVR2 Sense controllers | device 4 | Optional. v0.3.11 decodes PSVR2 FF12/FF14 (host-tested only; never run on a PSVR2 controller). See §10.4. |
+| Nintendo Switch Joy-Con (L)/(R) or Pro Controller | not numbered | Optional. Supported in v0.3.11 but hardware-untested; discovery and `0x30` decode are host-tested only (GitHub #145). No runbook steps exist for Switch yet. |
 | Other glasses | device 5 | Optional. Display-only; no tracking claim. |
-| A private room | everything | The phone link uses LESC bonding in 0.3.5, but controller links are unauthenticated. Pair in a private room. |
+| A private room | everything | The phone link uses LESC bonding in 0.3.11, but controller links are unauthenticated. Pair in a private room. |
 
 If your board was already prepared for you, you can skip flashing, but you must still confirm
-the firmware version. If you are not sure, flash `0.3.5` again; flashing erases the stored
+the firmware version. If you are not sure, flash `0.3.11` again; flashing erases the stored
 controller pairings, so the first pairing after a flash is expected.
 
 ### 1.1 Terms used below
@@ -99,14 +100,14 @@ The last line is a consent statement, not a legal contract. You can stop at any 
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| Firmware | **v0.3.5** | Browser installer or GitHub release. This is the current release, CI-built and hardware-unverified. |
+| Firmware | **v0.3.11** | Browser installer or GitHub release. The release this run targets; CI-built and hardware-unverified. |
 | App, Android 14+ | **v0.3.17 signed APK** (`0.3.17`, versionCode 2022) | GitHub release asset, arm64-v8a, signed by CI. This APK contains one shared Unity runtime for the VITURE and XREAL paths. It is large (about 410 MiB). |
 | Capture tools (desktop, optional) | WMR_Bridge `main` | `tools/capture_ble.py`, `tools/analyze_capture.py`. |
 
 ### 3.2 Links
 
 - Browser installer (all three firmware variants): <https://nightcinder.github.io/WMR_Bridge/>
-- Firmware release v0.3.5: <https://github.com/nightcinder/WMR_Bridge/releases/tag/v0.3.5>
+- Firmware release v0.3.11: <https://github.com/nightcinder/WMR_Bridge/releases/tag/v0.3.11>
 - Unified app APK (Android 14+): <https://github.com/nightcinder/wmr-companion/releases/download/v0.3.17/wmr-companion-0.3.17-unified-arm64-v8a.apk>
 - The release APK ships `libglasses.so` (VITURE XR Glasses SDK for Android 2.4.1)
   under the VITURE licence; the EULA and third-party notices ship in the APK
@@ -130,16 +131,16 @@ APK or firmware image.
 
 | Order | Device | What it settles | Minimum bundle | Stop / continue |
 |---|---|---|---|---|
-| **1** | **Android phone + both WMR controllers on v0.3.5** | Whether the `0.2.0` pairing regression is fixed: pair BOTH controllers at the same time. Also the baseline BLE stream and app screens. | **Tier 0**; Tier 1 if anything fails; Tier 2 if Tier 0 passes and you have time. | If pairing fails, stop and send Tier 1. Do not move to the glasses first. |
+| **1** | **Android phone + both WMR controllers on v0.3.11** | Whether the `0.2.0` pairing regression is fixed: pair BOTH controllers at the same time. Also the baseline BLE stream and app screens. | **Tier 0**; Tier 1 if anything fails; Tier 2 if Tier 0 passes and you have time. | If pairing fails, stop and send Tier 1. Do not move to the glasses first. |
 | **2** | **VITURE Pro Neckband + glasses** | Whether the unified APK runs on the Neckband, displays in the glasses, and whether the VITURE tracking path reports `available`/`unsupported`. Hand tracking needs a Luma Ultra. | Tier 0 (display + app) + Tier 2-V (tracking). | If the app will not install or display, record that and move on. |
 | **3** | **XREAL glasses + Beam Pro** | Same for the XREAL path. Hand tracking needs an Air 2 Ultra and the XREAL input source set to Hands. | Tier 0 + Tier 2-X. | If the model is not an Air 2 Ultra, record `unsupported`/display-only and move on. |
-| **4** | **PSVR2 Sense** | Whether v0.3.5 discovers/pairs PSVR2 hands and forwards raw `0xA1 0x31` frames. No decoded PSVR2 stream exists. | Tier 1 + Tier 2-P. | No PSVR2 hardware is a valid "not run". |
+| **4** | **PSVR2 Sense** | Whether v0.3.11 discovers/pairs PSVR2 hands and streams decoded FF12/FF14 (`A1 31` frames). Host-tested only; never run on a PSVR2 controller. | Tier 1 + Tier 2-P. | No PSVR2 hardware is a valid "not run". |
 | **5** | **Other glasses** | Display compatibility only: does the app appear and remain usable in the glasses? | Tier 0 display notes + screenshot. | Last. No controller or tracking claim. |
 
 **Why this order.** Device 1 is the blocker the tester already hit, and every other device
 assumes a controller stream. Device 2 is the rarest inventory and the first vendor path. Device
-3 is the second vendor path. Device 4 is raw-only and needs a serial log to be useful. Device 5
-is the lowest-information case.
+3 is the second vendor path. Device 4 now decodes FF12/FF14 on v0.3.11 (host-tested only) and needs a serial log to be
+useful. Device 5 is the lowest-information case.
 
 ---
 
@@ -148,7 +149,7 @@ is the lowest-information case.
 Do this with the Android phone and both WMR controllers. The goal is a yes/no answer and enough
 screen evidence to triage a failure. You do **not** need adb or a serial monitor for Tier 0.
 
-### 5.1 Flash or confirm v0.3.5
+### 5.1 Flash or confirm v0.3.11
 
 1. Use a desktop Chrome or Edge window.
 2. Open <https://nightcinder.github.io/WMR_Bridge/>.
@@ -157,10 +158,10 @@ screen evidence to triage a failure. You do **not** need adb or a serial monitor
    need `dialout`/`uucp` group membership.
 4. Pick **Both hands** and install. If it cannot connect, hold the **BOOT** button while it
    retries; close any serial monitor that is using the port.
-5. Take a screenshot of the installer page showing the **v0.3.5** label before or after the
+5. Take a screenshot of the installer page showing the **v0.3.11** label before or after the
    install. That is the Tier 0 firmware evidence.
 
-If the board is already on `0.3.5`, take the same screenshot and skip the flash. If you are not
+If the board is already on `0.3.11`, take the same screenshot and skip the flash. If you are not
 sure, flash it; this erases the stored pairings, which is normal. If you did **not** flash the
 board yourself, the installer screenshot shows what is available, not what is installed; say
 "pre-flashed" in the manifest and confirm the version with serial `v` in Tier 1.
@@ -190,18 +191,18 @@ the APK signature changes.
 1. Power the board. The status LED should be **red** (no controllers).
 2. Open the app and grant the Bluetooth/Nearby-devices permissions.
 3. On the **Connect** screen, scan for `WMR Bridge` and connect.
-4. If Android shows a pairing request for `WMR Bridge`, allow it. Firmware 0.3.5 bonds and
+4. If Android shows a pairing request for `WMR Bridge`, allow it. Firmware 0.3.11 bonds and
    encrypts the phone link, so a fresh phone gets the pairing dialog.
 5. Confirm the screen says **connected, streaming** and shows a negotiated **MTU** of 517 (or
    at least 61). If it shows 23, FF14 batching will not work; record it and continue with FF12
    if the app offers it.
 6. Open **Open 3D debug view**. Leave the app on the debug screen.
 
-> **HID / Gamepad Coexistence Warning:** Firmware 0.3.5 exposes a standard BLE HID gamepad (HOGP, service `0x1812`) directly to Android upon bonding. Do not enable app-level HID output in WMR Companion (`HidOutputPanel` / `BluetoothHidDevice`) at the same time: registering `BluetoothHidDevice` disables Android's HID Host service (stopping bridge HOGP input reception) and causes radio contention on the phone. Leave Companion app HID output disabled.
+> **HID / Gamepad Coexistence Warning:** Firmware 0.3.11 exposes a standard BLE HID gamepad (HOGP, service `0x1812`) directly to Android upon bonding. Do not enable app-level HID output in WMR Companion (`HidOutputPanel` / `BluetoothHidDevice`) at the same time: registering `BluetoothHidDevice` disables Android's HID Host service (stopping bridge HOGP input reception) and causes radio contention on the phone. Leave Companion app HID output disabled.
 
 Already-paired controllers may connect on their own after the board boots. If both appear as
 `connected - WMR - HID ready`, record "already paired" in the manifest. That proves the stream,
-but it does **not** test the pairing fix. To test pairing, flash `0.3.5` (which erases
+but it does **not** test the pairing fix. To test pairing, flash `0.3.11` (which erases
 the stored pairings) or disconnect each hand, use **Forget bond** on both, and re-pair. If you
 only need the stream baseline, continue without re-pairing.
 
@@ -229,7 +230,7 @@ not reflash `0.2.0`.
 
 Take these five items:
 
-1. Screenshot of the installer page showing **v0.3.5**.
+1. Screenshot of the installer page showing **v0.3.11**.
 2. Screenshot of the **Controller control** panel with both hands' status.
 3. Screenshot of the **Connect** screen with the MTU and stream state.
 4. Screenshot of the **Debug** screen with both hands' rates and sequence gaps.
@@ -305,7 +306,7 @@ you are done; if the pipe keeps it open, press `Ctrl+C`.
 Then:
 
 1. Reset the board (press **EN**, or unplug/replug USB) so the log includes the boot banner.
-2. Type `v` and press Enter. The log should print the firmware version; confirm `0.3.5`.
+2. Type `v` and press Enter. The log should print the firmware version; confirm `0.3.11`.
 3. Type `s` and press Enter to print the status block.
 4. Repeat the pairing steps from §5.4.
 5. If the second hand fails, let the retries finish (about 30 seconds) before stopping.
@@ -467,15 +468,16 @@ For any glasses not covered above:
 
 ### 7.7 PSVR2 observation
 
-1. Use the v0.3.5 board. Disconnect the phone.
+1. Use the v0.3.11 board. Disconnect the phone.
 2. Put one Sense controller in pairing mode using its normal procedure. Record exactly what
    you did; the bridge does not change the controller's pairing procedure.
 3. Start the serial monitor (§6.1) before pairing. Let discovery run.
 4. Record whether the log shows the controller as `model PSVR2`, whether a wake line appears,
    and the first report's frame length. The raw report starts `A1 31` and is expected to be up
    to 79 bytes; record the actual `frame_len` rather than assuming 79.
-5. Connect the app and select **FF11 raw**. There is no PSVR2 decoder for FF12/FF14, and FF13
-   is not read for PSVR2. If the app shows no 3D view, that is expected.
+5. Connect the app and select **FF12 decoded** or **FF14 batched**. v0.3.11 decodes
+   PSVR2 `A1 31` frames into the same 56-byte record as WMR (host-tested only); FF13 is not
+   read for a PSVR2 hand. If the app shows no 3D view, capture raw FF11 and the serial log.
 6. Capture the serial log and, if possible, a raw FF11 capture (§7.3).
 7. Repeat for the second hand if you have both.
 
@@ -489,7 +491,7 @@ Use one folder per run:
 wmr-ext-<handle>-<YYYYMMDD>/
   manifest.md
   tier0/
-    installer-v0.3.5.png
+    installer-v0.3.11.png
     controller-control.png
     connect-screen.png
     debug-screen.png
@@ -540,7 +542,7 @@ leave it out and say why in the paste-back; do not create an empty placeholder.
 - Date and timezone:
 - Tester handle:
 - Board: ESP32 model, flash size, USB port
-- Firmware: 0.3.5 (source: browser installer / GitHub release / pre-flashed)
+- Firmware: 0.3.11 (source: browser installer / GitHub release / pre-flashed)
 - Firmware evidence: installer screenshot / serial `v` / both
 - App: wmr-companion 0.3.17 unified (signed)
 - Phone/host: make, model, Android version
@@ -632,8 +634,9 @@ limit exceeded) and `0x13` (remote user terminated). Do not interpret them; send
 ### 10.4 PSVR2 Sense (device 4)
 
 - v0.3.3 and later search PSVR2 names by default. No build switch is needed.
-- PSVR2 is **raw-only**: FF11 carries `0xA1 0x31` frames up to 79 bytes. FF12/FF14 have no
-  PSVR2 decoder, and FF13 is not read for a PSVR2 hand.
+- On v0.3.11 PSVR2 decodes FF12/FF14: a 79-byte `A1 31` frame decodes to the same 56-byte
+  record as a WMR frame (host-tested only, never run on a PSVR2 controller). FF13 is not read
+  for a PSVR2 hand. FF11 still carries the raw `0xA1 0x31` frames.
 - The app's Capture screen writes only 46-byte WMR frames, so use the desktop
   `capture_ble.py` for PSVR2.
 - Record the exact pairing procedure you used, the `model PSVR2` line, the wake line, and the
@@ -661,7 +664,7 @@ limit exceeded) and `0x13` (remote user terminated). Do not interpret them; send
 | LED stays red | Check controller batteries; confirm pairing mode; check the serial log for discovery. | Send Tier 1. |
 | Board hot / smell / dark LED | Unplug immediately. | Stop; do not continue. |
 | Glasses show `unavailable`/`unsupported` | Record the exact status and model. | This is a valid result; move on. |
-| PSVR2 shows no 3D view | Expected: raw-only, no decoder. Use FF11 and the serial log. | Capture raw frames. |
+| PSVR2 shows no 3D view | Expected only if FF11 raw is used; v0.3.11 decodes FF12/FF14 for PSVR2 (host-tested). Use FF12/FF14 or capture raw FF11. | Capture raw frames. |
 
 **Do not:**
 
@@ -685,7 +688,7 @@ Keep the short block in the message; put the full manifest in `manifest.md`.
 
 - Handle:
 - Date/timezone:
-- Firmware: 0.3.5 (installer screenshot attached)
+- Firmware: 0.3.11 (installer screenshot attached)
 - App: 0.3.17 unified (signed)
 - Phone: make/model/Android
 - Controllers: make/model, LEFT/RIGHT
@@ -705,7 +708,7 @@ Keep the short block in the message; put the full manifest in `manifest.md`.
 - Run ID:
 - Device: phone / VITURE / XREAL / PSVR2 / other glasses
 - Result: PASS / PARTIAL / FAIL / BLOCKED / NOT RUN
-- Firmware: 0.3.5; serial `v` output:
+- Firmware: 0.3.11; serial `v` output:
 - App: version and source:
 - Host: make/model/Android:
 - Controllers/glasses: make/model:

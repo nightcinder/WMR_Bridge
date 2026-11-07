@@ -41,7 +41,7 @@
  * Header-only so the firmware and the host tests share one definition, and no extra
  * source file is added to the firmware build. The model is identified during discovery
  * (wmr_discovery.h); this file only answers "is this frame PSVR2 input?" and leaves the
- * payload parsing to the phone until a PSVR2 decoder exists. See docs/PSVR2.md.
+ * payload parsing to the PSVR2 decoder in wmr_decoded.c. See docs/PSVR2.md.
  */
 
 #ifndef WMR_PSVR2_H
@@ -49,7 +49,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "wmr_config.h"
+#include "wmr_codec.h"
 
 /* True if `frame` is a PSVR2 input report as delivered by the HID host: A1 header,
  * report ID 0x31, 77 payload bytes (79 total, WMR_PSVR2_INPUT_FRAME_MAX). The length is

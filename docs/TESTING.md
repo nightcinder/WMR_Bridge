@@ -11,7 +11,7 @@ it has.
 | --- | --- |
 | Firmware build, ESP-IDF v6.1, target esp32, `EXAMPLE=wmr_bridge` | Passed. No compiler warnings from `wmr_*` sources. `esp32-example.bin` 0x870d0 bytes (36 % of the app partition) |
 | `sdkconfig` unchanged by the build | Confirmed by byte comparison |
-| Host unit tests: `tests/run_tests.ps1` (built with `zig cc`, C99, `-Wall -Wextra -Wconversion`) | Passed: 6127 checks, 0 failures |
+| Host unit tests: `tests/run_tests.ps1` (built with `zig cc`, C99, `-Wall -Wextra -Wconversion`) | Passed: 6129 checks, 0 failures |
 
 The host tests cover (see `tests/test_protocol.c`):
 
@@ -115,6 +115,17 @@ This is the list CI runs (`host-tests`): one build and run per test, C99 with
 `-Wall -Wextra -Wconversion -Werror`. The `host-tests-sanitizers` job runs the
 same script with `-fsanitize=address,undefined -fno-sanitize-recover=all` and no
 suppression flags, so a buffer or UB finding fails the job.
+
+The pure-C codec modules (`wmr_decode`, `wmr_decoded`, `wmr_batch`, `wmr_protocol`
+and `wmr_hid`) are also built as an internal static library. The root
+`CMakeLists.txt` builds `libwmr_codec.a` and registers their tests with CTest:
+
+```sh
+cmake -B build && cmake --build build && ctest --test-dir build --output-on-failure
+```
+
+This target is for host tests only; it has no `install()` rule, shared library or
+pkg-config file, and the firmware build still comes from `tools/firmware/build.py`.
 
 `tests/run_tests.ps1` is the older Windows helper and covers the pure-C tests
 only. The BTstack-side tests (`tests/test_console.c`, `tests/test_cfgmgr.c`,

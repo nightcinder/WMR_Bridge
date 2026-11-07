@@ -41,8 +41,8 @@ contradicted this paragraph. It no longer does.
 | `drop` | Reports discarded because the queue was full, or the length was 0 or over `WMR_CFG_MAX_FRAME` (80) | Drop-newest: queued frames are kept |
 | `offline` | Reports received while no FF11/FF12/FF14 stream was active | Intentional, not an error. Since ONY-441 these reports may still have been sent through the HID gamepad |
 | `purged` | Frames that were queued, then discarded by a queue reset | See [RECONNECT_AND_QUEUE.md](RECONNECT_AND_QUEUE.md) |
-| `mtu_skip` | FF12 and FF14: reports discarded because the ATT MTU was below the stream's minimum (59 for FF12, 61 for FF14) | Zero on FF11. Intentional, not a queue problem |
-| `dec_err` | FF12 and FF14: queued frames that were not a valid 46-byte input report, discarded | Should stay 0 |
+| `mtu_skip` | FF12 and FF14: data discarded because the ATT MTU could not carry it. FF12: a frame when the MTU is below 59. FF14: a frame when the MTU is below 61, or the older records of a multi-record Switch frame that did not fit (all three need 173) | Zero on FF11. Intentional, not a queue problem |
+| `dec_err` | FF12 and FF14: queued frames that were not a valid 46-byte WMR, exactly-79-byte PSVR2 or exactly-50-byte Switch input report, discarded | Should stay 0 |
 | `decimated` | FF12 only: reports skipped on purpose by the diagnostic build option `WMR_CFG_FF12_DECIMATE` | Always 0 in the default build (`N=1`). Intentional, not a loss |
 | `batches_tx` | FF14 only, both hands together: batches accepted by `att_server_notify` | Handed to the BLE stack, not confirmed received. Cumulative since boot |
 | `records_in_batches` | FF14 only: valid records inside those batches | Equals the growth of `tx` summed over both hands while only FF14 streamed |
@@ -68,6 +68,11 @@ sum over hands of  rx  =  sum of (tx + drop + offline + purged + mtu_skip + dec_
 
 (`q` is the current queue depth.) This holds per hand if you could see the
 per-hand queue depth.
+
+A Switch hand breaks the frame arithmetic: one `0x30` frame counts once in `rx`
+but produces three records, so `tx` (and `mtu_skip`, when the notification could
+not hold them) grows three times as fast as `rx`. Count that hand's `rx` as
+three records when reconciling.
 
 On FF14 the identity is unchanged, but `tx` counts records, not notifications.
 One notification (one batch) carries up to 9 records, so `tx` grows much faster

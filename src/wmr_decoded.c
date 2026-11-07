@@ -41,6 +41,9 @@
 
 #include <string.h>
 #include "wmr_decoded.h"
+#include "wmr_controller_driver.h"
+#include "wmr_psvr2.h"
+#include "wmr_switch.h"
 
 static void put16(uint8_t *p, uint16_t v){
     p[0] = (uint8_t) (v & 0xFF);
@@ -167,9 +170,103 @@ bool wmr_decoded_decimate_keep(uint32_t sequence, unsigned n){
 }
 
 bool wmr_decoded_from_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]){
+    if (!frame || !out || frame->hand >= 2) return false;
+    const wmr_controller_driver_t *driver =
+        wmr_controller_driver_for_frame(frame->data, frame->length);
+    if (!driver || !driver->decode) return false;
+    return driver->decode(frame, out);
+}
+
+unsigned wmr_decoded_samples_from_frame(const wmr_frame_t *frame,
+                                        uint8_t out[][WMR_DECODED_SIZE], unsigned max){
+    if (!frame || !out || max == 0 || frame->hand >= 2) return 0;
+    const wmr_controller_driver_t *driver =
+        wmr_controller_driver_for_frame(frame->data, frame->length);
+    if (!driver) return 0;
+    if (driver->decode_samples) return driver->decode_samples(frame, out, max);
+    if (!driver->decode) return 0;
+    return driver->decode(frame, out[0]) ? 1 : 0;
+}
+
+bool wmr_decoded_from_switch_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]){
+    uint8_t records[WMR_DECODED_MAX_SAMPLES][WMR_DECODED_SIZE];
+    unsigned count = wmr_switch_decode_samples(frame, records, WMR_DECODED_MAX_SAMPLES);
+    if (!count) return false;
+    memcpy(out, records[count - 1], WMR_DECODED_SIZE);   /* newest sample */
+    return true;
+}
+
+/* ---- PSVR2 0x31 input report -------------------------------------------- */
+
+/* Offsets are into the frame as captured (frame[0] = 0xA1, frame[1] = report
+ * ID), so one is added to Monado's pssense_input_report offsets. The public
+ * layout and scales follow Monado's pssense driver:
+ *   src/xrt/drivers/pssense/pssense_driver.c (PSSENSE_GYRO_SCALE_DEG,
+ *   PSSENSE_ACCEL_SCALE). See docs/PSVR2.md. */
+#define PSVR2_OFF_STICK_X       3
+#define PSVR2_OFF_STICK_Y       4
+#define PSVR2_OFF_TRIGGER       5
+#define PSVR2_OFF_BUTTONS       10      /* 3 bytes */
+#define PSVR2_OFF_GYRO          18      /* 3 x i16 LE */
+#define PSVR2_OFF_ACCEL         24      /* 3 x i16 LE */
+#define PSVR2_OFF_IMU_TICKS     30      /* u32 LE */
+#define PSVR2_OFF_TEMPERATURE   34
+#define PSVR2_OFF_BATTERY       44      /* raw: high nibble charge state, low nibble level */
+
+/* 180/1024 degrees per raw count, converted to rad/s: pi/1024. */
+static const float psvr2_gyro_scale = 3.14159265358979323846f / 1024.0f;
+/* +-32768 counts covers +-8 g. */
+static const float psvr2_accel_scale = 9.80665f / 4096.0f;
+/* Monado treats one IMU tick as 333 ns; device_ticks is in 100 ns units. */
+static uint32_t psvr2_ticks_to_100ns(uint32_t ticks){
+    return (uint32_t) (((uint64_t) ticks * 333u) / 100u);
+}
+
+static int16_t get_s16(const uint8_t *p){
+    return (int16_t) get16(p);
+}
+
+bool wmr_decoded_from_psvr2_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]){
+    if (!frame || !out || frame->hand >= 2 ||
+        frame->length != WMR_PSVR2_INPUT_FRAME_MAX) return false;
+    if (!wmr_psvr2_is_input_report(frame->data, frame->length)) return false;
+
+    const uint8_t *f = frame->data;
+    wmr_decoded_t record;
+    memset(&record, 0, sizeof(record));
+    record.hand = frame->hand;
+    record.sequence = frame->sequence;
+    record.rx_time_us = frame->rx_time_us;
+    record.device_ticks = psvr2_ticks_to_100ns(get32(f + PSVR2_OFF_IMU_TICKS));
+    for (unsigned i = 0; i < 3; i++){
+        record.gyro[i] = (float) get_s16(f + PSVR2_OFF_GYRO + 2 * i) * psvr2_gyro_scale;
+        record.accel[i] = (float) get_s16(f + PSVR2_OFF_ACCEL + 2 * i) * psvr2_accel_scale;
+    }
+    record.temperature_raw = (int16_t) f[PSVR2_OFF_TEMPERATURE];
+    record.stick[0] = to_q15(((float) f[PSVR2_OFF_STICK_X] - 128.0f) / 128.0f);
+    record.stick[1] = to_q15((128.0f - (float) f[PSVR2_OFF_STICK_Y]) / 128.0f);
+    record.trigger = f[PSVR2_OFF_TRIGGER];
+    record.battery = f[PSVR2_OFF_BATTERY];
+
+    /* The WMR button byte cannot carry every PSVR2 face button or capacitive
+     * touch. Map the shared controls; the rest stay clear. */
+    uint8_t b0 = f[PSVR2_OFF_BUTTONS];
+    uint8_t b1 = f[PSVR2_OFF_BUTTONS + 1];
+    if (b1 & 0x10) record.buttons |= WMR_BTN_HOME;                       /* PS */
+    if (b1 & 0x03) record.buttons |= WMR_BTN_MENU;                       /* Share/Options */
+    if (b0 & (frame->hand == WMR_HAND_LEFT ? 0x10 : 0x20))
+        record.buttons |= WMR_BTN_SQUEEZE;                               /* L1/R1 grip */
+    if (b1 & (frame->hand == WMR_HAND_LEFT ? 0x04 : 0x08))
+        record.buttons |= WMR_BTN_THUMBSTICK_CLICK;                      /* L3/R3 */
+
+    wmr_decoded_pack(&record, out);
+    return true;
+}
+
+bool wmr_decoded_from_wmr_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]){
     wmr_controller_state_t state;
     wmr_decoded_t record;
-    if (!frame || frame->hand >= 2) return false;
+    if (!frame || !out || frame->hand >= 2) return false;
     if (!wmr_decode_frame(frame->data, frame->length, &state)) return false;
     wmr_decoded_from_state(&record, &state, frame->hand, frame->sequence, frame->rx_time_us);
     wmr_decoded_pack(&record, out);

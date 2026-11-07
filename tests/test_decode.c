@@ -3,6 +3,8 @@
 #include <string.h>
 #include <math.h>
 #include "wmr_decode.h"
+#include "wmr_decoded.h"
+#include "wmr_psvr2.h"
 
 static int checks, failures;
 
@@ -409,6 +411,98 @@ static void test_samples(const char *path){
     CHECK(n >= 2);
 }
 
+/* PSVR2 0x31 frames decode through the driver table into the same FF12 record.
+ * Offsets and scales follow Monado's pssense driver (docs/PSVR2.md). */
+static void psvr2_put16(uint8_t *p, int16_t v){
+    p[0] = (uint8_t) ((uint16_t) v & 0xFF);
+    p[1] = (uint8_t) ((uint16_t) v >> 8);
+}
+
+static void psvr2_put32(uint8_t *p, uint32_t v){
+    for (unsigned i = 0; i < 4; i++) p[i] = (uint8_t) (v >> (8 * i));
+}
+
+static void psvr2_frame(uint8_t *f, uint8_t hand){
+    memset(f, 0, WMR_PSVR2_INPUT_FRAME_MAX);
+    f[0] = WMR_PSVR2_HID_HEADER;
+    f[1] = WMR_PSVR2_INPUT_REPORT_ID;
+    f[2] = 0x01;                          /* BT header/counter */
+    f[3] = 192;                           /* stick x: +0.5 */
+    f[4] = 64;                            /* stick y: +0.5 (byte 0 is up) */
+    f[5] = 200;                           /* trigger */
+    f[10] = (uint8_t) (hand == WMR_HAND_LEFT ? 0x10 : 0x20);   /* L1/R1 grip */
+    f[11] = (uint8_t) (0x10 | (hand == WMR_HAND_LEFT ? 0x01 | 0x04 : 0x02 | 0x08));
+    psvr2_put16(f + 18, 1024);            /* gyro x: +pi rad/s */
+    psvr2_put16(f + 20, -2048);           /* gyro y: -2*pi rad/s */
+    psvr2_put16(f + 22, 0);
+    psvr2_put16(f + 24, 4096);            /* accel x: +9.80665 m/s^2 */
+    psvr2_put16(f + 26, -4096);
+    psvr2_put16(f + 28, 2048);
+    psvr2_put32(f + 30, 1000);            /* IMU ticks: 333 ns each */
+    f[34] = 42;                           /* temperature */
+    f[44] = 0x65;                         /* battery state byte */
+}
+
+static void test_psvr2_decode(void){
+    printf("PSVR2 0x31 frame decodes into an FF12 record\n");
+    uint8_t f[WMR_PSVR2_INPUT_FRAME_MAX];
+    psvr2_frame(f, WMR_HAND_LEFT);
+    wmr_frame_t frame;
+    memset(&frame, 0, sizeof(frame));
+    frame.hand = WMR_HAND_LEFT;
+    frame.sequence = 123;
+    frame.rx_time_us = 456789;
+    frame.length = sizeof(f);
+    memcpy(frame.data, f, sizeof(f));
+
+    uint8_t record[WMR_DECODED_SIZE];
+    CHECK(wmr_decoded_from_frame(&frame, record));
+    wmr_decoded_t d;
+    CHECK(wmr_decoded_unpack(record, sizeof(record), &d));
+    CHECK(d.hand == WMR_HAND_LEFT && d.sequence == 123 && d.rx_time_us == 456789);
+    CHECK(d.flags == 0);
+    CHECK(d.buttons == (WMR_BTN_HOME | WMR_BTN_MENU | WMR_BTN_SQUEEZE | WMR_BTN_THUMBSTICK_CLICK));
+    CHECK(d.stick[0] == 16384 && d.stick[1] == 16384);
+    CHECK(d.trigger == 200 && d.battery == 0x65 && d.temperature_raw == 42);
+    CHECK(near(d.gyro[0], 3.14159265f, 1e-5f));
+    CHECK(near(d.gyro[1], -6.28318531f, 1e-5f));
+    CHECK(near(d.gyro[2], 0.0f, 1e-6f));
+    CHECK(near(d.accel[0], 9.80665f, 1e-4f));
+    CHECK(near(d.accel[1], -9.80665f, 1e-4f));
+    CHECK(near(d.accel[2], 4.903325f, 1e-4f));
+    CHECK(d.device_ticks == 3330);        /* 1000 * 333 ns = 3330 * 100 ns */
+    CHECK(d.trackpad[0] == 0 && d.trackpad[1] == 0);
+
+    /* The grip and stick-click bits follow the hand's button byte. */
+    psvr2_frame(f, WMR_HAND_RIGHT);
+    frame.hand = WMR_HAND_RIGHT;
+    frame.sequence = 124;
+    memcpy(frame.data, f, sizeof(f));
+    CHECK(wmr_decoded_from_frame(&frame, record));
+    CHECK(wmr_decoded_unpack(record, sizeof(record), &d));
+    CHECK(d.buttons == (WMR_BTN_HOME | WMR_BTN_MENU | WMR_BTN_SQUEEZE | WMR_BTN_THUMBSTICK_CLICK));
+
+    /* Shape and report-ID checks. */
+    frame.hand = WMR_HAND_LEFT;
+    frame.length = WMR_PSVR2_INPUT_FRAME_MAX - 1;
+    CHECK(!wmr_decoded_from_frame(&frame, record));
+    psvr2_frame(frame.data, WMR_HAND_LEFT);
+    frame.length = WMR_PSVR2_INPUT_FRAME_MAX;
+    frame.data[0] = 0xA2;
+    CHECK(!wmr_decoded_from_frame(&frame, record));
+    psvr2_frame(frame.data, WMR_HAND_LEFT);
+    frame.data[1] = WMR_DECODE_REPORT_ID;                 /* a WMR ID in a 79-byte frame */
+    CHECK(!wmr_decoded_from_frame(&frame, record));
+    psvr2_frame(frame.data, WMR_HAND_LEFT);
+    frame.hand = 2;
+    CHECK(!wmr_decoded_from_frame(&frame, record));
+    frame.hand = WMR_HAND_LEFT;
+    CHECK(!wmr_decoded_from_frame(&frame, NULL));
+    CHECK(!wmr_decoded_from_frame(NULL, record));
+    CHECK(!wmr_decoded_from_psvr2_frame(&frame, NULL));
+    CHECK(!wmr_decoded_from_psvr2_frame(NULL, record));
+}
+
 int main(int argc, char **argv){
     test_synthetic();
     test_battery_temperature();
@@ -418,6 +512,7 @@ int main(int argc, char **argv){
     test_rejects();
     test_is_wmr();
     test_ticks();
+    test_psvr2_decode();
     if (argc > 1) test_samples(argv[1]);
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

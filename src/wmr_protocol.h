@@ -47,7 +47,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "wmr_config.h"
+#include "wmr_codec.h"
 
 /* One controller frame as captured (A1, report ID, payload...). */
 typedef struct {
