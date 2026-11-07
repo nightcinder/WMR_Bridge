@@ -20,6 +20,9 @@ The full design, wire protocol, security notes, setup steps and hardware test
 plan are in [`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md). The bring-up run sheet
 is [`docs/runs/sheets/pi-bridge.md`](../docs/runs/sheets/pi-bridge.md).
 
+New to the Pi? Read the simple-English beginner guide:
+[`docs/RPI_INSTALL_GUIDE.md`](../docs/RPI_INSTALL_GUIDE.md).
+
 ## Quick start (replay, no controllers)
 
 ```bash
