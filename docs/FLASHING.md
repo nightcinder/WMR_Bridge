@@ -80,6 +80,7 @@ environment are needed. The script itself is standard-library Python 3.8+.
 | `manifest.json` | [ESP Web Tools](https://esphome.github.io/esp-web-tools/) manifest, one merged part at offset 0. |
 | `build-info.json` | Variant, flag values, source commit, dirty flag, BTstack commit, ESP-IDF version, build time, flash settings. |
 | `index.html` | The browser installer page. |
+| `pi.html` | The Raspberry Pi setup page: flash the OS, run the one-line install, pair the controllers. |
 
 The `both` build keeps those exact names. `--variant left` and `--variant right`
 insert the variant before the role and in the manifest/build-info names:
@@ -177,8 +178,9 @@ over USB, clicks the install button for the image they want (Both hands, LEFT or
 RIGHT), and picks the serial port. The browser writes that variant's merged
 image. There is no ESP-IDF, Arduino IDE or Python install.
 
-The source page lives in `docs/flasher/index.html` and is copied into `dist/`
-by the build script. It loads `manifest.json` / `manifest-left.json` /
+The source pages live in `docs/flasher/` and are copied into `dist/` by the
+build script: `index.html` is the ESP32 flasher and `pi.html` is the Raspberry
+Pi setup page. The flasher loads `manifest.json` / `manifest-left.json` /
 `manifest-right.json` plus the matching `wmr-bridge*-factory.bin` files from the
 same directory. `build-info*.json` is optional and only fills in the version
 labels.
@@ -186,8 +188,9 @@ labels.
 ### Hosting
 
 The installer is live at <https://nightcinder.github.io/WMR_Bridge/>, serving
-the latest tagged release's images (all three variants). The `v0.3.11` tag
-publishes the 0.3.11 images to that page.
+the latest tagged release's images (all three variants). The same workflow
+copies `pi.html` and the release `install.sh` beside the images. The `v0.3.11`
+tag publishes the 0.3.11 images to that page.
 
 `.github/workflows/firmware.yml` deploys `dist/` to GitHub Pages on a `v*`
 tag. This keeps the manifest and the images same-origin, which the browser

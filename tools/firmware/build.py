@@ -12,7 +12,7 @@ reason flashing is awkward. This script does the same steps reproducibly:
   4. run `idf.py build` with EXAMPLE=wmr_bridge (and the variant's
      EXTRA_CFLAGS for --variant left|right),
   5. copy the images and a merged factory image to <repo>/dist, together with
-     the ESP Web Tools manifest and the browser flasher page,
+     the ESP Web Tools manifest and the browser flasher pages,
   6. optionally run `idf.py flash` against a serial port.
 
 `--variant both|left|right` builds the default both-hands image or a
@@ -427,6 +427,26 @@ def build_env(variant="both", base_env=None):
     return env
 
 
+def copy_flasher_pages(out, source_dir=None):
+    """Copy every browser page next to the firmware images.
+
+    The Pages artifact is the build output directory, so a new page in
+    docs/flasher/ ships by being there; index.html and pi.html must not be
+    listed one by one or the second page is silently forgotten.
+    """
+    source = Path(source_dir) if source_dir else REPO_ROOT / "docs" / "flasher"
+    out = Path(out)
+    copied = []
+    for page in sorted(source.glob("*.html")):
+        shutil.copyfile(page, out / page.name)
+        copied.append(page.name)
+        log("copied the browser page %s to %s" % (page.name, out / page.name))
+    if not copied:
+        log("warning: %s has no HTML pages; no browser pages in the output"
+            % source)
+    return copied
+
+
 def package_outputs(artifacts, out, version, repo_commit, repo_dirty,
                     btstack_commit, idf_ver, port_dir, build_dir, env,
                     variant="both"):
@@ -465,12 +485,7 @@ def package_outputs(artifacts, out, version, repo_commit, repo_dirty,
     )
     fwpackage.write_json(out / names["build_info"], info)
 
-    flasher = REPO_ROOT / "docs" / "flasher" / "index.html"
-    if flasher.is_file():
-        shutil.copyfile(flasher, out / "index.html")
-        log("copied the browser flasher page to %s" % (out / "index.html"))
-    else:
-        log("warning: %s is missing; no browser flasher page in the output" % flasher)
+    copy_flasher_pages(out)
 
 
 def maybe_reexec_with_idf(export_path):
@@ -612,7 +627,7 @@ def main():
     names = fwpackage.artifact_names(args.variant)
     log("done. Artifacts in %s" % out)
     for name in (names["factory"], names["manifest"], names["build_info"],
-                 size_report_name(args.variant), "index.html"):
+                 size_report_name(args.variant), "index.html", "pi.html"):
         path = out / name
         if path.is_file():
             log("  %-36s %8.1f KiB" % (name, path.stat().st_size / 1024.0))

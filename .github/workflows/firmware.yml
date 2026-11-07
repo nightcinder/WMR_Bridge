@@ -54,6 +54,52 @@ jobs:
       - name: List artifacts
         run: ls -lh dist
 
+      # The firmware output directory is also the Pages site. Stage what the
+      # tag-time deploy publishes and assert the payload here, so the artifact
+      # and its cross-links are verified on every PR instead of only on a tag.
+      - name: Check the Pages payload
+        run: |
+          set -eu
+          cp docs/flasher/index.html dist/index.html
+          cp docs/flasher/pi.html dist/pi.html
+          cp pi/install.sh dist/install.sh
+          test -s dist/index.html
+          test -s dist/pi.html
+          test -s dist/install.sh
+          python3 - <<'PY'
+          import re, sys
+          from pathlib import Path
+          root = Path("dist")
+          for page in ("index.html", "pi.html"):
+              html = (root / page).read_text(encoding="utf-8")
+              for href in re.findall(r'href="(\./[^"#?]+)"', html):
+                  if not (root / href[2:]).is_file():
+                      sys.exit("%s links to missing %s" % (page, href))
+          print("Pages payload OK: index.html, pi.html, install.sh")
+          PY
+
+      # Package the payload with the same action the tag-time deploy uses, then
+      # unpack it and assert the tar that deploy-pages downloads. The only step
+      # left to a tag is the deploy call itself, which needs no PR input.
+      - name: Build the Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+      - name: Download the Pages artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: github-pages
+          path: pages-artifact
+
+      - name: Verify the Pages artifact
+        run: |
+          set -eu
+          tar -tf pages-artifact/artifact.tar | sed 's|^\./||' | sort
+          for f in index.html pi.html install.sh; do
+            tar -tf pages-artifact/artifact.tar | sed 's|^\./||' | grep -qx "$f"
+          done
+
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -231,17 +277,32 @@ jobs:
     needs: build-liesa
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v7
+
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
           name: firmware
           path: dist
+
+      # The Pages site is the firmware output directory, so both setup pages
+      # and the installer the Pi page links to must be in dist before upload.
+      - name: Add the Pi setup page and installer
+        run: |
+          set -eu
+          cp docs/flasher/index.html dist/index.html
+          cp docs/flasher/pi.html dist/pi.html
+          cp pi/install.sh dist/install.sh
+          test -s dist/index.html
+          test -s dist/pi.html
+          test -s dist/install.sh
 
       - name: Configure Pages
         uses: actions/configure-pages@v6

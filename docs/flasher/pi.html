@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up WMR Bridge on a Raspberry Pi</title>
+<meta name="description" content="Three steps from a blank SD card to a working WMR Bridge on a Raspberry Pi: flash the OS, run one install command, pair the controllers.">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101318;
+    --panel: #181d25;
+    --line: #2b3341;
+    --text: #e6ebf2;
+    --muted: #9aa7b8;
+    --accent: #58a6ff;
+    --warn: #ffcc66;
+    --danger: #ff7b72;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 40px 20px 64px; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 1.15rem; margin: 0 0 10px; }
+  p, li { color: var(--muted); }
+  strong { color: var(--text); }
+  a { color: var(--accent); }
+  code { color: var(--text); background: #0b0e13; padding: 1px 5px; border-radius: 4px; }
+  .version { margin: 0 0 24px; font-size: 0.9rem; }
+  .nav { margin: 0 0 24px; font-size: 0.9rem; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px;
+    margin: 20px 0;
+  }
+  .step-number {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .note { color: var(--text); }
+  .warn { color: var(--warn); }
+  ol, ul { padding-left: 22px; }
+  li + li { margin-top: 8px; }
+  .cmd {
+    position: relative;
+    margin: 14px 0;
+    background: #0b0e13;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 92px 12px 12px;
+  }
+  .cmd pre {
+    margin: 0;
+    overflow-x: auto;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .cmd code { background: none; padding: 0; }
+  .copy {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font: inherit;
+    font-size: 0.8rem;
+    color: var(--text);
+    background: #232b36;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+  .copy:hover { border-color: var(--accent); }
+  .copy[data-state="ok"] { color: #7ee787; border-color: #2ea043; }
+  .copy[data-state="bad"] { color: var(--danger); border-color: #da3633; }
+  .footer { margin-top: 40px; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Set up WMR Bridge on a Raspberry Pi</h1>
+  <p class="version">
+    Three steps from a blank SD card to controllers streaming over Wi-Fi.
+  </p>
+  <p class="nav">
+    Flashing an ESP32 board instead?
+    <a href="./index.html">Open the browser flasher</a>.
+  </p>
+
+  <div class="panel">
+    <p>
+      WMR Bridge reads your Windows Mixed Reality controllers over Bluetooth and
+      sends their data to your phone or PC over 5 GHz Wi-Fi. You need a
+      <strong>Raspberry Pi 3 Model B+</strong>, <strong>Pi 4</strong> or
+      <strong>Pi 5</strong>, a microSD card, and the matching power supply.
+    </p>
+    <p class="warn">
+      A Pi Zero 2 W does not work: its Wi-Fi is 2.4 GHz only, the same band
+      Bluetooth uses.
+    </p>
+  </div>
+
+  <section class="panel">
+    <h2><span class="step-number">Step 1</span>Flash Raspberry Pi OS Lite</h2>
+    <p>
+      Use <strong>Raspberry Pi Imager</strong> to write
+      <strong>Raspberry Pi OS Lite (64-bit)</strong>. The 64-bit image is
+      required; the 32-bit one prints <code>armv7l</code> instead of
+      <code>aarch64</code>.
+    </p>
+    <ol>
+      <li>Choose <strong>Device</strong>: your board. For a 3B+ pick
+        <code>Raspberry Pi 3</code>.</li>
+      <li>Choose <strong>OS</strong>: <code>Raspberry Pi OS (other)</code>, then
+        <code>Raspberry Pi OS Lite (64-bit)</code>.</li>
+      <li>Choose <strong>Storage</strong>: your microSD card.</li>
+      <li>Click <strong>Next</strong>, then <strong>Edit Settings</strong>:
+        set a hostname (for example <code>wmr-pi</code>), a username and
+        password, your <strong>5 GHz</strong> Wi-Fi network and country, and
+        enable <strong>SSH</strong>.</li>
+      <li>Save the settings, write the card, put it in the Pi and power it on.
+        Wait 1 to 2 minutes.</li>
+    </ol>
+    <p>
+      The Pi and your phone or PC must both use the <strong>5 GHz band</strong>.
+      Run <code>iw dev wlan0 link</code> after you log in and look for
+      <code>freq: 5xxx</code>. If it shows <code>24xx</code>, reconnect to your
+      5 GHz network first.
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2><span class="step-number">Step 2</span>Install WMR Bridge</h2>
+    <p>
+      SSH into the Pi, then run this one command. It downloads the latest
+      release package, checks it against the release checksums, installs it and
+      starts the service.
+    </p>
+    <div class="cmd">
+      <pre><code id="install-cmd">curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash</code></pre>
+      <button class="copy" type="button" data-copy-target="install-cmd">Copy</button>
+    </div>
+    <p>
+      The command needs <code>apt-get</code>, which stock Raspberry Pi OS has.
+      The installer also turns off Wi-Fi power saving; reboot once
+      (<code>sudo reboot</code>) so that setting takes effect.
+    </p>
+    <p>
+      Check the install after the reboot:
+    </p>
+    <div class="cmd">
+      <pre><code id="check-cmd">wmr-bridge --version
+systemctl is-active wmr-bridge</code></pre>
+      <button class="copy" type="button" data-copy-target="check-cmd">Copy</button>
+    </div>
+    <p>
+      Or <a href="./install.sh" download>download <code>install.sh</code></a>
+      from this page and run it on the Pi.
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2><span class="step-number">Step 3</span>Pair your controllers</h2>
+    <p>
+      Start the Bluetooth tool, scan, then pair, trust and connect each
+      controller. Hold the <strong>Windows button</strong> under the battery
+      cover or on the grip until the LEDs pulse slowly to put a controller in
+      pairing mode.
+    </p>
+    <div class="cmd">
+      <pre><code id="pair-cmd">bluetoothctl
+[bluetooth]# scan on
+[bluetooth]# pair AA:BB:CC:DD:EE:01
+[bluetooth]# trust AA:BB:CC:DD:EE:01
+[bluetooth]# connect AA:BB:CC:DD:EE:01
+[bluetooth]# scan off
+[bluetooth]# exit</code></pre>
+      <button class="copy" type="button" data-copy-target="pair-cmd">Copy</button>
+    </div>
+    <p>
+      Replace the example address with the one from your scan output, and repeat
+      for the other controller. Then confirm both were found:
+    </p>
+    <div class="cmd">
+      <pre><code id="verify-cmd">cat /sys/class/hidraw/hidraw*/device/uevent | grep -E 'HID_NAME|HID_UNIQ'</code></pre>
+      <button class="copy" type="button" data-copy-target="verify-cmd">Copy</button>
+    </div>
+    <p>
+      You should see <code>Motion controller - Left</code> and
+      <code>Motion controller - Right</code>. Restart the bridge so it sees both
+      controllers: <code>sudo systemctl restart wmr-bridge</code>.
+    </p>
+  </section>
+
+  <div class="panel">
+    <p>
+      <strong>Read this before using it.</strong> WMR Bridge is experimental
+      test software, not a finished product. See the
+      <a href="https://github.com/nightcinder/WMR_Bridge/blob/main/docs/SECURITY.md">security notes</a>
+      before you send controller data over Wi-Fi.
+    </p>
+  </div>
+
+  <p class="footer">
+    Need the full walkthrough, troubleshooting or the pinned image hashes? Read
+    the <a href="https://github.com/nightcinder/WMR_Bridge/blob/main/docs/RPI_INSTALL_GUIDE.md">Raspberry Pi install guide</a>.
+    <br>
+    <a href="./index.html">Flash an ESP32 instead</a>
+    &middot;
+    <a href="https://github.com/nightcinder/WMR_Bridge">WMR_Bridge on GitHub</a>
+  </p>
+</main>
+<script>
+  (function () {
+    "use strict";
+
+    function legacyCopy(text) {
+      var area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      var copied = false;
+      try {
+        copied = document.execCommand("copy");
+      } catch (err) {
+        copied = false;
+      }
+      document.body.removeChild(area);
+      return copied;
+    }
+
+    Array.prototype.forEach.call(
+      document.querySelectorAll("[data-copy-target]"),
+      function (button) {
+        button.addEventListener("click", function () {
+          var target = document.getElementById(button.getAttribute("data-copy-target"));
+          if (!target) return;
+          var text = target.textContent.trim();
+          var label = button.textContent;
+          function report(ok) {
+            button.textContent = ok ? "Copied" : "Copy failed";
+            button.setAttribute("data-state", ok ? "ok" : "bad");
+            setTimeout(function () {
+              button.textContent = label;
+              button.removeAttribute("data-state");
+            }, 2000);
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () {
+              report(true);
+            }, function () {
+              report(legacyCopy(text));
+            });
+          } else {
+            report(legacyCopy(text));
+          }
+        });
+      }
+    );
+  })();
+</script>
+</body>
+</html>
