@@ -1,5 +1,8 @@
 # Deploying WMR Bridge to a Raspberry Pi
 
+New to the Pi? Read the simple-English beginner guide first:
+[Raspberry Pi install guide](RPI_INSTALL_GUIDE.md).
+
 The Pi host bridge runs under stock Raspberry Pi OS Lite and carries WMR
 controllers over Classic Bluetooth to a phone or PC by WebSocket over 5 GHz
 Wi-Fi. Supported boards: Pi 3B+, Pi 4 Model B, Pi 5. Pi Zero 2 W is not
