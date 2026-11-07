@@ -49,7 +49,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "wmr_config.h"
+#include "wmr_codec.h"
 
 /* True if `frame` is a PSVR2 input report as delivered by the HID host: A1 header,
  * report ID 0x31, 77 payload bytes (79 total, WMR_PSVR2_INPUT_FRAME_MAX). The length is

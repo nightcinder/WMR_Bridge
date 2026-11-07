@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "wmr_config.h"
 #include "wmr_protocol.h"
 #include "wmr_queue.h"
 #include "wmr_decoded.h"

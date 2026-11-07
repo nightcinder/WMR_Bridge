@@ -27,6 +27,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build and run host C tests
         run: ./tests/run_c_tests.sh
+      - name: Build the wmr_codec target and run ctest
+        run: cmake -B build && cmake --build build && ctest --test-dir build --output-on-failure
       - name: Run capture/analysis script tests
         run: python3 tests/test_analyze_capture.py
       - name: Run tester-bundle triage tests

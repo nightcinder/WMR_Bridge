@@ -46,6 +46,7 @@
 #define WMR_QUEUE_H
 
 #include <stdbool.h>
+#include "wmr_config.h"
 #include "wmr_protocol.h"
 
 typedef struct {
