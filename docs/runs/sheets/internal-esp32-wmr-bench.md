@@ -194,10 +194,15 @@ connection parameters?
   no other BLE app running.
 - Fresh connection per run; one client connected at a time.
 
-### 3.2 Main blocks — 12 runs, interleaved
+### 3.2 Main blocks — 12 runs (9 with the Companion `none` runs skipped)
 
 Each run is **120 s** at **250 ms** ping interval. Do not run all app runs and
 then all probe runs; follow this order.
+
+**Skip the Companion `none` runs.** The app's `none` latency mode is known
+broken (ONY-980): runs 1, 6 and 9 do not record properly, so skip them. The
+verdict uses the FF14 pair only; the probe `none` runs stay as optional RTT
+context.
 
 | Block | # | Client | Stream |
 |---|---|---|---|
@@ -245,8 +250,9 @@ percentiles are coarse. That is expected, not a failure.
 
 ### 3.4 Session 2
 
-Repeat **all 18 runs** on another power-up (ideally another day), at the same
-taped position, with the same bridge/app/probe builds. If the rig is rebuilt,
+Repeat the same **15 runs** on another power-up (ideally another day), at the
+same taped position, with the same bridge/app/probe builds — the 18-run list
+minus Companion `none` runs 1, 6 and 9. If the rig is rebuilt,
 that is a new position and the sessions cannot be paired. If the two sessions
 disagree, the result is **not shown**; repeat rather than choosing a session.
 
@@ -396,8 +402,12 @@ Run sheet context: [`single-esp32-levers.md`](single-esp32-levers.md) §3.
 
 **Question:** does RIGHT's ~10.8 % loss alone follow the physical controller,
 the table position, or the firmware RIGHT hand slot? This block needs no
-reflash. Phase 3 (address swap) and the V1/30 ms/hold-2 lever images are **out
-of scope**; they need custom builds.
+reflash. Phase 3 (address swap) is **not needed for this sitting**; run it only
+if phases 1–2 do not separate the controller from the position — the condition
+in [`single-esp32-levers.md`](single-esp32-levers.md) §3 and
+[`right-asymmetry.md`](right-asymmetry.md) §5. The V1 stagger, 30 ms interval
+and two-interval FF14 hold were tested by the owner (ONY-980) and are **out of
+scope** here.
 
 ### 8.1 Isolation rule
 
@@ -474,7 +484,7 @@ Phone: <model>, Android <version>; STREAM bridge_hands=<0|1>; position <distance
 A latency-2 session <1|2>: position=<...> photo=<...>
   run 1 App none:  mtu=  conn=  rssi=  p50=  stalls L/R=  file=
   run 2 Probe none: ...
-  ... 18 rows ...
+  ... 15 rows (App `none` rows marked skipped) ...
   session outcome: <Stay / Move / In between / not shown>
 
 B1 FF16: app="<...>" bits="<...>" console v="<...>" reconnect="<...>"  -> PASS/FAIL
@@ -499,11 +509,16 @@ A check with no figures is `not run`, even if it "seemed fine".
 
 ## 11. What this runbook deliberately does not cover
 
-- **Phase 3 of Sitting R** (physical RIGHT in the LEFT hand slot) needs the
-  address-override build; it is a separate reflash.
-- **V1 stagger, 30 ms interval request and the two-interval FF14 hold** need the
-  ONY-176/ONY-476 images built with `EXTRA_CFLAGS`; see
-  [`single-esp32-levers.md`](single-esp32-levers.md) §2 and §4.
+- **Phase 3 of Sitting R** (physical RIGHT in the LEFT hand slot) is not needed
+  for this sitting; it is the conditional hand-slot swap in
+  [`right-asymmetry.md`](right-asymmetry.md) §5 and is skipped unless phases 1–2
+  do not separate the controller from the position.
+- **V1 stagger, 30 ms interval request and the two-interval FF14 hold** were
+  tested by the owner (report on ONY-980, 2026-11-07) and are not re-benched
+  here; see [`single-esp32-levers.md`](single-esp32-levers.md) §2 and §4 for the
+  lever definitions. The lever sheet §6, `STATUS.md` and `PREDICTION.md` still
+  list them as not run and carry no figures, so this sheet makes no measurement
+  claim for them.
 - **The Pi Wi-Fi bridge** (Sitting P) needs a Raspberry Pi and is a separate
   sheet.
 - **PSVR2 and glasses runtimes** are external-tester coverage; this sitting is
