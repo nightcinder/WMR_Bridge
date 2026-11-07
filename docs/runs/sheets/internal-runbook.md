@@ -41,7 +41,7 @@ Do not start with the glasses. Pairing is the gate for every other device.
 | VITURE Pro Neckband + glasses | device 2 | Optional. The Neckband is an Android host; the glasses are the display. |
 | XREAL glasses + Beam Pro (or S24/S25-class phone) | device 3 | Optional. Air 2 Ultra is the only XREAL model with hand tracking; other models are display/3DoF only. |
 | PSVR2 Sense controllers | device 4 | Optional. v0.3.11 decodes PSVR2 FF12/FF14 (host-tested only; never run on a PSVR2 controller). See §10.4. |
-| Nintendo Switch Joy-Con (L)/(R) or Pro Controller | device 6 | Optional. Supported in v0.3.11 but hardware-untested; discovery and `0x30` decode are host-tested only (GitHub #145). |
+| Nintendo Switch Joy-Con (L)/(R) or Pro Controller | not numbered | Optional. Supported in v0.3.11 but hardware-untested; discovery and `0x30` decode are host-tested only (GitHub #145). No runbook steps exist for Switch yet. |
 | Other glasses | device 5 | Optional. Display-only; no tracking claim. |
 | A private room | everything | The phone link uses LESC bonding in 0.3.11, but controller links are unauthenticated. Pair in a private room. |
 

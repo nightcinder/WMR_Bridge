@@ -5,7 +5,7 @@
 
 Scope: the checks that need only the owner's phone and one ESP32 running the packaged **0.3.11**
 image (`v0.3.11` release, or a CI build of the same commit) and the **wmr-companion 0.2.2** APK.
-This is the ONY-439 campaign retargeted to 0.3.11 (ONY-930). The earlier 0.3.0 retarget (ONY-482)
+This is the ONY-439 campaign retargeted to 0.3.11 (ONY-972). The earlier 0.3.5 retarget (ONY-930)
 is history. The 0.2.4 sitting is kept as prior evidence in §10. One sitting, no reflash during it.
 
 The release pass has four checks:
