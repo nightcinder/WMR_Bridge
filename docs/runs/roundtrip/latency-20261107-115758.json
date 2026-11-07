@@ -1,0 +1,117 @@
+{
+  "format": "wmr-latency",
+  "version": 2,
+  "source": "wmr-gatt-probe (native Android)",
+  "started": "2026-11-07T16:55:58.108067Z",
+  "stream": "batched",
+  "duration_us": 120439197,
+  "round_trip": {
+    "measured": true,
+    "source": "FF15 echo",
+    "sent": 120,
+    "answered": 120,
+    "timeouts": 0,
+    "failed_writes": 0,
+    "rtt": {
+      "count": 120,
+      "min_us": 41543,
+      "p50_us": 59852,
+      "p90_us": 80787,
+      "p95_us": 87316,
+      "p99_us": 118630,
+      "max_us": 141276
+    },
+    "end_to_end": {
+      "count": 120,
+      "min_us": 41910,
+      "p50_us": 60212,
+      "p90_us": 81150,
+      "p95_us": 87715,
+      "p99_us": 118997,
+      "max_us": 141703
+    },
+    "turnaround": {
+      "count": 120,
+      "min_us": 350,
+      "p50_us": 367,
+      "p90_us": 403,
+      "p95_us": 407,
+      "p99_us": 422,
+      "max_us": 427
+    },
+    "max_queue_depth": 0,
+    "counters": {
+      "late_or_duplicate_answers": 0,
+      "bad_answers": 0,
+      "pings_skipped_busy": 0
+    },
+    "ping_interval_us": 1000000
+  },
+  "link": {
+    "mtu": 517,
+    "rssi_start_dbm": -80,
+    "rssi_end_dbm": -79,
+    "connection_interval_us": 15000,
+    "phy": null,
+    "high_priority_requested": true
+  },
+  "counters": {
+    "incomplete_frames": 0,
+    "reassembly_errors": 0,
+    "decoded_parse_errors": 0
+  },
+  "rows_dropped": 0,
+  "mode_changed": false,
+  "hands": [
+    {
+      "hand": "LEFT",
+      "records": 0,
+      "arrivals": 0,
+      "span_us": 0,
+      "rate_per_s": 0.00,
+      "inter_arrival": {
+        "count": 0,
+        "min_us": 0,
+        "p50_us": 0,
+        "p90_us": 0,
+        "p95_us": 0,
+        "p99_us": 0,
+        "max_us": 0
+      },
+      "stalls_over_50000us": 0,
+      "sequence_gaps": 0,
+      "sequence_loss": 0.0000,
+      "out_of_order": 0,
+      "missing_from_ticks": null,
+      "tick_loss": null,
+      "period_us": null,
+      "delay_above_window_min": null,
+      "delay_variation": null
+    },
+    {
+      "hand": "RIGHT",
+      "records": 0,
+      "arrivals": 0,
+      "span_us": 0,
+      "rate_per_s": 0.00,
+      "inter_arrival": {
+        "count": 0,
+        "min_us": 0,
+        "p50_us": 0,
+        "p90_us": 0,
+        "p95_us": 0,
+        "p99_us": 0,
+        "max_us": 0
+      },
+      "stalls_over_50000us": 0,
+      "sequence_gaps": 0,
+      "sequence_loss": 0.0000,
+      "out_of_order": 0,
+      "missing_from_ticks": null,
+      "tick_loss": null,
+      "period_us": null,
+      "delay_above_window_min": null,
+      "delay_variation": null
+    }
+  ]
+}

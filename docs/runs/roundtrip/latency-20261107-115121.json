@@ -1,0 +1,124 @@
+{
+  "format": "wmr-latency",
+  "version": 3,
+  "source": "wmr_companion app (phone)",
+  "started": "2026-11-07T11:51:21.709922",
+  "stream": "batched",
+  "duration_us": 130003524,
+  "round_trip": {
+    "measured": true,
+    "source": "FF15 echo",
+    "sent": 120,
+    "answered": 120,
+    "timeouts": 0,
+    "failed_writes": 0,
+    "rtt": {
+      "count": 120,
+      "min_us": 24712,
+      "p50_us": 50047,
+      "p90_us": 65755,
+      "p95_us": 70523,
+      "p99_us": 85413,
+      "max_us": 104311
+    },
+    "end_to_end": {
+      "count": 120,
+      "min_us": 25047,
+      "p50_us": 50395,
+      "p90_us": 66015,
+      "p95_us": 70892,
+      "p99_us": 85783,
+      "max_us": 105190
+    },
+    "turnaround": {
+      "count": 120,
+      "min_us": 247,
+      "p50_us": 342,
+      "p90_us": 621,
+      "p95_us": 881,
+      "p99_us": 906,
+      "max_us": 906
+    },
+    "max_queue_depth": 0,
+    "counters": {
+      "late_or_duplicate_answers": 2298,
+      "bad_answers": 0,
+      "pings_skipped_busy": 0
+    },
+    "bridge_id": "cc:94:df:12:b9:b6",
+    "ping_interval_us": 1000000
+  },
+  "link": {
+    "cc:94:df:12:b9:b6": {
+      "mtu": 517,
+      "rssi_start_dbm": null,
+      "rssi_end_dbm": null,
+      "connection_interval_us": null,
+      "phy": null,
+      "high_priority_requested": true
+    }
+  },
+  "counters": {
+    "incomplete_frames": 0,
+    "reassembly_errors": 0,
+    "decoded_parse_errors": 0
+  },
+  "rows_dropped": 0,
+  "mode_changed": false,
+  "hands": [
+    {
+      "hand": "LEFT",
+      "bridge_id": null,
+      "bridge_records": {},
+      "records": 0,
+      "arrivals": 0,
+      "span_us": 0,
+      "rate_per_s": 0.0,
+      "inter_arrival": {
+        "count": 0,
+        "min_us": 0,
+        "p50_us": 0,
+        "p90_us": 0,
+        "p95_us": 0,
+        "p99_us": 0,
+        "max_us": 0
+      },
+      "stalls_over_50000us": 0,
+      "sequence_gaps": 0,
+      "sequence_loss": 0.0,
+      "out_of_order": 0,
+      "missing_from_ticks": null,
+      "tick_loss": null,
+      "period_us": null,
+      "delay_above_window_min": null,
+      "delay_variation": null
+    },
+    {
+      "hand": "RIGHT",
+      "bridge_id": null,
+      "bridge_records": {},
+      "records": 0,
+      "arrivals": 0,
+      "span_us": 0,
+      "rate_per_s": 0.0,
+      "inter_arrival": {
+        "count": 0,
+        "min_us": 0,
+        "p50_us": 0,
+        "p90_us": 0,
+        "p95_us": 0,
+        "p99_us": 0,
+        "max_us": 0
+      },
+      "stalls_over_50000us": 0,
+      "sequence_gaps": 0,
+      "sequence_loss": 0.0,
+      "out_of_order": 0,
+      "missing_from_ticks": null,
+      "tick_loss": null,
+      "period_us": null,
+      "delay_above_window_min": null,
+      "delay_variation": null
+    }
+  ]
+}
