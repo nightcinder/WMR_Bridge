@@ -89,7 +89,7 @@ radio run.
 | 17 | `rx_time_us` monotonic | partial; arrival is bursty, not sensor time |
 | 18 | Tick unit and wrap | partial; 100 ns consistent, 2^32 wrap unseen |
 
-Checks 5-7, 11, 12, 15 and 16 are in `robustness.md` §1, §2, §3, §5, §8.
+Checks 5-7, 11, 12, 15 and 16 are in `robustness.md` §1, §2, §3, §5, §9.
 
 ## Link diagnostics
 
@@ -128,8 +128,7 @@ not established.
 | B11 | Switch FF12/FF14/FF11 | not run; robustness §8 |
 | B12 | `LINKLOG` fields | reported: 19-field header parses |
 
-The user's A/B comparison question (does FF14 reduce missing reports like
-decimation did?) is in `robustness.md` §4.
+The FF12 vs FF14 batching comparison is in `robustness.md` §4.
 
 ## FF15 echo
 

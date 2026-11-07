@@ -168,4 +168,4 @@ Paste: build header; per-run exports and `STREAM`; A verdict; B status/ATT; C mo
 
 ## 9. Not covered
 
-V1/interval/hold: [`single-esp32-levers.md`](single-esp32-levers.md). Two bridges: [`multi-bridge.md`](multi-bridge.md). Pi: [`pi-bridge.md`](pi-bridge.md). PSVR2/glasses: [`external-test-user.md`](external-test-user.md).
+V1/interval/hold: owner-reported tested on ONY-980; definitions in [`single-esp32-levers.md`](single-esp32-levers.md). Two bridges: [`multi-bridge.md`](multi-bridge.md). Pi: [`pi-bridge.md`](pi-bridge.md). PSVR2/glasses: [`external-test-user.md`](external-test-user.md).
