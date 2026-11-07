@@ -543,6 +543,15 @@ def test_pages_workflow_ships_pi_setup():
           "the Pages job fails when the Pi page or installer is missing")
     check("path: dist" in pages,
           "the Pages artifact is still the firmware output directory")
+    build_job = workflow.split("\n  build:", 1)[1].split("\n  build-liesa:", 1)[0]
+    check("Check the Pages payload" in build_job,
+          "the PR firmware job verifies the Pages payload")
+    for line in ("cp docs/flasher/index.html dist/index.html",
+                 "cp docs/flasher/pi.html dist/pi.html",
+                 "cp pi/install.sh dist/install.sh"):
+        check(line in build_job, "the PR firmware job stages %s" % line)
+    check("links to missing" in build_job,
+          "the PR firmware job rejects a broken page cross-link")
 
 
 def main():

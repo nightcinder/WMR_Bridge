@@ -54,6 +54,30 @@ jobs:
       - name: List artifacts
         run: ls -lh dist
 
+      # The firmware output directory is also the Pages site. Stage what the
+      # tag-time deploy publishes and assert the payload here, so the artifact
+      # and its cross-links are verified on every PR instead of only on a tag.
+      - name: Check the Pages payload
+        run: |
+          set -eu
+          cp docs/flasher/index.html dist/index.html
+          cp docs/flasher/pi.html dist/pi.html
+          cp pi/install.sh dist/install.sh
+          test -s dist/index.html
+          test -s dist/pi.html
+          test -s dist/install.sh
+          python3 - <<'PY'
+          import re, sys
+          from pathlib import Path
+          root = Path("dist")
+          for page in ("index.html", "pi.html"):
+              html = (root / page).read_text(encoding="utf-8")
+              for href in re.findall(r'href="(\./[^"#?]+)"', html):
+                  if not (root / href[2:]).is_file():
+                      sys.exit("%s links to missing %s" % (page, href))
+          print("Pages payload OK: index.html, pi.html, install.sh")
+          PY
+
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v7
         with:
