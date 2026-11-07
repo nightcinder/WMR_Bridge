@@ -5,6 +5,88 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.11 — 2026-11-07
+
+The controller-family release on top of 0.3.5. Firmware gains a per-model
+driver table, PSVR2 FF12/FF14 decoding and Nintendo Switch Joy-Con/Pro
+support; the Pi host bridge forwards FF13 calibration blobs over
+`wmr-wifi-v1`. FF10–FF17 keep their payloads, so companions at 0.2.2 or later
+continue to work, and the firmware reports the tag version over FF16 (0.3.11
+when tagged). **Switch support is host-tested and firmware-build-tested only
+and has not run on a controller ([#145](https://github.com/nightcinder/WMR_Bridge/issues/145)).**
+The Pi package is `0.2.4`: it caches and forwards FF13 blobs but does not yet
+read calibration from a controller. Firmware and Pi artifacts remain CI-built
+and hardware-unverified. (Tags `v0.3.6`–`v0.3.10` are WMR Companion releases in
+this repository, so `0.3.11` is the next free Bridge version.)
+
+### Firmware
+
+- **Driver table and PSVR2 FF12/FF14 decode (#142, ONY-945).**
+  `src/wmr_controller_driver.{h,c}` holds one entry per model with its
+  Bluetooth names, input-report predicate, FF12/FF14 decoder, wake report and
+  FF13 support; discovery, classification and decoding look it up instead of
+  branching on the model. A 79-byte `A1 31` PSVR2 frame now decodes into the
+  same 56-byte record as a WMR frame (gyro `pi/1024` rad/s, accel
+  `9.80665/4096` m/s², 333 ns IMU ticks converted to 100 ns), and a frame that
+  is not exactly 79 bytes is counted in `dec_err`. Covered by `test_decode`,
+  `test_discovery` and `test_protocol`; never run on a PSVR2 controller.
+- **Switch Joy-Con/Pro support (#144, ONY-946).** Discovery matches
+  `Joy-Con (L)`, `Joy-Con (R)` and `Pro Controller`; after
+  `DESCRIPTOR_AVAILABLE` the bridge sends HID output report `0x01`
+  subcommands (enable the 6-axis sensor, read the two SPI calibration blocks,
+  select 60 Hz `0x30` mode) with NACK/short-reply retry. The SPI calibration
+  is packed into FF13, and each `0x30` report yields three IMU/stick samples in
+  FF12/FF14. `tests/test_switch.c` covers the handshake sequence, calibration
+  packing and sample unpacking; the `WMR_MODEL_SWITCH` model bit is stored in
+  the address record. Not run on a controller; hardware verification is
+  tracked in [#145](https://github.com/nightcinder/WMR_Bridge/issues/145).
+- **Internal codec target (#141, ONY-944).** The wire-format constants live in
+  `src/wmr_codec.h` and build into a static `wmr_codec` target, so host tests
+  and the firmware share one definition without `wmr_protocol.h` or
+  `wmr_psvr2.h` pulling in `wmr_config.h`. No payload change.
+
+### Pi host bridge
+
+- **FF13 calibration forwarding over `wmr-wifi-v1` (#140, ONY-931).** `hello`
+  advertises `calibration` (version, 16-byte header, 496-byte window and
+  message tag `0x13`); a `{"type":"calibration","hand":...,"offset":N}` request
+  returns one tagged binary window from a per-hand cache, and `hello`/`status`
+  report each hand's state and blob CRC. The daemon answers `not_read` until an
+  ingest layer supplies a blob, because the Pi-side controller read over
+  hidraw is not implemented: **the Pi does not yet read FF13 calibration from
+  controllers.** `pi/tests/test_protocol.py` and `pi/tests/test_ws.py` cover
+  the windows, CRC and WebSocket forwarding.
+- **Package `0.2.4` (#140, ONY-931).** The Pi package version moves from
+  `0.2.3` to `0.2.4` because `hello` gains the calibration fields. The `.deb`
+  and tarball asset names follow `wmr_bridge.__version__`.
+
+### CI and build
+
+- **Blocking security scans and Pi package verification (#136, ONY-929).**
+  gitleaks and Semgrep no longer run with `continue-on-error`, and Semgrep uses
+  `--error`, so a finding holds the merge. The host-tests workflow also builds
+  the Pi tarball and `.deb` and verifies the tarball before the dry run.
+- **VERSION file (#137, ONY-928).** The root `VERSION` file is the version
+  source when git has no tag to describe: `tools/firmware/build.py` reads it
+  after `git describe`, and `tests/run_c_tests.sh` stamps it into the host-test
+  application descriptor. This release sets it to `0.3.11`.
+
+### Docs
+
+- Internal ESP32/WMR bench runbook and GATT probe steps (#139, #146), the Pi
+  3B+ bench kit (#135), the 12-package compatibility refresh (#143), tester
+  sheets retargeted to Bridge 0.3.5 and Companion 0.3.17 (#134), and the
+  current-release lines refreshed for 0.3.5 (#138).
+
+### Verification
+
+- Host C tests and Python tests run in CI before tagging; the ESP-IDF build
+  runs on the tag, and firmware reports the tag version over FF16.
+  `tests/test_switch.c`, `tests/test_decode.c` and `pi/tests/test_protocol.py`
+  / `pi/tests/test_ws.py` cover the new decode and forwarding paths. No
+  packaged firmware has been flashed to hardware, and the Switch path has
+  never run on a controller ([#145](https://github.com/nightcinder/WMR_Bridge/issues/145)).
+
 ## 0.3.5 — 2026-11-06
 
 The FF10 encryption-enforcement release on top of 0.3.4. FF10–FF17 keep their

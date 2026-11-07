@@ -1,12 +1,13 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-06 (current release 0.3.5, the FF10 encryption-enforcement
-release on top of 0.3.4: every FF10 data characteristic and its CCC now names
-`ENCRYPTION_KEY_SIZE_16`, so BTstack rejects an unencrypted or shorter-key
-access on the bonded LESC link the bridge already required; triage accepts the
-6-run pose protocol and the repository gains report-only Semgrep, gitleaks and
-Dependabot scans; no protocol payload change, companions at 0.2.2 or later
-continue to work; ESP32-over-BLE is
+Last updated: 2026-11-07 (current release 0.3.11, the controller-family release
+on top of 0.3.5: one driver table per model with PSVR2 FF12/FF14 decoding,
+Nintendo Switch Joy-Con/Pro handshake and `0x30` decoding, and Pi FF13
+calibration-blob forwarding; Switch and PSVR2 support remain host-tested and
+firmware-build-tested only and have never run on a controller, with the Switch
+hardware check tracked in GitHub #145; the Pi package is `0.2.4` and does not
+yet read FF13 calibration from controllers; FF10–FF17 keep their payloads, so
+companions at 0.2.2 or later continue to work; ESP32-over-BLE is
 the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the
 second supported first-class target; Pi is host-tests-only until the Pi sitting
 runs, see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md) and
@@ -47,11 +48,11 @@ maintained at the project's single entry point:
 | Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (ONY-307, PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.5 image has not been run on hardware ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block C) |
 | BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (ONY-438, #88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.5 pairing and encryption run is not yet done ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block B) |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, not run on hardware |
-| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md)) | Merged (second supported target) | Host tests only (122 tests + loopback replay), never run on Pi hardware or with controllers |
+| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md)) | Merged (second supported target) | Host tests only (137 tests + loopback replay), never run on Pi hardware or with controllers; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has not been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Console `v` read on the 0.2.4 hardware run (`0.2.4`, ESP-IDF v6.1); the live FF16 phone read on v0.3.5 is open ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block B) |
-| PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added by ONY-945 | Host tests and firmware build only, never run on a PSVR2 controller |
-| Switch Joy-Con/Pro controller support: discovery names, output report `0x01` subcommand handshake, SPI calibration packed into FF13, three-sample `0x30` decode into FF12/FF14 (ONY-946, [`docs/SWITCH.md`](SWITCH.md)) | In review (ONY-946) | Host tests (`tests/test_switch.c`) and firmware build only, never run on a Switch controller |
+| PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added by ONY-945 (v0.3.11) | Host tests and firmware build only, never run on a PSVR2 controller |
+| Switch Joy-Con/Pro controller support: discovery names, output report `0x01` subcommand handshake, SPI calibration packed into FF13, three-sample `0x30` decode into FF12/FF14 (ONY-946, [`docs/SWITCH.md`](SWITCH.md)) | Merged (v0.3.11) | Host tests (`tests/test_switch.c`) and firmware build only, never run on a Switch controller; hardware verification tracked in GitHub #145 |
 | Controller ACL that stalls after discovery: encrypt it from the bridge, then drop it after 4 s so the controller pages again (ONY-446, #92, [`docs/DISCOVERY.md`](DISCOVERY.md)) | Merged (v0.3.0) | Host-tested (`tests/test_linkwait.c`); field logs on 0.2.4 only, packaged v0.3.5 not run on hardware ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block C) |
 | Addressable status LED: red none, yellow LEFT, blue RIGHT, green both (#96) | Merged (v0.3.0) | Host-tested (`tests/test_status_led.c`); the GPIO 4 colour check has not run on hardware ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block E) |
 | Runtime contention toggles (`l`/`v`/`t`/`q` LEVERS commands, ONY-430, #86/#97, [`docs/CONTENTION_LEVERS.md`](CONTENTION_LEVERS.md)) | Merged (v0.3.0) | Host-tested (`tests/test_levers.c`); bench run still open |
