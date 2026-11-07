@@ -13,7 +13,7 @@ You need these things:
 
 - A Raspberry Pi 3 Model B+, Pi 4, or Pi 5.
 - A microSD card of 8 GB or more and a card reader.
-- A power supply. Use 5 V / 2.5 A micro-USB for a Pi 3B+.
+- A power supply. Use 5 V / 2.5 A micro-USB for a Pi 3B+, 5 V / 3 A USB-C for a Pi 4, and the official Pi 5 supply for a Pi 5.
 - A Wi-Fi network that uses the 5 GHz band.
 - Two WMR controllers with fresh batteries.
 - A computer with Raspberry Pi Imager installed.
@@ -74,7 +74,7 @@ Also check power saving:
 iw dev wlan0 get power_save
 ```
 
-The installer turns power saving off later. For now, just note the value.
+The package installs a setting to turn power saving off. That setting takes effect after a reboot or a Wi-Fi reconnect. For now, just note the value.
 
 ## Step 4: Install WMR Bridge
 
@@ -101,6 +101,18 @@ sudo apt install ./wmr-bridge_0.2.4_all.deb
 ```
 
 The package creates a system user, sets up files, and creates a security token.
+
+Reboot the Pi so the Wi-Fi power-saving setting takes effect:
+
+```bash
+sudo reboot
+```
+
+Wait 1 to 2 minutes. Then SSH back in:
+
+```bash
+ssh <username>@wmr-pi.local
+```
 
 ## Step 5: Start and check the service
 
@@ -177,7 +189,7 @@ journalctl -u wmr-bridge -n 30 --no-pager
 Run the test client on the Pi:
 
 ```bash
-python3 /opt/wmr-bridge/pi/tools/wifi_probe.py \
+sudo python3 /opt/wmr-bridge/pi/tools/wifi_probe.py \
     --host 127.0.0.1 \
     --token-file /etc/wmr-bridge/token \
     --stream batched \
@@ -192,6 +204,7 @@ Check the output. Both hands should show records above zero. Gaps should be zero
 The Wi-Fi may be on the 2.4 GHz band, or power saving may be on.
 Run `iw dev wlan0 link` and make sure `freq` is above 5000.
 Run `iw dev wlan0 get power_save` and make sure it says `off`.
+If it says `on`, reboot the Pi with `sudo reboot` so the package's NetworkManager setting takes effect. You can also check that `/etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf` contains `wifi.powersave = 2`.
 
 **Service fails with a token error.**
 The token file permissions may be wrong. Fix them:
