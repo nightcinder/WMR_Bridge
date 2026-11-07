@@ -56,8 +56,9 @@ Firmware and Pi artifacts remain CI-built and hardware-unverified.
 - Simple-English Raspberry Pi install guide (#153, ONY-993), Raspberry Pi and
   ESP32 flashing docs leading with the one-line installer and one factory
   image per variant (#158, ONY-999), run sheets trimmed and consolidated
-  (#151 ONY-979, #152 ONY-983, #150 ONY-980, #157 ONY-1006), and
-  current-release lines refreshed for 0.3.11 (#149 ONY-972).
+  (#152 ONY-983, #150 ONY-980), latency and bench runs archived (#151
+  ONY-979, #157 ONY-1006), and current-release lines refreshed for 0.3.11
+  (#149 ONY-972).
 
 ### Verification
 
