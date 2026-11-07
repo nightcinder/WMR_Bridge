@@ -37,13 +37,14 @@ static void calibration_blocks(uint8_t imu[WMR_SWITCH_CAL_IMU_LEN],
         put16(&imu[12 + 2 * axis], 0);       /* gyro origin */
         put16(&imu[18 + 2 * axis], 13371);   /* gyro sensitivity */
     }
-    /* Left: max, center, min. Right: center, min, max. */
-    pack12(&stick[0], 4095, 4095);
+    /* Left: max above centre, centre, min below centre. Right: centre, min, max.
+     * The max/min groups are deltas, not positions. */
+    pack12(&stick[0], 2047, 2047);
     pack12(&stick[3], 2048, 2048);
-    pack12(&stick[6], 0, 0);
+    pack12(&stick[6], 2048, 2048);
     pack12(&stick[9], 2048, 2048);
-    pack12(&stick[12], 0, 0);
-    pack12(&stick[15], 4095, 4095);
+    pack12(&stick[12], 2048, 2048);
+    pack12(&stick[15], 2047, 2047);
 }
 
 static uint16_t reply(uint8_t *f, uint8_t ack, uint8_t subcommand,
@@ -57,17 +58,32 @@ static uint16_t reply(uint8_t *f, uint8_t ack, uint8_t subcommand,
     return (uint16_t) (WMR_SWITCH_REPLY_OFF_DATA + (data_len ? data_len : 1));
 }
 
+/* A 0x10 reply echoes the 4-byte address and size before the SPI data. */
+static uint16_t spi_reply(uint8_t *f, uint8_t ack, uint32_t address,
+                          const uint8_t *data, uint8_t data_len){
+    uint8_t payload[WMR_SWITCH_SPI_ECHO_SIZE + WMR_SWITCH_CAL_IMU_LEN];
+    payload[0] = (uint8_t) (address & 0xFF);
+    payload[1] = (uint8_t) ((address >> 8) & 0xFF);
+    payload[2] = (uint8_t) ((address >> 16) & 0xFF);
+    payload[3] = (uint8_t) ((address >> 24) & 0xFF);
+    payload[4] = data_len;
+    if (data_len) memcpy(&payload[WMR_SWITCH_SPI_ECHO_SIZE], data, data_len);
+    return reply(f, ack, WMR_SWITCH_SUBCMD_SPI_READ, payload,
+                 (uint8_t) (WMR_SWITCH_SPI_ECHO_SIZE + data_len));
+}
+
 static void test_subcommand_report(void){
     printf("output report 0x01\n");
     uint8_t out[WMR_SWITCH_OUTPUT_FRAME_SIZE];
-    const uint8_t args[3] = { 0x20, 0x60, 0x18 };
-    CHECK(wmr_switch_build_subcommand(7, 0x10, args, 3, out) == WMR_SWITCH_OUTPUT_FRAME_SIZE);
+    const uint8_t args[5] = { 0x20, 0x60, 0x00, 0x00, 0x18 };
+    CHECK(wmr_switch_build_subcommand(7, 0x10, args, 5, out) == WMR_SWITCH_OUTPUT_FRAME_SIZE);
     CHECK(out[0] == WMR_SWITCH_OUTPUT_REPORT_ID);
     CHECK(out[1] == 7);
     CHECK(out[2] == 0x00 && out[3] == 0x01 && out[4] == 0x40 && out[5] == 0x40);
     CHECK(out[6] == 0x00 && out[7] == 0x01 && out[8] == 0x40 && out[9] == 0x40);
     CHECK(out[10] == 0x10);
-    CHECK(out[11] == 0x20 && out[12] == 0x60 && out[13] == 0x18);
+    CHECK(out[11] == 0x20 && out[12] == 0x60 && out[13] == 0x00 &&
+          out[14] == 0x00 && out[15] == 0x18);
     CHECK(out[WMR_SWITCH_OUTPUT_FRAME_SIZE - 1] == 0);
     CHECK(wmr_switch_build_subcommand(0, 0x10, args, 0, out) == WMR_SWITCH_OUTPUT_FRAME_SIZE);
 }
@@ -93,14 +109,16 @@ static void test_handshake(void){
     CHECK(wmr_switch_handshake_next(&hs, out, &len));
     CHECK(out[1] == 1);
     CHECK(out[10] == WMR_SWITCH_SUBCMD_SPI_READ);
-    CHECK(out[11] == 0x20 && out[12] == 0x60 && out[13] == WMR_SWITCH_CAL_IMU_LEN);
-    flen = reply(frame, 0x90, WMR_SWITCH_SUBCMD_SPI_READ, imu, WMR_SWITCH_CAL_IMU_LEN);
+    CHECK(out[11] == 0x20 && out[12] == 0x60 && out[13] == 0x00 &&
+          out[14] == 0x00 && out[15] == WMR_SWITCH_CAL_IMU_LEN);
+    flen = spi_reply(frame, 0x90, WMR_SWITCH_CAL_IMU_ADDR, imu, WMR_SWITCH_CAL_IMU_LEN);
     CHECK(wmr_switch_handshake_on_reply(&hs, frame, flen));
 
     CHECK(wmr_switch_handshake_next(&hs, out, &len));
     CHECK(out[10] == WMR_SWITCH_SUBCMD_SPI_READ);
-    CHECK(out[11] == 0x3D && out[12] == 0x60 && out[13] == WMR_SWITCH_CAL_STICK_LEN);
-    flen = reply(frame, 0x90, WMR_SWITCH_SUBCMD_SPI_READ, stick, WMR_SWITCH_CAL_STICK_LEN);
+    CHECK(out[11] == 0x3D && out[12] == 0x60 && out[13] == 0x00 &&
+          out[14] == 0x00 && out[15] == WMR_SWITCH_CAL_STICK_LEN);
+    flen = spi_reply(frame, 0x90, WMR_SWITCH_CAL_STICK_ADDR, stick, WMR_SWITCH_CAL_STICK_LEN);
     CHECK(wmr_switch_handshake_on_reply(&hs, frame, flen));
 
     CHECK(wmr_switch_handshake_next(&hs, out, &len));
@@ -138,9 +156,15 @@ static void test_handshake(void){
     flen = reply(frame, 0x80, WMR_SWITCH_SUBCMD_ENABLE_IMU, NULL, 0);
     CHECK(wmr_switch_handshake_on_reply(&hs, frame, flen));
     CHECK(wmr_switch_handshake_next(&hs, out, &len));
-    flen = reply(frame, 0x90, WMR_SWITCH_SUBCMD_SPI_READ, imu, 4);
+    flen = spi_reply(frame, 0x90, WMR_SWITCH_CAL_IMU_ADDR, imu, 4);
     CHECK(wmr_switch_handshake_on_reply(&hs, frame, flen));
     CHECK(wmr_switch_handshake_next(&hs, out, &len));       /* same SPI step again */
+    CHECK(out[10] == WMR_SWITCH_SUBCMD_SPI_READ && out[11] == 0x20);
+
+    /* A reply that echoes another address is retried, not packed. */
+    flen = spi_reply(frame, 0x90, WMR_SWITCH_CAL_STICK_ADDR, imu, WMR_SWITCH_CAL_IMU_LEN);
+    CHECK(wmr_switch_handshake_on_reply(&hs, frame, flen));
+    CHECK(wmr_switch_handshake_next(&hs, out, &len));
     CHECK(out[10] == WMR_SWITCH_SUBCMD_SPI_READ && out[11] == 0x20);
 
     /* A missing reply times out and counts as a failed attempt. */
@@ -183,6 +207,10 @@ static void test_decode(void){
     wmr_switch_calibration_parse(imu, stick, &cal);
     CHECK(cal.valid);
     CHECK(cal.stick_valid[WMR_HAND_LEFT] && cal.stick_valid[WMR_HAND_RIGHT]);
+    /* The SPI groups are deltas around the centre; the parser stores absolute values. */
+    CHECK(cal.stick_center[WMR_HAND_LEFT][0] == 2048);
+    CHECK(cal.stick_max[WMR_HAND_LEFT][0] == 4095 && cal.stick_min[WMR_HAND_LEFT][0] == 0);
+    CHECK(cal.stick_max[WMR_HAND_RIGHT][1] == 4095 && cal.stick_min[WMR_HAND_RIGHT][1] == 0);
     wmr_switch_set_calibration(WMR_HAND_LEFT, &cal);
 
     wmr_frame_t frame;

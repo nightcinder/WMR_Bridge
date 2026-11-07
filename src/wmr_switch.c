@@ -102,7 +102,7 @@ bool wmr_switch_handshake_next(wmr_switch_handshake_t *hs,
     if (hs->waiting) return false;
     if (hs->step == WMR_SWITCH_HS_IDLE || hs->step >= WMR_SWITCH_HS_DONE) return false;
 
-    uint8_t args[4];
+    uint8_t args[5];
     uint8_t args_len = 0;
     switch (hs->step){
         case WMR_SWITCH_HS_IMU:
@@ -111,15 +111,19 @@ bool wmr_switch_handshake_next(wmr_switch_handshake_t *hs,
             break;
         case WMR_SWITCH_HS_CAL_IMU:
             args[0] = (uint8_t) (WMR_SWITCH_CAL_IMU_ADDR & 0xFF);
-            args[1] = (uint8_t) (WMR_SWITCH_CAL_IMU_ADDR >> 8);
-            args[2] = WMR_SWITCH_CAL_IMU_LEN;
-            args_len = 3;
+            args[1] = (uint8_t) ((WMR_SWITCH_CAL_IMU_ADDR >> 8) & 0xFF);
+            args[2] = (uint8_t) ((WMR_SWITCH_CAL_IMU_ADDR >> 16) & 0xFF);
+            args[3] = (uint8_t) ((WMR_SWITCH_CAL_IMU_ADDR >> 24) & 0xFF);
+            args[4] = WMR_SWITCH_CAL_IMU_LEN;
+            args_len = 5;
             break;
         case WMR_SWITCH_HS_CAL_STICK:
             args[0] = (uint8_t) (WMR_SWITCH_CAL_STICK_ADDR & 0xFF);
-            args[1] = (uint8_t) (WMR_SWITCH_CAL_STICK_ADDR >> 8);
-            args[2] = WMR_SWITCH_CAL_STICK_LEN;
-            args_len = 3;
+            args[1] = (uint8_t) ((WMR_SWITCH_CAL_STICK_ADDR >> 8) & 0xFF);
+            args[2] = (uint8_t) ((WMR_SWITCH_CAL_STICK_ADDR >> 16) & 0xFF);
+            args[3] = (uint8_t) ((WMR_SWITCH_CAL_STICK_ADDR >> 24) & 0xFF);
+            args[4] = WMR_SWITCH_CAL_STICK_LEN;
+            args_len = 5;
             break;
         case WMR_SWITCH_HS_MODE:
             args[0] = WMR_SWITCH_INPUT_MODE_FULL;
@@ -182,15 +186,26 @@ bool wmr_switch_handshake_on_reply(wmr_switch_handshake_t *hs,
     }
 
     if (hs->step == WMR_SWITCH_HS_CAL_IMU || hs->step == WMR_SWITCH_HS_CAL_STICK){
-        uint8_t want = hs->step == WMR_SWITCH_HS_CAL_IMU ? WMR_SWITCH_CAL_IMU_LEN
-                                                         : WMR_SWITCH_CAL_STICK_LEN;
-        unsigned offset = hs->step == WMR_SWITCH_HS_CAL_IMU ? WMR_SWITCH_CAL_IMU_OFFSET
-                                                            : WMR_SWITCH_CAL_STICK_OFFSET;
-        if (length < (uint16_t) (WMR_SWITCH_REPLY_OFF_DATA + want)){
+        bool imu = hs->step == WMR_SWITCH_HS_CAL_IMU;
+        uint32_t want_addr = imu ? WMR_SWITCH_CAL_IMU_ADDR : WMR_SWITCH_CAL_STICK_ADDR;
+        uint8_t want = imu ? WMR_SWITCH_CAL_IMU_LEN : WMR_SWITCH_CAL_STICK_LEN;
+        unsigned offset = imu ? WMR_SWITCH_CAL_IMU_OFFSET : WMR_SWITCH_CAL_STICK_OFFSET;
+        /* The reply echoes the 4-byte address and size; refuse a mismatched echo. */
+        if (length < (uint16_t) (WMR_SWITCH_REPLY_OFF_SPI_DATA + want)){
             retry_current(hs);
             return true;
         }
-        memcpy(&hs->blob[offset], &frame[WMR_SWITCH_REPLY_OFF_DATA], want);
+        const uint8_t *echo = &frame[WMR_SWITCH_REPLY_OFF_DATA];
+        bool echo_ok = echo[0] == (uint8_t) (want_addr & 0xFF) &&
+                       echo[1] == (uint8_t) ((want_addr >> 8) & 0xFF) &&
+                       echo[2] == (uint8_t) ((want_addr >> 16) & 0xFF) &&
+                       echo[3] == (uint8_t) ((want_addr >> 24) & 0xFF) &&
+                       echo[4] == want;
+        if (!echo_ok){
+            retry_current(hs);
+            return true;
+        }
+        memcpy(&hs->blob[offset], &frame[WMR_SWITCH_REPLY_OFF_SPI_DATA], want);
     }
     advance(hs);
     return true;
@@ -230,6 +245,13 @@ static bool stick_span_ok(uint16_t min, uint16_t center, uint16_t max){
     return max > center && center > min && max - min >= 64;
 }
 
+/* A 12-bit stick value clamped to the wire range. */
+static uint16_t stick_12bit(int32_t value){
+    if (value < 0) return 0;
+    if (value > 0xFFF) return 0xFFF;
+    return (uint16_t) value;
+}
+
 void wmr_switch_calibration_parse(const uint8_t imu[WMR_SWITCH_CAL_IMU_LEN],
                                   const uint8_t stick[WMR_SWITCH_CAL_STICK_LEN],
                                   wmr_switch_calibration_t *out){
@@ -251,14 +273,17 @@ void wmr_switch_calibration_parse(const uint8_t imu[WMR_SWITCH_CAL_IMU_LEN],
     uint16_t group[6][2];
     for (unsigned g = 0; g < 6; g++) stick_group(&stick[3 * g], group[g]);
 
-    /* Left: max, center, min. Right: center, min, max (spi_flash_notes.md). */
+    /* Left: max above centre, centre, min below centre. Right: centre, min below
+     * centre, max above centre. The max/min groups are deltas, not positions. */
     for (unsigned axis = 0; axis < 2; axis++){
-        out->stick_max[WMR_HAND_LEFT][axis]    = group[0][axis];
-        out->stick_center[WMR_HAND_LEFT][axis] = group[1][axis];
-        out->stick_min[WMR_HAND_LEFT][axis]    = group[2][axis];
-        out->stick_center[WMR_HAND_RIGHT][axis] = group[3][axis];
-        out->stick_min[WMR_HAND_RIGHT][axis]    = group[4][axis];
-        out->stick_max[WMR_HAND_RIGHT][axis]    = group[5][axis];
+        uint16_t left_center = group[1][axis];
+        uint16_t right_center = group[3][axis];
+        out->stick_center[WMR_HAND_LEFT][axis]     = left_center;
+        out->stick_max[WMR_HAND_LEFT][axis]        = stick_12bit((int32_t) left_center + group[0][axis]);
+        out->stick_min[WMR_HAND_LEFT][axis]        = stick_12bit((int32_t) left_center - group[2][axis]);
+        out->stick_center[WMR_HAND_RIGHT][axis]    = right_center;
+        out->stick_min[WMR_HAND_RIGHT][axis]       = stick_12bit((int32_t) right_center - group[4][axis]);
+        out->stick_max[WMR_HAND_RIGHT][axis]       = stick_12bit((int32_t) right_center + group[5][axis]);
     }
     for (unsigned hand = 0; hand < WMR_NUM_CONTROLLERS; hand++){
         bool ok = true;

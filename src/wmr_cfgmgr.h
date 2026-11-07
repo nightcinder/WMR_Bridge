@@ -74,6 +74,10 @@ wmr_cfg_blob_state_t wmr_cfgmgr_get(unsigned hand, const uint8_t **blob, uint32_
  * READY. Ignored when `blob` is NULL or `total` exceeds the cache. */
 void wmr_cfgmgr_set_blob(unsigned hand, const uint8_t *blob, uint32_t total);
 
+/* Discard a blob published by wmr_cfgmgr_set_blob, so a controller change cannot
+ * serve the previous device's calibration. Other states are left alone. */
+void wmr_cfgmgr_clear_blob(unsigned hand);
+
 /* One console line per hand. */
 void wmr_cfgmgr_print(void);
 

@@ -237,6 +237,14 @@ void wmr_cfgmgr_set_blob(unsigned hand, const uint8_t *blob, uint32_t total){
     set_state(h, WMR_CFG_READY);
 }
 
+void wmr_cfgmgr_clear_blob(unsigned hand){
+    if (hand >= WMR_NUM_CONTROLLERS) return;
+    hand_t *h = &hands[hand];
+    h->total = 0;
+    h->crc = 0;
+    if (h->state == WMR_CFG_READY) set_state(h, WMR_CFG_NOT_READ);
+}
+
 void wmr_cfgmgr_print(void){
     for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
         const hand_t *h = &hands[i];

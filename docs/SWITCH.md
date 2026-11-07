@@ -35,9 +35,12 @@ reply, because the controller answers with a `0x21` input report.
 | Step | Subcommand | Arguments | Effect |
 | --- | --- | --- | --- |
 | 1 | `0x40` | `01` | enable the 6-axis sensor |
-| 2 | `0x10` | `20 60 18` | SPI read: 24 bytes at `0x6020` (IMU calibration) |
-| 3 | `0x10` | `3D 60 12` | SPI read: 18 bytes at `0x603D` (stick calibration) |
+| 2 | `0x10` | `20 60 00 00 18` | SPI read: 24 bytes at `0x6020` (IMU calibration) |
+| 3 | `0x10` | `3D 60 00 00 12` | SPI read: 18 bytes at `0x603D` (stick calibration) |
 | 4 | `0x03` | `30` | select 60 Hz full input report mode |
+
+The `0x10` arguments are a 4-byte little-endian SPI address followed by a 1-byte
+length.
 
 A NACK (ACK byte with bit 7 clear) or a short SPI reply retries the same step, up
 to `WMR_SWITCH_HS_MAX_TRIES` (3). After that the handshake is `FAILED` and the
@@ -55,7 +58,11 @@ A captured frame is `A1 21 ...`. Offsets below count from `A1`:
 | 2..13 | 12 | timer, battery/connection, buttons, sticks, vibrator |
 | 14 | 1 | ACK byte: bit 7 set = ACK; low bits = reply data type (`0x10` = SPI data) |
 | 15 | 1 | subcommand ID being answered |
-| 16.. | up to 35 | subcommand reply data |
+| 16..20 | 5 | `0x10` replies only: echoed SPI address (4-byte little-endian) and size |
+| 21.. | up to 35 | subcommand reply data (the SPI bytes for `0x10`) |
+
+The handshake checks that the echoed address and size match the request and
+retries the step otherwise.
 
 These replies never enter the sample stream and never take a sequence number.
 
@@ -69,7 +76,7 @@ and a 42-byte blob:
 | Blob offset | Size | Source |
 | --- | --- | --- |
 | 0..23 | 24 | SPI `0x6020`: six int16 little-endian values (acc origin XYZ, acc sensitivity XYZ, gyro origin XYZ, gyro sensitivity XYZ) |
-| 24..41 | 18 | SPI `0x603D`: three 3-byte groups per stick (left max/center/min, right center/min/max), two packed 12-bit axes each |
+| 24..41 | 18 | SPI `0x603D`: three 3-byte groups per stick (left max-above-centre/centre/min-below-centre, right centre/min/max), two packed 12-bit axes each. The max/min groups are deltas; the parser stores absolute min/max (`centre +/- delta`) |
 
 The blob is not the Microsoft JSON block and carries no extra version byte; the
 FF13 header already identifies the window format. A Switch hand never runs the
@@ -99,6 +106,12 @@ Every report produces three FF12 records (and up to three records in an FF14
 batch). All three carry the raw frame's `sequence`; `rx_time_us` steps back
 5 ms per older sample. `device_ticks` is 0 because the controller exposes only an
 8-bit packet timer, not a usable tick counter.
+
+An FF14 notification needs an ATT MTU of 173 to carry all three records at once
+(`3` ATT bytes + `2` batch header + `3 x 56` record bytes). Below that the newest
+records that fit are sent and the older samples of the frame are discarded and
+counted in the per-hand `mtu_skip`; FF12 needs only 59 because it carries one
+record per notification.
 
 Buttons map to the WMR bits as follows: Home -> `HOME`, Minus/Plus -> `MENU`,
 Capture -> `TRACKPAD_CLICK`, either stick click -> `THUMBSTICK_CLICK`, and any of

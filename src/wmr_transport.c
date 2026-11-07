@@ -406,7 +406,11 @@ static void pump_send_decoded(const wmr_frame_t *frame){
  * A frame may carry several records (three for a Switch 0x30 report); a frame is added
  * whole and the batch stops before the next frame that does not fit, so nothing leaves the
  * queue until the notification is accepted. A frame that is not a valid input report is
- * removed and counted (dec_err) and does not occupy a slot in the batch. */
+ * removed and counted (dec_err) and does not occupy a slot in the batch.
+ *
+ * When the MTU fits fewer records than one frame carries, the newest records are sent
+ * and the older ones are discarded and counted in mtu_skip. A Switch frame needs an ATT
+ * MTU of 173 for all three samples; below that the stream is lossy by construction. */
 static void pump_send_batch(void){
     const unsigned max_count = wmr_batch_max_count(att_server_get_mtu(phone_handle));
     if (!max_count){
@@ -418,6 +422,7 @@ static void pump_send_batch(void){
     wmr_batch_t batch;
     wmr_batch_init(&batch, max_count);
     unsigned added[WMR_BATCH_MAX_COUNT];
+    unsigned skipped[WMR_BATCH_MAX_COUNT];
     const unsigned take = queue.count < max_count ? queue.count : max_count;
     unsigned processed = 0;
     for (unsigned i = 0; i < take; i++){
@@ -427,15 +432,18 @@ static void pump_send_batch(void){
                                                         WMR_DECODED_MAX_SAMPLES);
         if (!count){
             added[i] = 0;
+            skipped[i] = 0;
             processed = i + 1;
             continue;
         }
-        /* At an MTU that fits fewer records than one frame carries, keep the first ones
-         * rather than stalling the queue forever. */
-        if (count > max_count) count = max_count;
+        /* At an MTU that fits fewer records than one frame carries, keep the newest ones
+         * rather than stalling the queue forever; the older samples go stale first. */
+        unsigned first = count > max_count ? count - max_count : 0;
+        if (first) count = max_count;
         if (batch.count + count > max_count) break;
-        for (unsigned j = 0; j < count; j++) wmr_batch_add(&batch, records[j]);
+        for (unsigned j = 0; j < count; j++) wmr_batch_add(&batch, records[first + j]);
         added[i] = count;
+        skipped[i] = first;
         processed = i + 1;
     }
     if (batch.count){
@@ -454,6 +462,7 @@ static void pump_send_batch(void){
         const wmr_frame_t *frame = wmr_queue_peek(&queue);
         if (added[i]) stats.tx[frame->hand] += added[i];
         else          stats.decode_errors[frame->hand]++;
+        stats.mtu_skipped[frame->hand] += skipped[i];
         wmr_queue_pop(&queue);
     }
     pump_kick();

@@ -124,8 +124,9 @@ The frame is the controller's HID input report exactly as BTstack delivers it:
 byte 0 = `0xA1` (HID DATA/input transaction header), byte 1 = report ID, then
 the payload. A WMR report is report ID `0x01` with 44 payload bytes, 46 bytes
 in total. A PSVR2 Sense report is report ID `0x31` with 77 payload bytes,
-79 bytes in total. A Switch report is report ID `0x30` with 49 payload bytes,
-50 bytes in total. The raw stream carries any frame unchanged; FF12/FF14
+79 bytes in total. A Switch report is report ID `0x30` with 48 payload bytes,
+49 bytes in total (the 50-byte frame adds the `0xA1` header). The raw stream
+carries any frame unchanged; FF12/FF14
 apply the model's decoder (see [PSVR2.md](PSVR2.md), [SWITCH.md](SWITCH.md)).
 PSVR2 and Switch names are searched for by default alongside the WMR names from
 0.2 onward. The 12-byte fragment
@@ -384,7 +385,8 @@ until the rotation capture in [DECODING.md](DECODING.md) is done.
   79 bytes; a short or malformed `0x31` frame is counted in `dec_err`
   ([PSVR2.md](PSVR2.md)). A Switch `0x30` frame is accepted only at exactly
   50 bytes and produces three FF12 records; a short or malformed `0x30` frame is
-  counted in `dec_err` ([SWITCH.md](SWITCH.md)).
+  rejected by its input-report check before it is queued, so it increments
+  `other_reports`, not `dec_err` ([SWITCH.md](SWITCH.md)).
 - Samples of the two hands may interleave freely. Ordering is per hand by
   `sequence`.
 
@@ -499,8 +501,14 @@ the ESP32 BLE stack really sends one batch per connection event is not
 guaranteed and has not been measured.
 
 On a send error the batch stays queued and is sent again (a send error never
-discards records). A queued frame that is not a valid 46-byte input report is
-removed and counted in `dec_err`, and takes no slot in the batch.
+discards records). A queued frame that is not a valid input report for its
+model is removed and counted in `dec_err`, and takes no slot in the batch.
+
+A Switch `0x30` frame yields three records but a notification holds
+`(MTU - 5) / 56` of them, so FF14 needs an ATT MTU of at least 173 for the whole
+frame. Below that the newest records that fit are sent and the older samples are
+discarded and counted in the per-hand `mtu_skip`; the frame is still popped and
+its sent records count in `tx`.
 
 ## Counters and the accounting identity
 

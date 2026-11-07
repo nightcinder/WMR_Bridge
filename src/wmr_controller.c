@@ -920,6 +920,8 @@ static void switch_handshake_done(unsigned hand){
 static void switch_handshake_start(controller_t *c){
     unsigned hand = (unsigned) (c - controllers);
     memset(&switch_handshakes[hand], 0, sizeof(switch_handshakes[hand]));
+    /* Never decode a new controller with the previous one's factory calibration. */
+    wmr_switch_set_calibration(hand, NULL);
 #if WMR_CFG_SWITCH_HANDSHAKE
     wmr_switch_handshake_init(&switch_handshakes[hand]);
     switch_timer_arm();
@@ -942,7 +944,10 @@ static void switch_handshake_feed(unsigned hand, const uint8_t *frame, uint16_t 
 }
 
 static void switch_handshake_abort(unsigned hand){
-    if (hand < WMR_NUM_CONTROLLERS) wmr_switch_handshake_abort(&switch_handshakes[hand]);
+    if (hand >= WMR_NUM_CONTROLLERS) return;
+    wmr_switch_handshake_abort(&switch_handshakes[hand]);
+    /* The state machine is per connection; the calibration cache must not outlive it. */
+    wmr_switch_set_calibration(hand, NULL);
 }
 
 static void switch_timer_fire(btstack_timer_source_t *timer){
@@ -2451,6 +2456,9 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             wmr_linkwait_finish(&linkwait[(unsigned) (c - controllers)]);
             c->psvr2_wake_pending = false;
             switch_handshake_abort((unsigned) (c - controllers));
+            /* A Switch calibration blob belongs to the controller that produced it. */
+            if (c->model == WMR_MODEL_SWITCH)
+                wmr_cfgmgr_clear_blob((unsigned) (c - controllers));
             if (!c->connected) disc_pair_failed((unsigned) (c - controllers), 0);
 #if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
             if (stagger_active() && (unsigned) (c - controllers) == stagger_first() && !stagger_released){

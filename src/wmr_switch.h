@@ -104,10 +104,13 @@
 #define WMR_SWITCH_OFF_RIGHT_STICK      10
 #define WMR_SWITCH_OFF_IMU              14      /* 3 x 12 bytes */
 
-/* Subcommand reply 0x21 offsets: report bytes 13, 14 and 15. */
+/* Subcommand reply 0x21 offsets: report bytes 13, 14 and 15. A 0x10 reply then
+ * echoes the 4-byte little-endian SPI address and 1-byte size before its data. */
 #define WMR_SWITCH_REPLY_OFF_ACK        14
 #define WMR_SWITCH_REPLY_OFF_SUBCMD     15
 #define WMR_SWITCH_REPLY_OFF_DATA       16
+#define WMR_SWITCH_SPI_ECHO_SIZE        5
+#define WMR_SWITCH_REPLY_OFF_SPI_DATA   (WMR_SWITCH_REPLY_OFF_DATA + WMR_SWITCH_SPI_ECHO_SIZE)
 #define WMR_SWITCH_REPLY_MIN_SIZE       (WMR_SWITCH_REPLY_OFF_DATA + 1)
 
 /* Button bits, report bytes 3 (right), 4 (shared) and 5 (left). */
@@ -211,9 +214,10 @@ typedef struct {
     uint16_t stick_max[WMR_NUM_CONTROLLERS][2];
 } wmr_switch_calibration_t;
 
-/* Parse the 24-byte IMU and 18-byte stick blocks as read from SPI. Out-of-range values
- * leave the affected section invalid instead of making up axes; the decoder then uses the
- * documented default scales. */
+/* Parse the 24-byte IMU and 18-byte stick blocks as read from SPI. The stick
+ * groups hold deltas around the centre; stick_min/stick_max receive the absolute
+ * wire values. Out-of-range values leave the affected section invalid instead of
+ * making up axes; the decoder then uses the documented default scales. */
 void wmr_switch_calibration_parse(const uint8_t imu[WMR_SWITCH_CAL_IMU_LEN],
                                   const uint8_t stick[WMR_SWITCH_CAL_STICK_LEN],
                                   wmr_switch_calibration_t *out);
