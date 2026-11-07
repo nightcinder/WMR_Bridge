@@ -6,8 +6,10 @@ capture under `captures/` to `tools/analyze_capture.py`, and prints one report:
 app, firmware, MTU and stream facts, per-hand rates and loss, sequence gaps,
 the 6DoF pose-file inventory, and every missing or inconsistent file.
 
-A bundle without a manifest, without diagnostics, or without a capture exits
-nonzero and names the problem. Everything else is reported and exits zero.
+A bundle without a manifest, without diagnostics, or without any capture or
+pose file exits nonzero and names the problem. Everything else is reported and
+exits zero. A 6DoF-only bench bundle has no `captures/`, no bridge and no
+latency run; its six pose recordings are the analysable data.
 
 Standard library only. Run from anywhere:
 
@@ -240,6 +242,51 @@ def _pose_run_seconds(samples):
     return (last - first) / 1e9
 
 
+def _distinct_tracking_frames(samples, hand=None):
+    """Count runs of identical tracking content, ignoring timestamps.
+
+    Only the recorded hand is compared: the other hand still moves and would
+    hide a repeated anchor frame; when the recorded hand is absent, the head
+    frame is the fallback. Returns None when the samples carry no hand or head
+    content, so a synthetic fixture without a real tracking frame is not
+    flagged.
+    """
+    def strip(value):
+        if isinstance(value, dict):
+            return {key: strip(item) for key, item in value.items()
+                    if key not in ("time_ns", "host_time_ns")}
+        if isinstance(value, list):
+            return [strip(item) for item in value]
+        return value
+
+    last = object()
+    distinct = 0
+    for sample in samples:
+        tracking = sample.get("tracking") if isinstance(sample, dict) else None
+        if not isinstance(tracking, dict):
+            return None
+        content = strip(tracking)
+        hands = content.get("hands") if isinstance(content, dict) else None
+        head = content.get("head") if isinstance(content, dict) else None
+        payload = None
+        if isinstance(hands, dict):
+            if hand:
+                recorded = hands.get(hand)
+                if recorded is not None:
+                    payload = {"hand": recorded}
+            else:
+                payload = hands
+        if payload is None and head:
+            payload = {"head": head}
+        if payload is None:
+            return None
+        signature = json.dumps(payload, sort_keys=True)
+        if signature != last:
+            distinct += 1
+            last = signature
+    return distinct
+
+
 def _pose_file_note(path, problems, segment=None):
     try:
         with open(path, "r") as fp:
@@ -267,7 +314,23 @@ def _pose_file_note(path, problems, segment=None):
     if seconds < minimumRunSeconds and segment != "occlusion":
         problems.append("%s: run is %.1f s, shorter than %d s"
                         % (os.path.basename(path), seconds, minimumRunSeconds))
-    return "%d samples over %.1f s" % (len(samples), seconds)
+    note = "%d samples over %.1f s" % (len(samples), seconds)
+    match = POSE_NAME.match(os.path.basename(path))
+    distinct = _distinct_tracking_frames(samples, match.group(2) if match else None)
+    if distinct is not None and distinct < len(samples):
+        note += " (%d distinct tracking frame%s)" % (
+            distinct, "" if distinct == 1 else "s")
+        if distinct * 2 <= len(samples):
+            problems.append(
+                "%s: %d of %d samples repeat the preceding tracking frame; "
+                "the declared anchor rate is overstated"
+                % (os.path.basename(path), len(samples) - distinct, len(samples)))
+    return note
+
+
+def _bench_mode(meta, diagnostics):
+    """Bench mode from diagnostics.json, falling back to the manifest."""
+    return (diagnostics.get("bench_mode") or meta.get("Bench mode") or "").strip()
 
 
 def _manifest_checks(meta, diagnostics, problems):
@@ -282,7 +345,7 @@ def _manifest_checks(meta, diagnostics, problems):
     if manifest_bridges and manifest_bridges != str(len(bridges)):
         problems.append("manifest says %s bridge(s); diagnostics.json has %d"
                         % (manifest_bridges, len(bridges)))
-    if not bridges:
+    if not bridges and _bench_mode(meta, diagnostics) != "6dof_only":
         problems.append("diagnostics.json lists no bridge (nothing was connected)"
                         " at export")
 
@@ -315,9 +378,13 @@ def triage(zip_path):
                 name for name in os.listdir(os.path.join(work, "captures"))
                 if name.endswith(".txt")
             ) if os.path.isdir(os.path.join(work, "captures")) else []
-            if not captures:
-                raise BundleError("no capture files under captures/ "
-                                  "(nothing to analyse)")
+            poses = sorted(
+                name for name in os.listdir(work)
+                if name.startswith(POSE_PREFIX) and name.endswith(".json"))
+            if not captures and not poses:
+                raise BundleError("no capture files under captures/ and no "
+                                  "pose captures in the bundle (nothing to "
+                                  "analyse)")
 
             problems = []
             lines = ["Bundle: %s" % zip_path,
@@ -335,6 +402,20 @@ def triage(zip_path):
             if meta:
                 lines.append("Manifest: %d field(s), date %s"
                              % (len(meta), meta.get("Date", "unknown")))
+            bench_mode = _bench_mode(meta, diagnostics)
+            if bench_mode:
+                runtime = diagnostics.get("tracking_runtime")
+                lines.append("Bench: %s%s"
+                             % (bench_mode,
+                                ", runtime %s" % runtime if runtime else ""))
+            steps = (diagnostics.get("bench") or {}).get("steps")
+            if isinstance(steps, list) and steps:
+                statuses = [step.get("status") for step in steps
+                            if isinstance(step, dict)]
+                lines.append("Bench steps: %d done, %d skipped, %d failed (%d)"
+                             % (statuses.count("done"),
+                                statuses.count("skipped"),
+                                statuses.count("failed"), len(steps)))
             _manifest_checks(meta, diagnostics, problems)
 
             bridges = [b for b in diagnostics.get("bridges") or []
@@ -378,7 +459,8 @@ def triage(zip_path):
 
             if not os.path.isfile(os.path.join(work, "README.md")):
                 problems.append("README.md is missing from the bundle")
-            if not os.path.isdir(os.path.join(work, "latency")):
+            if not os.path.isdir(os.path.join(work, "latency")) and (
+                    bench_mode != "6dof_only"):
                 problems.append("no latency/ files (no latency run was saved)")
 
             lines.append("")
