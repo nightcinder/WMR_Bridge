@@ -9,7 +9,7 @@ and ONY-176 Sitting R (RIGHT asymmetry, phases 1–2, no reflash).
 Nothing here is a hardware result until the figures are pasted back. A check
 with no figures is `not run`.
 
-Plan: ONY-926. Runbook owner: Nick. Firmware: **WMR_Bridge v0.3.5**. Phone
+Plan: ONY-926. Runbook owner: Nick. Firmware: **WMR_Bridge v0.3.11**. Phone
 apps: **Companion 0.3.18** and **GATT probe 0.3.18**.
 
 ---
@@ -19,9 +19,9 @@ apps: **Companion 0.3.18** and **GATT probe 0.3.18**.
 | Block | Check | Gate / decision | Time |
 |---|---|---|---|
 | **A** | ONY-23 latency-2: app vs native GATT probe | Milestone 5: Stay Flutter / move the receive hot path native / in between. Needs three interleaved blocks in **two sessions** | 75–90 min per session |
-| **B** | FF16 live read, FF17 `DebugScreen`, stick calibration | 0.3.5 protocol and app controls | 30–40 min |
-| **C** | ONY-446 RIGHT reconnect after discovery | Packaged 0.3.5 fixes the 0.2.4 RIGHT stall | 30 min |
-| **D** | ONY-441 HID gamepad | 0.3.5 HID recheck; the only pass so far is on `0.2.4-38` | 20 min |
+| **B** | FF16 live read, FF17 `DebugScreen`, stick calibration | 0.3.11 protocol and app controls | 30–40 min |
+| **C** | ONY-446 RIGHT reconnect after discovery | Packaged 0.3.11 fixes the 0.2.4 RIGHT stall | 30 min |
+| **D** | ONY-441 HID gamepad | 0.3.11 HID recheck; the only pass so far is on `0.2.4-38` | 20 min |
 | **E** | GPIO 4 status LED | red / yellow / blue / green mapping | 5 min |
 | **F** | ONY-176 Sitting R, phases 1–2 | Does RIGHT's ~10.8 % alone-loss follow the controller, the hand slot, or the position? | 45–60 min |
 
@@ -38,22 +38,22 @@ Session 1 (functional) is about 1.5–2 h. The two latency sessions are about
 
 ## 1. Install
 
-### 1.1 Firmware v0.3.5
+### 1.1 Firmware v0.3.11
 
 Use the browser installer or the release image, not a local build:
 
 - Installer: <https://nightcinder.github.io/WMR_Bridge/>
-- Release: <https://github.com/nightcinder/WMR_Bridge/releases/tag/v0.3.5>
+- Release: <https://github.com/nightcinder/WMR_Bridge/releases/tag/v0.3.11>
 
 1. Open the installer in desktop Chrome or Edge with a USB **data** cable.
-2. Choose **Both hands** and install `v0.3.5`. If the board will not enter the
+2. Choose **Both hands** and install `v0.3.11`. If the board will not enter the
    bootloader, hold **BOOT** while the installer retries.
 3. Open the serial monitor and confirm before touching the controllers:
-   - boot banner prints `WMR Bridge firmware 0.3.5 ...` and
+   - boot banner prints `WMR Bridge firmware 0.3.11 ...` and
      `serving LEFT and RIGHT`;
    - `LED: WS2812 on GPIO 4 27` (the prebuilt image drives both pins);
-   - console `v` prints `0.3.5`.
-4. Connect the app and confirm the Debug screen shows `firmware 0.3.5` and
+   - console `v` prints `0.3.11`.
+4. Connect the app and confirm the Debug screen shows `firmware 0.3.11` and
    `FF11+ FF12+ FF13+ FF14+ FF15+ FF16+ FF17+`.
 
 A full factory flash erases the stored controller addresses and the bridge's
@@ -61,7 +61,7 @@ phone bond. Pair both controllers again. If the phone still holds an old
 `WMR Bridge` bond from a 0.2.x build, forget that entry once in Android
 Bluetooth settings before pairing.
 
-If the board already reports `0.3.5` (console `v` and FF16 agree), do not
+If the board already reports `0.3.11` (console `v` and FF16 agree), do not
 reflash just for this sitting; record both reads in §2.
 
 ### 1.2 Phone APKs
@@ -114,7 +114,7 @@ Paste this at the top of the result block; every block inherits it.
 
 | Field | Where from | Expected |
 |---|---|---|
-| Bridge firmware + hash | Console `v`; `git describe --tags --always` of the flashed commit; release `build-info.json` `version` | `0.3.5` |
+| Bridge firmware + hash | Console `v`; `git describe --tags --always` of the flashed commit; release `build-info.json` `version` | `0.3.11` |
 | `bridge_hands=` | `STREAM` line (console `s` or the periodic stats) | `0` (both hands) unless the block says otherwise |
 | App version + commit | Debug screen → About | `0.3.18` |
 | Probe version + commit | APK filename / build output | `0.3.18` |
@@ -276,8 +276,8 @@ disagree, the result is **not shown**; repeat rather than choosing a session.
 
 | Step | Pass | Fail |
 |---|---|---|
-| 1 | `firmware 0.3.5` and `FF11+ FF12+ FF13+ FF14+ FF15+ FF16+ FF17+` | `n/a (no FF16)`, `malformed`, or a different version |
-| 2 | One line matching the release `build-info.json` `version` (`0.3.5`), not `1` or empty | `1` or empty |
+| 1 | `firmware 0.3.11` and `FF11+ FF12+ FF13+ FF14+ FF15+ FF16+ FF17+` | `n/a (no FF16)`, `malformed`, or a different version |
+| 2 | One line matching the release `build-info.json` `version` (`0.3.11`), not `1` or empty | `1` or empty |
 | 3 | Same string after reconnect, with `none` and `FF14` | String changes or disappears when the stream changes |
 
 Record: app string, bit row, console line, `build-info.json` version, stream used.
@@ -330,7 +330,7 @@ outcome, and the `learn`/centre values from the file.
 
 Spec: [`docs/DISCOVERY.md`](../../DISCOVERY.md). The 0.2.4 failure: RIGHT's ACL
 came up about 2 s after `discovery finished`, nothing encrypted it, and neither
-hand produced a report for 18 s until reset. 0.3.5 encrypts that ACL after
+hand produced a report for 18 s until reset. 0.3.11 encrypts that ACL after
 750 ms and drops it after 4 s without a HID channel so the controller pages
 again.
 
@@ -352,7 +352,7 @@ the power-cycle lines.
 ## 6. Block D — ONY-441 HID gamepad
 
 Spec: [`docs/HID_GAMEPAD.md`](../../HID_GAMEPAD.md). The only pass so far is on
-the pre-0.3.0 build `0.2.4-38-g4bcf01c`; this block is the v0.3.5 recheck.
+the pre-0.3.0 build `0.2.4-38-g4bcf01c`; this block is the v0.3.11 recheck.
 
 Setup: bridge booted and advertising (`adv=on`, no discovery round), both hands
 connected, phone ready. If the phone held a 0.2.x bond, forget `WMR Bridge`
@@ -477,7 +477,7 @@ One row per check. Fill only from §10 figures; `not run` is the honest default.
 ## 10. Paste-back block
 
 ```text
-Build: firmware 0.3.5 / <hash> / build-info version <...>;
+Build: firmware 0.3.11 / <hash> / build-info version <...>;
        app 0.3.18 / <commit>; probe 0.3.18 / <commit>
 Phone: <model>, Android <version>; STREAM bridge_hands=<0|1>; position <distance/photo>
 
