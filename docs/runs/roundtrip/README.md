@@ -54,3 +54,23 @@ Notes for re-deriving the runs:
   answer skipped, ESP32 turnaround, clock-offset estimate). The frame CSV holds
   the per-record arrivals and device ticks. Percentiles in the JSON are
   nearest-rank over the whole run.
+
+## 2026-11-07 app against probe latency bench (ONY-23, WMR_Bridge v0.3.5)
+
+Eight runs were recorded on 2026-11-07 with a Pixel phone. They test Companion 0.3.18 and native GATT probe 0.3.18 against WMR_Bridge v0.3.5. These exports correspond to runs 1, 2, 3, 4, 13, 14, 17, and 18 from `docs/runs/sheets/internal-esp32-wmr-bench.md`.
+
+| Run | Client | Stream | Interval | Files | Round trip p50 / p99 / max | Pings over 50 ms | Tick loss LEFT / RIGHT | Stalls over 50 ms LEFT / RIGHT | RSSI start to end |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | App | none | 250 ms | `latency-20261107-114053{,-echo,-samples}.csv`, `.json` | 38.9 / 89.4 / 137.3 ms | 54 / 479 | n/a | 0 / 0 | n/a |
+| 2 | Probe | none | 250 ms | `latency-20261107-114008{,-echo,-samples}.csv`, `.json` | 35.2 / 73.0 / 96.8 ms | 60 / 473 | n/a | 0 / 0 | −81 to −83 dBm |
+| 3 | App | FF14 batched | 250 ms | `latency-20261107-114337{,-echo,-samples}.csv`, `.json` | 42.2 / 132.2 / 185.2 ms | 155 / 480 | 22.2 % / 18.9 % | 490 / 440 | n/a |
+| 4 | Probe | FF14 batched | 250 ms | `latency-20261107-114821{,-echo,-samples}.csv`, `.json` | n/a (0 answers, 119 timeouts) | n/a | 23.1 % / 18.6 % | 277 / 229 | −81 to −78 dBm |
+| 13 | App | FF14 batched | 50 ms | `latency-20261107-114850{,-echo,-samples}.csv`, `.json` | 50.5 / 104.1 / 138.9 ms | 794 / 1519 | n/a | 0 / 0 | n/a |
+| 14 | Probe | FF14 batched | 50 ms | `latency-20261107-115554{,-echo,-samples}.csv`, `.json` | 53.1 / 99.5 / 144.0 ms | 982 / 1541 | n/a | 0 / 0 | −80 to −78 dBm |
+| 17 | App | FF14 batched | 1000 ms | `latency-20261107-115121{,-echo,-samples}.csv`, `.json` | 50.0 / 85.4 / 104.3 ms | 60 / 120 | n/a | 0 / 0 | n/a |
+| 18 | Probe | FF14 batched | 1000 ms | `latency-20261107-115758{,-echo,-samples}.csv`, `.json` | 59.9 / 118.6 / 141.3 ms | 92 / 120 | n/a | 0 / 0 | −80 to −79 dBm |
+
+Notes on the 2026-11-07 runs:
+
+- Run 4 received controller stream packets and recorded stream stalls. Every round-trip ping timed out because no echo response arrived.
+- Runs 13, 14, 17, and 18 exercised the ping interval ladder. The clients received no stream frame records during these runs.
