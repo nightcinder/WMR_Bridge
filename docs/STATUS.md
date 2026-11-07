@@ -59,7 +59,7 @@ maintained at the project's single entry point:
 | Pi host-bridge packaging: `build_package.sh`, `verify_package.sh` and a no-hardware `dry_run.sh` (ONY-440, #87, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)) | Merged (v0.3.0) | Packaging tests and dry run pass; never run on Pi hardware |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: about 45–52 min dual-controller, about 58–65 min single-controller; not recommended for session VR |
 | BLE HID-over-GATT gamepad (ONY-441, merged for v0.3.0) | Implemented and passes the 2026-10-28 phone run on the pre-0.3.0 branch build `0.2.4-38-g4bcf01c`: it pairs, bonds, raises ATT MTU to 517, enables the HID Report CCCD (`hid=on`) and streams HID reports (about 68/s, `errors=0`) with both controllers connected; the phone reconnects to the bond after a bridge reboot without re-pairing. CTKD was the last blocker: `0.2.4-38` disables it, so Android keeps the LE HID transport and shows no second Classic entry | PASS (phone + mapping) on `0.2.4-38-g4bcf01c`: Pixel 11 Pro / Android 17; gamepad appears and controls register in the tester. Controller power-cycle after the reboot was not re-captured. The v0.3.11 recheck is open ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block D). See [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
-| Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 Sitting R run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE. The 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers ([`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). One FF14 native-probe run and one app FF14 run exist, but not as a paired cell from one session and position; latency-2 still needs three interleaved runs per cell in each of two sessions before it reaches a verdict ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block A) |
+| Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 Sitting R run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE. The 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers ([`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). ONY-23 (M7 latency-2) is closed: **Stay Flutter** under the ONY-1010 amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). The 2026-11-07 pair misses the Stay branch on RIGHT stalls (440 vs 698, 37 % apart) and lands in between: stay Flutter, gaps filed upstream. 2026-10-28 `d` = +3.7 ms (one unpaired run per client); 2026-11-07 `d` = -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms (rule in [latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md); figures in [`docs/runs/roundtrip/`](runs/roundtrip/README.md)) |
 
 ## BLE HID gamepad (ONY-441)
 
@@ -160,16 +160,21 @@ so because a run exists. `, ` means nothing has run yet.
 | FF17 scan/connect | `partial`, status v2 captured from FF17 notifications: version 1, both hands `addr_source` 2 (NVS) with distinct tails, discovery idle / round 4, `flags` 0 on both (taken disconnected). DISCOVER `0x01` → `last_result` `0x03` NOTHING_TO_DO; `0x05 0x01` FORGET_BOND RIGHT → `last_result` `0x00` OK with RIGHT disconnected, which explains the earlier `05/06` as a >2-byte write and makes a `134` consistent with ATT `0x86`. Connected-state status, connect/disconnect, double disconnect, `0x7f` and step 6 as written (BUSY while RIGHT connected) unrun; RIGHT link key cleared, so it must be re-paired | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | bench §4, §8 |
 | Stick dead zone | `partial`, normalized rest `0.0000, 0.0000` both hands at dead zone 0.05, centres LEFT `-0.0227, 0.0090` / RIGHT `-0.1119, 0.0819`; three sittings: RIGHT stable at about `-0.112, +0.085` (real bias), LEFT moved `-0.030, -0.011` → `-0.008, +0.021` → `+0.017, +0.025`, still learning. Dead zone 0 set but saved settings read `learn true` after the switch was reported off (toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair; end stops, held offset and a confirmed learning-off run missing | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | bench §4, §8 |
 | Latency stream ladder | `partial`, one 120 s run per stream: p50 `none` 63.4 / 62.3, FF11 34.3, FF12 34.5, FF14 39.3 ms, 479/479 answered; one session, so no ladder verdict (`latency-2` §3.3) | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/runs/sheets/latency-2.md` §3–§5 |
-| App-vs-native probe decision | `partial`, app FF14 39.3 ms vs probe 35.6 ms (`d` = +3.7), stalls 235/317 vs 274/365, inside both Stay bounds but from one unpaired run per client | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/runs/sheets/latency-2.md` §6 |
+| App-vs-native probe decision | `pass`, ONY-23 closed: **Stay Flutter** under the ONY-1010 amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). The 2026-11-07 pair misses the Stay branch on RIGHT stalls (440 vs 698, 37 % apart) and lands in between: stay Flutter, gaps filed upstream. 2026-10-28 app 39.3 vs probe 35.6 ms (`d` = +3.7, one unpaired run per client); 2026-11-07 `d` = -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms, probe stalls 610/698 vs app 490/440 | Pixel 11 Pro, Android 17; 2026-11-07 builds in `docs/runs/roundtrip/README.md` | `wmr-companion` `docs/runs/sheets/latency-2.md` (rule); `docs/runs/roundtrip/README.md` (figures); ONY-1010 (amendment) |
 | FF13 calibration applied in fusion | `partial`, pose recordings: 6.6 s face-down rest LEFT `+0.00°`, RIGHT `−0.03°`; a 14.4 s hand-held take turned RIGHT `−25.3°`. Prose rest pair 83.5 / 42.7 unlabelled for off/on, no 90° error | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/PROTOCOL.md` "FF13 config block in the app"; bench §8 (FF13 evidence) |
 
-In hand but not a verdict: the app ladder (five exports, none twice) covers all four
-streams, and the native GATT probe FF14 run (2026-10-28 19:27:46, 120 s, 473/473
-answered, RTT p50 35.6 ms, stalls LEFT 274 / RIGHT 365) now has a same-build app
-FF14 run to compare with. Applying `latency-2` §6 arithmetic gives `d` = +3.7 ms and
-stall counts inside 25 % on both hands, which is the Stay window, but §3.3 requires
-three runs per cell, interleaved, plus a second session before a verdict, so checks 4
-and 5 stay `partial`. The figures above are the evidence.
+ONY-23 closed on 2026-11-07. The 2026-10-28 pair gave `d` = +3.7 ms (one
+unpaired run per client) and the 2026-11-07 session gave `d` = -16.3 ms at
+250 ms, -2.6 ms at 50 ms and -9.9 ms at 1000 ms, with probe stalls 610/698
+against app 490/440. The 250 ms pair is app 11:43 against a probe re-run at
+15:18 (app RSSI not recorded), and the 50 and 1000 ms runs received no stream
+frames. Under the ONY-1010 amendment (warm/stable start; one-sided
+`d <= +5 ms`, stalls within 25 %) the 250 ms pair misses the Stay branch on
+RIGHT stalls (440 vs 698, 37 % apart) and lands in between: **Stay Flutter**,
+with the `universal_ble` gaps filed upstream. The Dart client is not the
+bottleneck. The native probe is retired; the rule and protocol remain in
+`wmr-companion/docs/runs/sheets/latency-2.md` and the 2026-11-07 figures are
+archived in `docs/runs/roundtrip/README.md`.
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 
@@ -216,8 +221,11 @@ Full run sheet and figures:
   multi-bridge, export v3) did not move the streamed median, and the no-stream
   penalty reproduced (about 59 ms then, 61.6 ms now), which fits the
   slave-latency explanation. That is one pass of the ladder: the none and FF14
-  repeats are not run, and latency-2 (app against the native GATT probe) is
-  still open, so the split between app, plugin and radio is still unknown. See
+  repeats are not run. Latency-2 closed ONY-23 as **Stay Flutter** under the
+  ONY-1010 amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within
+  25 %); the 2026-11-07 pair lands in between (stay Flutter, gaps filed
+  upstream), so the Dart client is not the bottleneck and the split lies in the
+  plugin and radio. See
   [`docs/PREDICTION.md`](PREDICTION.md) section 5.
 
 ### 4. Next Step: Multi-Bridge Architecture & Pi Wi-Fi Host Bridge

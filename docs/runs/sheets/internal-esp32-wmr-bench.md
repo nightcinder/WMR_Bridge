@@ -2,58 +2,56 @@
 
 Status: runbook, not a result. A check is `not run` until its figures are pasted back. This sheet replaces `ony-439-android-verification.md`.
 
-Firmware **v0.3.11**; apps **Companion 0.3.18** and **GATT probe 0.3.18**. Plan ONY-926.
+Firmware **v0.3.11**; app **Companion 0.3.18**. Plan ONY-926.
 
 ## 0. Blocks
 
 | Block | Check | Decision | Time |
 |---|---|---|---|
-| A | ONY-23 latency-2: app vs native probe | Milestone 5: Stay Flutter / move native / in between; two sessions | 75-90 min each |
 | B | FF16, FF17 DebugScreen, stick | 0.3.11 protocol and app controls | 30-40 min |
 | C | ONY-446 RIGHT reconnect | 0.3.11 fixes the 0.2.4 stall | 30 min |
 | D | ONY-441 HID gamepad | 0.3.11 recheck | 20 min |
 | E | GPIO 4 status LED | red / yellow / blue / green | 5 min |
 | F | Sitting R phases 1-2 | Does RIGHT's ~10.8 % follow controller, slot or position? | 45-60 min |
 
-Order: install, then **B -> E -> C -> D** on one boot. Do **F** next on a fresh boot with one controller powered. Do **A** last in its own taped session, then repeat on another power-up. Do not interleave A with radio moves.
+Order: install, then **B -> E -> C -> D** on one boot. Do **F** next on a fresh boot with one controller powered.
 
 ## 1. Install and record
 1. Install the **Both hands** `v0.3.11` image from the [installer](https://nightcinder.github.io/WMR_Bridge/) or the release.
 2. Confirm the boot banner, console `v` and Debug screen all say `0.3.11`, with all capability bits. If so, do not reflash.
-3. Install both APKs from the `wmr-companion` `v0.3.18` release. If the probe will not update, uninstall `com.onyxlens.wmr.gattprobe` once, then install.
-4. Record: firmware hash, `bridge_hands=`, app/probe versions, phone and Android, LED wiring (GPIO 4 or `declined`).
+3. Install the Companion APK from the `wmr-companion` `v0.3.18` release.
+4. Record: firmware hash, `bridge_hands=`, app version, phone and Android, LED wiring (GPIO 4 or `declined`).
 
 A factory flash erases controller addresses and the phone bond. Pair both controllers again; forget an old 0.2.x `WMR Bridge` bond in Android first.
 
 ## 2. Common rules
-- One phone client at a time (`phone=1`): force-stop the Companion before the probe, and disconnect the probe before the Companion.
-- Probes before ONY-973 only scan. While the phone holds the HID gamepad link the bridge stops advertising: remove the `WMR Bridge` bond before the probe, then pair the gamepad again.
 - Tape the bridge, phone and controller spots; do not move them inside a block.
 - Select the stream, wait **30 s**, confirm `mtu=517`, `phone=1` and live `rate_rx`; a no-stream run shows `stream=none sub=0`. Copy the first and last `STREAM` line per run, including `conn=[...]`, plus RSSI.
 - A disconnect, sleeping controller, wrong stream, missing `STREAM`, MTU below 517, interval change or moved rig invalidates the run. Mark it and repeat.
 
-## 3. Block A — ONY-23 latency-2
+## 3. Block A — ONY-23 latency-2 (closed)
 
-Canonical protocol: [latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md); it wins if they differ. Question: how much of the ~40-45 ms FF15 round trip and more than 50 ms stalls is Flutter/Dart, and how much is radio?
+**Closed — Stay Flutter** (ONY-23). ONY-1010 amended the rule: the test
+condition is a normal warm/stable power state, and the Stay Flutter bound is
+one-sided `d = app p50 - probe p50 <= +5 ms`; the >50 ms stall count must still
+be within 25 % of the probe's (`abs(a - p) <= 0.25 x p`) on both hands. Move the
+receive path native if `d >= +10 ms` or probe stalls are `< 0.5 x` the app's on
+either hand; otherwise it is in between — stay Flutter and file the
+`universal_ble` gaps upstream. The pre-amendment
+[latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md)
+rule is two-sided `abs(d) <= 5 ms` with the same stall bound.
 
-**Verdict, FF14 pair only:**
-- Move the receive path native if `app p50 - probe p50 >= 10 ms`, or probe stalls `< 0.5 x` the app's on either hand.
-- Stay Flutter only if `abs(d) <= 5 ms` and both hands have `abs(a - p) <= 0.25 x p` (median `stalls_over_50000us`).
-- Otherwise "in between". One session is not a verdict.
-
-Setup: phone taped about 1.0 m from the bridge; controllers face down and still about 0.5 m away; fixed board orientation; same phone and builds; battery saver and scanning off; fresh connection per run.
-
-Each run is **120 s** at **250 ms**, in this order. **Skip the Companion `none` runs** (1, 6, 9): that app mode is known broken (ONY-980). The verdict uses the FF14 pair only; probe `none` runs are optional RTT context.
-
-| Block | Runs (client, stream) |
-|---|---|
-| 1 | ~~App none~~, Probe none, App FF14, Probe FF14 |
-| 2 | Probe none, ~~App none~~, Probe FF14, App FF14 |
-| 3 | ~~App none~~, Probe none, App FF14, Probe FF14 |
-
-Record client, stream, validity, MTU, `conn`, RSSI, sent/answered/timeouts, RTT min/p50/p95/p99/max, turnaround p50, per-hand stalls, gaps and file names. Discard a pair if RSSI differs by more than 3 dB or link parameters differ.
-
-Interval pass, FF14: App/Probe at **50 ms**, then **250 ms**, then **1000 ms** (6 runs). Compare cluster spacing, not only p50. Repeat the same **15 runs** in a second session; if they disagree, the result is `not shown`.
+Evidence: 2026-10-28 `d` = +3.7 ms, one unpaired run per client, with stalls
+inside 25 % on both hands; 2026-11-07 `d` = -16.3 / -2.6 / -9.9 ms at 250 / 50 /
+1000 ms, with probe stalls 610/698 against app 490/440. The 250 ms pair is app
+11:43 against a probe re-run at 15:18 (app RSSI not recorded), and its RIGHT
+stalls are 37 % apart (440 vs 698), so it misses the Stay branch under either
+bound and lands in between: Stay Flutter, gaps filed upstream. The 50 and
+1000 ms runs received no stream frames. The Dart client is not the bottleneck;
+the round trip is radio-bound. The native probe is retired. ONY-1010 records the
+amendment; the rule and protocol are in `latency-2`; the 2026-11-07 figures are
+archived in [`docs/runs/roundtrip/README.md`](../roundtrip/README.md). Do not run
+this block.
 
 ## 4. Block B — FF16, FF17, stick
 
@@ -159,12 +157,11 @@ Restore the normal both-hands image afterwards.
 
 | # | Block | Check | Result |
 |---|---|---|---|
-| 1-3 | A | Latency sessions 1, 2, verdict | not run |
-| 4-6 | B | FF16, FF17, stick | not run |
-| 7-9 | C-E | ONY-446, HID, LED | not run |
-| 10-11 | F | Sitting R phases 1-2, phase 3 | not run |
+| 1-3 | B | FF16, FF17, stick | not run |
+| 4-6 | C-E | ONY-446, HID, LED | not run |
+| 7-8 | F | Sitting R phases 1-2, phase 3 | not run |
 
-Paste: build header; per-run exports and `STREAM`; A verdict; B status/ATT; C monitor lines; D control notes; E colours; F/F2 means and attribution; defects filed. A check with no figures is `not run`.
+Paste: build header; per-run exports and `STREAM`; B status/ATT; C monitor lines; D control notes; E colours; F/F2 means and attribution; defects filed. A check with no figures is `not run`.
 
 ### FF13 evidence (0.2.4)
 

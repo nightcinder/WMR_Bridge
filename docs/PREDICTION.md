@@ -436,16 +436,22 @@ These are host tests, no hardware:
 ## 5. Is the 2026-10-22 latency run still current?
 
 Short answer: the stream ladder has one current pass. The ladder repeats are
-not run, and latency-2 has one FF14 run per client but not the three
-interleaved runs per cell or the second session it requires. Four 120 s runs
+not run; latency-2 is closed (ONY-23) as **Stay Flutter** under the ONY-1010
+amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). Four
+120 s runs
 on 2026-10-24 with firmware `v0.1.1`
 and the `0.1.0` app measured rtt p50 40.5 ms (FF14) against 40.8 ms on
 2026-10-22, 44.8 ms (FF11), 44.3 ms (FF12) and 61.6 ms with no stream. So
 neither the client refactor nor the firmware changes since then moved the
 streamed median, and the old about 59 ms no-stream penalty reproduced. The runs
 are sequential at one stated position rather than interleaved. The FF14 and none
-repeats are missing, and latency-2 (app against the native probe) has only one
-FF14 run per client, so the split between app, plugin and radio remains open.
+repeats are missing. The app-vs-probe evidence is limited: 2026-10-28 is one
+unpaired run per client (`d` = +3.7 ms); the 2026-11-07 250 ms pair is app 11:43
+against a probe re-run at 15:18 (app RSSI not recorded), and its RIGHT stalls
+are 440 vs 698 (37 % apart), so it misses the Stay branch and lands in between
+(stay Flutter, gaps filed upstream). The 50 and 1000 ms runs received no stream
+frames (`d` = -2.6 / -9.9 ms). The Dart client is not the bottleneck, so the
+remaining split is plugin and radio.
 The rest of this
 section keeps the 2026-10-22 comparison as the record of what changed between
 the two builds.
@@ -517,15 +523,16 @@ the RSSI samples span 8 dB (the app reads RSSI twice per run, at start and
 stop, at 1 dB resolution, so that spread does not prove the rig moved). So the
 4 ms FF11/FF12 penalty against FF14 cannot be separated from session drift.
 
-The FF14 and no-stream repeats remain unrun, and latency-2 is incomplete: one
-FF14 run per client is not the three-run cell or the second session its sheet
-requires. In particular, no run yet separates the app's share of the round trip
-from the radio's.
+The FF14 and no-stream repeats remain unrun. Latency-2 closed (ONY-23) as
+**Stay Flutter** under the ONY-1010 amendment (warm/stable start; one-sided
+`d <= +5 ms`, stalls within 25 %); the 2026-11-07 pair lands in between (stay
+Flutter, gaps filed upstream), so the Dart client's share of the round trip is
+off the critical path and the remainder is plugin and radio.
 
 ### 5.4 What is still required for a current latency claim
 
-The ladder repeats and latency-2. Do not run a new bespoke test. The two
-existing sheets already define what is missing:
+The ladder repeats. Do not run a new bespoke test. The existing sheet defines
+what is missing:
 
 - [wmr-companion LATENCY.md](https://github.com/nightcinder/wmr-companion/blob/main/docs/LATENCY.md)
   "Run sheet": six runs at one fixed position (none, FF11, FF12, FF14, then
@@ -533,14 +540,15 @@ existing sheets already define what is missing:
   the current firmware and APK hashes recorded. The 2026-10-24 sitting covers
   the first four (one pass, not interleaved). The two repeats are still needed
   before a 4 ms difference between streams is called real.
-- [latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md):
-  the Flutter client against the bare-Kotlin GATT probe, which is the decision
-  that actually needs a current number. The probe is merged (`tool/gatt_probe`,
-  PR #36); its debug APK is due as the `v0.3.18` release asset
-  `wmr-gatt-probe-0.3.18-debug.apk`. One FF14 run per client (app 39.3 ms,
-  probe 35.6 ms, `d` = +3.7 ms) is not a verdict: the sheet needs three
-  interleaved runs per cell and a second session, and its interval pass has not
-  run.
+- Latency-2 is closed (ONY-23, **Stay Flutter**) under the ONY-1010 amendment
+  (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %), with
+  2026-10-28 `d` = +3.7 ms (one unpaired run per client) and 2026-11-07 `d` =
+  -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms; the 250 ms pair misses the Stay
+  branch on RIGHT stalls and lands in between (stay Flutter, gaps filed
+  upstream). The probe is retired; the rule and protocol stay in
+  [latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md)
+  and the 2026-11-07 figures are archived in
+  [`runs/roundtrip/`](runs/roundtrip/README.md).
 
 Add the current both-hands versus single-hand comparison if the question is
 specifically the single-ESP32 capacity, rather than only the client. The
@@ -620,9 +628,10 @@ Until those exist, this is a design recommendation, not a shipped feature.
   it an app-only feature, which would duplicate it per platform.
 - The 40.5-44.8 ms streamed latency figures are current for the `0.1.1`/`0.1.0`
   release pair (the 2026-10-24 runs reproduced the 2026-10-22 FF14 median and
-  added none/FF11/FF12), but the ladder repeats and the app/plugin/radio split
-  still need latency-2 completed before the stream ordering or a
-  native-vs-Flutter decision is quoted as a result.
+  added none/FF11/FF12). The ladder repeats still gate the stream ordering, but
+  the native-vs-Flutter decision is closed: ONY-23 is **Stay Flutter** (ONY-1010
+  amendment: warm/stable start, one-sided `d <= +5 ms`, stalls within 25 %; the
+  2026-11-07 pair lands in between).
 - Build prediction only after the loss work, as an opt-in presentation layer
   with the tests and hardware acceptance in sections 4-6.
 
