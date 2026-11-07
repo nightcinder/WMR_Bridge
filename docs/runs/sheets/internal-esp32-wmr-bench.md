@@ -81,9 +81,30 @@ report it there; do not substitute a CI artifact or an older APK. Install both
 while the phone is on Wi-Fi:
 
 ```bash
+adb devices                       # the phone must appear as "device", not "unauthorized"
 adb install -r wmr-companion-0.3.18-unified-arm64-v8a.apk
 adb install -r wmr-gatt-probe-0.3.18-debug.apk
 ```
+
+If the probe install stops with **"App not installed"** / the generic
+**"Something went wrong"** dialog, or `adb` says
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE`, the phone already holds a probe signed
+with a different debug key. The `v0.3.18` probe is debug-signed by the CI
+runner, and every runner mints a new key, so an earlier probe from a CI
+artifact, a local build or ONY-195/467 cannot be updated in place. Remove it
+once, then install:
+
+```bash
+adb uninstall com.onyxlens.wmr.gattprobe   # ignore "Unknown package" on a fresh phone
+adb install wmr-gatt-probe-0.3.18-debug.apk
+adb shell pm list packages | grep com.onyxlens.wmr.gattprobe
+```
+
+`adb push` only copies the APK to the device; it does not install it. Do not
+push to `/sdcard` and tap the file as a workaround — use `adb install`. From
+0.3.19 the probe is signed with the project release key, so later probes update
+in place; installing the first release-signed probe over the debug-signed
+`0.3.18` build also needs the one-time `adb uninstall`.
 
 The probe is the bare-Kotlin client: no Flutter, no plugin, no platform channel.
 
