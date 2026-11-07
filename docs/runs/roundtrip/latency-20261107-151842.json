@@ -1,0 +1,149 @@
+{
+  "format": "wmr-latency",
+  "version": 2,
+  "source": "wmr-gatt-probe (native Android)",
+  "started": "2026-11-07T20:16:42.155520Z",
+  "stream": "batched",
+  "duration_us": 120443255,
+  "round_trip": {
+    "measured": true,
+    "source": "FF15 echo",
+    "sent": 473,
+    "answered": 473,
+    "timeouts": 0,
+    "failed_writes": 0,
+    "rtt": {
+      "count": 473,
+      "min_us": 18161,
+      "p50_us": 58505,
+      "p90_us": 98982,
+      "p95_us": 110614,
+      "p99_us": 134958,
+      "max_us": 186202
+    },
+    "end_to_end": {
+      "count": 473,
+      "min_us": 18633,
+      "p50_us": 60217,
+      "p90_us": 102559,
+      "p95_us": 117425,
+      "p99_us": 138635,
+      "max_us": 197232
+    },
+    "turnaround": {
+      "count": 473,
+      "min_us": 202,
+      "p50_us": 1046,
+      "p90_us": 3780,
+      "p95_us": 9092,
+      "p99_us": 27756,
+      "max_us": 59633
+    },
+    "max_queue_depth": 48,
+    "counters": {
+      "late_or_duplicate_answers": 0,
+      "bad_answers": 0,
+      "pings_skipped_busy": 0
+    },
+    "ping_interval_us": 250000
+  },
+  "link": {
+    "mtu": 517,
+    "rssi_start_dbm": -76,
+    "rssi_end_dbm": -79,
+    "connection_interval_us": 15000,
+    "phy": null,
+    "high_priority_requested": true
+  },
+  "counters": {
+    "incomplete_frames": 0,
+    "reassembly_errors": 0,
+    "decoded_parse_errors": 0
+  },
+  "rows_dropped": 0,
+  "mode_changed": false,
+  "hands": [
+    {
+      "hand": "LEFT",
+      "records": 19091,
+      "arrivals": 4858,
+      "span_us": 120434887,
+      "rate_per_s": 158.52,
+      "inter_arrival": {
+        "count": 4857,
+        "min_us": 228,
+        "p50_us": 15294,
+        "p90_us": 58370,
+        "p95_us": 76472,
+        "p99_us": 107442,
+        "max_us": 166918
+      },
+      "stalls_over_50000us": 610,
+      "sequence_gaps": 0,
+      "sequence_loss": 0.0000,
+      "out_of_order": 0,
+      "missing_from_ticks": 4971,
+      "tick_loss": 0.2066,
+      "period_us": 4981,
+      "delay_above_window_min": {
+        "count": 19091,
+        "min_us": 0,
+        "p50_us": 44750,
+        "p90_us": 89240,
+        "p95_us": 104917,
+        "p99_us": 139641,
+        "max_us": 194666
+      },
+      "delay_variation": {
+        "count": 19061,
+        "min_us": 1,
+        "p50_us": 1437,
+        "p90_us": 17081,
+        "p95_us": 28940,
+        "p99_us": 62901,
+        "max_us": 152567
+      }
+    },
+    {
+      "hand": "RIGHT",
+      "records": 16062,
+      "arrivals": 4397,
+      "span_us": 120434887,
+      "rate_per_s": 133.37,
+      "inter_arrival": {
+        "count": 4396,
+        "min_us": 185,
+        "p50_us": 17202,
+        "p90_us": 66539,
+        "p95_us": 83820,
+        "p99_us": 114496,
+        "max_us": 162955
+      },
+      "stalls_over_50000us": 698,
+      "sequence_gaps": 0,
+      "sequence_loss": 0.0000,
+      "out_of_order": 0,
+      "missing_from_ticks": 7909,
+      "tick_loss": 0.3299,
+      "period_us": 4988,
+      "delay_above_window_min": {
+        "count": 16062,
+        "min_us": 0,
+        "p50_us": 46786,
+        "p90_us": 87315,
+        "p95_us": 102898,
+        "p99_us": 137776,
+        "max_us": 186605
+      },
+      "delay_variation": {
+        "count": 16019,
+        "min_us": 0,
+        "p50_us": 1909,
+        "p90_us": 19273,
+        "p95_us": 30975,
+        "p99_us": 62746,
+        "max_us": 138304
+      }
+    }
+  ]
+}
