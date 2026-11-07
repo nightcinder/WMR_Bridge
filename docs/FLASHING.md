@@ -175,8 +175,9 @@ and the remaining `WMR_CFG_PSVR2_WAKE` diagnostic switch.
 
 The flasher is a static page using ESP Web Tools. The user connects the board
 over USB, clicks the install button for the image they want (Both hands, LEFT or
-RIGHT), and picks the serial port. The browser writes that variant's merged
-image. There is no ESP-IDF, Arduino IDE or Python install.
+RIGHT), and picks the serial port. The browser writes that variant's
+bootloader, partition table and application images. There is no ESP-IDF,
+Arduino IDE or Python install.
 
 The source pages live in `docs/flasher/` and are copied into `dist/` by the
 build script: `index.html` is the ESP32 flasher and `pi.html` is the Raspberry
@@ -190,8 +191,8 @@ labels.
 
 The installer is live at <https://nightcinder.github.io/WMR_Bridge/>, serving
 the latest tagged release's images (all three variants). The same workflow
-copies `pi.html` and the release `install.sh` beside the images. The `v0.3.11`
-tag publishes the 0.3.11 images to that page.
+copies `pi.html` and the release `install.sh` beside the images. The `v0.3.12`
+tag publishes the 0.3.12 images to that page.
 
 `.github/workflows/firmware.yml` deploys `dist/` to GitHub Pages on a `v*`
 tag. This keeps the manifest and the images same-origin, which the browser

@@ -97,11 +97,11 @@ at `/etc/wmr-bridge/token`, and starts `wmr-bridge.service`.
 To pin a release, set the version and the tag:
 
 ```bash
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.11 sudo -E bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.12/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.12 sudo -E bash
 ```
 
 The Pi package version and the firmware tag are independent. The current
-firmware release is v0.3.11.
+firmware release is v0.3.12.
 
 To check a download by hand, fetch SHA256SUMS from the same release and run:
 
@@ -109,7 +109,7 @@ To check a download by hand, fetch SHA256SUMS from the same release and run:
 sha256sum -c SHA256SUMS --ignore-missing
 ```
 
-The `v0.3.11` release carries six files: three merged factory images
+The `v0.3.12` release carries six files: three merged factory images
 (`wmr-bridge-factory.bin`, `-left`, `-right`), the package, `install.sh`, and
 SHA256SUMS. There are no per-file checksum files.
 
