@@ -5,7 +5,7 @@
 > re-derived. This is not a pose-filter tuning corpus (see §4).
 
 Source: `wmr-ext-20261107.zip` from an external tester, Android XR on an XREAL
-Android XR Puck (Android 14 / API 34). Companion `0.3.18+2023` at `118b63b`,
+Android XR Puck (Android 14 / API 34). Companion `0.3.18+23` at `118b63b`,
 no bridge attached, so `firmware_sha` is null and no FF16 read happened.
 
 ## 1. Bundle
@@ -68,9 +68,10 @@ which it is not here.
 
 The still run is hand-held, not the braced hold in ONY-501's addendum. The left
 palm anchor moves 118 x 269 x 142 mm peak to peak over 15 s and about 9 mm RMS
-against a 1 s moving mean over the last 10 s. The drifting run has a median
-speed of 7.5 cm/s after the first second, below the 10-50 cm/s band; 253 of its
-717 distinct frames are inside the band. The repeated frames in §3 still make
+against a 1 s moving mean over the last 10 s. Between consecutive distinct
+frames the drifting run has a median palm speed of 7.5 cm/s, below the
+10-50 cm/s band; 253 of the 717 intervals between its 718 distinct frames are
+inside the band. The repeated frames in §3 still make
 this corpus unusable for the ONY-502 score, and the still is not the braced
 recapture.
 

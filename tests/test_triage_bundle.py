@@ -86,6 +86,35 @@ def repeated_pose(data, samples, seconds):
     return json.dumps(document).encode()
 
 
+def repeated_hand_pose(data, samples, seconds):
+    """Rewrite a pose file whose recorded hand repeats but head/other hand move."""
+    document = json.loads(data)
+    first = document["samples"][0]
+    start = first["host_ns"]
+    step = int(seconds * 1_000_000_000) // (samples - 1)
+    anchor = {"joints": {"palm": {"pose": {
+        "t": [0.1, 0.2, 0.3], "q": [0.0, 0.0, 0.0, 1.0]}}}}
+    rewritten = []
+    for index in range(samples):
+        sample = json.loads(json.dumps(first))
+        sample["host_ns"] = start + index * step
+        sample["tracking"] = {
+            "v": 1,
+            "time_ns": start + index * step,
+            "host_time_ns": start + index * step,
+            "head": {"pose": {"t": [0.0, 0.0, float(index)],
+                              "q": [0.0, 0.0, 0.0, 1.0]}},
+            "hands": {
+                "left": anchor,
+                "right": {"pose": {"t": [0.0, float(index), 0.0],
+                                   "q": [0.0, 0.0, 0.0, 1.0]}},
+            },
+        }
+        rewritten.append(sample)
+    document["samples"] = rewritten
+    return json.dumps(document).encode()
+
+
 def set_pose_span(seconds):
     """Rewrite the fixture's pose file so its samples span `seconds`."""
     def edit(rel, data):
@@ -212,6 +241,44 @@ class FailingBundleTest(unittest.TestCase):
             "4 samples over 15.0 s (1 distinct tracking frame)", out)
         self.assertIn(
             "3 of 4 samples repeat the preceding tracking frame", out)
+
+    def test_repeated_recorded_hand_frames_are_flagged(self):
+        def repeated(rel, data):
+            if rel != "pose_capture_androidXr_left_still.json":
+                return data
+            return repeated_hand_pose(data, 4, 15)
+
+        code, out, _err = run_main(self.bundle(edit=repeated))
+        self.assertEqual(code, 0)
+        self.assertIn(
+            "4 samples over 15.0 s (1 distinct tracking frame)", out)
+        self.assertIn(
+            "3 of 4 samples repeat the preceding tracking frame", out)
+
+    def test_missing_recorded_hand_falls_back_to_head(self):
+        def repeated(rel, data):
+            if rel != "pose_capture_androidXr_left_still.json":
+                return data
+            document = json.loads(data)
+            samples = document["samples"]
+            step = int(15.0 * 1_000_000_000) // (len(samples) - 1)
+            for index, sample in enumerate(samples):
+                sample["host_ns"] = samples[0]["host_ns"] + index * step
+                sample["tracking"] = {
+                    "v": 1,
+                    "time_ns": sample["host_ns"],
+                    "host_time_ns": sample["host_ns"],
+                    "head": {"pose": {"t": [0.0, 0.0, float(index)],
+                                      "q": [0.0, 0.0, 0.0, 1.0]}},
+                    "hands": {"right": {"pose": {"t": [0.0, 0.0, 0.0],
+                                                 "q": [0.0, 0.0, 0.0, 1.0]}}},
+                }
+            return json.dumps(document).encode()
+
+        code, out, _err = run_main(self.bundle(edit=repeated))
+        self.assertEqual(code, 0)
+        self.assertNotIn("distinct tracking frame", out)
+        self.assertIn("Problems: none", out)
 
     def test_one_sample_run_is_flagged_as_short(self):
         def one_sample(rel, data):

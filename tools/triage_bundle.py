@@ -268,11 +268,17 @@ def _distinct_tracking_frames(samples, hand=None):
         content = strip(tracking)
         hands = content.get("hands") if isinstance(content, dict) else None
         head = content.get("head") if isinstance(content, dict) else None
+        payload = None
         if isinstance(hands, dict):
-            payload = {"hand": hands.get(hand) if hand else hands}
-        elif head:
+            if hand:
+                recorded = hands.get(hand)
+                if recorded is not None:
+                    payload = {"hand": recorded}
+            else:
+                payload = hands
+        if payload is None and head:
             payload = {"head": head}
-        else:
+        if payload is None:
             return None
         signature = json.dumps(payload, sort_keys=True)
         if signature != last:
