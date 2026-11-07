@@ -99,7 +99,7 @@ static bool stack_ready;
  * is allowed at a time so the controllers do not race each other. */
 static bool connect_pending;
 
-/* ---- Contention-2 V1: staggered start (docs/runs/sheets/contention-2.md) - */
+/* ---- Contention-2 V1: staggered start (docs/CONTENTION_LEVERS.md) - */
 
 #if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
 #define STAGGER_GATE_MS      30000u

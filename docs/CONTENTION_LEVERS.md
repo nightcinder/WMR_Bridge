@@ -4,10 +4,11 @@ ONY-428 investigation. Source of truth for the numbers: [`docs/PREDICTION.md`](P
 1 to 2.5, [`docs/STATUS.md`](STATUS.md) section 5, [`docs/DECODING.md`](DECODING.md)
 "Investigation notes", and the run sheets
 [`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md),
-[`docs/runs/sheets/contention-2.md`](runs/sheets/contention-2.md),
-[`docs/runs/sheets/right-asymmetry.md`](runs/sheets/right-asymmetry.md),
+[`docs/runs/sheets/internal-esp32-wmr-bench.md`](runs/sheets/internal-esp32-wmr-bench.md),
 [`docs/runs/sheets/multi-bridge.md`](runs/sheets/multi-bridge.md),
 [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md).
+The 2026-10-22/23 contention results are in this file; the old
+`contention-2*.md` sheets were removed in ONY-983.
 
 ## Answer
 
@@ -41,6 +42,26 @@ dual-hand result.
 
 The no-phone baseline is the important qualifier. Turning the phone link off, or moving it to
 Wi-Fi on the Pi bridge, cannot by itself make a Classic link lossless.
+
+## Hardware results (2026-10-22/23, user-reported)
+
+Controllers: LEFT `2C:4D:79:C8:C9:CC`, RIGHT `2C:4D:79:C8:F9:A9`. FF14, MTU 517,
+phone streaming, 30 s settle, `last5s_pct`.
+
+- **Role check:** the ESP32 is Classic master on both links
+  (`role=master`, `status=0x00`). Forcing master (V3) is a no-op.
+- **No sniff (V2):** the policy write was confirmed as `sniff=clear`,
+  `role_switch=on`. In one 120 s run LEFT lost 17.55 % and RIGHT 23.19 %
+  (318.7 reports/s, 0 phone sequence gaps, 514 stalls over 50 ms). Both figures
+  sit inside the reference spread (LEFT 14-20 %, RIGHT 19-26 %). Sniff is not
+  the cause.
+- **RTT separation:** 60 s FF15 echo, pings only: p50 59.4 ms. With FF14 active:
+  p50 40.8 ms, p95 59.3 ms, 239/239 answered. ESP32 turnaround was 0.34-0.47 ms
+  median, 7.31 ms max. The ~40 ms round trip is the BLE stack and 15 ms
+  connection interval, not stream backlog or bridge queueing.
+- **What this leaves:** slave scheduling, sniff and host queueing are ruled out.
+  Shared 2.4 GHz airtime is the working hypothesis for the pair loss, not a
+  proven cause. RIGHT's own ~10.8 % is not explained by it.
 
 ## Lever status
 
