@@ -262,9 +262,9 @@ builds the installable package `wmr-bridge_<version>_all.deb` plus a piped
 `install.sh` that fetches and verifies the release `.deb`. The
 `wmr-pi-bridge-0.1.0.tar.gz` asset on the v0.1.0 GitHub release is the only old
 packaged Pi tarball. Releases cut by the current workflow attach the `.deb`,
-`install.sh` and `SHA256SUMS` alongside the factory images; older tags
-published different asset lists, and any tarball stays a local build from
-`pi/build_package.sh`. The one-line install works from
+`install.sh` and `SHA256SUMS` alongside the factory and application images;
+older tags published different asset lists, and any tarball stays a local build
+from `pi/build_package.sh`. The one-line install works from
 `releases/latest/download/install.sh` and needs `apt-get`. The Pi setup page on
 GitHub Pages is at <https://nightcinder.github.io/WMR_Bridge/pi.html>.
 

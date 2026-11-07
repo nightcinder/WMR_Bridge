@@ -228,16 +228,18 @@ jobs:
           name: pi-package
           path: dist
 
-      # Only six files are user-facing: the three merged factory images, the
-      # Pi .deb, the piped installer and one digest list. Staging into release/
-      # keeps the per-variant app/bootloader/partition images, manifests,
-      # build-info JSON, tarball and per-file .sha256 files out of the release.
-      - name: Stage the six release assets
+      # Only nine files are user-facing: the three merged factory images, the
+      # three application images the split manifest needs, the Pi .deb, the
+      # piped installer and one digest list. Staging into release/ keeps the
+      # per-variant bootloader/partition images, manifests, build-info JSON,
+      # tarball and per-file .sha256 files out of the release.
+      - name: Stage the nine release assets
         run: |
           set -eu
           mkdir -p release
           for variant in "" -left -right; do
             cp "dist/wmr-bridge${variant}-factory.bin" release/
+            cp "dist/wmr-bridge${variant}-app.bin" release/
           done
           cp dist/wmr-bridge_*_all.deb release/
           cp dist/install.sh release/

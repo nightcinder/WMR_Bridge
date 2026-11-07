@@ -99,10 +99,12 @@ A short browser guide for the same steps is at
 https://nightcinder.github.io/WMR_Bridge/pi.html.
 
 Tags before #104 (such as `v0.3.0`) carry firmware only. Tags from #104
-through `v0.3.11` also publish `install.sh` and `wmr-bridge_<version>_all.deb`.
-Newer tags publish six files: the three merged factory images
+through `v0.3.12` also publish `install.sh` and `wmr-bridge_<version>_all.deb`.
+Those tags publish six files: the three merged factory images
 (`wmr-bridge-factory.bin`, `-left`, `-right`), the `.deb`, `install.sh` and
-`SHA256SUMS`. The current release is `v0.3.11`.
+`SHA256SUMS`. Later tags also attach the three application images
+(`wmr-bridge-app.bin`, `-left`, `-right`), for nine files. The pinned list
+below is `v0.3.11`.
 
 Pinned 2026-11-07 assets:
 

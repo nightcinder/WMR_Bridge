@@ -59,6 +59,19 @@ APP_NAME = "wmr-bridge-app.bin"
 BOOTLOADER_NAME = "wmr-bridge-bootloader.bin"
 PARTITION_TABLE_NAME = "wmr-bridge-partition-table.bin"
 
+# The browser installer writes the three images separately. NVS lives at
+# 0x9000-0xFFFF, so the bootloader and partition table sit below it and the
+# application starts at 0x10000. An install without "Erase device" then writes
+# only these ranges and preserves the stored phone/controller pairings.
+BOOTLOADER_OFFSET = 4096        # 0x1000
+PARTITION_TABLE_OFFSET = 32768  # 0x8000
+APP_OFFSET = 65536              # 0x10000
+MANIFEST_PARTS = (
+    ("bootloader", BOOTLOADER_OFFSET),
+    ("partition_table", PARTITION_TABLE_OFFSET),
+    ("app", APP_OFFSET),
+)
+
 DEFAULT_CHIP = "esp32"
 # ESP Web Tools spells the chip family this way.
 CHIP_FAMILIES = {
@@ -254,16 +267,16 @@ def chip_family(chip):
     return CHIP_FAMILIES.get(chip.lower(), chip.upper())
 
 
-def make_manifest(version, chip=DEFAULT_CHIP, factory_name=None, variant="both"):
-    """ESP Web Tools manifest for a single merged image at offset 0.
+def make_manifest(version, chip=DEFAULT_CHIP, variant="both"):
+    """ESP Web Tools manifest that writes the three images separately.
 
-    The name says which hand the image serves, and the part path points at
-    that variant's factory image. `both` is unchanged from the original
-    manifest.
+    The name says which hand the image serves, and each part path points at
+    that variant's own image. Writing bootloader, partition table and
+    application at their own offsets leaves NVS (0x9000-0xFFFF) untouched
+    when the installer is used without "Erase device".
     """
     _check_variant(variant)
-    if factory_name is None:
-        factory_name = artifact_names(variant)["factory"]
+    names = artifact_names(variant)
     return {
         "name": MANIFEST_NAMES[variant],
         "version": str(version),
@@ -271,7 +284,10 @@ def make_manifest(version, chip=DEFAULT_CHIP, factory_name=None, variant="both")
         "builds": [
             {
                 "chipFamily": chip_family(chip),
-                "parts": [{"path": factory_name, "offset": 0}],
+                "parts": [
+                    {"path": names[key], "offset": offset}
+                    for key, offset in MANIFEST_PARTS
+                ],
             }
         ],
     }

@@ -135,8 +135,14 @@ def test_manifest():
     check(manifest["new_install_prompt_erase"] is True, "flasher offers erase")
     build = manifest["builds"][0]
     check(build["chipFamily"] == "ESP32", "ESP Web Tools chip family")
-    check(build["parts"] == [{"path": "wmr-bridge-factory.bin", "offset": 0}],
-          "one merged image at offset 0")
+    check(build["parts"] == [
+        {"path": "wmr-bridge-bootloader.bin", "offset": 4096},
+        {"path": "wmr-bridge-partition-table.bin", "offset": 32768},
+        {"path": "wmr-bridge-app.bin", "offset": 65536},
+    ], "bootloader, partition table and app at their own offsets")
+    check(all(not 0x9000 <= part["offset"] <= 0xFFFF
+              for part in build["parts"]),
+          "no image starts inside NVS (0x9000-0xFFFF)")
     check(fp.make_manifest("x", chip="esp32s3")["builds"][0]["chipFamily"] == "ESP32-S3",
           "S3 family mapping")
 
@@ -288,8 +294,10 @@ def test_package_outputs_names_and_manifests():
                           "%s packaging writes %s" % (variant, name))
                 manifest = json.loads((out / names["manifest"]).read_text())
                 check(manifest["builds"][0]["parts"] == [
-                    {"path": names["factory"], "offset": 0}
-                ], "%s manifest points at its own factory image" % variant)
+                    {"path": names["bootloader"], "offset": 4096},
+                    {"path": names["partition_table"], "offset": 32768},
+                    {"path": names["app"], "offset": 65536},
+                ], "%s manifest points at its own three images" % variant)
                 info = json.loads((out / names["build_info"]).read_text())
                 check(info["variant"] == variant,
                       "%s packaged build-info records the variant" % variant)
@@ -303,9 +311,13 @@ def test_package_outputs_names_and_manifests():
                         "new_install_prompt_erase": True,
                         "builds": [{
                             "chipFamily": "ESP32",
-                            "parts": [{"path": fp.FACTORY_NAME, "offset": 0}],
+                            "parts": [
+                                {"path": fp.BOOTLOADER_NAME, "offset": 4096},
+                                {"path": fp.PARTITION_TABLE_NAME, "offset": 32768},
+                                {"path": fp.APP_NAME, "offset": 65536},
+                            ],
                         }],
-                    }, "packaged both manifest is unchanged")
+                    }, "packaged both manifest writes the three images separately")
     finally:
         build.run = real_run
 
@@ -318,24 +330,32 @@ def test_variant_manifest():
         "new_install_prompt_erase": True,
         "builds": [{
             "chipFamily": "ESP32",
-            "parts": [{"path": fp.FACTORY_NAME, "offset": 0}],
+            "parts": [
+                {"path": fp.BOOTLOADER_NAME, "offset": 4096},
+                {"path": fp.PARTITION_TABLE_NAME, "offset": 32768},
+                {"path": fp.APP_NAME, "offset": 65536},
+            ],
         }],
-    }, "the both-hands manifest is byte-for-byte the old shape")
+    }, "the both-hands manifest lists the three images separately")
 
     left = fp.make_manifest("1.2.3", variant="left")
     check(left["name"] == "WMR Bridge (LEFT hand)",
           "LEFT manifest label says which hand")
     check(left["builds"][0]["parts"] == [
-        {"path": "wmr-bridge-left-factory.bin", "offset": 0}
-    ], "LEFT manifest points at the LEFT factory image")
+        {"path": "wmr-bridge-left-bootloader.bin", "offset": 4096},
+        {"path": "wmr-bridge-left-partition-table.bin", "offset": 32768},
+        {"path": "wmr-bridge-left-app.bin", "offset": 65536},
+    ], "LEFT manifest points at the LEFT images")
     check(left["version"] == "1.2.3", "LEFT manifest keeps the version")
 
     right = fp.make_manifest("1.2.3", variant="right")
     check(right["name"] == "WMR Bridge (RIGHT hand)",
           "RIGHT manifest label says which hand")
-    check(right["builds"][0]["parts"][0]["path"]
-          == "wmr-bridge-right-factory.bin",
-          "RIGHT manifest points at the RIGHT factory image")
+    check(right["builds"][0]["parts"] == [
+        {"path": "wmr-bridge-right-bootloader.bin", "offset": 4096},
+        {"path": "wmr-bridge-right-partition-table.bin", "offset": 32768},
+        {"path": "wmr-bridge-right-app.bin", "offset": 65536},
+    ], "RIGHT manifest points at the RIGHT images")
 
 
 def test_variant_build_info():

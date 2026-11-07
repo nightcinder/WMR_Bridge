@@ -109,7 +109,7 @@ To check a download by hand, fetch SHA256SUMS from the same release and run:
 sha256sum -c SHA256SUMS --ignore-missing
 ```
 
-The release carries six files: three merged factory images
+The `v0.3.11` release carries six files: three merged factory images
 (`wmr-bridge-factory.bin`, `-left`, `-right`), the package, `install.sh`, and
 SHA256SUMS. There are no per-file checksum files.
 
