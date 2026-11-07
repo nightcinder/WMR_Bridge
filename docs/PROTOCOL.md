@@ -123,11 +123,10 @@ fragment: a 12-byte header followed by a chunk of one controller frame.
 The frame is the controller's HID input report exactly as BTstack delivers it:
 byte 0 = `0xA1` (HID DATA/input transaction header), byte 1 = report ID, then
 the payload. A WMR report is report ID `0x01` with 44 payload bytes, 46 bytes
-in total. A PSVR2 Sense report is report ID `0x31` with up to 77 payload
-bytes, 79 bytes in total. The raw stream carries it unchanged, and the phone has
-to parse it (there is no FF12/FF14 decoder for it yet, see [PSVR2.md](PSVR2.md)).
-PSVR2 names are searched for by default alongside the WMR names from 0.2 onward.
-Nothing in either stream is decoded by the bridge, and the 12-byte fragment
+in total. A PSVR2 Sense report is report ID `0x31` with 77 payload bytes,
+79 bytes in total. The raw stream carries either frame unchanged; FF12/FF14
+apply the model's decoder (see [PSVR2.md](PSVR2.md)). PSVR2 names are searched
+for by default alongside the WMR names from 0.2 onward. The 12-byte fragment
 header is identical for both.
 
 Example (RIGHT, sequence `0x01020304`, 46-byte frame, notification capacity 44
@@ -281,6 +280,21 @@ integers are little-endian. Floats are IEEE 754 binary32, little-endian.
   capture is planned to check the gyro scale (a full turn should integrate to
   2 pi).
 
+#### PSVR2 `0x31` frames
+
+A PSVR2 hand decodes through its driver entry (`wmr_controller_driver.c`,
+`wmr_decoded_from_psvr2_frame`). The frame must be exactly 79 bytes with the
+`A1 31` header. Offsets and scales follow Monado's `pssense` driver: gyro is
+raw x `pi/1024` rad/s; accel is raw x `9.80665/4096` m/s^2 (+-8 g); the stick is
+0..255 with x `(raw - 128)/128` and y `(128 - raw)/128`; the trigger is 0..255;
+`device_ticks` is the controller IMU counter times 333 ns, converted to the
+record's 100 ns ticks. Temperature is a raw degrees-C byte and battery is the
+raw battery-state byte (high nibble charge state, low nibble level). Only PS,
+Share/Options, L1/R1 and L3/R3 map to the WMR button bits; face buttons and
+capacitive touches are not represented. `trackpad` stays 0 and these samples
+are uncalibrated (`flags` bit 0 clear). The report CRC is not checked. Full
+field table: [PSVR2.md](PSVR2.md).
+
 ### Calibration is done on the phone
 
 FF12 carries uncalibrated values: `flags` bit 0 is 0. Each sample is in the
@@ -344,12 +358,12 @@ until the rotation capture in [DECODING.md](DECODING.md) is done.
   difference from FF11, where a tiny MTU leaves frames queued until the queue
   fills and `drop` rises. Request a large MTU before enabling FF12 (the same
   step as for FF11).
-- A queued frame that is not a valid 46-byte input report (wrong length,
+- A queued frame that is not a valid input report (wrong length,
   transaction header, or report ID) is discarded and counted in the per-hand
   `dec_err` statistic. Config responses are not expected here. They are
   separated by report ID before this point in the FF13 design (implemented, see
-  below). A PSVR2 `0x31` frame is also discarded here until a PSVR2 decoder
-  exists, so FF12/FF14 are WMR-only. Use FF11 for a PSVR2 hand
+  below). A PSVR2 `0x31` frame is decoded by its driver entry when it is exactly
+  79 bytes; a short or malformed `0x31` frame is counted in `dec_err`
   ([PSVR2.md](PSVR2.md)).
 - Samples of the two hands may interleave freely. Ordering is per hand by
   `sequence`.
@@ -730,7 +744,7 @@ or queued: look at the report ID, which is byte 1 of what BTstack delivers (byte
 | --- | --- |
 | `0x01` | WMR input report: existing path, unchanged (sequence, raw FF11 or decoded FF12) |
 | `0x02`, `0x06` | WMR config command response: goes only to the config reader. Not sequence-numbered, not counted in `rx`, not queued, not forwarded on FF11/FF12 |
-| `0x31` | PSVR2 input report (PSVR2 hand only): forwarded on FF11. FF12/FF14 reject it until a PSVR2 decoder exists |
+| `0x31` | PSVR2 input report (PSVR2 hand only): forwarded on FF11 and decoded for FF12/FF14 when the frame is exactly 79 bytes |
 | anything else | Counted in a separate "other reports" counter, not forwarded |
 
 Classification is by report ID, not by length, so a malformed short response

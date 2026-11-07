@@ -11,14 +11,14 @@ foreach ($name in "gcc", "clang", "cc") {
 if (-not $cc -and (Get-Command zig -ErrorAction SilentlyContinue)) { $cc = @("zig", "cc") }
 if (-not $cc) { throw "No C compiler found (install gcc/clang/zig, or see README)." }
 
-$sources = "$root\tests\test_protocol.c", "$root\src\wmr_protocol.c", "$root\src\wmr_queue.c", "$root\src\wmr_decoded.c", "$root\src\wmr_decode.c"
+$sources = "$root\tests\test_protocol.c", "$root\src\wmr_protocol.c", "$root\src\wmr_queue.c", "$root\src\wmr_decoded.c", "$root\src\wmr_decode.c", "$root\src\wmr_controller_driver.c"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" $sources -o $exe
 if ($LASTEXITCODE -ne 0) { throw "compile failed" }
 & $exe "$root\samples\controller_frames.txt"
 $protocolStatus = $LASTEXITCODE
 
 $exeDecode = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_decode.exe"
-$decodeSources = "$root\tests\test_decode.c", "$root\src\wmr_decode.c"
+$decodeSources = "$root\tests\test_decode.c", "$root\src\wmr_decode.c", "$root\src\wmr_decoded.c", "$root\src\wmr_controller_driver.c"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" $decodeSources -lm -o $exeDecode
 if ($LASTEXITCODE -ne 0) { throw "compile failed (decode)" }
 & $exeDecode "$root\samples\controller_frames.txt"
@@ -29,13 +29,13 @@ if ($LASTEXITCODE -ne 0) { throw "compile failed (link)" }
 & $exeLink
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $exeStream = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_stream_mode.exe"
-$streamSources = "$root\tests\test_stream_mode.c", "$root\src\wmr_stream_mode.c", "$root\src\wmr_decoded.c", "$root\src\wmr_decode.c"
+$streamSources = "$root\tests\test_stream_mode.c", "$root\src\wmr_stream_mode.c", "$root\src\wmr_decoded.c", "$root\src\wmr_decode.c", "$root\src\wmr_controller_driver.c"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" $streamSources -o $exeStream
 if ($LASTEXITCODE -ne 0) { throw "compile failed (stream mode)" }
 & $exeStream "$root\samples\controller_frames.txt"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $exeBatch = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_batch.exe"
-$batchSources = "$root\tests\test_batch.c", "$root\src\wmr_batch.c", "$root\src\wmr_levers.c", "$root\src\wmr_stream_mode.c", "$root\src\wmr_queue.c", "$root\src\wmr_decoded.c", "$root\src\wmr_decode.c"
+$batchSources = "$root\tests\test_batch.c", "$root\src\wmr_batch.c", "$root\src\wmr_levers.c", "$root\src\wmr_stream_mode.c", "$root\src\wmr_queue.c", "$root\src\wmr_decoded.c", "$root\src\wmr_decode.c", "$root\src\wmr_controller_driver.c"
 & $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" $batchSources -o $exeBatch
 if ($LASTEXITCODE -ne 0) { throw "compile failed (batch)" }
 & $exeBatch
@@ -66,7 +66,7 @@ if ($LASTEXITCODE -ne 0) { throw "compile failed (cfg)" }
 & $exeCfg
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $exeDisc = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_discovery.exe"
-& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_discovery.c" "$root\src\wmr_discovery.c" -o $exeDisc
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_discovery.c" "$root\src\wmr_discovery.c" "$root\src\wmr_controller_driver.c" "$root\src\wmr_decoded.c" "$root\src\wmr_decode.c" -o $exeDisc
 if ($LASTEXITCODE -ne 0) { throw "compile failed (discovery)" }
 & $exeDisc
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -86,7 +86,7 @@ if ($LASTEXITCODE -ne 0) { throw "compile failed (status led)" }
 & $exeLed
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $exeHid = Join-Path ([System.IO.Path]::GetTempPath()) "wmr_test_hid.exe"
-& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_hid.c" "$root\src\wmr_hid.c" "$root\src\wmr_decoded.c" "$root\src\wmr_decode.c" -lm -o $exeHid
+& $cc[0] $cc[1..($cc.Length)] -std=c99 -Wall -Wextra -Wconversion "-I$root\src" "$root\tests\test_hid.c" "$root\src\wmr_hid.c" "$root\src\wmr_decoded.c" "$root\src\wmr_decode.c" "$root\src\wmr_controller_driver.c" -lm -o $exeHid
 if ($LASTEXITCODE -ne 0) { throw "compile failed (hid)" }
 & $exeHid "$root\tests\vectors\hid_gamepad.txt" "$root\tests\vectors\hid_report_descriptor.txt"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

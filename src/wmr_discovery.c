@@ -41,65 +41,20 @@
 
 #include <string.h>
 #include "wmr_discovery.h"
+#include "wmr_controller_driver.h"
 
-static char lower(uint8_t c){
-    return (char) (c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c);
-}
-
-static bool name_equals(const uint8_t *name, size_t len, const char *want){
-    while (len && (name[len - 1] == 0 || name[len - 1] == ' ')) len--;
-    if (len != strlen(want)) return false;
-    for (size_t i = 0; i < len; i++){
-        if (lower(name[i]) != lower((uint8_t) want[i])) return false;
-    }
-    return true;
-}
-
-typedef struct {
-    const char *name;
-    int         hand;
-    wmr_model_t model;
-} controller_name_t;
-
-/* The names are matched in order. A WMR and a PSVR2 controller of the same hand therefore
- * both map to that hand; the first one found in a discovery run wins, exactly as two WMR
- * controllers of one hand already did. */
-static const controller_name_t controller_names[] = {
-    { WMR_DISCOVERY_NAME_LEFT,   WMR_HAND_LEFT,  WMR_MODEL_WMR   },
-    { WMR_DISCOVERY_NAME_RIGHT,  WMR_HAND_RIGHT, WMR_MODEL_WMR   },
-    { WMR_DISCOVERY_NAME_PSVR2_LEFT,  WMR_HAND_LEFT,  WMR_MODEL_PSVR2 },
-    { WMR_DISCOVERY_NAME_PSVR2_RIGHT, WMR_HAND_RIGHT, WMR_MODEL_PSVR2 },
-};
-
-#define CONTROLLER_NAME_COUNT (sizeof(controller_names) / sizeof(controller_names[0]))
-
-const char *wmr_model_name(wmr_model_t model){
-    switch (model){
-        case WMR_MODEL_WMR:   return "WMR";
-        case WMR_MODEL_PSVR2: return "PSVR2";
-        default:              return "?";
-    }
-}
-
-/* Hand and model for a name; hand -1 and model WMR_MODEL_COUNT when unknown. */
-static int identify_name(const uint8_t *name, size_t len, wmr_model_t *model){
-    if (!name) return -1;
-    for (unsigned i = 0; i < CONTROLLER_NAME_COUNT; i++){
-        if (!name_equals(name, len, controller_names[i].name)) continue;
-        if (model) *model = controller_names[i].model;
-        return controller_names[i].hand;
-    }
-    return -1;
-}
+/* Controller names and models live in the driver table (wmr_controller_driver.c). A WMR and
+ * a PSVR2 controller of the same hand therefore both map to that hand; the first one found
+ * in a discovery run wins, exactly as two WMR controllers of one hand already did. */
 
 int wmr_discovery_hand_for_name(const uint8_t *name, size_t len){
-    return identify_name(name, len, NULL);
+    int hand = -1;
+    return wmr_controller_driver_for_name(name, len, &hand) ? hand : -1;
 }
 
 wmr_model_t wmr_discovery_model_for_name(const uint8_t *name, size_t len){
-    wmr_model_t model = WMR_MODEL_COUNT;
-    if (identify_name(name, len, &model) < 0) return WMR_MODEL_COUNT;
-    return model;
+    const wmr_controller_driver_t *driver = wmr_controller_driver_for_name(name, len, NULL);
+    return driver ? driver->model : WMR_MODEL_COUNT;
 }
 
 /* ---- Stored addresses ---------------------------------------------------- */
@@ -250,8 +205,9 @@ wmr_disc_result_t wmr_discovery_on_inquiry_result(wmr_discovery_t *d, const wmr_
     }
     if (name && len){
         if (d->seen_count < WMR_DISCOVERY_MAX_SEEN) memcpy(d->seen[d->seen_count++], dev->address, 6);
-        wmr_model_t model = WMR_MODEL_COUNT;
-        int hand = identify_name(name, len, &model);
+        int hand = -1;
+        const wmr_controller_driver_t *driver = wmr_controller_driver_for_name(name, len, &hand);
+        wmr_model_t model = driver ? driver->model : WMR_MODEL_COUNT;
         return classify(d, dev->address, hand, model);
     }
     if (d->pending_count == WMR_DISCOVERY_MAX_PENDING){
@@ -272,8 +228,9 @@ const wmr_discovery_device_t *wmr_discovery_next_name_request(wmr_discovery_t *d
 
 wmr_disc_result_t wmr_discovery_on_name(wmr_discovery_t *d, const uint8_t address[6],
                                         const uint8_t *name, size_t len){
-    wmr_model_t model = WMR_MODEL_COUNT;
-    int hand = identify_name(name, len, &model);
+    int hand = -1;
+    const wmr_controller_driver_t *driver = wmr_controller_driver_for_name(name, len, &hand);
+    wmr_model_t model = driver ? driver->model : WMR_MODEL_COUNT;
     return classify(d, address, hand, model);
 }
 

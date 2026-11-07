@@ -56,8 +56,9 @@ implemented. See [docs/PROTOCOL.md](docs/PROTOCOL.md).
   The console can also connect outwards. Each hand has its own connection state.
 - Frames. A WMR controller sends 46-byte input reports (`A1`, report ID `01`,
   44 payload bytes) at roughly 150-180 reports per second per hand in the one
-  run that was measured. A PSVR2 Sense controller sends `A1 31` reports of up to
-  79 bytes. These are forwarded raw only for now ([docs/PSVR2.md](docs/PSVR2.md)).
+  run that was measured. A PSVR2 Sense controller sends `A1 31` reports of
+  exactly 79 bytes. Both are forwarded raw, and both decode into FF12/FF14
+  ([docs/PSVR2.md](docs/PSVR2.md)).
 - Queue. Frames from both hands go into one bounded FIFO (256 frames). If it
   fills, the newest frame is dropped and counted.
 - BLE. The ESP32 advertises as `WMR Bridge`. The phone must pair and bond
@@ -285,7 +286,7 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 | What | Result |
 | --- | --- |
 | Firmware build (ESP-IDF v6.1, ESP32) | Passes, no warnings from this code |
-| Host unit tests of the protocol encoder, reassembler and queue (6127 checks) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
+| Host unit tests of the protocol encoder, reassembler and queue (6129 checks) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
 | Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 122 tests) | Pass (host tests only; never run on a Raspberry Pi or with real controllers) |
 | Flash and boot on a real ESP32 | Passes; advertises; stats print every 5 s; no debug spam |
 | One bench run, about 15 s, both controllers and a phone (log pasted by the user, not instrumented on the phone) | Both controllers connected on their own; ATT MTU went 23 to 517; about 174/s (LEFT) and 154/s (RIGHT); sent = received for both hands; 0 drops, 0 offline, 0 purged, 0 send errors; queue back to 0 after a startup peak of 11; counter accounting added up exactly |
@@ -311,10 +312,10 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
   earlier bring-up sessions where LEFT/RIGHT was not recorded.
 - Regression comparison against the original single-file version under identical
   conditions.
-- PSVR2 Sense controllers. The recognition, model storage, raw forwarding and HID
-  wake path are host-tested and build-tested but have never run on a PSVR2
-  controller. They are searched for by default alongside WMR
-  ([docs/PSVR2.md](docs/PSVR2.md)).
+- PSVR2 Sense controllers. The recognition, model storage, raw forwarding,
+  decoded FF12/FF14 stream and HID wake path are host-tested and build-tested
+  but have never run on a PSVR2 controller. They are searched for by default
+  alongside WMR ([docs/PSVR2.md](docs/PSVR2.md)).
 - Linux / Raspberry Pi Wi-Fi host bridge (`pi/`). Second supported target, but
   host-tests-only until the Pi sitting runs
   ([docs/PI_BRIDGE.md](docs/PI_BRIDGE.md),
@@ -338,10 +339,11 @@ Full list and details: [docs/TESTING.md](docs/TESTING.md).
 - Single phone, exactly two controllers. Controllers are recognised by name until
   their addresses are stored. A name can be spoofed (see
   [docs/DISCOVERY.md](docs/DISCOVERY.md)).
-- PSVR2 Sense controllers are raw-only today. FF12/FF14 have no PSVR2 decoder.
-  FF13 is not read. The wake request is unverified and has never run on a
-  controller (see [docs/PSVR2.md](docs/PSVR2.md)). Each hand's model is
-  independent, but the decoded stream remains WMR-only.
+- PSVR2 Sense controllers decode into FF12/FF14 with uncalibrated Monado
+  scales, but only PS, Share/Options, L1/R1 and L3/R3 reach the WMR button byte;
+  face buttons and capacitive touch are not represented. FF13 is not read. The
+  wake request and decoder have never run on a controller (see
+  [docs/PSVR2.md](docs/PSVR2.md)). Each hand's model is independent.
 - `tx` means "accepted by the Bluetooth stack", not "received by the phone".
 
 Details and hardening suggestions: [docs/SECURITY.md](docs/SECURITY.md).

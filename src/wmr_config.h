@@ -239,13 +239,13 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 
 /* The bridge also recognises Sony's PSVR2 Sense controllers by name (see
  * wmr_discovery.h for the names and the per-hand model). Their input reports are 0x31
- * frames of up to WMR_PSVR2_INPUT_FRAME_MAX bytes (A1, report ID, 77 payload bytes),
- * forwarded on the raw stream (FF11). They send no input until the host reads HID
- * Feature Report 0x05 over the control channel, and they do not speak Microsoft's FF13
- * config protocol; both are handled per controller model in wmr_controller.c. There is
- * no PSVR2 parser in the decoded stream yet, so FF12/FF14 count those frames as decode
- * errors. PSVR2 discovery, frames and wake are always compiled in; every hand is
- * searched for both models by default. Scope and open questions: docs/PSVR2.md.
+ * frames of WMR_PSVR2_INPUT_FRAME_MAX bytes (A1, report ID, 77 payload bytes). They send
+ * no input until the host reads HID Feature Report 0x05 over the control channel, and
+ * they do not speak Microsoft's FF13 config protocol. The controller driver table
+ * (wmr_controller_driver.c) owns the per-model names, report predicate, decoder, wake
+ * read and config support; FF12/FF14 decode 0x31 frames through its PSVR2 entry.
+ * PSVR2 discovery, frames and wake are always compiled in; every hand is searched for
+ * both models by default. Scope and open questions: docs/PSVR2.md.
  *
  *   -DWMR_CFG_PSVR2_WAKE=0      recognise PSVR2 but send no wake request (diagnostics) */
 #ifndef WMR_CFG_PSVR2_WAKE
