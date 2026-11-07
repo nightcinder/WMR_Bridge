@@ -552,6 +552,10 @@ def test_pages_workflow_ships_pi_setup():
         check(line in build_job, "the PR firmware job stages %s" % line)
     check("links to missing" in build_job,
           "the PR firmware job rejects a broken page cross-link")
+    check("uses: actions/upload-pages-artifact@v5" in build_job,
+          "the PR firmware job builds the Pages artifact")
+    check("pages-artifact/artifact.tar" in build_job,
+          "the PR firmware job inspects the artifact deploy-pages downloads")
 
 
 def main():

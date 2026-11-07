@@ -78,6 +78,28 @@ jobs:
           print("Pages payload OK: index.html, pi.html, install.sh")
           PY
 
+      # Package the payload with the same action the tag-time deploy uses, then
+      # unpack it and assert the tar that deploy-pages downloads. The only step
+      # left to a tag is the deploy call itself, which needs no PR input.
+      - name: Build the Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+      - name: Download the Pages artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: github-pages
+          path: pages-artifact
+
+      - name: Verify the Pages artifact
+        run: |
+          set -eu
+          tar -tf pages-artifact/artifact.tar | sed 's|^\./||' | sort
+          for f in index.html pi.html install.sh; do
+            tar -tf pages-artifact/artifact.tar | sed 's|^\./||' | grep -qx "$f"
+          done
+
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v7
         with:
