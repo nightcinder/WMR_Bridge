@@ -4,8 +4,10 @@
 # Usage on Raspberry Pi / Linux host:
 #   sudo ./pi/install.sh
 #
-# One-line install (no checkout): fetch the release tarball, verify its sha256
-# and run the installer from the extracted tree.
+# One-line install (no checkout): fetch the release .deb, verify it against the
+# release SHA256SUMS, install it with apt-get and enable/start the service.
+# A host without apt-get installs from a checkout or from a locally built
+# release tarball instead (see docs/PI_BRIDGE.md).
 #   curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 #
 # Pin a release or a mirror (also used by the host tests). The Pi package
@@ -46,8 +48,9 @@ fetch_stdout() {
     fi
 }
 
-# When piped (`curl ... | sudo bash`) $0 is the shell, not this file. Fetch the
-# matching release tarball and run the installer from the extracted tree.
+# When piped (`curl ... | sudo bash`) $0 is the shell, not this file. Detect a
+# checkout or extracted package tree here; without one, install the release
+# .deb further down.
 SELF="$0"
 SCRIPT_DIR=""
 case "$SELF" in
@@ -61,6 +64,13 @@ case "$SELF" in
         ;;
 esac
 
+enable_service() {
+    if [ "${WMR_SKIP_PRIVILEGED:-0}" != "1" ] && command -v systemctl >/dev/null 2>&1; then
+        systemctl enable wmr-bridge.service || true
+        systemctl restart wmr-bridge.service || true
+    fi
+}
+
 if [ -z "$SCRIPT_DIR" ]; then
     PINNED_VERSION="${WMR_BRIDGE_VERSION:-}"
     VERSION="$PINNED_VERSION"
@@ -70,12 +80,12 @@ if [ -z "$SCRIPT_DIR" ]; then
         if [ -n "$release_json" ]; then
             VERSION="$(
                 printf '%s\n' "$release_json" |
-                    grep -o '"name"[[:space:]]*:[[:space:]]*"wmr-bridge-[^"]*\.tar\.gz"' |
+                    grep -o '"name"[[:space:]]*:[[:space:]]*"wmr-bridge_[^"]*_all\.deb"' |
                     head -n 1 |
-                    sed -n 's/.*"wmr-bridge-\([^"]*\)\.tar\.gz".*/\1/p'
+                    sed -n 's/.*"wmr-bridge_\([^"]*\)_all\.deb".*/\1/p'
             )"
         fi
-        [ -n "$VERSION" ] || die "no wmr-bridge tarball on the latest release; set WMR_BRIDGE_VERSION=<version>, or install the .deb"
+        [ -n "$VERSION" ] || die "no wmr-bridge .deb on the latest release; set WMR_BRIDGE_VERSION=<version>"
     fi
 
     BASE_URL="${WMR_BRIDGE_RELEASE_BASE_URL:-}"
@@ -87,30 +97,36 @@ if [ -z "$SCRIPT_DIR" ]; then
         fi
     fi
 
-    TARBALL="wmr-bridge-${VERSION}.tar.gz"
     TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/wmr-bridge-install.XXXXXX")"
     trap 'rm -rf "$TMP_DIR"' EXIT INT TERM HUP
 
-    fetch_url "${BASE_URL}/${TARBALL}" "${TMP_DIR}/${TARBALL}" ||
-        die "could not fetch ${BASE_URL}/${TARBALL}"
-    fetch_url "${BASE_URL}/${TARBALL}.sha256" "${TMP_DIR}/${TARBALL}.sha256" ||
-        die "could not fetch ${BASE_URL}/${TARBALL}.sha256"
-    (cd "$TMP_DIR" && sha256sum -c "${TARBALL}.sha256") ||
-        die "sha256 verification failed for ${TARBALL}"
+    fetch_url "${BASE_URL}/SHA256SUMS" "${TMP_DIR}/SHA256SUMS" ||
+        die "could not fetch ${BASE_URL}/SHA256SUMS"
 
-    tar -xzf "${TMP_DIR}/${TARBALL}" -C "$TMP_DIR"
-    EXTRACTED="${TMP_DIR}/wmr-bridge-${VERSION}"
-    INNER="${EXTRACTED}/pi/install.sh"
-    [ -f "$INNER" ] || die "release tarball has no pi/install.sh"
-    EXTRACTED_VERSION="$(
-        sed -n 's/^__version__ = "\(.*\)"$/\1/p' "${EXTRACTED}/pi/wmr_bridge/__init__.py"
-    )"
-    [ "$EXTRACTED_VERSION" = "$VERSION" ] ||
-        die "tarball is $EXTRACTED_VERSION but requested $VERSION"
-    echo "install.sh: using release ${VERSION} from ${BASE_URL}"
-    status=0
-    WMR_BRIDGE_PIPED=1 sh "$INNER" "$@" || status=$?
-    exit "$status"
+    # Verify one asset against the shared digest list. The list covers every
+    # release file, so select the single line for this asset first.
+    verify_from_sums() {
+        name="$1"
+        awk -v n="$name" '$2 == n { print }' "${TMP_DIR}/SHA256SUMS" > "${TMP_DIR}/${name}.sum"
+        [ -s "${TMP_DIR}/${name}.sum" ] || die "SHA256SUMS has no entry for ${name}"
+        (cd "$TMP_DIR" && sha256sum -c "${name}.sum") >/dev/null ||
+            die "sha256 verification failed for ${name}"
+    }
+
+    # Releases attach no tarball, so the no-checkout path installs the .deb.
+    # Without apt-get, point at the two paths that still work instead of
+    # failing on a missing asset.
+    command -v apt-get >/dev/null 2>&1 ||
+        die "the piped install needs apt-get; install from a checkout (git clone https://github.com/${REPO} && sudo WMR_Bridge/pi/install.sh) or extract a tarball built with pi/build_package.sh and run its pi/install.sh"
+
+    DEB="wmr-bridge_${VERSION}_all.deb"
+    fetch_url "${BASE_URL}/${DEB}" "${TMP_DIR}/${DEB}" ||
+        die "could not fetch ${BASE_URL}/${DEB}"
+    verify_from_sums "$DEB"
+    echo "install.sh: installing ${DEB} from ${BASE_URL}"
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "${TMP_DIR}/${DEB}"
+    enable_service
+    exit 0
 fi
 
 DESTDIR="${DESTDIR:-}"

@@ -88,9 +88,12 @@ If the link is at 2.4 GHz, reconnect to the 5 GHz SSID before continuing.
 
 ## 4. Install
 
-Release tags since PR #104 publish `install.sh`, `wmr-bridge_<version>_all.deb`
-and `wmr-bridge-<version>.tar.gz`. The current release is `v0.3.11` with Pi
-package `0.2.4`. Tags before #104 (such as `v0.3.0`) carry firmware only.
+Tags before #104 (such as `v0.3.0`) carry firmware only. Tags from #104
+through `v0.3.11` also publish `install.sh`, `wmr-bridge_<version>_all.deb`
+and `wmr-bridge-<version>.tar.gz`. Newer tags publish six files: the three
+merged factory images (`wmr-bridge-factory.bin`, `-left`, `-right`), the
+`.deb`, `install.sh` and `SHA256SUMS`. The current release is `v0.3.11` with
+Pi package `0.2.4`.
 
 Pinned 2026-11-07 assets:
 
@@ -128,10 +131,14 @@ sudo apt install ./wmr-bridge_0.2.4_all.deb
 
 Verify release files with `sha256sum -c SHA256SUMS --ignore-missing`.
 
-The installer verifies the tarball checksum, creates the `wmr` service user in
-`input`, installs to `/opt/wmr-bridge/pi`, adds udev rules, disables Wi-Fi power
-saving, writes a `0600 wmr:wmr` token at `/etc/wmr-bridge/token`, installs the
-systemd unit and puts `/usr/bin/wmr-bridge` on `PATH`.
+The installer downloads the release `.deb` and verifies it against
+`SHA256SUMS`, then installs with `apt-get`. The package creates the `wmr`
+service user, installs to `/opt/wmr-bridge/pi`, adds the udev rule and the
+NetworkManager power-save drop-in, writes a `0600 wmr:wmr` token at
+`/etc/wmr-bridge/token`, installs the systemd unit and puts
+`/usr/bin/wmr-bridge` on `PATH`. The piped installer needs `apt-get`; without
+it, install from a checkout or a locally built tarball (see the
+[Pi bridge guide](PI_BRIDGE.md#installation)).
 
 Start and check:
 
