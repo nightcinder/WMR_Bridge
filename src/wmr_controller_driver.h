@@ -39,13 +39,14 @@
  * wmr_controller_driver.h - the controller-family dispatch table.
  *
  * One entry per model owns everything that differs between families: the
- * Bluetooth names per hand, the HID input report predicate, the FF12/FF14
- * decoder, the wake feature report and whether the model speaks the Microsoft
- * FF13 config protocol. Discovery, the HID report handler and the decoded
- * stream look the entry up instead of branching on wmr_model_t.
+ * Bluetooth names per hand (plus an optional name for a one-device controller),
+ * the HID input report predicate, the reply predicate and subcommand handshake,
+ * the FF12/FF14 decoder(s), the wake feature report and whether the model speaks
+ * the Microsoft FF13 config protocol. Discovery, the HID report handler and the
+ * decoded stream look the entry up instead of branching on wmr_model_t.
  *
- * Pure C, no BTstack dependency, host-tested. Behaviour: docs/PSVR2.md and
- * docs/PROTOCOL.md.
+ * Pure C, no BTstack dependency, host-tested. Behaviour: docs/PSVR2.md,
+ * docs/SWITCH.md and docs/PROTOCOL.md.
  */
 
 #ifndef WMR_CONTROLLER_DRIVER_H
@@ -62,10 +63,15 @@ typedef struct wmr_controller_driver {
     wmr_model_t model;
     const char *label;                            /* short name for logs and FF17 */
     const char *name[WMR_NUM_CONTROLLERS];        /* Bluetooth name per hand */
+    const char *solo_name;                        /* extra name for a one-device controller; paired as LEFT */
     uint8_t     input_report_id;                  /* second byte of the HID frame */
     uint8_t     wake_feature_id;                  /* HID Feature Report that starts streaming; 0 = none */
+    bool        subcommand_handshake;             /* output report 0x01 handshake after the descriptor */
     bool        serves_config_block;              /* model answers the Microsoft FF13 config read */
     bool      (*is_input_report)(const uint8_t *frame, uint16_t length);
+    bool      (*is_reply_report)(const uint8_t *frame, uint16_t length);   /* non-input replies */
+    unsigned  (*decode_samples)(const wmr_frame_t *frame,
+                                uint8_t out[][WMR_DECODED_SIZE], unsigned max); /* optional */
     bool      (*decode)(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]);
 } wmr_controller_driver_t;
 

@@ -38,6 +38,7 @@ if( EXAMPLE STREQUAL "wmr_bridge" )
         "${WMR_BRIDGE_DIR}/src/wmr_secure.c"
         "${WMR_BRIDGE_DIR}/src/wmr_status_led.c"
         "${WMR_BRIDGE_DIR}/src/wmr_stream_mode.c"
+        "${WMR_BRIDGE_DIR}/src/wmr_switch.c"
         "${WMR_BRIDGE_DIR}/src/wmr_transport.c"
         "${WMR_BRIDGE_DIR}/src/wmr_txpower.c")
     set(GATT_PATH "${WMR_BRIDGE_DIR}/wmr_bridge.gatt")

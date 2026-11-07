@@ -57,6 +57,10 @@
 #define WMR_DISCOVERY_NAME_RIGHT         "Motion controller - Right"
 #define WMR_DISCOVERY_NAME_PSVR2_LEFT    "PlayStation VR2 Sense Controller (L)"
 #define WMR_DISCOVERY_NAME_PSVR2_RIGHT   "PlayStation VR2 Sense Controller (R)"
+#define WMR_DISCOVERY_NAME_SWITCH_LEFT   "Joy-Con (L)"
+#define WMR_DISCOVERY_NAME_SWITCH_RIGHT  "Joy-Con (R)"
+/* One-device controller: no hand in the name, paired as LEFT (see the driver table). */
+#define WMR_DISCOVERY_NAME_SWITCH_PRO    "Pro Controller"
 
 /* Controller family, decided from the Bluetooth name. The name is the only discriminator
  * before a connection, so the model is stored next to the address and used after a
@@ -65,10 +69,11 @@
 typedef enum {
     WMR_MODEL_WMR = 0,      /* Windows Mixed Reality motion controller (the default) */
     WMR_MODEL_PSVR2 = 1,    /* PlayStation VR2 Sense controller */
+    WMR_MODEL_SWITCH = 2,   /* Nintendo Switch Joy-Con (L)/(R) or Pro Controller */
     WMR_MODEL_COUNT
 } wmr_model_t;
 
-/* "WMR", "PSVR2", or "?" for WMR_MODEL_COUNT / an out-of-range value. */
+/* "WMR", "PSVR2", "Switch", or "?" for WMR_MODEL_COUNT / an out-of-range value. */
 const char *wmr_model_name(wmr_model_t model);
 
 /* Hand (WMR_HAND_LEFT / WMR_HAND_RIGHT) whose name this is, or -1. Case-insensitive, whole
@@ -82,7 +87,7 @@ wmr_model_t wmr_discovery_model_for_name(const uint8_t *name, size_t len);
 /* ---- Stored addresses ---------------------------------------------------- */
 
 /* Layout: [0] version, [1] valid bits, [2..7] LEFT address, [8..13] RIGHT address,
- * [14] model bits (2 per hand, little-endian; 0 = WMR, 1 = PSVR2), [15] reserved 0.
+ * [14] model bits (2 per hand, little-endian; 0 = WMR, 1 = PSVR2, 2 = Switch), [15] reserved 0.
  * Version stays 1: firmware before PSVR2 support ignores byte 14, and a record written
  * by it reads back as WMR_MODEL_WMR for both hands. An unrecognised model value makes
  * the record invalid instead of silently treating the controller as a WMR one. Model

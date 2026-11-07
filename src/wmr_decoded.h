@@ -115,5 +115,17 @@ bool wmr_decoded_from_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SI
  * unless a test needs to exercise one model directly. */
 bool wmr_decoded_from_wmr_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]);
 bool wmr_decoded_from_psvr2_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]);
+bool wmr_decoded_from_switch_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]);
+
+/* Largest number of records one transport frame can produce. A Switch 0x30 report
+ * carries three IMU samples; every other model produces one. */
+#define WMR_DECODED_MAX_SAMPLES  3
+
+/* Decode every record a frame carries, oldest first, through the driver table.
+ * Returns the number written (0 when no driver accepts the frame). A model without a
+ * multi-sample decoder writes one record. `max` may be smaller than the frame's count;
+ * only that many records are written. */
+unsigned wmr_decoded_samples_from_frame(const wmr_frame_t *frame,
+                                        uint8_t out[][WMR_DECODED_SIZE], unsigned max);
 
 #endif /* WMR_DECODED_H */
