@@ -20,7 +20,7 @@ config survive updates.
 - [ ] Join the dedicated **5 GHz** SSID; `iw dev wlan0 link` shows `freq: 5xxx`.
 - [ ] `uname -m` prints `aarch64`; `systemctl is-active bluetooth` prints
       `active`.
-- [ ] Install the package; `wmr-bridge --version` prints `wmr_bridge 0.2.4`.
+- [ ] Install the package; `wmr-bridge --version` prints the installed version.
 - [ ] Service is `enabled` and `active`.
 - [ ] Pair, trust and connect both controllers; both appear in
       `/sys/class/hidraw/*/device/uevent`.
@@ -88,20 +88,32 @@ If the link is at 2.4 GHz, reconnect to the 5 GHz SSID before continuing.
 
 ## 4. Install
 
+The fastest path is the one-line installer. It downloads the package, checks
+it against SHA256SUMS, and installs it:
+
+```bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
+```
+
+A short browser guide for the same steps is at
+https://nightcinder.github.io/WMR_Bridge/pi.html.
+
 Tags before #104 (such as `v0.3.0`) carry firmware only. Tags from #104
-through `v0.3.11` also publish `install.sh`, `wmr-bridge_<version>_all.deb`
-and `wmr-bridge-<version>.tar.gz`. Newer tags publish six files: the three
-merged factory images (`wmr-bridge-factory.bin`, `-left`, `-right`), the
-`.deb`, `install.sh` and `SHA256SUMS`. The current release is `v0.3.11` with
-Pi package `0.2.4`.
+through `v0.3.11` also publish `install.sh` and `wmr-bridge_<version>_all.deb`.
+Newer tags publish six files: the three merged factory images
+(`wmr-bridge-factory.bin`, `-left`, `-right`), the `.deb`, `install.sh` and
+`SHA256SUMS`. The current release is `v0.3.11`.
 
 Pinned 2026-11-07 assets:
 
 | Asset | SHA-256 |
 |---|---|
-| `wmr-bridge-0.2.4.tar.gz` | `50d95736a80eae821ad23a8840e341a6d568703a7f40883b91cc153c7b7c2ab0` |
-| `wmr-bridge_0.2.4_all.deb` | `8c54616806ba7cddb78f0e68a71f2f3503e23c4e4d16625129ea220c3a841eba` |
+| `wmr-bridge-factory.bin` | (see SHA256SUMS) |
+| `wmr-bridge-left-factory.bin` | (see SHA256SUMS) |
+| `wmr-bridge-right-factory.bin` | (see SHA256SUMS) |
+| `wmr-bridge_<version>_all.deb` | (see SHA256SUMS) |
 | `install.sh` | `7f738a4a084965de99a02819f459b64f893b21b2178eeea10555f7186ed94d28` |
+| `SHA256SUMS` | (shared digest list) |
 
 **From a checkout (current or pre-release):**
 
@@ -119,17 +131,19 @@ sudo apt install ./dist/*.deb
 # latest
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 # pin package and tag
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/install.sh | WMR_BRIDGE_VERSION=0.2.4 WMR_BRIDGE_TAG=v0.3.11 sudo -E bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.11 sudo -E bash
 ```
 
 **Standalone `.deb`:**
 
 ```bash
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/wmr-bridge_0.2.4_all.deb
-sudo apt install ./wmr-bridge_0.2.4_all.deb
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/wmr-bridge_<version>_all.deb
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
+sudo apt install ./wmr-bridge_<version>_all.deb
 ```
 
-Verify release files with `sha256sum -c SHA256SUMS --ignore-missing`.
+Replace `<version>` with the Pi package version.
 
 The installer downloads the release `.deb` and verifies it against
 `SHA256SUMS`, then installs with `apt-get`. The package creates the `wmr`
@@ -143,10 +157,8 @@ it, install from a checkout or a locally built tarball (see the
 Start and check:
 
 ```bash
-wmr-bridge --version   # wmr_bridge 0.2.4
+wmr-bridge --version
 wmr-bridge --list
-sudo systemctl daemon-reload
-sudo systemctl enable --now wmr-bridge
 systemctl status wmr-bridge
 journalctl -u wmr-bridge -n 50 --no-pager
 ```

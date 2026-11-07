@@ -130,12 +130,12 @@ and Nintendo Switch Joy-Con/Pro handshake and `0x30` decoding. Switch support
 is host-tested and firmware-build-tested only and has never run on a
 controller ([#145](https://github.com/nightcinder/WMR_Bridge/issues/145)).
 FF10–FF17 keep their payloads, so companions at 0.2.2 or later continue to
-work. The Raspberry Pi host bridge is package `0.2.4`: it forwards FF13
-calibration blobs but does not yet read calibration from controllers. Packaged
-releases are CI-built and hardware-unverified. See
-[CHANGELOG.md](CHANGELOG.md) for the full notes. To install the current release
-without ESP-IDF, use the hosted browser installer at
-<https://nightcinder.github.io/WMR_Bridge/>, which serves all three variants. The
+work. The Raspberry Pi host bridge forwards FF13 calibration blobs but does not
+yet read calibration from controllers. Packaged releases are CI-built and
+hardware-unverified. See [CHANGELOG.md](CHANGELOG.md) for the full notes. To
+install the current release without ESP-IDF, use the hosted browser installer at
+<https://nightcinder.github.io/WMR_Bridge/>, which serves all three variants,
+or the Pi setup page at <https://nightcinder.github.io/WMR_Bridge/pi.html>. The
 [GitHub release](https://github.com/nightcinder/WMR_Bridge/releases/latest)
 also carries the images and manifests. For a local build, serve `dist/` over
 HTTP. Details are in [docs/FLASHING.md](docs/FLASHING.md).
@@ -258,15 +258,15 @@ shows the hidraw nodes. Full setup, the wire protocol, security notes and the
 hardware test checklist are in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md). The
 first-sitting bring-up procedure is in
 [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). The `pi/` tree
-builds two installable artifacts: `wmr-bridge_<version>_all.deb` and
-`wmr-bridge-<version>.tar.gz`, plus a piped `install.sh` that fetches and
-verifies the release `.deb`. The `wmr-pi-bridge-0.1.0.tar.gz` asset on the
-v0.1.0 GitHub release is the only old packaged Pi tarball. The `pi/` tree in
-this repository is package `0.2.4`. Releases cut by the current workflow attach
-the `.deb`, `install.sh` and `SHA256SUMS` alongside the factory images; older
-tags published different asset lists, and the tarball stays a local build from
+builds the installable package `wmr-bridge_<version>_all.deb` plus a piped
+`install.sh` that fetches and verifies the release `.deb`. The
+`wmr-pi-bridge-0.1.0.tar.gz` asset on the v0.1.0 GitHub release is the only old
+packaged Pi tarball. Releases cut by the current workflow attach the `.deb`,
+`install.sh` and `SHA256SUMS` alongside the factory images; older tags
+published different asset lists, and any tarball stays a local build from
 `pi/build_package.sh`. The one-line install works from
-`releases/latest/download/install.sh` and needs `apt-get`.
+`releases/latest/download/install.sh` and needs `apt-get`. The Pi setup page on
+GitHub Pages is at <https://nightcinder.github.io/WMR_Bridge/pi.html>.
 
 ## BLE interface (summary)
 
