@@ -146,22 +146,22 @@ registers controls. Details in `HID_GAMEPAD.md` §0.2.4-38 field run.
 ## Android verification campaign (ONY-439, 0.3.11 pass)
 
 Scope: phone + one ESP32 only. Sheet:
-[`docs/runs/sheets/ony-439-android-verification.md`](runs/sheets/ony-439-android-verification.md).
+[`docs/runs/sheets/internal-esp32-wmr-bench.md`](runs/sheets/internal-esp32-wmr-bench.md).
 The 0.3.11 bench pass has four gate checks: FF16 on Companion `0.2.2`, ONY-446
 RIGHT reconnect, status LED colours, and the Android HID gamepad. All four are
 `not run`. The rows below are the 0.2.4 sitting. A row leaves `not run`
-only when that check's figures arrive, from the sheet's §9 paste-back block or
-from the evidence collected in sheet §10. Rows that name a device and build do
+only when that check's figures arrive, from the bench sheet's §8 results and
+paste-back block. Rows that name a device and build do
 so because a run exists. `, ` means nothing has run yet.
 
 | Check | Result | Device / build | Where the procedure lives |
 |---|---|---|---|
-| FF16 live read | `partial`, app 0.2.1 had no FF16 display (wmr-companion #107); Companion 0.2.2 adds it and the 0.3.11 recheck is open. Console `v` settles the 0.2.4 build half (`0.2.4`, `ESP-IDF v6.1`); reconnect half not run | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | sheet §1, §10 |
-| FF17 scan/connect | `partial`, status v2 captured from FF17 notifications: version 1, both hands `addr_source` 2 (NVS) with distinct tails, discovery idle / round 4, `flags` 0 on both (taken disconnected). DISCOVER `0x01` → `last_result` `0x03` NOTHING_TO_DO; `0x05 0x01` FORGET_BOND RIGHT → `last_result` `0x00` OK with RIGHT disconnected, which explains the earlier `05/06` as a >2-byte write and makes a `134` consistent with ATT `0x86`. Connected-state status, connect/disconnect, double disconnect, `0x7f` and step 6 as written (BUSY while RIGHT connected) unrun; RIGHT link key cleared, so it must be re-paired | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | sheet §2, §10 |
-| Stick dead zone | `partial`, normalized rest `0.0000, 0.0000` both hands at dead zone 0.05, centres LEFT `-0.0227, 0.0090` / RIGHT `-0.1119, 0.0819`; three sittings: RIGHT stable at about `-0.112, +0.085` (real bias), LEFT moved `-0.030, -0.011` → `-0.008, +0.021` → `+0.017, +0.025`, still learning. Dead zone 0 set but saved settings read `learn true` after the switch was reported off (toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair; end stops, held offset and a confirmed learning-off run missing | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | sheet §3, §10 |
+| FF16 live read | `partial`, app 0.2.1 had no FF16 display (wmr-companion #107); Companion 0.2.2 adds it and the 0.3.11 recheck is open. Console `v` settles the 0.2.4 build half (`0.2.4`, `ESP-IDF v6.1`); reconnect half not run | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | bench §4, §8 |
+| FF17 scan/connect | `partial`, status v2 captured from FF17 notifications: version 1, both hands `addr_source` 2 (NVS) with distinct tails, discovery idle / round 4, `flags` 0 on both (taken disconnected). DISCOVER `0x01` → `last_result` `0x03` NOTHING_TO_DO; `0x05 0x01` FORGET_BOND RIGHT → `last_result` `0x00` OK with RIGHT disconnected, which explains the earlier `05/06` as a >2-byte write and makes a `134` consistent with ATT `0x86`. Connected-state status, connect/disconnect, double disconnect, `0x7f` and step 6 as written (BUSY while RIGHT connected) unrun; RIGHT link key cleared, so it must be re-paired | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | bench §4, §8 |
+| Stick dead zone | `partial`, normalized rest `0.0000, 0.0000` both hands at dead zone 0.05, centres LEFT `-0.0227, 0.0090` / RIGHT `-0.1119, 0.0819`; three sittings: RIGHT stable at about `-0.112, +0.085` (real bias), LEFT moved `-0.030, -0.011` → `-0.008, +0.021` → `+0.017, +0.025`, still learning. Dead zone 0 set but saved settings read `learn true` after the switch was reported off (toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair; end stops, held offset and a confirmed learning-off run missing | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | bench §4, §8 |
 | Latency stream ladder | `partial`, one 120 s run per stream: p50 `none` 63.4 / 62.3, FF11 34.3, FF12 34.5, FF14 39.3 ms, 479/479 answered; one session, so no ladder verdict (`latency-2` §3.3) | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/runs/sheets/latency-2.md` §3–§5 |
 | App-vs-native probe decision | `partial`, app FF14 39.3 ms vs probe 35.6 ms (`d` = +3.7), stalls 235/317 vs 274/365, inside both Stay bounds but from one unpaired run per client | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/runs/sheets/latency-2.md` §6 |
-| FF13 calibration applied in fusion | `partial`, pose recordings: 6.6 s face-down rest LEFT `+0.00°`, RIGHT `−0.03°`; a 14.4 s hand-held take turned RIGHT `−25.3°`. Prose rest pair 83.5 / 42.7 unlabelled for off/on, no 90° error | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/PROTOCOL.md` "FF13 config block in the app"; sheet §10 |
+| FF13 calibration applied in fusion | `partial`, pose recordings: 6.6 s face-down rest LEFT `+0.00°`, RIGHT `−0.03°`; a 14.4 s hand-held take turned RIGHT `−25.3°`. Prose rest pair 83.5 / 42.7 unlabelled for off/on, no 90° error | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/PROTOCOL.md` "FF13 config block in the app"; bench §8 (FF13 evidence) |
 
 In hand but not a verdict: the app ladder (five exports, none twice) covers all four
 streams, and the native GATT probe FF14 run (2026-10-28 19:27:46, 120 s, 473/473
@@ -169,12 +169,12 @@ answered, RTT p50 35.6 ms, stalls LEFT 274 / RIGHT 365) now has a same-build app
 FF14 run to compare with. Applying `latency-2` §6 arithmetic gives `d` = +3.7 ms and
 stall counts inside 25 % on both hands, which is the Stay window, but §3.3 requires
 three runs per cell, interleaved, plus a second session before a verdict, so checks 4
-and 5 stay `partial`. Details in sheet §10.
+and 5 stay `partial`. The figures above are the evidence.
 
 ## Contention-2 Empirical Hardware Findings (Issue #18)
 
 Full run sheet and figures:
-[`docs/runs/sheets/contention-2-results.md`](runs/sheets/contention-2-results.md).
+[`docs/CONTENTION_LEVERS.md`](CONTENTION_LEVERS.md).
 
 ### 1. Classic ACL Master Role Confirmed (Variant V3 No-Op)
 
@@ -254,7 +254,7 @@ evidence.
 | Lever | Status | Result / prerequisite |
 |---|---|---|
 | V1 staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`) | Not run | Code on `main`. Needs the two V1 images and the A/B/A block at one fixed position |
-| RIGHT asymmetry, phases 1-2 | Not run | No reflash. Use [`docs/runs/sheets/right-asymmetry.md`](runs/sheets/right-asymmetry.md) section 4 with one controller powered at a time |
+| RIGHT asymmetry, phases 1-2 | Not run | No reflash. Use [`docs/runs/sheets/internal-esp32-wmr-bench.md`](runs/sheets/internal-esp32-wmr-bench.md) section 6 with one controller powered at a time |
 | DLE confirmation, current build | Not run on the current build; 2026-10-22 log shows 251/2120 accepted | `tx 251 octets / 2120 us, rx 251 octets / 2120 us`. Capture the line again on this build |
 | Longer BLE interval (30 ms request) | Not run | Existing `WMR_CFG_CONN_INTERVAL_MIN/MAX`. Phone must grant it and the granted value must be recorded |
 | Longer FF14 hold (2 intervals) | Not run | New `WMR_CFG_BATCH_HOLD_INTERVALS=2`. Default 1 leaves current behaviour unchanged |
