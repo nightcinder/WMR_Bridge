@@ -1,22 +1,22 @@
-# Run sheet: 0.3.5 Android bench confirmation
+# Run sheet: 0.3.11 Android bench confirmation
 
 > **Procedure plus partial evidence, not a verdict.** A check scores only from figures the owner
 > supplies in §9 or that are recorded in §10; a green CI build is not a result.
 
-Scope: the checks that need only the owner's phone and one ESP32 running the packaged **0.3.5**
-image (`v0.3.5` release, or a CI build of the same commit) and the **wmr-companion 0.2.2** APK.
-This is the ONY-439 campaign retargeted to 0.3.5 (ONY-930). The earlier 0.3.0 retarget (ONY-482)
+Scope: the checks that need only the owner's phone and one ESP32 running the packaged **0.3.11**
+image (`v0.3.11` release, or a CI build of the same commit) and the **wmr-companion 0.2.2** APK.
+This is the ONY-439 campaign retargeted to 0.3.11 (ONY-930). The earlier 0.3.0 retarget (ONY-482)
 is history. The 0.2.4 sitting is kept as prior evidence in §10. One sitting, no reflash during it.
 
 The release pass has four checks:
 
-1. FF16 shows `0.3.5` on the companion 0.2.2 Debug screen (§1).
+1. FF16 shows `0.3.11` on the companion 0.2.2 Debug screen (§1).
 2. RIGHT reconnects after discovery, encrypts and streams without a board reset — the ONY-446
    fix (§4).
 3. The status LED shows the right colour for each hand combination (§5).
 4. Android binds the BLE HID gamepad with no app (§6).
 
-Sections 2 and 3 are the carried-forward FF17 and stick checks. They do not gate 0.3.5, but they
+Sections 2 and 3 are the carried-forward FF17 and stick checks. They do not gate 0.3.11, but they
 are still unrun, so they stay in the sheet.
 
 ## 0. Record before touching anything
@@ -25,7 +25,7 @@ Paste these once at the top of the result block; every check below inherits them
 
 | Field | Where from |
 |---|---|
-| Bridge firmware version and hash | Console `v` and `git describe --tags --always` of the flashed commit; `build-info.json` `version` if a packaged image was flashed. Expect `0.3.5` |
+| Bridge firmware version and hash | Console `v` and `git describe --tags --always` of the flashed commit; `build-info.json` `version` if a packaged image was flashed. Expect `0.3.11` |
 | `bridge_hands=` boot banner | Serial monitor first line |
 | App version and commit | Debug screen "About", or `git -C wmr-companion log --oneline -1`. Expect `0.2.2` (versionCode 4) |
 | Phone model and Android version | Settings → About phone |
@@ -55,8 +55,8 @@ connect and renders the bridge string plus the FF11–FF16 capability bits on th
 
 | Step | Pass | Fail |
 |---|---|---|
-| 1 | App shows `firmware 0.3.5` and `FF11+ FF12+ FF13+ FF14+ FF15+ FF16+` (companion 0.2.2 does not display FF17) | `firmware n/a (no FF16, older firmware)`, `firmware malformed`, or a different version |
-| 2 | Console `v` prints one line matching `build-info.json` `version` (`0.3.5`) | `1` or an empty value from a bare `idf.py` build |
+| 1 | App shows `firmware 0.3.11` and `FF11+ FF12+ FF13+ FF14+ FF15+ FF16+` (companion 0.2.2 does not display FF17) | `firmware n/a (no FF16, older firmware)`, `firmware malformed`, or a different version |
+| 2 | Console `v` prints one line matching `build-info.json` `version` (`0.3.11`) | `1` or an empty value from a bare `idf.py` build |
 | 3 | Same string after reconnect, with stream `none` and with `FF14` | String changes or disappears when the stream changes |
 
 Paste back: the app's string and bit row, the console `v` line, `build-info.json` `version`, and
@@ -202,14 +202,14 @@ declines is recorded as `declined`, not as a pass.
 
 | # | Check | Gate | Result | Device | Build | Figures |
 |---|---|---|---|---|---|---|
-| 1 | FF16 on companion 0.2.2 | 0.3.5 | not run | | | §1 |
-| 2 | ONY-446 RIGHT reconnect | 0.3.5 | not run | | | §4 |
-| 3 | Status LED colours | 0.3.5 | not run | | | §5 |
-| 4 | Android HID gamepad | 0.3.5 | not run | | | §6 |
+| 1 | FF16 on companion 0.2.2 | 0.3.11 | not run | | | §1 |
+| 2 | ONY-446 RIGHT reconnect | 0.3.11 | not run | | | §4 |
+| 3 | Status LED colours | 0.3.11 | not run | | | §5 |
+| 4 | Android HID gamepad | 0.3.11 | not run | | | §6 |
 | 5 | FF17 scan/connect | carried | not run | | | §2 |
 | 6 | Stick dead zone | carried | not run | | | §3 |
 
-The 0.2.4 partials for these checks are in §10; they do not carry over to 0.3.5.
+The 0.2.4 partials for these checks are in §10; they do not carry over to 0.3.11.
 
 ## 9. Paste-back block
 
@@ -229,7 +229,7 @@ A check with no figures is `not run`, even if the phone "seemed fine".
 
 ## 10. Prior sitting: 0.2.4 evidence (2026-10-28)
 
-Owner-supplied, not a verdict, and it does not gate 0.3.5. Section numbers inside this appendix
+Owner-supplied, not a verdict, and it does not gate 0.3.11. Section numbers inside this appendix
 refer to the 0.2.4 sheet; the procedures now live in §1–§7.
 
 ### Evidence received (0.2.4 sitting)

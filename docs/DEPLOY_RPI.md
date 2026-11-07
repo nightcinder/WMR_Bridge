@@ -204,7 +204,7 @@ sudo ./pi/install.sh
 
 ---
 
-### Method 2: Released Artifacts (`v0.3.5` and later)
+### Method 2: Released Artifacts (`v0.3.11` and later)
 
 Install from the release using the one-line installer or a downloaded package.
 
@@ -212,9 +212,9 @@ Install from the release using the one-line installer or a downloaded package.
 
 | Artifact | Link | SHA-256 |
 | --- | --- | --- |
-| `wmr-bridge-0.2.3.tar.gz` | [download](https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.5/wmr-bridge-0.2.3.tar.gz) | `04b7742b4357702c0eeb318879257dd097f8bc0d7c0cd929ddd77aa8486b8129` |
-| `wmr-bridge_0.2.3_all.deb` | [download](https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.5/wmr-bridge_0.2.3_all.deb) | `311bbd7d990402b84feb3d4dbb505541d7ab9e7a1acff0fd93224567297d4e75` |
-| `install.sh` | [download](https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.5/install.sh) | `bff2fa26fe3f4fb48a16dfdd9c61fff85c52a90cbae92f9a2aaf884dc2e4d6fa` |
+| `wmr-bridge-0.2.4.tar.gz` | [download](https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/wmr-bridge-0.2.4.tar.gz) | `50d95736a80eae821ad23a8840e341a6d568703a7f40883b91cc153c7b7c2ab0` |
+| `wmr-bridge_0.2.4_all.deb` | [download](https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/wmr-bridge_0.2.4_all.deb) | `8c54616806ba7cddb78f0e68a71f2f3503e23c4e4d16625129ea220c3a841eba` |
+| `install.sh` | [download](https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/install.sh) | `7f738a4a084965de99a02819f459b64f893b21b2178eeea10555f7186ed94d28` |
 
 The release also carries `SHA256SUMS` for every asset. Verify the files you
 downloaded (the list covers all assets, so ignore the ones you did not fetch):
