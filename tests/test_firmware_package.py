@@ -30,6 +30,10 @@ def check(cond, what):
     if not cond:
         failures += 1
         print("  FAIL:", what)
+        # Under pytest the counting runner is never called, so a failed check
+        # would otherwise leave the suite green. Raise so `pytest -q` fails.
+        if "pytest" in sys.modules:
+            raise AssertionError(what)
 
 
 def write(path, content=b"x"):
@@ -527,6 +531,10 @@ def test_pages_workflow_ships_pi_setup():
     with open(path, encoding="utf-8") as fh:
         workflow = fh.read()
     pages = workflow.split("\n  pages:", 1)[1]
+    check("actions/checkout" in pages,
+          "the Pages job checks out the tree for the setup pages")
+    check("contents: read" in pages,
+          "the Pages job may read the checked-out repository")
     check("cp docs/flasher/pi.html dist/pi.html" in pages,
           "the Pages job copies the Pi setup page")
     check("cp pi/install.sh dist/install.sh" in pages,
