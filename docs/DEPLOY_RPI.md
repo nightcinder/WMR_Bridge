@@ -175,10 +175,13 @@ to disable Wi-Fi power saving permanently).*
 ## 4. Step 3: Install WMR Bridge
 
 > **Release Asset Availability**:
-> Every `v*` tag since the packaging change (PR #104) publishes `install.sh`,
-> `wmr-bridge_<version>_all.deb`, and `wmr-bridge-<version>.tar.gz`. The
-> current release is `v0.3.11`, which carries Pi package `0.2.4`. Tags before
-> #104 (such as `v0.3.0`) only contain ESP32 firmware assets.
+> Tags before #104 (such as `v0.3.0`) only contain ESP32 firmware assets.
+> Tags from #104 through `v0.3.11` also publish `install.sh`,
+> `wmr-bridge_<version>_all.deb` and `wmr-bridge-<version>.tar.gz`. Newer tags
+> publish six files: the three merged factory images
+> (`wmr-bridge-factory.bin`, `-left`, `-right`), the `.deb`, `install.sh` and
+> `SHA256SUMS`. The current release is `v0.3.11`, which carries Pi package
+> `0.2.4`.
 >
 > Use Method 1 only for a checkout you built yourself or for a pre-release
 > change that has no tag yet.
@@ -242,14 +245,14 @@ curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/in
 ```
 
 The installer:
-1. Downloads the release tarball and verifies its SHA-256 checksum against GitHub release assets.
-2. Creates the dedicated `wmr` system service user and adds it to the `input` group.
-3. Installs files to `/opt/wmr-bridge/pi` and udev rules to `/etc/udev/rules.d/99-wmr-bridge.rules`.
-4. Disables Wi-Fi power saving via `/etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf`.
-5. Generates a secure authorization token at `/etc/wmr-bridge/token` (mode `0600 wmr:wmr`).
-6. Configures the systemd service `/etc/systemd/system/wmr-bridge.service`.
-7. Installs `/usr/bin/wmr-bridge`, a launcher for `python3 -m wmr_bridge` from
-   `/opt/wmr-bridge`.
+1. Downloads the release `.deb` and verifies it against the release `SHA256SUMS`.
+2. Installs it with `apt-get`. The package creates the dedicated `wmr` service
+   user, installs files to `/opt/wmr-bridge/pi` and `/usr/bin/wmr-bridge`, adds
+   the udev rule and the NetworkManager power-save drop-in, generates
+   `/etc/wmr-bridge/token` and configures `wmr-bridge.service`.
+3. Enables and starts `wmr-bridge.service`.
+4. On a host without `apt-get`, falls back to the release tarball and runs its
+   installer.
 
 #### Option B: Standalone Debian package (`.deb`)
 

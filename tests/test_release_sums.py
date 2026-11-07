@@ -17,14 +17,11 @@ HERE = Path(__file__).resolve().parent
 SCRIPT = HERE.parent / "tools" / "release" / "make_sums.sh"
 
 ASSETS = (
-    "wmr-bridge-0.2.2.tar.gz",
-    "wmr-bridge-0.2.2.tar.gz.sha256",
-    "wmr-bridge_0.2.2_all.deb",
-    "wmr-bridge_0.2.2_all.deb.sha256",
-    "install.sh",
     "wmr-bridge-factory.bin",
     "wmr-bridge-left-factory.bin",
-    "manifest.json",
+    "wmr-bridge-right-factory.bin",
+    "wmr-bridge_0.2.2_all.deb",
+    "install.sh",
 )
 
 
@@ -83,13 +80,13 @@ class ReleaseSumsTests(unittest.TestCase):
     def test_rerun_replaces_stale_entries(self):
         self.assertEqual(run(SCRIPT, str(self.dist)).returncode, 0)
         (self.dist / "notes.txt").write_bytes(b"added later\n")
-        (self.dist / "manifest.json").unlink()
+        (self.dist / "install.sh").unlink()
         self.assertEqual(run(SCRIPT, str(self.dist)).returncode, 0)
 
         lines = (self.dist / "SHA256SUMS").read_text(encoding="ascii").splitlines()
         names = [line.split("  ", 1)[1] for line in lines]
         self.assertIn("notes.txt", names)
-        self.assertNotIn("manifest.json", names)
+        self.assertNotIn("install.sh", names)
 
     def test_empty_directory_is_an_error(self):
         empty = Path(self.tmp.name) / "empty"
