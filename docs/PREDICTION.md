@@ -436,18 +436,22 @@ These are host tests, no hardware:
 ## 5. Is the 2026-10-22 latency run still current?
 
 Short answer: the stream ladder has one current pass. The ladder repeats are
-not run; latency-2 is closed (ONY-23) as **Stay Flutter** under the warm-start,
-one-sided `d <= +5 ms` rule. Four 120 s runs
+not run; latency-2 is closed (ONY-23) as **Stay Flutter** under the ONY-1010
+amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). Four
+120 s runs
 on 2026-10-24 with firmware `v0.1.1`
 and the `0.1.0` app measured rtt p50 40.5 ms (FF14) against 40.8 ms on
 2026-10-22, 44.8 ms (FF11), 44.3 ms (FF12) and 61.6 ms with no stream. So
 neither the client refactor nor the firmware changes since then moved the
 streamed median, and the old about 59 ms no-stream penalty reproduced. The runs
 are sequential at one stated position rather than interleaved. The FF14 and none
-repeats are missing. On the warm-start evidence the Dart client is not the
-bottleneck: 2026-10-28 gave `d` = +3.7 ms, and 2026-11-07 gave `d` = -16.3 /
--2.6 / -9.9 ms at 250 / 50 / 1000 ms with probe stalls 610/698 against app
-490/440, so the remaining split is plugin and radio.
+repeats are missing. The app-vs-probe evidence is limited: 2026-10-28 is one
+unpaired run per client (`d` = +3.7 ms); the 2026-11-07 250 ms pair is app 11:43
+against a probe re-run at 15:18 (app RSSI not recorded), and its RIGHT stalls
+are 440 vs 698 (37 % apart), so it misses the Stay branch and lands in between
+(stay Flutter, gaps filed upstream). The 50 and 1000 ms runs received no stream
+frames (`d` = -2.6 / -9.9 ms). The Dart client is not the bottleneck, so the
+remaining split is plugin and radio.
 The rest of this
 section keeps the 2026-10-22 comparison as the record of what changed between
 the two builds.
@@ -520,9 +524,10 @@ stop, at 1 dB resolution, so that spread does not prove the rig moved). So the
 4 ms FF11/FF12 penalty against FF14 cannot be separated from session drift.
 
 The FF14 and no-stream repeats remain unrun. Latency-2 closed (ONY-23) as
-**Stay Flutter** under the warm-start, one-sided `d <= +5 ms` rule, so the
-Dart client's share of the round trip is off the critical path and the
-remainder is plugin and radio.
+**Stay Flutter** under the ONY-1010 amendment (warm/stable start; one-sided
+`d <= +5 ms`, stalls within 25 %); the 2026-11-07 pair lands in between (stay
+Flutter, gaps filed upstream), so the Dart client's share of the round trip is
+off the critical path and the remainder is plugin and radio.
 
 ### 5.4 What is still required for a current latency claim
 
@@ -535,11 +540,15 @@ what is missing:
   the current firmware and APK hashes recorded. The 2026-10-24 sitting covers
   the first four (one pass, not interleaved). The two repeats are still needed
   before a 4 ms difference between streams is called real.
-- Latency-2 is closed (ONY-23, **Stay Flutter**): the warm-start, one-sided
-  `d <= +5 ms` rule, with 2026-10-28 `d` = +3.7 ms and 2026-11-07 `d` =
-  -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms. The probe is retired; the
-  archived protocol and figures stay in
-  [latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md).
+- Latency-2 is closed (ONY-23, **Stay Flutter**) under the ONY-1010 amendment
+  (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %), with
+  2026-10-28 `d` = +3.7 ms (one unpaired run per client) and 2026-11-07 `d` =
+  -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms; the 250 ms pair misses the Stay
+  branch on RIGHT stalls and lands in between (stay Flutter, gaps filed
+  upstream). The probe is retired; the rule and protocol stay in
+  [latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md)
+  and the 2026-11-07 figures are archived in
+  [`runs/roundtrip/`](runs/roundtrip/README.md).
 
 Add the current both-hands versus single-hand comparison if the question is
 specifically the single-ESP32 capacity, rather than only the client. The
@@ -620,8 +629,9 @@ Until those exist, this is a design recommendation, not a shipped feature.
 - The 40.5-44.8 ms streamed latency figures are current for the `0.1.1`/`0.1.0`
   release pair (the 2026-10-24 runs reproduced the 2026-10-22 FF14 median and
   added none/FF11/FF12). The ladder repeats still gate the stream ordering, but
-  the native-vs-Flutter decision is closed: ONY-23 is **Stay Flutter** (warm
-  start, one-sided `d <= +5 ms`).
+  the native-vs-Flutter decision is closed: ONY-23 is **Stay Flutter** (ONY-1010
+  amendment: warm/stable start, one-sided `d <= +5 ms`, stalls within 25 %; the
+  2026-11-07 pair lands in between).
 - Build prediction only after the loss work, as an opt-in presentation layer
   with the tests and hardware acceptance in sections 4-6.
 

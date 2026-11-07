@@ -31,19 +31,27 @@ A factory flash erases controller addresses and the phone bond. Pair both contro
 
 ## 3. Block A — ONY-23 latency-2 (closed)
 
-**Closed — Stay Flutter** (ONY-1010). Test condition: a warm, stable power
-state rather than a cold power-cycled start. Decision rule on the FF14 pair:
-move the receive path native if `d = app p50 - probe p50 >= +10 ms`, or probe
-stalls `< 0.5 x` the app's on either hand; Stay Flutter if the one-sided
-`d <= +5 ms` and both hands are within 25 % (`abs(a - p) <= 0.25 x p`) or have
-fewer app stalls than the probe.
+**Closed — Stay Flutter** (ONY-23). ONY-1010 amended the rule: the test
+condition is a normal warm/stable power state, and the Stay Flutter bound is
+one-sided `d = app p50 - probe p50 <= +5 ms`; the >50 ms stall count must still
+be within 25 % of the probe's (`abs(a - p) <= 0.25 x p`) on both hands. Move the
+receive path native if `d >= +10 ms` or probe stalls are `< 0.5 x` the app's on
+either hand; otherwise it is in between — stay Flutter and file the
+`universal_ble` gaps upstream. The pre-amendment
+[latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md)
+rule is two-sided `abs(d) <= 5 ms` with the same stall bound.
 
-Evidence: 2026-10-28 `d` = +3.7 ms; 2026-11-07 `d` = -16.3 ms at 250 ms,
--2.6 ms at 50 ms and -9.9 ms at 1000 ms, with probe stalls 610/698 against app
-490/440. The Dart client is not the bottleneck; the round trip is radio-bound.
-The native probe is retired. The protocol and archived figures stay in
-[latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md).
-Do not run this block.
+Evidence: 2026-10-28 `d` = +3.7 ms, one unpaired run per client, with stalls
+inside 25 % on both hands; 2026-11-07 `d` = -16.3 / -2.6 / -9.9 ms at 250 / 50 /
+1000 ms, with probe stalls 610/698 against app 490/440. The 250 ms pair is app
+11:43 against a probe re-run at 15:18 (app RSSI not recorded), and its RIGHT
+stalls are 37 % apart (440 vs 698), so it misses the Stay branch under either
+bound and lands in between: Stay Flutter, gaps filed upstream. The 50 and
+1000 ms runs received no stream frames. The Dart client is not the bottleneck;
+the round trip is radio-bound. The native probe is retired. ONY-1010 records the
+amendment; the rule and protocol are in `latency-2`; the 2026-11-07 figures are
+archived in [`docs/runs/roundtrip/README.md`](../roundtrip/README.md). Do not run
+this block.
 
 ## 4. Block B — FF16, FF17, stick
 
