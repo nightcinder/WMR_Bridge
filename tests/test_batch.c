@@ -143,9 +143,13 @@ static void test_real_record(void){
 static void test_flush_rule(void){
     printf("FF14 flush rule\n");
     const uint32_t hold = 15000u * WMR_CFG_BATCH_HOLD_INTERVALS;
-    CHECK(wmr_batch_hold_us(15000) == 15000u * WMR_CFG_BATCH_HOLD_INTERVALS);
-    CHECK(wmr_batch_hold_us(7500) == 7500u * WMR_CFG_BATCH_HOLD_INTERVALS);
-    CHECK(wmr_batch_hold_us(0) == WMR_CFG_BATCH_HOLD_DEFAULT_US * WMR_CFG_BATCH_HOLD_INTERVALS);
+    CHECK(wmr_batch_hold_us(15000, WMR_CFG_BATCH_HOLD_DEFAULT_US,
+                            WMR_CFG_BATCH_HOLD_INTERVALS) == 15000u * WMR_CFG_BATCH_HOLD_INTERVALS);
+    CHECK(wmr_batch_hold_us(7500, WMR_CFG_BATCH_HOLD_DEFAULT_US,
+                            WMR_CFG_BATCH_HOLD_INTERVALS) == 7500u * WMR_CFG_BATCH_HOLD_INTERVALS);
+    CHECK(wmr_batch_hold_us(0, WMR_CFG_BATCH_HOLD_DEFAULT_US,
+                            WMR_CFG_BATCH_HOLD_INTERVALS) ==
+          WMR_CFG_BATCH_HOLD_DEFAULT_US * WMR_CFG_BATCH_HOLD_INTERVALS);
     /* nothing queued: never */
     CHECK(wmr_batch_flush_reason(0, 9, 999999, hold) == WMR_BATCH_FLUSH_NO);
     /* partial and young: keep collecting */
@@ -190,9 +194,11 @@ static void test_flush_rule(void){
     /* The LEVERS `h` toggle doubles the hold at runtime; toggle back restores the default. */
     CHECK(wmr_levers_hold_intervals() == 1u);
     CHECK(wmr_levers_hold_toggle());
-    CHECK(wmr_batch_hold_us(15000) == 30000u);
+    CHECK(wmr_batch_hold_us(15000, WMR_CFG_BATCH_HOLD_DEFAULT_US,
+                            wmr_levers_hold_intervals()) == 30000u);
     CHECK(!wmr_levers_hold_toggle());
-    CHECK(wmr_batch_hold_us(15000) == 15000u);
+    CHECK(wmr_batch_hold_us(15000, WMR_CFG_BATCH_HOLD_DEFAULT_US,
+                            wmr_levers_hold_intervals()) == 15000u);
 #endif
 }
 

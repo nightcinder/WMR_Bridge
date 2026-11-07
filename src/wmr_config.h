@@ -47,12 +47,9 @@
 #define WMR_CONFIG_H
 
 #include <stdbool.h>
+#include "wmr_codec.h"
 
 /* ---- Controllers ------------------------------------------------------- */
-
-#define WMR_HAND_LEFT        0
-#define WMR_HAND_RIGHT       1
-#define WMR_NUM_CONTROLLERS  2
 
 /* Which controllers this build serves. 0 = both (default, current behaviour), 1 = LEFT
  * only, 2 = RIGHT only. The excluded hand is ignored by discovery, refused by the outgoing
@@ -255,11 +252,6 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_PSVR2_WAKE         1
 #endif
 
-/* HID transaction header, input report ID and largest complete frame (A1 + report ID +
- * payload). 0x31 reports carry 77 payload bytes, so the frame is 79 bytes. */
-#define WMR_PSVR2_HID_HEADER       0xA1
-#define WMR_PSVR2_INPUT_REPORT_ID  0x31
-#define WMR_PSVR2_INPUT_FRAME_MAX  79
 /* HID Feature Report read that wakes a PSVR2 Sense controller (unverified on hardware). */
 #define WMR_PSVR2_WAKE_FEATURE_ID  0x05
 /* Delay between DESCRIPTOR_AVAILABLE and that read. On incoming/reconnect links BTstack
@@ -270,39 +262,13 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_PSVR2_WAKE_DELAY_MS 250
 #endif
 
-/* ---- Frames, queue and wire format ------------------------------------- */
-
-/* Largest controller frame (A1 + report ID + payload) that is forwarded.
- * WMR frames are 46 bytes; PSVR2 input frames are up to 79. 80 is the smallest
- * value that carries both and still fits the static queue in ESP32 DRAM (96
- * overflows dram0_0_seg; see docs/PSVR2.md). Longer frames are counted as
- * drops. */
-#ifndef WMR_CFG_MAX_FRAME
-#define WMR_CFG_MAX_FRAME          80
-#endif
-#if WMR_CFG_MAX_FRAME < WMR_PSVR2_INPUT_FRAME_MAX
-#error "WMR_CFG_MAX_FRAME must be >= WMR_PSVR2_INPUT_FRAME_MAX (79)"
-#endif
+/* ---- Frames and queue -------------------------------------------------- */
 
 /* Bounded FIFO shared by both hands, in whole frames. When full, new
  * frames are dropped (drop-newest) and counted. */
 #ifndef WMR_CFG_QUEUE_CAPACITY
 #define WMR_CFG_QUEUE_CAPACITY     256
 #endif
-
-/* wire: size of the fragment header preceding each payload chunk. */
-#define WMR_PROTO_HEADER_SIZE      12
-
-/* wire: first byte of every notification ('R'). */
-#define WMR_PROTO_MAGIC            0x52
-
-/* Upper bound on one ATT notification value, whatever the MTU allows. */
-#ifndef WMR_CFG_MAX_NOTIFICATION
-#define WMR_CFG_MAX_NOTIFICATION   244
-#endif
-
-/* ATT opcode + handle overhead inside an ATT_MTU-sized PDU. */
-#define WMR_ATT_NOTIFY_OVERHEAD    3
 
 /* ---- BLE peripheral ---------------------------------------------------- */
 

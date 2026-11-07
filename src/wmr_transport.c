@@ -256,7 +256,9 @@ static bool batch_due(void){
     const uint64_t now = (uint64_t) esp_timer_get_time();
     const uint64_t age64 = now > oldest->rx_time_us ? now - oldest->rx_time_us : 0;
     const uint32_t age = age64 > UINT32_MAX ? UINT32_MAX : (uint32_t) age64;
-    const uint32_t hold = wmr_batch_hold_us(conn_known ? wmr_conn_interval_us(conn_now.interval) : 0);
+    const uint32_t hold = wmr_batch_hold_us(conn_known ? wmr_conn_interval_us(conn_now.interval) : 0,
+                                            WMR_CFG_BATCH_HOLD_DEFAULT_US,
+                                            wmr_levers_hold_intervals());
     const unsigned max_count = wmr_batch_max_count(att_server_get_mtu(phone_handle));
     if (wmr_batch_flush_reason(queue.count, max_count, age, hold) != WMR_BATCH_FLUSH_NO) return true;
     btstack_run_loop_remove_timer(&batch_timer);

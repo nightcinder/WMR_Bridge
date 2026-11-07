@@ -116,6 +116,17 @@ This is the list CI runs (`host-tests`): one build and run per test, C99 with
 same script with `-fsanitize=address,undefined -fno-sanitize-recover=all` and no
 suppression flags, so a buffer or UB finding fails the job.
 
+The pure-C codec modules (`wmr_decode`, `wmr_decoded`, `wmr_batch`, `wmr_protocol`
+and `wmr_hid`) are also built as an internal static library. The root
+`CMakeLists.txt` builds `libwmr_codec.a` and registers their tests with CTest:
+
+```sh
+cmake -B build && cmake --build build && ctest --test-dir build --output-on-failure
+```
+
+This target is for host tests only; it has no `install()` rule, shared library or
+pkg-config file, and the firmware build still comes from `tools/firmware/build.py`.
+
 `tests/run_tests.ps1` is the older Windows helper and covers the pure-C tests
 only. The BTstack-side tests (`tests/test_console.c`, `tests/test_cfgmgr.c`,
 `tests/test_linkdiag.c`) use the fakes in `tests/host_stubs/` and POSIX stdout
