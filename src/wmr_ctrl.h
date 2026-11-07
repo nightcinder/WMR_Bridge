@@ -92,7 +92,7 @@ typedef struct {
     bool    connecting;
     bool    descriptor_available;
     uint8_t address_source;   /* 0: none, 1: override, 2: stored */
-    uint8_t model;            /* 0: WMR, 1: PSVR2 */
+    uint8_t model;            /* 0: WMR, 1: PSVR2, 2: Switch */
     uint8_t address[6];       /* last 3 bytes (address[3..5]) packed into payload */
 } wmr_ctrl_hand_status_t;
 
