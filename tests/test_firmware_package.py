@@ -465,6 +465,78 @@ def test_flasher_controller_panel():
           "the status parser uses the firmware's address-source wording")
 
 
+def test_pi_flasher_page_contract():
+    reldir = os.path.join(HERE, "..", "docs", "flasher")
+    with open(os.path.join(reldir, "pi.html"), encoding="utf-8") as fh:
+        page = fh.read()
+    check(page.count('class="step-number"') == 3,
+          "the Pi page has exactly its three steps")
+    for label in ("Step 1", "Step 2", "Step 3"):
+        check(label in page, "the Pi page labels %s" % label)
+    check("Raspberry Pi Imager" in page, "step 1 uses Pi Imager")
+    check("Raspberry Pi OS Lite (64-bit)" in page,
+          "step 1 names the 64-bit Lite image")
+    check("Pi Zero 2 W" in page, "the page names the unsupported board")
+    check(
+        "curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/"
+        "latest/download/install.sh | sudo bash" in page,
+        "step 2 gives the one-line install command",
+    )
+    check("bluetoothctl" in page and "[bluetooth]# pair " in page,
+          "step 3 pairs controllers with bluetoothctl")
+    for target in ("install-cmd", "check-cmd", "pair-cmd", "verify-cmd"):
+        check('data-copy-target="%s"' % target in page,
+              "the %s command has a copy button" % target)
+    check("navigator.clipboard" in page,
+          "the copy buttons use the clipboard API")
+    check("--bg: #101318" in page,
+          "the Pi page uses the flasher's dark theme")
+    check('href="./index.html"' in page,
+          "the Pi page links back to the ESP32 flasher")
+    check('href="./install.sh"' in page,
+          "the Pi page links to the installer bundled beside it")
+    check("docs/RPI_INSTALL_GUIDE.md" in page,
+          "the page links to the full Pi install guide")
+    with open(os.path.join(reldir, "index.html"), encoding="utf-8") as fh:
+        flasher = fh.read()
+    check('href="./pi.html"' in flasher,
+          "the ESP32 flasher links to the Pi setup page")
+
+
+def test_flasher_pages_are_packaged():
+    flasher_dir = Path(HERE).parent / "docs" / "flasher"
+    for name in ("index.html", "pi.html"):
+        check((flasher_dir / name).is_file(),
+              "%s exists in docs/flasher" % name)
+    with tempfile.TemporaryDirectory() as root:
+        source = Path(root) / "flasher"
+        out = Path(root) / "dist"
+        source.mkdir()
+        out.mkdir()
+        for name in ("index.html", "pi.html"):
+            (source / name).write_text(name, encoding="utf-8")
+        copied = build.copy_flasher_pages(out, source)
+        check(copied == ["index.html", "pi.html"],
+              "packaging copies every flasher page in name order")
+        for name in copied:
+            check((out / name).is_file(), "packaging writes %s" % name)
+
+
+def test_pages_workflow_ships_pi_setup():
+    path = os.path.join(HERE, "..", ".github", "workflows", "firmware.yml")
+    with open(path, encoding="utf-8") as fh:
+        workflow = fh.read()
+    pages = workflow.split("\n  pages:", 1)[1]
+    check("cp docs/flasher/pi.html dist/pi.html" in pages,
+          "the Pages job copies the Pi setup page")
+    check("cp pi/install.sh dist/install.sh" in pages,
+          "the Pages job copies the installer beside the page")
+    check("test -s dist/pi.html" in pages and "test -s dist/install.sh" in pages,
+          "the Pages job fails when the Pi page or installer is missing")
+    check("path: dist" in pages,
+          "the Pages artifact is still the firmware output directory")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

@@ -237,11 +237,25 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v7
+
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
           name: firmware
           path: dist
+
+      # The Pages site is the firmware output directory, so both setup pages
+      # and the installer the Pi page links to must be in dist before upload.
+      - name: Add the Pi setup page and installer
+        run: |
+          set -eu
+          cp docs/flasher/index.html dist/index.html
+          cp docs/flasher/pi.html dist/pi.html
+          cp pi/install.sh dist/install.sh
+          test -s dist/index.html
+          test -s dist/pi.html
+          test -s dist/install.sh
 
       - name: Configure Pages
         uses: actions/configure-pages@v6
