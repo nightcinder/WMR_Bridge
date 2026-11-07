@@ -18,6 +18,8 @@ ENV_EXAMPLE = PI_DIR / "systemd" / "wmr-bridge.env.example"
 UDEV_RULES = PI_DIR / "udev" / "99-wmr-bridge.rules"
 POWERSAVE_CONF = PI_DIR / "networkmanager" / "99-wmr-bridge-powersave.conf"
 BUILD_PACKAGE = PI_DIR / "build_package.sh"
+BUILD_DEB = PI_DIR / "build_deb.sh"
+MAKE_SUMS = PI_DIR.parent / "tools" / "release" / "make_sums.sh"
 VERSION = re.search(
     r'^__version__ = "([^"]+)"$',
     (PI_DIR / "wmr_bridge" / "__init__.py").read_text(encoding="utf-8"),
@@ -160,7 +162,81 @@ class PackagingTests(unittest.TestCase):
             self.assertIn("systemctl daemon-reload", calls)
 
 
-    def test_installer_fetches_and_verifies_release_when_piped(self) -> None:
+    def test_installer_installs_verified_deb_when_piped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            release = tmp_path / "release"
+            build = subprocess.run(
+                [str(BUILD_DEB), "--out", str(release)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(build.returncode, 0, msg=build.stderr)
+
+            # A published release carries the three factory images, the .deb,
+            # install.sh and one SHA256SUMS list.
+            for variant in ("", "-left", "-right"):
+                (release / f"wmr-bridge{variant}-factory.bin").write_bytes(b"firmware\n")
+            shutil.copy(INSTALL_SH, release / "install.sh")
+            sums = subprocess.run(
+                ["/bin/sh", str(MAKE_SUMS), str(release)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(sums.returncode, 0, msg=sums.stderr)
+
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            calls = tmp_path / "calls.log"
+            _write_stub(bin_dir, "apt-get", f'echo "apt-get $*" >> "{calls}"')
+            _write_stub(bin_dir, "systemctl", f'echo "systemctl $*" >> "{calls}"')
+
+            env = {
+                **os.environ,
+                "WMR_BRIDGE_VERSION": VERSION,
+                "WMR_BRIDGE_RELEASE_BASE_URL": release.as_uri(),
+                "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
+            }
+            proc = subprocess.run(
+                ["/bin/sh", "-s"],
+                input=INSTALL_SH.read_text(encoding="utf-8"),
+                cwd=tmp_path,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            self.assertIn(f"installing wmr-bridge_{VERSION}_all.deb", proc.stdout)
+
+            calls_text = calls.read_text(encoding="utf-8")
+            install_lines = [line for line in calls_text.splitlines() if line.startswith("apt-get install -y ")]
+            self.assertEqual(len(install_lines), 1)
+            self.assertTrue(install_lines[0].endswith(f"wmr-bridge_{VERSION}_all.deb"))
+            self.assertIn("systemctl enable wmr-bridge.service", calls_text)
+            self.assertIn("systemctl restart wmr-bridge.service", calls_text)
+
+            corrupt = tmp_path / "corrupt"
+            shutil.copytree(release, corrupt)
+            (corrupt / f"wmr-bridge_{VERSION}_all.deb").write_bytes(b"not a deb")
+            calls.write_text("", encoding="utf-8")
+            env["WMR_BRIDGE_RELEASE_BASE_URL"] = corrupt.as_uri()
+            proc = subprocess.run(
+                ["/bin/sh", "-s"],
+                input=INSTALL_SH.read_text(encoding="utf-8"),
+                cwd=tmp_path,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("sha256 verification failed", proc.stderr)
+            self.assertEqual(calls.read_text(encoding="utf-8"), "")
+
+    def test_installer_falls_back_to_tarball_without_apt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             release = tmp_path / "release"
@@ -171,12 +247,21 @@ class PackagingTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(build.returncode, 0, msg=build.stderr)
+            shutil.copy(INSTALL_SH, release / "install.sh")
+            sums = subprocess.run(
+                ["/bin/sh", str(MAKE_SUMS), str(release)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(sums.returncode, 0, msg=sums.stderr)
 
             rootfs = tmp_path / "rootfs"
             env = {
                 **os.environ,
                 "WMR_BRIDGE_VERSION": VERSION,
                 "WMR_BRIDGE_RELEASE_BASE_URL": release.as_uri(),
+                "WMR_BRIDGE_INSTALL_METHOD": "tarball",
                 "DESTDIR": str(rootfs),
                 "WMR_SKIP_PRIVILEGED": "1",
             }
@@ -195,25 +280,6 @@ class PackagingTests(unittest.TestCase):
                 (rootfs / "opt" / "wmr-bridge" / "pi" / "wmr_bridge" / "__main__.py").is_file()
             )
             self.assertTrue((rootfs / "etc" / "wmr-bridge" / "token").is_file())
-
-            corrupt = tmp_path / "corrupt"
-            shutil.copytree(release, corrupt)
-            (corrupt / f"wmr-bridge-{VERSION}.tar.gz").write_bytes(b"not a tarball")
-            bad_rootfs = tmp_path / "bad-rootfs"
-            env["WMR_BRIDGE_RELEASE_BASE_URL"] = corrupt.as_uri()
-            env["DESTDIR"] = str(bad_rootfs)
-            proc = subprocess.run(
-                ["/bin/sh", "-s"],
-                input=INSTALL_SH.read_text(encoding="utf-8"),
-                cwd=tmp_path,
-                env=env,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertNotEqual(proc.returncode, 0)
-            self.assertIn("sha256 verification failed", proc.stderr)
-            self.assertFalse(bad_rootfs.exists())
 
 
 if __name__ == "__main__":
