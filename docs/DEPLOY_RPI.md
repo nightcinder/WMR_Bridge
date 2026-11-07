@@ -31,7 +31,7 @@ the related procedure and its commands.
 - [ ] `uname -m` prints `aarch64` and `systemctl is-active bluetooth` prints
       `active`. [§2]
 - [ ] Install the released package and check `wmr-bridge --version` prints
-      `wmr_bridge 0.2.3`. [§4]
+      `wmr_bridge 0.2.4`. [§4]
 - [ ] `systemctl is-enabled wmr-bridge` reports `enabled` and
       `systemctl is-active wmr-bridge` reports `active`. [§4]
 - [ ] Pair, trust, and connect both controllers; both appear in
@@ -174,7 +174,7 @@ to disable Wi-Fi power saving permanently).*
 > **Release Asset Availability**:
 > Every `v*` tag since the packaging change (PR #104) publishes `install.sh`,
 > `wmr-bridge_<version>_all.deb`, and `wmr-bridge-<version>.tar.gz`. The
-> current release is `v0.3.5`, which carries Pi package `0.2.3`. Tags before
+> current release is `v0.3.11`, which carries Pi package `0.2.4`. Tags before
 > #104 (such as `v0.3.0`) only contain ESP32 firmware assets.
 >
 > Use Method 1 only for a checkout you built yourself or for a pre-release
@@ -226,10 +226,10 @@ sha256sum -c SHA256SUMS --ignore-missing
 #### Option A: One-line installer (pinned version)
 
 The Pi package version and the firmware release tag are independent: package
-`0.2.3` ships in tag `v0.3.5`. To pin both, set the package version and the tag:
+`0.2.4` ships in tag `v0.3.11`. To pin both, set the package version and the tag:
 
 ```bash
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.5/install.sh | WMR_BRIDGE_VERSION=0.2.3 WMR_BRIDGE_TAG=v0.3.5 sudo -E bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/install.sh | WMR_BRIDGE_VERSION=0.2.4 WMR_BRIDGE_TAG=v0.3.11 sudo -E bash
 ```
 
 To install the latest release without pinning:
@@ -253,8 +253,8 @@ The installer:
 Download the `.deb` asset from the [GitHub Releases](https://github.com/nightcinder/WMR_Bridge/releases) page:
 
 ```bash
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.5/wmr-bridge_0.2.3_all.deb
-sudo apt install ./wmr-bridge_0.2.3_all.deb
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/wmr-bridge_0.2.4_all.deb
+sudo apt install ./wmr-bridge_0.2.4_all.deb
 ```
 
 ---
@@ -266,7 +266,7 @@ Both install methods also put `/usr/bin/wmr-bridge` on `PATH`; it runs
 without changing directory:
 
 ```bash
-wmr-bridge --version   # wmr_bridge 0.2.3
+wmr-bridge --version   # wmr_bridge 0.2.4
 wmr-bridge --list
 ```
 
@@ -358,13 +358,13 @@ python3 /opt/wmr-bridge/pi/tools/wifi_probe.py \
 ### Expected Output
 
 ```text
-connected to ws://127.0.0.1:8765/wmr as 0.2.3
+connected to ws://127.0.0.1:8765/wmr as 0.2.4
 hello: {
   "type": "hello",
   "protocol": 1,
   "transport": "wifi",
   "device": "wmr-pi",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "handFilter": [
     "LEFT",
     "RIGHT"
@@ -456,7 +456,7 @@ subscribe: {'type': 'subscribed', 'stream': 'batched', 'recordSize': 56, 'batchM
   "dropped": 0,
   "serverStatus": {
     "type": "status",
-    "version": "0.2.3",
+    "version": "0.2.4",
     "handFilter": [
       "LEFT",
       "RIGHT"
