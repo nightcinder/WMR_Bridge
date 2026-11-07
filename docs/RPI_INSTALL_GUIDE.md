@@ -78,29 +78,40 @@ The package installs a setting to turn power saving off. That setting takes effe
 
 ## Step 4: Install WMR Bridge
 
-This guide uses the released package version 0.2.4 from release v0.3.11.
+The installer does the whole setup in one step. It downloads the release
+package, checks it against SHA256SUMS, installs it, and starts the service.
 
-Download the package:
-
-```bash
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/wmr-bridge_0.2.4_all.deb
-```
-
-Check the file hash (optional but recommended):
+Run this on the Pi:
 
 ```bash
-sha256sum wmr-bridge_0.2.4_all.deb
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 ```
 
-The expected hash is `8c54616806ba7cddb78f0e68a71f2f3503e23c4e4d16625129ea220c3a841eba`.
+A short browser guide for the same steps is at
+https://nightcinder.github.io/WMR_Bridge/pi.html.
 
-Install the package:
+The installer creates the `wmr` user, installs files under `/opt/wmr-bridge/pi`,
+adds the udev rule and the NetworkManager power-save setting, writes the token
+at `/etc/wmr-bridge/token`, and starts `wmr-bridge.service`.
+
+To pin a release, set the version and the tag:
 
 ```bash
-sudo apt install ./wmr-bridge_0.2.4_all.deb
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.11 sudo -E bash
 ```
 
-The package creates a system user, sets up files, and creates a security token.
+The Pi package version and the firmware tag are independent. The current
+firmware release is v0.3.11.
+
+To check a download by hand, fetch SHA256SUMS from the same release and run:
+
+```bash
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+The release carries six files: three merged factory images
+(`wmr-bridge-factory.bin`, `-left`, `-right`), the package, `install.sh`, and
+SHA256SUMS. There are no per-file checksum files.
 
 Reboot the Pi so the Wi-Fi power-saving setting takes effect:
 
@@ -114,30 +125,19 @@ Wait 1 to 2 minutes. Then SSH back in:
 ssh <username>@wmr-pi.local
 ```
 
-## Step 5: Start and check the service
+## Step 5: Check the service
 
-The bridge runs as a system service. Check it:
+The installer starts the service. Check it:
 
 ```bash
-wmr-bridge --version   # wmr_bridge 0.2.4
+wmr-bridge --version
 wmr-bridge --list
-```
-
-Enable and start the service:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now wmr-bridge
-```
-
-Check the status:
-
-```bash
 systemctl status wmr-bridge
-systemctl is-enabled wmr-bridge   # enabled
-systemctl is-active wmr-bridge    # active
+systemctl is-active wmr-bridge   # active
 journalctl -u wmr-bridge -n 50 --no-pager
 ```
+
+If the service is not running, start it with `sudo systemctl enable --now wmr-bridge`.
 
 ## Step 6: Pair a controller
 
