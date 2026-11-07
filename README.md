@@ -262,9 +262,10 @@ builds two installable artifacts: `wmr-bridge_<version>_all.deb` and
 `wmr-bridge-<version>.tar.gz`, plus a piped `install.sh` that fetches and
 verifies the release `.deb`. The `wmr-pi-bridge-0.1.0.tar.gz` asset on the
 v0.1.0 GitHub release is the only old packaged Pi tarball. The `pi/` tree in
-this repository is package `0.2.4`. Every `v*` release attaches the current
-`.deb`, `install.sh` and `SHA256SUMS` alongside the factory images; the tarball
-stays a local build from `pi/build_package.sh`. The one-line install works from
+this repository is package `0.2.4`. Releases cut by the current workflow attach
+the `.deb`, `install.sh` and `SHA256SUMS` alongside the factory images; older
+tags published different asset lists, and the tarball stays a local build from
+`pi/build_package.sh`. The one-line install works from
 `releases/latest/download/install.sh` and needs `apt-get`.
 
 ## BLE interface (summary)

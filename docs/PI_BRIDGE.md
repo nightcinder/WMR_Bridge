@@ -221,12 +221,15 @@ from (the tag defaults to `v<version>`, which only matches when the package
 version equals the tag). Set `WMR_BRIDGE_RELEASE_BASE_URL` to use a mirror. A
 checkout install does not enable the unit; enable it as shown above.
 
-Every `v*` release attaches six files: `wmr-bridge-factory.bin`,
+Releases cut by this workflow attach six files: `wmr-bridge-factory.bin`,
 `wmr-bridge-left-factory.bin`, `wmr-bridge-right-factory.bin`,
-`wmr-bridge_<version>_all.deb`, `install.sh` and `SHA256SUMS`, built by the
-`package` job in `.github/workflows/firmware.yml` from `pi/build_package.sh` and
-`pi/build_deb.sh`. The package version comes from `pi/wmr_bridge/__version__`,
-not from the tag.
+`wmr-bridge_<version>_all.deb`, `install.sh` and `SHA256SUMS`. The three factory
+images come from the `build-liesa` firmware job; the `.deb` and `install.sh`
+come from the `package` job (`pi/build_deb.sh`, `pi/build_package.sh` and a copy
+of `pi/install.sh`); `SHA256SUMS` is written by `tools/release/make_sums.sh` in
+the `release` job. Older tags published different asset lists; `v0.3.11`, for
+example, still carries the tarball and per-file `.sha256` files. The package
+version comes from `pi/wmr_bridge/__version__`, not from the tag.
 
 Or run the equivalent manual steps:
 
