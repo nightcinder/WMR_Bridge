@@ -98,11 +98,16 @@ curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/in
 A short browser guide for the same steps is at
 https://nightcinder.github.io/WMR_Bridge/pi.html.
 
-Tags before #104 (such as `v0.3.0`) carry firmware only. Tags from #104
-through `v0.3.11` also publish `install.sh` and `wmr-bridge_<version>_all.deb`.
-Newer tags publish six files: the three merged factory images
+Tags before #104 (such as `v0.3.0`) carry firmware images only. Tags from
+#104 onward also publish `install.sh` and `wmr-bridge_<version>_all.deb`.
+`v0.3.12` publishes six files: the three merged factory images
 (`wmr-bridge-factory.bin`, `-left`, `-right`), the `.deb`, `install.sh` and
-`SHA256SUMS`. The current release is `v0.3.11`.
+`SHA256SUMS`. The release after it also attaches the three application images
+(`wmr-bridge-app.bin`, `-left`, `-right`), for nine files. Earlier tags such as
+`v0.3.11` attached the full build output: the factory, application, bootloader
+and partition-table images for all three variants, the three manifests,
+`build-info*.json`, `index.html`, the tarball and per-file `.sha256` checksums.
+The pinned list below is `v0.3.12`.
 
 Pinned 2026-11-07 assets:
 
@@ -112,7 +117,7 @@ Pinned 2026-11-07 assets:
 | `wmr-bridge-left-factory.bin` | (see SHA256SUMS) |
 | `wmr-bridge-right-factory.bin` | (see SHA256SUMS) |
 | `wmr-bridge_<version>_all.deb` | (see SHA256SUMS) |
-| `install.sh` | `7f738a4a084965de99a02819f459b64f893b21b2178eeea10555f7186ed94d28` |
+| `install.sh` | `10c30a9264a0119b54d942a4ce7d7c1623978a1fe3f19ef4602f48f5c393d95d` |
 | `SHA256SUMS` | (shared digest list) |
 
 **From a checkout (current or pre-release):**
@@ -131,14 +136,14 @@ sudo apt install ./dist/*.deb
 # latest
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 # pin package and tag
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.11 sudo -E bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.12/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.12 sudo -E bash
 ```
 
 **Standalone `.deb`:**
 
 ```bash
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/wmr-bridge_<version>_all.deb
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.11/SHA256SUMS
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.12/wmr-bridge_<version>_all.deb
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.12/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 sudo apt install ./wmr-bridge_<version>_all.deb
 ```

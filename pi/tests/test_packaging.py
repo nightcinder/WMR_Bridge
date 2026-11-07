@@ -174,10 +174,11 @@ class PackagingTests(unittest.TestCase):
             )
             self.assertEqual(build.returncode, 0, msg=build.stderr)
 
-            # A published release carries the three factory images, the .deb,
-            # install.sh and one SHA256SUMS list.
+            # A published release carries the three factory images, the three
+            # application images, the .deb, install.sh and one SHA256SUMS list.
             for variant in ("", "-left", "-right"):
                 (release / f"wmr-bridge{variant}-factory.bin").write_bytes(b"firmware\n")
+                (release / f"wmr-bridge{variant}-app.bin").write_bytes(b"app\n")
             shutil.copy(INSTALL_SH, release / "install.sh")
             sums = subprocess.run(
                 ["/bin/sh", str(MAKE_SUMS), str(release)],

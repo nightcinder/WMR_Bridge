@@ -20,6 +20,9 @@ ASSETS = (
     "wmr-bridge-factory.bin",
     "wmr-bridge-left-factory.bin",
     "wmr-bridge-right-factory.bin",
+    "wmr-bridge-app.bin",
+    "wmr-bridge-left-app.bin",
+    "wmr-bridge-right-app.bin",
     "wmr-bridge_0.2.2_all.deb",
     "install.sh",
 )

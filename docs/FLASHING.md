@@ -73,11 +73,11 @@ environment are needed. The script itself is standard-library Python 3.8+.
 
 | File | Purpose |
 | --- | --- |
-| `wmr-bridge-factory.bin` | Bootloader, partition table and application merged at offset 0. This is the file the browser flasher writes. |
+| `wmr-bridge-factory.bin` | Bootloader, partition table and application merged at offset 0, for a full-flash workflow. The browser flasher writes the three separate images instead. |
 | `wmr-bridge-app.bin` | The application image alone, for `idf.py`/`esptool` users. |
 | `wmr-bridge-bootloader.bin` | Bootloader image (`0x1000`). |
 | `wmr-bridge-partition-table.bin` | Partition table (`0x8000`). |
-| `manifest.json` | [ESP Web Tools](https://esphome.github.io/esp-web-tools/) manifest, one merged part at offset 0. |
+| `manifest.json` | [ESP Web Tools](https://esphome.github.io/esp-web-tools/) manifest: bootloader at `4096`, partition table at `32768`, application at `65536`. NVS (`0x9000`–`0xFFFF`) is not written, so a reflash with "Erase device" unchecked keeps the stored pairings. |
 | `build-info.json` | Variant, flag values, source commit, dirty flag, BTstack commit, ESP-IDF version, build time, flash settings. |
 | `index.html` | The browser installer page. |
 | `pi.html` | The Raspberry Pi setup page: flash the OS, run the one-line install, pair the controllers. |
@@ -175,13 +175,15 @@ and the remaining `WMR_CFG_PSVR2_WAKE` diagnostic switch.
 
 The flasher is a static page using ESP Web Tools. The user connects the board
 over USB, clicks the install button for the image they want (Both hands, LEFT or
-RIGHT), and picks the serial port. The browser writes that variant's merged
-image. There is no ESP-IDF, Arduino IDE or Python install.
+RIGHT), and picks the serial port. The browser writes that variant's
+bootloader, partition table and application images. There is no ESP-IDF,
+Arduino IDE or Python install.
 
 The source pages live in `docs/flasher/` and are copied into `dist/` by the
 build script: `index.html` is the ESP32 flasher and `pi.html` is the Raspberry
 Pi setup page. The flasher loads `manifest.json` / `manifest-left.json` /
-`manifest-right.json` plus the matching `wmr-bridge*-factory.bin` files from the
+`manifest-right.json` plus the matching `wmr-bridge*-bootloader.bin`,
+`wmr-bridge*-partition-table.bin` and `wmr-bridge*-app.bin` files from the
 same directory. `build-info*.json` is optional and only fills in the version
 labels.
 
@@ -189,8 +191,8 @@ labels.
 
 The installer is live at <https://nightcinder.github.io/WMR_Bridge/>, serving
 the latest tagged release's images (all three variants). The same workflow
-copies `pi.html` and the release `install.sh` beside the images. The `v0.3.11`
-tag publishes the 0.3.11 images to that page.
+copies `pi.html` and the release `install.sh` beside the images. The `v0.3.12`
+tag publishes the 0.3.12 images to that page.
 
 `.github/workflows/firmware.yml` deploys `dist/` to GitHub Pages on a `v*`
 tag. This keeps the manifest and the images same-origin, which the browser
@@ -226,10 +228,12 @@ when a matching manifest and images are next to it.
   - Mobile (Android / iOS): Not supported (Web Serial is not available on mobile browsers).
 - Classic ESP32 with at least 2 MB flash. ESP32-S3 has no Classic Bluetooth, so
   it cannot run this firmware.
-- The manifest installs one merged image at offset 0 and asks the installer to
-  erase first. The partition table is ESP-IDF's
-  `Single factory app, no OTA (large)` layout (application at `0x10000`). There
-  is no OTA partition, so updates are always over USB.
+- The manifest writes bootloader, partition table and application separately,
+  at offsets `4096`, `32768` and `65536`, and asks the installer to erase
+  first. With "Erase device" unchecked, NVS (`0x9000`–`0xFFFF`) is left alone,
+  so the stored phone and controller pairings survive a reflash. The partition
+  table is ESP-IDF's `Single factory app, no OTA (large)` layout (application
+  at `0x10000`). There is no OTA partition, so updates are always over USB.
 - The build is not signed. There is no secure boot or flash encryption (see
   [SECURITY.md](SECURITY.md)). Only flash images built by this repository's
   workflow.
