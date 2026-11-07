@@ -43,6 +43,7 @@
 #include "wmr_controller_driver.h"
 #include "wmr_decode.h"
 #include "wmr_psvr2.h"
+#include "wmr_switch.h"
 
 /* Table order matches wmr_model_t so a lookup is a bounds check and an index. */
 static const wmr_controller_driver_t drivers[WMR_MODEL_COUNT] = {
@@ -52,8 +53,11 @@ static const wmr_controller_driver_t drivers[WMR_MODEL_COUNT] = {
         .name                = { WMR_DISCOVERY_NAME_LEFT, WMR_DISCOVERY_NAME_RIGHT },
         .input_report_id     = WMR_DECODE_REPORT_ID,
         .wake_feature_id     = 0,
+        .subcommand_handshake = false,
         .serves_config_block = true,
         .is_input_report     = wmr_decode_frame_is_wmr,
+        .is_reply_report     = NULL,
+        .decode_samples      = NULL,
         .decode              = wmr_decoded_from_wmr_frame,
     },
     {
@@ -62,9 +66,26 @@ static const wmr_controller_driver_t drivers[WMR_MODEL_COUNT] = {
         .name                = { WMR_DISCOVERY_NAME_PSVR2_LEFT, WMR_DISCOVERY_NAME_PSVR2_RIGHT },
         .input_report_id     = WMR_PSVR2_INPUT_REPORT_ID,
         .wake_feature_id     = WMR_PSVR2_WAKE_FEATURE_ID,
+        .subcommand_handshake = false,
         .serves_config_block = false,
         .is_input_report     = wmr_psvr2_is_input_report,
+        .is_reply_report     = NULL,
+        .decode_samples      = NULL,
         .decode              = wmr_decoded_from_psvr2_frame,
+    },
+    {
+        .model               = WMR_MODEL_SWITCH,
+        .label               = "Switch",
+        .name                = { WMR_DISCOVERY_NAME_SWITCH_LEFT, WMR_DISCOVERY_NAME_SWITCH_RIGHT },
+        .solo_name           = WMR_DISCOVERY_NAME_SWITCH_PRO,
+        .input_report_id     = WMR_SWITCH_INPUT_REPORT_ID,
+        .wake_feature_id     = 0,
+        .subcommand_handshake = true,
+        .serves_config_block = false,
+        .is_input_report     = wmr_switch_is_input_report,
+        .is_reply_report     = wmr_switch_is_reply_report,
+        .decode_samples      = wmr_switch_decode_samples,
+        .decode              = wmr_decoded_from_switch_frame,
     },
 };
 
@@ -101,6 +122,12 @@ const wmr_controller_driver_t *wmr_controller_driver_for_name(const uint8_t *nam
         for (unsigned h = 0; h < WMR_NUM_CONTROLLERS; h++){
             if (!name_equals(name, len, drivers[i].name[h])) continue;
             if (hand) *hand = (int) h;
+            return &drivers[i];
+        }
+        /* A one-device controller (the Switch Pro Controller) has no hand in its name;
+         * pair it as LEFT so both of its sticks reach the decoded stream. */
+        if (drivers[i].solo_name && name_equals(name, len, drivers[i].solo_name)){
+            if (hand) *hand = WMR_HAND_LEFT;
             return &drivers[i];
         }
     }

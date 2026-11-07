@@ -18,21 +18,27 @@ reconnect without scanning.
 | `Motion controller - Right` | RIGHT | WMR |
 | `PlayStation VR2 Sense Controller (L)` | LEFT | PSVR2 |
 | `PlayStation VR2 Sense Controller (R)` | RIGHT | PSVR2 |
+| `Joy-Con (L)` | LEFT | Switch |
+| `Joy-Con (R)` | RIGHT | Switch |
+| `Pro Controller` | LEFT | Switch |
 
 Trailing spaces and NUL padding are ignored. Anything else must match. The WMR
 names are the ones given in issue #2. The PSVR2 names come from the ONY-81
 investigation and the [PSVR2 tracking issue](https://github.com/nightcinder/WMR_Bridge/issues/44).
 Check D2 in TESTING.md covers the WMR names (reported passed, no output pasted).
-The PSVR2 names have not been seen by this firmware. What the bridge does
-differently for a PSVR2 hand is in [PSVR2.md](PSVR2.md).
+The PSVR2 and Switch names have not been seen by this firmware. What the bridge
+does differently for those hands is in [PSVR2.md](PSVR2.md) and
+[SWITCH.md](SWITCH.md). A Pro Controller has no hand in its name, so it pairs as
+LEFT and carries both sticks in its decoded record.
 
 ## Model
 
-The name decides the controller's model (`wmr_model_t`: `WMR` or `PSVR2`), not
-just its hand. The model is stored with the address and restored on later boots,
-so a reconnect does not have to ask for the name again. It selects the HID wake
-handshake, whether the Microsoft FF13 config read is sent, and which report IDs
-are forwarded. A device that matches neither name is not a controller.
+The name decides the controller's model (`wmr_model_t`: `WMR`, `PSVR2` or
+`Switch`), not just its hand. The model is stored with the address and restored
+on later boots, so a reconnect does not have to ask for the name again. It
+selects the HID wake handshake, whether the Microsoft FF13 config read is sent,
+and which report IDs are forwarded. A device that matches none of the names is
+not a controller.
 
 ## Where an address comes from
 
@@ -41,17 +47,18 @@ Per hand, in this order:
 1. Compile-time override (`-DWMR_CFG_LEFT_ADDRESS=\"AA:BB:CC:DD:EE:FF\"`, same for
    RIGHT; undefined by default). Never written to NVS. Never forgotten by `F`. An
    unparsable value is reported at boot and ignored. An override is always treated
-   as a WMR controller: there is no model on the command line, so a PSVR2 Sense
-   controller must be found by name instead of being pinned this way.
+   as a WMR controller: there is no model on the command line, so a PSVR2 or
+   Switch controller must be found by name instead of being pinned this way.
 2. Stored: found by discovery (or by name on an incoming connection) and saved in
    NVS through BTstack's TLV store (the same store as the link keys), tag
    `WMRA`, a 16-byte record (`wmr_addr_record_pack`, golden bytes in the test).
    Only an address that has connected successfully (or that already has a link
    key) is stored, so a stored address is one the bridge has paired with. Byte 14
-   carries two model bits per hand (00 = WMR, 01 = PSVR2). Bytes 15 stay
-   reserved. Model bits are written only for a valid hand. The version stays 1,
-   so firmware from before PSVR2 support still reads the record and treats both
-   hands as WMR.
+   carries two model bits per hand (00 = WMR, 01 = PSVR2, 10 = Switch). Bytes 15
+   stay reserved. Model bits are written only for a valid hand. The version
+   stays 1, so firmware from before PSVR2 support still reads the record and
+   treats both hands as WMR; firmware from before Switch support rejects a
+   record whose model bits are 10 and falls back to discovery.
 3. None: the hand is unknown until discovery finds it.
 
 The `s` command prints each hand's address, its source and its model.

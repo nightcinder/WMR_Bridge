@@ -51,6 +51,7 @@
 #include "wmr_linkdiag.h"
 #include "wmr_linkwait.h"
 #include "wmr_log.h"
+#include "wmr_switch.h"
 #include "wmr_transport.h"
 
 typedef struct {
@@ -868,6 +869,117 @@ static void psvr2_wake_timer_fire(btstack_timer_source_t *timer){
     }
 }
 #endif
+
+/* ---- Switch subcommand handshake ---------------------------------------- */
+
+/* Joy-Con and Pro controllers need output report 0x01 before they stream 0x30 reports:
+ * enable the IMU, read the two SPI calibration blocks, then select full input mode. The
+ * pure state machine and the report codec are in wmr_switch.c; this is only the timer and
+ * the BTstack send path. Commands are spaced out because the controller answers each one
+ * with a 0x21 reply and must not be flooded. */
+static wmr_switch_handshake_t switch_handshakes[WMR_NUM_CONTROLLERS];
+static btstack_timer_source_t switch_timer;
+static bool switch_timer_armed;
+
+static void switch_timer_fire(btstack_timer_source_t *timer);
+
+static bool switch_handshake_active(unsigned hand){
+    if (hand >= WMR_NUM_CONTROLLERS) return false;
+    wmr_switch_hs_step_t step = switch_handshakes[hand].step;
+    return step != WMR_SWITCH_HS_IDLE && step != WMR_SWITCH_HS_DONE &&
+           step != WMR_SWITCH_HS_FAILED;
+}
+
+static void switch_timer_arm(void){
+    if (switch_timer_armed) return;
+    switch_timer_armed = true;
+    btstack_run_loop_remove_timer(&switch_timer);
+    btstack_run_loop_set_timer(&switch_timer, WMR_SWITCH_HS_INTERVAL_MS);
+    btstack_run_loop_add_timer(&switch_timer);
+}
+
+static void switch_handshake_done(unsigned hand){
+    wmr_switch_handshake_t *hs = &switch_handshakes[hand];
+    uint32_t total = 0;
+    const uint8_t *blob = wmr_switch_handshake_blob(hs, &total);
+    if (blob && total == WMR_SWITCH_CAL_SIZE){
+        wmr_switch_calibration_t cal;
+        wmr_switch_calibration_parse(&blob[WMR_SWITCH_CAL_IMU_OFFSET],
+                                     &blob[WMR_SWITCH_CAL_STICK_OFFSET], &cal);
+        wmr_switch_set_calibration(hand, &cal);
+        wmr_cfgmgr_set_blob(hand, blob, total);
+        WMR_LOGI("switch", "%s handshake done: IMU %s, sticks left %s right %s; "
+                 "%lu-byte FF13 blob",
+                 controllers[hand].name, cal.valid ? "calibrated" : "default scales",
+                 cal.stick_valid[WMR_HAND_LEFT] ? "calibrated" : "default",
+                 cal.stick_valid[WMR_HAND_RIGHT] ? "calibrated" : "default",
+                 (unsigned long) total);
+    }
+}
+
+static void switch_handshake_start(controller_t *c){
+    unsigned hand = (unsigned) (c - controllers);
+    memset(&switch_handshakes[hand], 0, sizeof(switch_handshakes[hand]));
+#if WMR_CFG_SWITCH_HANDSHAKE
+    wmr_switch_handshake_init(&switch_handshakes[hand]);
+    switch_timer_arm();
+    WMR_LOGI("switch", "%s handshake started", c->name);
+#else
+    WMR_LOGI("pair", "%s connected; Switch handshake disabled in this build", c->name);
+#endif
+}
+
+static void switch_handshake_feed(unsigned hand, const uint8_t *frame, uint16_t length){
+    if (!switch_handshake_active(hand)) return;
+    if (!wmr_switch_handshake_on_reply(&switch_handshakes[hand], frame, length)) return;
+    if (wmr_switch_handshake_ready(&switch_handshakes[hand])){
+        switch_handshake_done(hand);
+    } else if (wmr_switch_handshake_failed(&switch_handshakes[hand])){
+        WMR_LOGW("switch", "%s handshake failed; reconnect to retry", controllers[hand].name);
+    } else {
+        switch_timer_arm();     /* send the next step after the reply */
+    }
+}
+
+static void switch_handshake_abort(unsigned hand){
+    if (hand < WMR_NUM_CONTROLLERS) wmr_switch_handshake_abort(&switch_handshakes[hand]);
+}
+
+static void switch_timer_fire(btstack_timer_source_t *timer){
+    (void) timer;
+    switch_timer_armed = false;
+    bool more = false;
+    for (unsigned i = 0; i < WMR_NUM_CONTROLLERS; i++){
+        wmr_switch_handshake_t *hs = &switch_handshakes[i];
+        if (!switch_handshake_active(i)) continue;
+        controller_t *c = &controllers[i];
+        if (!c->cid || !c->descriptor_available){
+            wmr_switch_handshake_abort(hs);
+            continue;
+        }
+        if (hs->waiting) wmr_switch_handshake_tick(hs, WMR_SWITCH_HS_INTERVAL_MS);
+        if (wmr_switch_handshake_failed(hs)){
+            WMR_LOGW("switch", "%s sent no reply; handshake failed, reconnect to retry",
+                     c->name);
+            continue;
+        }
+        uint8_t out[WMR_SWITCH_OUTPUT_FRAME_SIZE];
+        uint16_t len = 0;
+        if (wmr_switch_handshake_next(hs, out, &len)){
+            uint8_t status = hid_host_send_report(c->cid, out[0], &out[1],
+                                                  (uint16_t) (len - 1));
+            if (status != ERROR_CODE_SUCCESS){
+                WMR_LOGW("switch", "%s subcommand not sent (0x%02x); giving up",
+                         c->name, status);
+                wmr_switch_handshake_abort(hs);
+                continue;
+            }
+        }
+        if (switch_handshake_active(i)) more = true;
+    }
+    if (more) switch_timer_arm();
+}
+
 static void disc_timer_fire(btstack_timer_source_t *timer);
 static wmr_connect_result_t connect_hand_impl(unsigned hand);
 static void disc_connect_next(void);
@@ -1084,6 +1196,7 @@ void wmr_controller_init(wmr_report_sink_t sink){
     disc_timer.process = disc_timer_fire;
     linkwait_timer.process = linkwait_timer_fire;
     connect_watch_timer.process = connect_watch_fire;
+    switch_timer.process = switch_timer_fire;
 #if WMR_CFG_PSVR2_WAKE
     psvr2_wake_timer.process = psvr2_wake_timer_fire;
 #endif
@@ -2172,6 +2285,12 @@ static void handle_report(const uint8_t *packet){
         c->other_reports++;
         return;
     }
+    /* A model-specific non-input reply (Switch subcommand 0x21) belongs to its handshake,
+     * not to the sample stream. */
+    if (driver->is_reply_report && driver->is_reply_report(report, length)){
+        switch_handshake_feed((unsigned) (c - controllers), report, length);
+        return;
+    }
     if (!driver->is_input_report(report, length)){
         if (driver->serves_config_block &&
             wmr_cfg_classify(report, length) == WMR_CFG_REPORT_CONFIG){
@@ -2228,6 +2347,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
                 break;
             }
             c->psvr2_wake_pending = false;
+            switch_handshake_abort((unsigned) (c - controllers));
             if (status != ERROR_CODE_SUCCESS){
                 WMR_LOGW("pair", "%s HID connection failed: %s (0x%02x)",
                          c->name, pair_status_text(status), status);
@@ -2274,6 +2394,9 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
                     WMR_LOGI("pair", "%s connected; wake request disabled in this build",
                              c->name);
 #endif
+                } else if (driver && driver->subcommand_handshake)
+                {
+                    switch_handshake_start(c);
                 } else if (driver && driver->serves_config_block)
                 {
                     wmr_cfgmgr_on_descriptor((unsigned) (c - controllers));
@@ -2327,6 +2450,7 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
             if (!c) break;
             wmr_linkwait_finish(&linkwait[(unsigned) (c - controllers)]);
             c->psvr2_wake_pending = false;
+            switch_handshake_abort((unsigned) (c - controllers));
             if (!c->connected) disc_pair_failed((unsigned) (c - controllers), 0);
 #if WMR_CFG_STAGGER_FIRST_HAND || WMR_CFG_TEST_LEVERS
             if (stagger_active() && (unsigned) (c - controllers) == stagger_first() && !stagger_released){

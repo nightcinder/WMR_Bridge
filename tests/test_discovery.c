@@ -162,9 +162,9 @@ static void test_record(void){
     CHECK(wmr_addr_record_unpack(out, sizeof(out), &back));
     CHECK(back.model[0] == WMR_MODEL_PSVR2 && back.model[1] == WMR_MODEL_PSVR2);
     /* Unknown model values make the record invalid rather than guessing WMR. */
-    memcpy(bad, golden_both, sizeof(bad)); bad[14] = 0x02;
+    memcpy(bad, golden_both, sizeof(bad)); bad[14] = 0x03;
     CHECK(!wmr_addr_record_unpack(bad, sizeof(bad), &back));
-    memcpy(bad, golden_both, sizeof(bad)); bad[14] = 0x08;
+    memcpy(bad, golden_both, sizeof(bad)); bad[14] = 0x0F;
     CHECK(!wmr_addr_record_unpack(bad, sizeof(bad), &back));
 
     CHECK(!wmr_addr_record_unpack(golden_both, 15, &back) && !back.valid[0] && !back.valid[1]);

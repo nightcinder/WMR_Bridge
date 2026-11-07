@@ -115,7 +115,7 @@ fragment: a 12-byte header followed by a chunk of one controller frame.
 | 0 | u8 | `magic` | `0x52` (`'R'`) |
 | 1 | u8 | `hand` | 0 = LEFT, 1 = RIGHT |
 | 2 | u32 | `sequence` | Per-hand frame number (see rules) |
-| 6 | u16 | `total_len` | Length of the whole frame in bytes (46 for WMR, 79 for PSVR2) |
+| 6 | u16 | `total_len` | Length of the whole frame in bytes (46 for WMR, 79 for PSVR2, 50 for Switch) |
 | 8 | u16 | `offset` | Offset of this chunk within the frame |
 | 10 | u16 | `chunk_len` | Bytes of frame data in this notification |
 | 12 | `chunk_len` | `data` | `frame[offset .. offset+chunk_len)` |
@@ -124,9 +124,11 @@ The frame is the controller's HID input report exactly as BTstack delivers it:
 byte 0 = `0xA1` (HID DATA/input transaction header), byte 1 = report ID, then
 the payload. A WMR report is report ID `0x01` with 44 payload bytes, 46 bytes
 in total. A PSVR2 Sense report is report ID `0x31` with 77 payload bytes,
-79 bytes in total. The raw stream carries either frame unchanged; FF12/FF14
-apply the model's decoder (see [PSVR2.md](PSVR2.md)). PSVR2 names are searched
-for by default alongside the WMR names from 0.2 onward. The 12-byte fragment
+79 bytes in total. A Switch report is report ID `0x30` with 49 payload bytes,
+50 bytes in total. The raw stream carries any frame unchanged; FF12/FF14
+apply the model's decoder (see [PSVR2.md](PSVR2.md), [SWITCH.md](SWITCH.md)).
+PSVR2 and Switch names are searched for by default alongside the WMR names from
+0.2 onward. The 12-byte fragment
 header is identical for both.
 
 Example (RIGHT, sequence `0x01020304`, 46-byte frame, notification capacity 44
@@ -295,6 +297,22 @@ capacitive touches are not represented. `trackpad` stays 0 and these samples
 are uncalibrated (`flags` bit 0 clear). The report CRC is not checked. Full
 field table: [PSVR2.md](PSVR2.md).
 
+#### Switch `0x30` frames
+
+A Switch hand decodes through its driver entry (`wmr_controller_driver.c`,
+`wmr_switch_decode_samples`). The frame must be exactly 50 bytes with the
+`A1 30` header. One report carries three 12-byte IMU samples 5 ms apart and one
+button/stick snapshot, so it produces three FF12 records (oldest first). All
+three carry the raw frame's `sequence`; `rx_time_us` steps back 5 ms per older
+sample and `device_ticks` is 0 (the controller has only an 8-bit packet timer).
+Accel and gyro use the SPI factory calibration read by the handshake when it is
+valid, otherwise the documented default scales; stick axes use the calibrated
+min/centre/max when valid. `CALIBRATED` is set only when the IMU calibration is
+in use. Home, Minus/Plus, Capture, stick click and ZL/ZR/L/R map to the WMR
+button bits; the D-pad and face buttons do not. A Pro Controller pairs as LEFT
+and exposes its right stick as the `trackpad` pair. Full field table and open
+questions: [SWITCH.md](SWITCH.md).
+
 ### Calibration is done on the phone
 
 FF12 carries uncalibrated values: `flags` bit 0 is 0. Each sample is in the
@@ -364,7 +382,9 @@ until the rotation capture in [DECODING.md](DECODING.md) is done.
   separated by report ID before this point in the FF13 design (implemented, see
   below). A PSVR2 `0x31` frame is decoded by its driver entry when it is exactly
   79 bytes; a short or malformed `0x31` frame is counted in `dec_err`
-  ([PSVR2.md](PSVR2.md)).
+  ([PSVR2.md](PSVR2.md)). A Switch `0x30` frame is accepted only at exactly
+  50 bytes and produces three FF12 records; a short or malformed `0x30` frame is
+  counted in `dec_err` ([SWITCH.md](SWITCH.md)).
 - Samples of the two hands may interleave freely. Ordering is per hand by
   `sequence`.
 
@@ -664,7 +684,11 @@ it.
 
 WMR hands only. The descriptor-available handler sends the block read only to a
 `WMR_MODEL_WMR` hand. A PSVR2 hand gets the Feature Report `0x05` wake read
-instead and no FF13 command. See [PSVR2.md](PSVR2.md).
+instead and no FF13 command. See [PSVR2.md](PSVR2.md). A Switch hand runs its
+own output report `0x01` handshake and publishes the raw 42-byte SPI calibration
+blob (24 IMU + 18 stick bytes) through the same FF13 cache
+(`wmr_cfgmgr_set_blob`), so the phone reads it with the normal window header;
+see [SWITCH.md](SWITCH.md).
 
 Goal: the ESP32 reads each controller's firmware config block once, caches it
 per hand, and serves it to the phone byte-for-byte as received. The ESP32 does
@@ -745,6 +769,8 @@ or queued: look at the report ID, which is byte 1 of what BTstack delivers (byte
 | `0x01` | WMR input report: existing path, unchanged (sequence, raw FF11 or decoded FF12) |
 | `0x02`, `0x06` | WMR config command response: goes only to the config reader. Not sequence-numbered, not counted in `rx`, not queued, not forwarded on FF11/FF12 |
 | `0x31` | PSVR2 input report (PSVR2 hand only): forwarded on FF11 and decoded for FF12/FF14 when the frame is exactly 79 bytes |
+| `0x21` | Switch subcommand reply (Switch hand only): consumed by the output report `0x01` handshake, never queued or forwarded |
+| `0x30` | Switch input report (Switch hand only): forwarded on FF11 and decoded into three FF12/FF14 records when the frame is exactly 50 bytes |
 | anything else | Counted in a separate "other reports" counter, not forwarded |
 
 Classification is by report ID, not by length, so a malformed short response
@@ -753,8 +779,9 @@ controller keeps streaming `0x01` input reports interleaved with the responses.
 The reader ignores non-matching IDs exactly as Monado's loop does, and input
 handling is unaffected. A PSVR2 hand never gets the FF13 read at all (the
 commands are Microsoft-specific), so its `0x02`/`0x06` reports, if any, are
-counted as "other". `WMR_CFG_MAX_FRAME` is 80 so both a WMR and a PSVR2 frame
-fit. Config responses still never reach that queue. The sequence counter is not
+counted as "other". A Switch hand sends its own subcommands and gets no
+Microsoft read. `WMR_CFG_MAX_FRAME` is 80 so WMR (46), PSVR2 (79) and Switch
+(50) frames all fit. Config responses still never reach that queue. The sequence counter is not
 advanced by config traffic, so FF11/FF12 sequence numbers stay contiguous.
 
 ## Cache
@@ -981,12 +1008,12 @@ bytes, it fits within the default ATT MTU of 23 bytes (20-byte payload +
 | 0 | u8 | `version` | Format version, `1` |
 | 1 | u8 | `left_flags` | Bit 0: connected, Bit 1: connecting, Bit 2: descriptor received, Bits 3..7: reserved (0) |
 | 2 | u8 | `left_addr_source` | 0: None, 1: Compile override, 2: Stored in NVS |
-| 3 | u8 | `left_model` | 0: WMR, 1: PSVR2 |
+| 3 | u8 | `left_model` | 0: WMR, 1: PSVR2, 2: Switch |
 | 4..6 | 3 B | `left_addr_tail` | Last 3 bytes of Bluetooth address (device ID: bytes 3, 4, 5). `00 00 00` if no address |
 | 7 | u8 | `reserved0` | Reserved, `0` |
 | 8 | u8 | `right_flags` | Bit 0: connected, Bit 1: connecting, Bit 2: descriptor received, Bits 3..7: reserved (0) |
 | 9 | u8 | `right_addr_source` | 0: None, 1: Compile override, 2: Stored in NVS |
-| 10 | u8 | `right_model` | 0: WMR, 1: PSVR2 |
+| 10 | u8 | `right_model` | 0: WMR, 1: PSVR2, 2: Switch |
 | 11..13 | 3 B | `right_addr_tail` | Last 3 bytes of Bluetooth address (device ID: bytes 3, 4, 5). `00 00 00` if no address |
 | 14 | u8 | `reserved1` | Reserved, `0` |
 | 15 | u8 | `discovery_state` | 0: Idle, 1: Inquiry, 2: Remote name requests, 3: Connecting discovered |

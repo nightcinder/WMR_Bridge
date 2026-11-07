@@ -21,6 +21,7 @@ add_library(wmr_codec STATIC
     src/wmr_decode.c
     src/wmr_decoded.c
     src/wmr_controller_driver.c
+    src/wmr_switch.c
     src/wmr_batch.c
     src/wmr_protocol.c
     src/wmr_hid.c
@@ -53,6 +54,9 @@ add_test(NAME test_protocol
 wmr_test_target(test_decode tests/test_decode.c)
 add_test(NAME test_decode
     COMMAND test_decode "${CMAKE_CURRENT_SOURCE_DIR}/samples/controller_frames.txt")
+
+wmr_test_target(test_switch tests/test_switch.c src/wmr_discovery.c)
+add_test(NAME test_switch COMMAND test_switch)
 
 wmr_test_target(test_stream_mode tests/test_stream_mode.c src/wmr_stream_mode.c)
 add_test(NAME test_stream_mode

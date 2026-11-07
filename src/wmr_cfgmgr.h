@@ -69,6 +69,11 @@ void wmr_cfgmgr_on_closed(unsigned hand);
 /* State for FF13. `blob`/`total` are valid only when state is READY. */
 wmr_cfg_blob_state_t wmr_cfgmgr_get(unsigned hand, const uint8_t **blob, uint32_t *total);
 
+/* Publish a blob produced by another model's handshake (the Switch SPI calibration
+ * read) as this hand's FF13 block. Replaces any cached Microsoft block and marks it
+ * READY. Ignored when `blob` is NULL or `total` exceeds the cache. */
+void wmr_cfgmgr_set_blob(unsigned hand, const uint8_t *blob, uint32_t total);
+
 /* One console line per hand. */
 void wmr_cfgmgr_print(void);
 

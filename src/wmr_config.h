@@ -262,6 +262,20 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_PSVR2_WAKE_DELAY_MS 250
 #endif
 
+/* ---- Nintendo Switch Joy-Con / Pro controllers ------------------------- */
+
+/* The bridge also recognises Joy-Con (L)/(R) and the Pro Controller by name. After the
+ * HID descriptor arrives it runs the Classic BT output-report 0x01 handshake in
+ * wmr_switch.c: enable the IMU, read the factory calibration from SPI (published over
+ * FF13) and select 60 Hz full input mode. The calibration is applied to FF12/FF14.
+ * Discovery, frames and the handshake are always compiled in; scope and open questions:
+ * docs/SWITCH.md.
+ *
+ *   -DWMR_CFG_SWITCH_HANDSHAKE=0   recognise Switch controllers but send no subcommands */
+#ifndef WMR_CFG_SWITCH_HANDSHAKE
+#define WMR_CFG_SWITCH_HANDSHAKE 1
+#endif
+
 /* ---- Frames and queue -------------------------------------------------- */
 
 /* Bounded FIFO shared by both hands, in whole frames. When full, new

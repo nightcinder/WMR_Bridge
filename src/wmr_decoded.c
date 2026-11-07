@@ -43,6 +43,7 @@
 #include "wmr_decoded.h"
 #include "wmr_controller_driver.h"
 #include "wmr_psvr2.h"
+#include "wmr_switch.h"
 
 static void put16(uint8_t *p, uint16_t v){
     p[0] = (uint8_t) (v & 0xFF);
@@ -174,6 +175,25 @@ bool wmr_decoded_from_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SI
         wmr_controller_driver_for_frame(frame->data, frame->length);
     if (!driver || !driver->decode) return false;
     return driver->decode(frame, out);
+}
+
+unsigned wmr_decoded_samples_from_frame(const wmr_frame_t *frame,
+                                        uint8_t out[][WMR_DECODED_SIZE], unsigned max){
+    if (!frame || !out || max == 0 || frame->hand >= 2) return 0;
+    const wmr_controller_driver_t *driver =
+        wmr_controller_driver_for_frame(frame->data, frame->length);
+    if (!driver) return 0;
+    if (driver->decode_samples) return driver->decode_samples(frame, out, max);
+    if (!driver->decode) return 0;
+    return driver->decode(frame, out[0]) ? 1 : 0;
+}
+
+bool wmr_decoded_from_switch_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]){
+    uint8_t records[WMR_DECODED_MAX_SAMPLES][WMR_DECODED_SIZE];
+    unsigned count = wmr_switch_decode_samples(frame, records, WMR_DECODED_MAX_SAMPLES);
+    if (!count) return false;
+    memcpy(out, records[count - 1], WMR_DECODED_SIZE);   /* newest sample */
+    return true;
 }
 
 /* ---- PSVR2 0x31 input report -------------------------------------------- */
