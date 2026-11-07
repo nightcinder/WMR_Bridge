@@ -1,5 +1,8 @@
 # Deploying WMR Bridge to a Raspberry Pi (Tester Runbook)
 
+New to the Pi? Read the simple-English beginner guide first:
+[Raspberry Pi install guide](RPI_INSTALL_GUIDE.md).
+
 This runbook guides testers through deploying and updating the WMR Bridge
 software on a Raspberry Pi (Raspberry Pi 3 Model B+, Raspberry Pi 4 Model B, or
 Raspberry Pi 5).
