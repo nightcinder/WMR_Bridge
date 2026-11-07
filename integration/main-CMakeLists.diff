@@ -2,7 +2,7 @@ diff --git a/port/esp32/main/CMakeLists.txt b/port/esp32/main/CMakeLists.txt
 index e575a44..24b37e8 100644
 --- a/port/esp32/main/CMakeLists.txt
 +++ b/port/esp32/main/CMakeLists.txt
-@@ -8,24 +8,47 @@ else()
+@@ -8,24 +8,48 @@ else()
      set(EXAMPLE $ENV{EXAMPLE})
  endif()
  
@@ -20,6 +20,7 @@ index e575a44..24b37e8 100644
 +        "${WMR_BRIDGE_DIR}/src/wmr_cfgmgr.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_console.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_controller.c"
++        "${WMR_BRIDGE_DIR}/src/wmr_controller_driver.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_ctrl.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_decode.c"
 +        "${WMR_BRIDGE_DIR}/src/wmr_decoded.c"

@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "wmr_discovery.h"
+#include "wmr_controller_driver.h"
 
 static int checks, failures;
 
@@ -62,6 +63,45 @@ static void test_models(void){
     CHECK(wmr_discovery_model_for_name(NULL, 0) == WMR_MODEL_COUNT);
     CHECK(wmr_discovery_model_for_name(NAME("PlayStation VR2 Sense Controller (L)")) == WMR_MODEL_PSVR2);
     CHECK(wmr_discovery_model_for_name(NAME("PlayStation VR2 Sense Controller (R)")) == WMR_MODEL_PSVR2);
+}
+
+static void test_drivers(void){
+    printf("Controller driver table\n");
+    const wmr_controller_driver_t *wmr = wmr_controller_driver(WMR_MODEL_WMR);
+    const wmr_controller_driver_t *psvr2 = wmr_controller_driver(WMR_MODEL_PSVR2);
+    CHECK(wmr != NULL && wmr->model == WMR_MODEL_WMR);
+    CHECK(psvr2 != NULL && psvr2->model == WMR_MODEL_PSVR2);
+    CHECK(wmr != psvr2);
+    CHECK(strcmp(wmr->label, "WMR") == 0);
+    CHECK(strcmp(psvr2->label, "PSVR2") == 0);
+    CHECK(wmr_controller_driver(WMR_MODEL_COUNT) == NULL);
+    CHECK(wmr_controller_driver((wmr_model_t) 99) == NULL);
+
+    CHECK(strcmp(wmr->name[WMR_HAND_LEFT], "Motion controller - Left") == 0);
+    CHECK(strcmp(wmr->name[WMR_HAND_RIGHT], "Motion controller - Right") == 0);
+    CHECK(strcmp(psvr2->name[WMR_HAND_LEFT], "PlayStation VR2 Sense Controller (L)") == 0);
+    CHECK(strcmp(psvr2->name[WMR_HAND_RIGHT], "PlayStation VR2 Sense Controller (R)") == 0);
+    CHECK(wmr->input_report_id == 0x01 && psvr2->input_report_id == 0x31);
+    CHECK(wmr->serves_config_block && !psvr2->serves_config_block);
+    CHECK(wmr->wake_feature_id == 0);
+    CHECK(psvr2->wake_feature_id == WMR_PSVR2_WAKE_FEATURE_ID);
+
+    int found_hand = 99;
+    CHECK(wmr_controller_driver_for_name(NAME("Motion controller - Left"), &found_hand) == wmr);
+    CHECK(found_hand == WMR_HAND_LEFT);
+    CHECK(wmr_controller_driver_for_name(NAME("PlayStation VR2 Sense Controller (R)"), &found_hand) == psvr2);
+    CHECK(found_hand == WMR_HAND_RIGHT);
+    CHECK(wmr_controller_driver_for_name(NAME("Keyboard"), &found_hand) == NULL);
+    CHECK(found_hand == -1);
+    CHECK(wmr_controller_driver_for_name(NULL, 0, &found_hand) == NULL);
+    CHECK(found_hand == -1);
+
+    uint8_t wmr_frame[46] = {0xA1, 0x01};
+    uint8_t psvr2_frame[79] = {0xA1, 0x31};
+    CHECK(wmr_controller_driver_for_frame(wmr_frame, sizeof(wmr_frame)) == wmr);
+    CHECK(wmr_controller_driver_for_frame(psvr2_frame, sizeof(psvr2_frame)) == psvr2);
+    CHECK(wmr_controller_driver_for_frame(wmr_frame, sizeof(wmr_frame) - 1) == NULL);
+    CHECK(wmr_controller_driver_for_frame(NULL, 0) == NULL);
 }
 
 static void test_record(void){
@@ -420,6 +460,7 @@ static void test_hand_unusable(void){
 int main(void){
     test_names();
     test_models();
+    test_drivers();
     test_record();
     test_run_names_in_inquiry();
     test_run_psvr2();

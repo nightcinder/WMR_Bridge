@@ -45,12 +45,12 @@
 #include "wmr_cfg.h"
 #include "wmr_cfgmgr.h"
 #include "wmr_controller.h"
+#include "wmr_controller_driver.h"
 #include "wmr_discovery.h"
 #include "wmr_levers.h"
 #include "wmr_linkdiag.h"
 #include "wmr_linkwait.h"
 #include "wmr_log.h"
-#include "wmr_psvr2.h"
 #include "wmr_transport.h"
 
 typedef struct {
@@ -835,11 +835,10 @@ static void psvr2_wake_timer_fire(btstack_timer_source_t *timer);
  * first, and works the same for outgoing links (which do not send it). One attempt per
  * connection; the response is logged by HID_SUBEVENT_GET_REPORT_RESPONSE. Unverified on
  * hardware (wmr_psvr2.h, docs/PSVR2.md). */
-static void psvr2_wake(controller_t *c){
-    uint8_t status = hid_host_send_get_report(c->cid, HID_REPORT_TYPE_FEATURE,
-                                             WMR_PSVR2_WAKE_FEATURE_ID);
+static void psvr2_wake(controller_t *c, uint8_t feature_id){
+    uint8_t status = hid_host_send_get_report(c->cid, HID_REPORT_TYPE_FEATURE, feature_id);
     WMR_LOGI("psvr2", "%s wake request: GET_REPORT feature 0x%02x, status=%s (0x%02x)",
-             c->name, WMR_PSVR2_WAKE_FEATURE_ID, pair_status_text(status), status);
+             c->name, feature_id, pair_status_text(status), status);
     if (status != ERROR_CODE_SUCCESS)
         WMR_LOGW("psvr2", "%s wake request refused; reconnect (l/r) to try again", c->name);
 }
@@ -862,8 +861,10 @@ static void psvr2_wake_timer_fire(btstack_timer_source_t *timer){
         controller_t *c = &controllers[i];
         if (!c->psvr2_wake_pending) continue;
         c->psvr2_wake_pending = false;
-        if (!c->cid || !c->descriptor_available || c->model != WMR_MODEL_PSVR2) continue;
-        psvr2_wake(c);
+        if (!c->cid || !c->descriptor_available) continue;
+        const wmr_controller_driver_t *driver = wmr_controller_driver(c->model);
+        if (!driver || !driver->wake_feature_id) continue;
+        psvr2_wake(c, driver->wake_feature_id);
     }
 }
 #endif
@@ -2164,26 +2165,21 @@ static void handle_report(const uint8_t *packet){
     uint16_t length = hid_subevent_report_get_report_len(packet);
     /* Classify by report ID before anything is counted or queued (docs/PROTOCOL.md, FF13):
      * config command responses go to the config reader only and never take a sequence
-     * number or enter the sample stream. PSVR2 controllers have their own report ID and do
-     * not speak the Microsoft config protocol, so only 0x31 input frames are forwarded. */
-    if (c->model == WMR_MODEL_PSVR2){
-        if (!wmr_psvr2_is_input_report(report, length)){
-            c->other_reports++;
+     * number or enter the sample stream. Which reports are input and whether a model has a
+     * config protocol comes from its driver entry, not from a model branch here. */
+    const wmr_controller_driver_t *driver = wmr_controller_driver(c->model);
+    if (!driver){
+        c->other_reports++;
+        return;
+    }
+    if (!driver->is_input_report(report, length)){
+        if (driver->serves_config_block &&
+            wmr_cfg_classify(report, length) == WMR_CFG_REPORT_CONFIG){
+            wmr_cfgmgr_on_report((unsigned) (c - controllers), report, length);
             return;
         }
-    } else
-    {
-        switch (wmr_cfg_classify(report, length)){
-            case WMR_CFG_REPORT_CONFIG:
-                wmr_cfgmgr_on_report((unsigned) (c - controllers), report, length);
-                return;
-            case WMR_CFG_REPORT_OTHER:
-                c->other_reports++;
-                return;
-            case WMR_CFG_REPORT_INPUT:
-            default:
-                break;
-        }
+        c->other_reports++;
+        return;
     }
     c->reports++;
     /* Hand EVERY report over before any logging. The report buffer is only
@@ -2270,14 +2266,15 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel,
                          c->name, pair_status_text(status), status);
             }
             if (c->descriptor_available){
-                if (c->model == WMR_MODEL_PSVR2){
+                const wmr_controller_driver_t *driver = wmr_controller_driver(c->model);
+                if (driver && driver->wake_feature_id){
 #if WMR_CFG_PSVR2_WAKE
                     psvr2_wake_arm(c);
 #else
-                    WMR_LOGI("pair", "PSVR2 %s connected; wake request disabled in this build",
+                    WMR_LOGI("pair", "%s connected; wake request disabled in this build",
                              c->name);
 #endif
-                } else
+                } else if (driver && driver->serves_config_block)
                 {
                     wmr_cfgmgr_on_descriptor((unsigned) (c - controllers));
                 }

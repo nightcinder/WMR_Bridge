@@ -40,7 +40,7 @@ Do not start with the glasses. Pairing is the gate for every other device.
 | Both WMR controllers, charged | Tier 0 | LEFT and RIGHT. Know which is which; the ring/trigger orientation is in the capture steps. |
 | VITURE Pro Neckband + glasses | device 2 | Optional. The Neckband is an Android host; the glasses are the display. |
 | XREAL glasses + Beam Pro (or S24/S25-class phone) | device 3 | Optional. Air 2 Ultra is the only XREAL model with hand tracking; other models are display/3DoF only. |
-| PSVR2 Sense controllers | device 4 | Optional. Raw FF11 only; see §10.4. |
+| PSVR2 Sense controllers | device 4 | Optional. v0.3.5 is raw FF11 only; newer builds decode FF12/FF14. See §10.4. |
 | Other glasses | device 5 | Optional. Display-only; no tracking claim. |
 | A private room | everything | The phone link uses LESC bonding in 0.3.5, but controller links are unauthenticated. Pair in a private room. |
 
@@ -133,13 +133,13 @@ APK or firmware image.
 | **1** | **Android phone + both WMR controllers on v0.3.5** | Whether the `0.2.0` pairing regression is fixed: pair BOTH controllers at the same time. Also the baseline BLE stream and app screens. | **Tier 0**; Tier 1 if anything fails; Tier 2 if Tier 0 passes and you have time. | If pairing fails, stop and send Tier 1. Do not move to the glasses first. |
 | **2** | **VITURE Pro Neckband + glasses** | Whether the unified APK runs on the Neckband, displays in the glasses, and whether the VITURE tracking path reports `available`/`unsupported`. Hand tracking needs a Luma Ultra. | Tier 0 (display + app) + Tier 2-V (tracking). | If the app will not install or display, record that and move on. |
 | **3** | **XREAL glasses + Beam Pro** | Same for the XREAL path. Hand tracking needs an Air 2 Ultra and the XREAL input source set to Hands. | Tier 0 + Tier 2-X. | If the model is not an Air 2 Ultra, record `unsupported`/display-only and move on. |
-| **4** | **PSVR2 Sense** | Whether v0.3.5 discovers/pairs PSVR2 hands and forwards raw `0xA1 0x31` frames. No decoded PSVR2 stream exists. | Tier 1 + Tier 2-P. | No PSVR2 hardware is a valid "not run". |
+| **4** | **PSVR2 Sense** | Whether v0.3.5 discovers/pairs PSVR2 hands and forwards raw `0xA1 0x31` frames. v0.3.5 has no decoded PSVR2 stream; newer builds do. | Tier 1 + Tier 2-P. | No PSVR2 hardware is a valid "not run". |
 | **5** | **Other glasses** | Display compatibility only: does the app appear and remain usable in the glasses? | Tier 0 display notes + screenshot. | Last. No controller or tracking claim. |
 
 **Why this order.** Device 1 is the blocker the tester already hit, and every other device
 assumes a controller stream. Device 2 is the rarest inventory and the first vendor path. Device
-3 is the second vendor path. Device 4 is raw-only and needs a serial log to be useful. Device 5
-is the lowest-information case.
+3 is the second vendor path. Device 4 is raw-only on v0.3.5 and needs a serial log to be
+useful. Device 5 is the lowest-information case.
 
 ---
 
@@ -474,8 +474,9 @@ For any glasses not covered above:
 4. Record whether the log shows the controller as `model PSVR2`, whether a wake line appears,
    and the first report's frame length. The raw report starts `A1 31` and is expected to be up
    to 79 bytes; record the actual `frame_len` rather than assuming 79.
-5. Connect the app and select **FF11 raw**. There is no PSVR2 decoder for FF12/FF14, and FF13
-   is not read for PSVR2. If the app shows no 3D view, that is expected.
+5. Connect the app and select **FF11 raw**. On v0.3.5 there is no PSVR2 decoder for
+   FF12/FF14, and FF13 is not read for PSVR2; newer builds decode FF12/FF14. If the app shows
+   no 3D view on v0.3.5, that is expected.
 6. Capture the serial log and, if possible, a raw FF11 capture (§7.3).
 7. Repeat for the second hand if you have both.
 
@@ -632,8 +633,9 @@ limit exceeded) and `0x13` (remote user terminated). Do not interpret them; send
 ### 10.4 PSVR2 Sense (device 4)
 
 - v0.3.3 and later search PSVR2 names by default. No build switch is needed.
-- PSVR2 is **raw-only**: FF11 carries `0xA1 0x31` frames up to 79 bytes. FF12/FF14 have no
-  PSVR2 decoder, and FF13 is not read for a PSVR2 hand.
+- On v0.3.5 PSVR2 is **raw-only**: FF11 carries `0xA1 0x31` frames up to 79 bytes. v0.3.5 has
+  no PSVR2 decoder for FF12/FF14, and FF13 is not read for a PSVR2 hand. Newer builds decode
+  exactly-79-byte `0x31` frames into FF12/FF14.
 - The app's Capture screen writes only 46-byte WMR frames, so use the desktop
   `capture_ble.py` for PSVR2.
 - Record the exact pairing procedure you used, the `model PSVR2` line, the wake line, and the
@@ -661,7 +663,7 @@ limit exceeded) and `0x13` (remote user terminated). Do not interpret them; send
 | LED stays red | Check controller batteries; confirm pairing mode; check the serial log for discovery. | Send Tier 1. |
 | Board hot / smell / dark LED | Unplug immediately. | Stop; do not continue. |
 | Glasses show `unavailable`/`unsupported` | Record the exact status and model. | This is a valid result; move on. |
-| PSVR2 shows no 3D view | Expected: raw-only, no decoder. Use FF11 and the serial log. | Capture raw frames. |
+| PSVR2 shows no 3D view | Expected on v0.3.5 (raw-only, no decoder); newer builds decode FF12/FF14. Use FF11 and the serial log. | Capture raw frames. |
 
 **Do not:**
 

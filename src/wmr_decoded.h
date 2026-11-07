@@ -105,9 +105,15 @@ bool wmr_decoded_mtu_ok(uint16_t att_mtu);
  * whose sequence is a multiple of n. */
 bool wmr_decoded_decimate_keep(uint32_t sequence, unsigned n);
 
-/* Decode a queued raw frame into a packed FF12 record. Uses frame->hand,
- * frame->sequence and frame->rx_time_us. Returns false (out untouched) if the
- * frame is not a valid 46-byte input report. The CALIBRATED flag stays 0. */
+/* Decode a queued raw frame into a packed FF12 record through the controller
+ * driver table. Uses frame->hand, frame->sequence and frame->rx_time_us.
+ * Returns false (out untouched) if no driver accepts the frame or the model's
+ * decoder rejects it. The CALIBRATED flag stays 0. */
 bool wmr_decoded_from_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]);
+
+/* Model decoders used by the driver table. Call wmr_decoded_from_frame instead
+ * unless a test needs to exercise one model directly. */
+bool wmr_decoded_from_wmr_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]);
+bool wmr_decoded_from_psvr2_frame(const wmr_frame_t *frame, uint8_t out[WMR_DECODED_SIZE]);
 
 #endif /* WMR_DECODED_H */

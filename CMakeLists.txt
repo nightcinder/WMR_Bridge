@@ -20,6 +20,7 @@ endif()
 add_library(wmr_codec STATIC
     src/wmr_decode.c
     src/wmr_decoded.c
+    src/wmr_controller_driver.c
     src/wmr_batch.c
     src/wmr_protocol.c
     src/wmr_hid.c
