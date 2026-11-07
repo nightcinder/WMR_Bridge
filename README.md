@@ -124,9 +124,10 @@ python3 tools/firmware/build.py --idf-export ~/esp/esp-idf/export.sh --flash /de
 
 The first run clones the pinned BTstack commit into `.fw-build/`. Later runs
 reuse it. The output in `dist/` includes a merged factory image and a browser
-flasher page. `0.3.11` is the current release. It is the controller-family
-release on top of 0.3.5: one driver table per model, PSVR2 FF12/FF14 decoding,
-and Nintendo Switch Joy-Con/Pro handshake and `0x30` decoding. Switch support
+flasher page. `0.3.12` is the current release. Its firmware is the
+controller-family release on top of 0.3.5: one driver table per model,
+PSVR2 FF12/FF14 decoding, and Nintendo Switch Joy-Con/Pro handshake and
+`0x30` decoding. Switch support
 is host-tested and firmware-build-tested only and has never run on a
 controller ([#145](https://github.com/nightcinder/WMR_Bridge/issues/145)).
 FF10–FF17 keep their payloads, so companions at 0.2.2 or later continue to
