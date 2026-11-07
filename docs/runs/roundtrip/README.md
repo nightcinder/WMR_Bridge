@@ -57,11 +57,11 @@ Notes for re-deriving the runs:
 
 ## 2026-11-07 app against probe latency bench (ONY-23, WMR_Bridge v0.3.5)
 
-Eight runs were recorded on 2026-11-07 with a Pixel phone. They test Companion 0.3.18 and native GATT probe 0.3.18 against WMR_Bridge v0.3.5. These exports correspond to runs 1, 2, 3, 4, 13, 14, 17, and 18 from `docs/runs/sheets/internal-esp32-wmr-bench.md`.
+Eight runs were recorded on 2026-11-07 with a Pixel phone. They test Companion 0.3.18 and native GATT probe 0.3.18 against WMR_Bridge v0.3.5. These exports correspond to runs 1, 2, 3, 4, 13, 14, 17, and 18 from `docs/runs/sheets/internal-esp32-wmr-bench.md`. Companion `none` mode (run 1) is known broken (ONY-980) and skipped in the bench protocol; it is archived here for completeness because the tester recorded it.
 
 | Run | Client | Stream | Interval | Files | Round trip p50 / p99 / max | Pings over 50 ms | Tick loss LEFT / RIGHT | Stalls over 50 ms LEFT / RIGHT | RSSI start to end |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | App | none | 250 ms | `latency-20261107-114053{,-echo,-samples}.csv`, `.json` | 38.9 / 89.4 / 137.3 ms | 54 / 479 | n/a | 0 / 0 | n/a |
+| 1 (invalid) | App | none | 250 ms | `latency-20261107-114053{,-echo,-samples}.csv`, `.json` | 38.9 / 89.4 / 137.3 ms | 54 / 479 | n/a | 0 / 0 | −83 to −84 dBm |
 | 2 | Probe | none | 250 ms | `latency-20261107-114008{,-echo,-samples}.csv`, `.json` | 35.2 / 73.0 / 96.8 ms | 60 / 473 | n/a | 0 / 0 | −81 to −83 dBm |
 | 3 | App | FF14 batched | 250 ms | `latency-20261107-114337{,-echo,-samples}.csv`, `.json` | 42.2 / 132.2 / 185.2 ms | 155 / 480 | 22.2 % / 18.9 % | 490 / 440 | n/a |
 | 4 | Probe | FF14 batched | 250 ms | `latency-20261107-114821{,-echo,-samples}.csv`, `.json` | n/a (0 answers, 119 timeouts) | n/a | 23.1 % / 18.6 % | 277 / 229 | −81 to −78 dBm |
@@ -72,5 +72,6 @@ Eight runs were recorded on 2026-11-07 with a Pixel phone. They test Companion 0
 
 Notes on the 2026-11-07 runs:
 
+- Run 1 (App none) is invalid because companion none mode is known broken (ONY-980; runs 1, 6, and 9 are skipped in the bench sheet). It is preserved here because the tester ran it.
 - Run 4 received controller stream packets and recorded stream stalls. Every round-trip ping timed out because no echo response arrived.
 - Runs 13, 14, 17, and 18 exercised the ping interval ladder. The clients received no stream frame records during these runs.
