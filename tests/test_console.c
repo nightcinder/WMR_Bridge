@@ -13,6 +13,7 @@
 #include "wmr_config.h"
 #include "wmr_console.h"
 #include "host_stubs.h"
+#include "wmr_host_version.h"
 
 static int checks, failures;
 
@@ -56,7 +57,7 @@ static void send_state_event(uint8_t type, uint8_t state){
 static void test_banner_and_usage(void){
     printf("console: banner on init, usage once the stack is working\n");
     start();
-    CHECK(strstr(output, "WMR Bridge firmware 0.3.4-hosttest") != NULL);
+    CHECK(strstr(output, "WMR Bridge firmware " WMR_HOST_TEST_VERSION) != NULL);
     CHECK(strstr(output, "serving LEFT and RIGHT") != NULL);
     CHECK(strstr(output, "WMR bridge console") == NULL);
     CHECK(host_pending_timers() == 1);          /* the statistics timer */

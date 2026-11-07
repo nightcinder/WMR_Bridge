@@ -17,12 +17,10 @@ concurrency:
 jobs:
   # Secret scan of the commits a PR adds (and of a push to `main`). The action
   # is free on a public repository, so no GITLEAKS_LICENSE secret is needed.
-  # Report-only until we have a week of noise data: a finding is visible in the
-  # checks list but cannot block the merge.
+  # Blocking: a finding fails the job and holds the merge.
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
         with:
@@ -41,7 +39,6 @@ jobs:
   semgrep:
     name: semgrep
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - name: Install semgrep
@@ -49,14 +46,14 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/semgrep-venv"
           "$RUNNER_TEMP/semgrep-venv/bin/pip" install --quiet semgrep
       - name: Scan
-        # semgrep exits non-zero when it reports findings, which is expected
-        # while the job is report-only. Keep the SARIF step running so the
-        # findings are still published as an artifact.
-        continue-on-error: true
+        # `--error` makes semgrep exit 1 when it reports findings, so this job
+        # fails and holds the merge. The SARIF step still runs via
+        # `if: always()` so the findings stay published as an artifact.
         run: |
           "$RUNNER_TEMP/semgrep-venv/bin/semgrep" scan \
             --config p/security-audit \
             --config p/c \
+            --error \
             --sarif \
             --output semgrep.sarif
       - name: Upload SARIF

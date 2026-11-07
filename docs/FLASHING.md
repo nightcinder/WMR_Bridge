@@ -56,7 +56,7 @@ PowerShell profile as above. To build without flashing, omit `--flash`.
 
 | Option | Meaning |
 | --- | --- |
-| `--version VERSION` | Version written to the manifest, `build-info*.json` and the firmware (FF16/console `v`). At most 31 bytes. A longer value is refused. Default: `git describe --tags --always --dirty`, or `GITHUB_REF_NAME` when set to a `v*` tag. |
+| `--version VERSION` | Version written to the manifest, `build-info*.json` and the firmware (FF16/console `v`). At most 31 bytes. A longer value is refused. Default: `git describe --tags --always --dirty`, or `GITHUB_REF_NAME` when set to a `v*` tag. Outside a git checkout the root `VERSION` file is used. |
 | `--variant both\|left\|right` | Which hands the image serves. `both` (default) is today's build. `left` / `right` are compile-time single-hand images that advertise `WMR Bridge L` / `WMR Bridge R`. See [Two bridges](#two-bridges-one-hand-each). |
 | `--out DIR` | Artifact directory. Default `dist/`. |
 | `--work DIR` | Managed BTstack/build directory. Default `.fw-build/`. |

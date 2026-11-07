@@ -24,7 +24,7 @@ is [`docs/runs/sheets/pi-bridge.md`](../docs/runs/sheets/pi-bridge.md).
 
 ```bash
 cd pi
-python3 -m unittest discover -s tests -v          # 123 host tests
+python3 -m unittest discover -s tests -v          # 137 host tests
 python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 
 # in a second terminal
