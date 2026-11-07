@@ -12,7 +12,9 @@ user-facing assets instead of 28, the Pi install is one command, and the
 Raspberry Pi setup guide is a page on the GitHub Pages site. Firmware payloads
 are unchanged from 0.3.11: FF10–FF17 keep their payloads, companions at 0.2.2
 or later continue to work, and the firmware reports the tag version over FF16
-(0.3.12 when tagged). The Pi package stays `0.2.4`; only `install.sh` changed.
+(0.3.12 when tagged). The Pi package stays `0.2.4`: only `install.sh` changed
+in behaviour, and the packaged `pi/README.md` and `docs/PI_BRIDGE.md` carry the
+new install steps.
 Firmware and Pi artifacts remain CI-built and hardware-unverified.
 
 ### Release assets
@@ -54,8 +56,8 @@ Firmware and Pi artifacts remain CI-built and hardware-unverified.
 - Simple-English Raspberry Pi install guide (#153, ONY-993), Raspberry Pi and
   ESP32 flashing docs leading with the one-line installer and one factory
   image per variant (#158, ONY-999), run sheets trimmed and consolidated
-  (#151 ONY-979, #152 ONY-983, #157 ONY-1006), and current-release lines
-  refreshed for 0.3.11 (#149 ONY-972, #150 ONY-980).
+  (#151 ONY-979, #152 ONY-983, #150 ONY-980, #157 ONY-1006), and
+  current-release lines refreshed for 0.3.11 (#149 ONY-972).
 
 ### Verification
 
