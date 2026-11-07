@@ -222,8 +222,8 @@ Both controllers should reconnect without re-pairing.
   `iw dev wlan0 get power_save` for `off`. The drop-in
   `/etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf` should contain
   `wifi.powersave = 2`.
-- **Token error:** `sudo chown wmr:wmr /etc/wmr-bridge/token`, `sudo chmod 0600`,
-  then restart.
+- **Token error:** `sudo chown wmr:wmr /etc/wmr-bridge/token`,
+  `sudo chmod 0600 /etc/wmr-bridge/token`, then restart.
 - **No `/dev/hidraw*`:** load `hidp`, persist it in
   `/etc/modules-load.d/wmr-bridge.conf`, and restart Bluetooth.
 - **Controller will not reconnect after reboot:** `bluetoothctl trust <MAC>`.
