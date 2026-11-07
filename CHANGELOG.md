@@ -73,7 +73,7 @@ this repository, so `0.3.11` is the next free Bridge version.)
 
 ### Docs
 
-- Internal ESP32/WMR bench runbook and GATT probe steps (#139, #146), the Pi
+- Internal ESP32/WMR bench runbook and GATT probe steps (#139, #146, #147), the Pi
   3B+ bench kit (#135), the 12-package compatibility refresh (#143), tester
   sheets retargeted to Bridge 0.3.5 and Companion 0.3.17 (#134), and the
   current-release lines refreshed for 0.3.5 (#138).

@@ -31,7 +31,7 @@ the related procedure and its commands.
 - [ ] `uname -m` prints `aarch64` and `systemctl is-active bluetooth` prints
       `active`. [§2]
 - [ ] Install the released package and check `wmr-bridge --version` prints
-      `wmr_bridge 0.2.3`. [§4]
+      `wmr_bridge 0.2.4`. [§4]
 - [ ] `systemctl is-enabled wmr-bridge` reports `enabled` and
       `systemctl is-active wmr-bridge` reports `active`. [§4]
 - [ ] Pair, trust, and connect both controllers; both appear in

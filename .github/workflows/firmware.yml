@@ -189,11 +189,24 @@ jobs:
       - name: Write SHA256SUMS for every release asset
         run: tools/release/make_sums.sh dist
 
+      # The GitHub release body is the CHANGELOG section for this tag, not
+      # GitHub's generated PR list: the caveats (Switch untested on hardware,
+      # Pi cannot read FF13 from controllers) must ship with the release.
+      - name: Write release body from CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v version="$version" '
+            index($0, "## " version " ") == 1 { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-body.md
+          test -s release-body.md
+
       - name: Create release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: dist/*
-          generate_release_notes: true
+          body_path: release-body.md
           fail_on_unmatched_files: true
           # A tag with a suffix (v0.1.0-rc1) is a prerelease and must not be
           # offered as "Latest"; a plain version tag (v0.1.0) is a release.

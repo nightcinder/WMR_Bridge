@@ -99,7 +99,7 @@ The last line is a consent statement, not a legal contract. You can stop at any 
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| Firmware | **v0.3.5** | Browser installer or GitHub release. This is the current release, CI-built and hardware-unverified. |
+| Firmware | **v0.3.5** | Browser installer or GitHub release. The release this run targets; CI-built and hardware-unverified. |
 | App, Android 14+ | **v0.3.17 signed APK** (`0.3.17`, versionCode 2022) | GitHub release asset, arm64-v8a, signed by CI. This APK contains one shared Unity runtime for the VITURE and XREAL paths. It is large (about 410 MiB). |
 | Capture tools (desktop, optional) | WMR_Bridge `main` | `tools/capture_ble.py`, `tools/analyze_capture.py`. |
 
