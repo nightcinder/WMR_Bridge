@@ -166,6 +166,15 @@ Restore the normal both-hands image afterwards.
 
 Paste: build header; per-run exports and `STREAM`; A verdict; B status/ATT; C monitor lines; D control notes; E colours; F/F2 means and attribution; defects filed. A check with no figures is `not run`.
 
+### FF13 evidence (0.2.4)
+
+| Recording | Span | Attitude | LEFT | RIGHT |
+|---|---|---|---|---|
+| `pose-20261028-191217.json` | 6.6 s | both still, face down | `+0.00°` | `−0.03°` (pitch `+88.8°`) |
+| `pose-20261028-192352.json` | 14.4 s | RIGHT held at pitch `+24.8°`, turned | `−0.01°` | `−25.33°` (`−1.74 °/s`) |
+
+Both are fused poses (`source=orientationOnly`); only the first is a rest take. Neither is labelled with the FF13 switch state (in-memory only), so no before/after pair and no 90° error. The owner's prose pair, RIGHT `83.5` / `42.7`, has no export or switch label, so neither figure is assigned. Needs two 60 s face-down, untouched takes, switch off then on.
+
 ## 9. Not covered
 
 V1/interval/hold: owner-reported tested on ONY-980; definitions in [`single-esp32-levers.md`](single-esp32-levers.md). Two bridges: [`multi-bridge.md`](multi-bridge.md). Pi: [`pi-bridge.md`](pi-bridge.md). PSVR2/glasses: [`external-test-user.md`](external-test-user.md).
