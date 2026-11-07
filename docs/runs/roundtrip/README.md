@@ -57,7 +57,7 @@ Notes for re-deriving the runs:
 
 ## 2026-11-07 app against probe latency bench (ONY-23, WMR_Bridge v0.3.5)
 
-Eight initial runs and one re-run were recorded on 2026-11-07 with a Pixel phone. They test Companion 0.3.18 and native GATT probe 0.3.18 against WMR_Bridge v0.3.5. These exports correspond to runs 1, 2, 3, 4, 13, 14, 17, and 18 from `docs/runs/sheets/internal-esp32-wmr-bench.md`, plus the re-run of run 4 after the ONY-991 echo fix. Companion `none` mode (run 1) is known broken (ONY-980) and skipped in the bench protocol; it is archived here for completeness because the tester recorded it.
+Eight initial runs and one re-run were recorded on 2026-11-07 with a Pixel phone. The eight initial runs test Companion 0.3.18 and native GATT probe 0.3.18 against WMR_Bridge v0.3.5. The re-run tests the post-ONY-991 probe build (wmr-companion commit `1843864`). These exports correspond to runs 1, 2, 3, 4, 13, 14, 17, and 18 from `docs/runs/sheets/internal-esp32-wmr-bench.md`, plus the re-run of run 4 after the ONY-991 echo fix. Companion `none` mode (run 1) is known broken (ONY-980) and skipped in the bench protocol; it is archived here for completeness because the tester recorded it.
 
 | Run | Client | Stream | Interval | Files | Round trip p50 / p99 / max | Pings over 50 ms | Tick loss LEFT / RIGHT | Stalls over 50 ms LEFT / RIGHT | RSSI start to end |
 |---|---|---|---|---|---|---|---|---|---|
