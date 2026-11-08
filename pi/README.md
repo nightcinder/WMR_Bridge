@@ -88,10 +88,9 @@ sudo apt install bluez
 sudo modprobe hidp
 sudo systemctl enable --now bluetooth
 
-# Put one controller in pairing mode, then:
-bluetoothctl --timeout 30 scan on
-bluetoothctl trust "AA:BB:CC:DD:EE:FF"
-bluetoothctl connect "AA:BB:CC:DD:EE:FF"
+# The bridge pairs controllers on its own. Put one controller in pairing mode:
+# turn it on with the front Windows button, then hold the small pairing button
+# inside the battery compartment until the LEDs pulse slowly.
 
 sudo usermod -aG input "$USER"   # or run the bridge as a user in group input
 wmr-bridge --list                # confirm both controllers are visible

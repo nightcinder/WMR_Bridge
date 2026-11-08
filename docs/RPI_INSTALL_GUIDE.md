@@ -139,35 +139,20 @@ journalctl -u wmr-bridge -n 50 --no-pager
 
 If the service is not running, start it with `sudo systemctl enable --now wmr-bridge`.
 
-## Step 6: Pair a controller
+## Step 6: Pair the controllers (automatic)
 
-Pair each controller over Bluetooth Classic. Start the Bluetooth tool:
+The bridge pairs controllers on its own. You put a controller in pairing mode.
+The bridge finds it, pairs it, trusts it, and connects it. You do not run
+`bluetoothctl`.
 
-```bash
-bluetoothctl
-```
+Put each controller in pairing mode, one at a time:
 
-Turn scanning on:
+1. Turn on the controller. Hold the front Windows button for 2 seconds.
+2. Open the battery cover.
+3. Hold the small pairing button inside the battery compartment until the LEDs
+   pulse slowly.
 
-```text
-[bluetooth]# scan on
-```
-
-Put the Left controller into pairing mode. Hold the Windows button under the battery cover until the LEDs pulse slowly.
-Find the controller in the scan output. Then run:
-
-```text
-[bluetooth]# pair AA:BB:CC:DD:EE:01
-[bluetooth]# trust AA:BB:CC:DD:EE:01
-[bluetooth]# connect AA:BB:CC:DD:EE:01
-```
-
-Use the real MAC address from your scan output. Repeat for the Right controller. Stop scanning and exit:
-
-```text
-[bluetooth]# scan off
-[bluetooth]# exit
-```
+Wait for the bridge to pair the controller. Repeat for the other controller.
 
 Check that both controllers are registered:
 
@@ -175,7 +160,8 @@ Check that both controllers are registered:
 cat /sys/class/hidraw/hidraw*/device/uevent | grep -E 'HID_NAME|HID_UNIQ'
 ```
 
-You should see entries for both `Motion controller - Left` and `Motion controller - Right`.
+You should see entries for both `Motion controller - Left` and
+`Motion controller - Right`.
 
 Restart the bridge so it sees both controllers:
 
@@ -183,6 +169,9 @@ Restart the bridge so it sees both controllers:
 sudo systemctl restart wmr-bridge
 journalctl -u wmr-bridge -n 30 --no-pager
 ```
+
+If a controller does not pair on its own, see "Manual pairing (optional)" in
+the "If something fails" section.
 
 ## Step 7: Check it works
 
@@ -225,10 +214,40 @@ sudo systemctl restart bluetooth
 ```
 
 **Controller does not reconnect after a reboot.**
-Make sure you trusted each controller during pairing:
+Make sure the controller is trusted. Run:
 
 ```bash
 bluetoothctl trust <MAC-ADDRESS>
+```
+
+**Manual pairing (optional).**
+If automatic pairing fails, pair by hand with `bluetoothctl`:
+
+```bash
+bluetoothctl
+```
+
+Turn scanning on:
+
+```text
+[bluetooth]# scan on
+```
+
+Put one controller in pairing mode. Use the pairing button inside the battery
+compartment. Find the controller in the scan output. Then run:
+
+```text
+[bluetooth]# pair AA:BB:CC:DD:EE:FF
+[bluetooth]# trust AA:BB:CC:DD:EE:FF
+[bluetooth]# connect AA:BB:CC:DD:EE:FF
+```
+
+Use the real MAC address from your scan output. Repeat for the other controller.
+Stop scanning and exit:
+
+```text
+[bluetooth]# scan off
+[bluetooth]# exit
 ```
 
 **Pi 3B+ under-voltage or throttling.**

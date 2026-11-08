@@ -94,23 +94,24 @@ The bridge deliberately does not open L2CAP PSM 0x11/0x13 itself. The kernel
 HIDP driver already listens there. A user-space listener would collide with it.
 BlueZ owns the HID host channels and exposes each controller as a hidraw node.
 
-### Pair the controllers
+### Pair the controllers (automatic)
 
-Put one controller in pairing mode (hold the Windows button until the LEDs
-flash), then:
+The bridge pairs controllers on its own. It runs a BlueZ auto-pairer while
+fewer than two hands are open on hidraw. Put a controller in pairing mode and
+the bridge scans, pairs, trusts, and connects it. You do not run `bluetoothctl`.
 
-```bash
-bluetoothctl
-[bluetooth]# scan on
-# wait for "Motion controller - Left" / "- Right"
-[bluetooth]# pair AA:BB:CC:DD:EE:FF
-[bluetooth]# trust AA:BB:CC:DD:EE:FF
-[bluetooth]# connect AA:BB:CC:DD:EE:FF
-[bluetooth]# scan off
-```
+Put one controller in pairing mode:
 
-Repeat for the second controller. The controllers normally reconnect to a
-trusted host on their own after waking. Check the nodes:
+1. Turn on the controller. Hold the front Windows button for 2 seconds.
+2. Open the battery cover.
+3. Hold the small pairing button inside the battery compartment until the LEDs
+   pulse slowly.
+
+Wait for the bridge to pair it. Repeat for the other controller. The
+controllers normally reconnect to a trusted host on their own after waking.
+Pass `--no-auto-pair` to disable the auto-pairer and pair by hand.
+
+Check the nodes:
 
 ```bash
 ls -l /dev/hidraw*
