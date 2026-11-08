@@ -197,9 +197,9 @@ The bridge listens on `ws://<pi-ip>:8765/wmr`. Read the token on the Pi:
 sudo cat /etc/wmr-bridge/token
 ```
 
-Paste that token into the companion app. The service advertises
-`_wmr-bridge._tcp` for discovery tools, but the companion app does not
-discover it: enter the Pi's host and port by hand.
+Paste that token into the companion app. The companion app does not discover
+the Pi: enter its host and port by hand. The v0.3.12 release does not enable
+mDNS advertisement (`--advertise-mdns`); that lands in the next release.
 
 ## If something fails
 
