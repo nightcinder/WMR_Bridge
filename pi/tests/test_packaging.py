@@ -125,6 +125,7 @@ class PackagingTests(unittest.TestCase):
             log_file = tmp_path / "calls.log"
 
             _write_stub(bin_dir, "id", "exit 1")
+            _write_stub(bin_dir, "getent", "exit 0")
             _write_stub(bin_dir, "useradd", f'echo "useradd $*" >> "{log_file}"')
             _write_stub(bin_dir, "chown", f'echo "chown $*" >> "{log_file}"')
             _write_stub(bin_dir, "udevadm", f'echo "udevadm $*" >> "{log_file}"')
@@ -165,6 +166,39 @@ class PackagingTests(unittest.TestCase):
             self.assertIn("udevadm trigger", calls)
             self.assertIn("systemctl daemon-reload", calls)
 
+
+    def test_installer_without_bluetooth_group_still_creates_user(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            destdir = tmp_path / "rootfs"
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            log_file = tmp_path / "calls.log"
+
+            _write_stub(bin_dir, "id", "exit 1")
+            _write_stub(bin_dir, "getent", "exit 1")
+            _write_stub(bin_dir, "useradd", f'echo "useradd $*" >> "{log_file}"')
+            _write_stub(bin_dir, "chown", "exit 0")
+            _write_stub(bin_dir, "udevadm", "exit 0")
+            _write_stub(bin_dir, "systemctl", "exit 0")
+
+            env = {
+                **os.environ,
+                "DESTDIR": str(destdir),
+                "WMR_SKIP_PRIVILEGED": "0",
+                "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
+            }
+            proc = subprocess.run(
+                ["/bin/sh", str(INSTALL_SH)],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            calls = log_file.read_text(encoding="utf-8")
+            self.assertIn("useradd --system --create-home --groups input wmr", calls)
+            self.assertNotIn("bluetooth", calls)
 
     def test_installer_installs_verified_deb_when_piped(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -287,6 +321,26 @@ class PackagingTests(unittest.TestCase):
             self.assertIn("needs apt-get", proc.stderr)
             self.assertIn("pi/build_package.sh", proc.stderr)
 
+
+    def test_build_package_ships_root_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "pkg"
+            proc = subprocess.run(
+                [str(BUILD_PACKAGE), "--out", str(out)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            archive = out / f"wmr-bridge-{VERSION}.tar.gz"
+            listing = subprocess.run(
+                ["tar", "-tzf", str(archive)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(listing.returncode, 0, msg=listing.stderr)
+            self.assertIn(f"wmr-bridge-{VERSION}/VERSION", listing.stdout.splitlines())
 
     def test_build_scripts_reject_version_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

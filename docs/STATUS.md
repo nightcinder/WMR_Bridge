@@ -6,7 +6,7 @@ PSVR2 FF12/FF14 decoding, Nintendo Switch Joy-Con/Pro handshake and `0x30`
 decoding, and Pi FF13
 calibration-blob forwarding; Switch and PSVR2 support remain host-tested and
 firmware-build-tested only and have never run on a controller, with the Switch
-hardware check tracked in GitHub #145; the Pi package is `0.2.4` and does not
+hardware check tracked in GitHub #145; the Pi package is `0.3.12` and does not
 yet read FF13 calibration from controllers; FF10–FF17 keep their payloads, so
 companions at 0.2.2 or later continue to work; ESP32-over-BLE is
 the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the

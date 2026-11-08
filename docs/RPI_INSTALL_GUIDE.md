@@ -100,8 +100,9 @@ To pin a release, set the version and the tag:
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.12/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.12 sudo -E bash
 ```
 
-The Pi package version and the firmware tag are independent. The current
-firmware release is v0.3.12.
+The Pi package version tracks the repository `VERSION`, so a release cut from
+this tree reports the same version as its firmware tag. The current release is
+v0.3.12.
 
 To check a download by hand, fetch SHA256SUMS from the same release and run:
 

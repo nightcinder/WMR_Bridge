@@ -12,9 +12,10 @@ user-facing assets instead of 28, the Pi install is one command, and the
 Raspberry Pi setup guide is a page on the GitHub Pages site. Firmware payloads
 are unchanged from 0.3.11: FF10–FF17 keep their payloads, companions at 0.2.2
 or later continue to work, and the firmware reports the tag version over FF16
-(0.3.12 when tagged). The Pi package stays `0.2.4`: only `install.sh` changed
-in behaviour, and the packaged `pi/README.md` and `docs/PI_BRIDGE.md` carry the
-new install steps.
+(0.3.12 when tagged). The Pi package reports `0.3.12`, synced with the root
+`VERSION` (ONY-1025): its runtime is unchanged from `0.2.4`, the installer
+fixes its temp-file permissions, and `wmr` joins the `bluetooth` group. The
+packaged `pi/README.md` and `docs/PI_BRIDGE.md` carry the new install steps.
 Firmware and Pi artifacts remain CI-built and hardware-unverified.
 
 ### Release assets
