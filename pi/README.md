@@ -141,7 +141,7 @@ The daemon logs hand and client events:
   `LEFT disconnected: /dev/hidraw0 after 123 report(s)`.
 - Client connect/disconnect: `client connected: <peer>` / `client disconnected: <peer>`.
 - Subscribe/unsubscribe: `client <peer> subscribed to batched` / `client <peer> unsubscribed`.
-- No controller: a one-time warning `no WMR controllers found; pair one in bluetoothctl, check ...`.
+- No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check ...`.
 - Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
 
 ## Status
