@@ -2,9 +2,10 @@
 # Build the installable Raspberry Pi / Linux host-bridge package.
 #
 # The package is a source tree, not a wheel: it carries pi/ (daemon, probe,
-# installer, systemd unit, udev rule), docs/PI_BRIDGE.md and a replay capture,
-# so it installs without a git checkout and can run the P2 replay check on the
-# Pi before any controller is paired.
+# installer, systemd unit, udev rule), docs/PI_BRIDGE.md, a replay capture and
+# the root VERSION, so it installs without a git checkout, builds its own
+# artifacts, and can run the P2 replay check on the Pi before any controller is
+# paired.
 #
 #   pi/build_package.sh                 # writes dist/wmr-bridge-<version>.tar.gz
 #   pi/build_package.sh --out DIR       # writes into DIR instead
@@ -38,6 +39,19 @@ VERSION="$(
     cd "${SCRIPT_DIR}"
     python3 -c 'import wmr_bridge; print(wmr_bridge.__version__)'
 )"
+# Keep the package version tied to the repository VERSION; a drift here is how
+# the published .deb fell behind at 0.2.4 while the release was 0.3.12.
+REPO_VERSION="$(sed -n '1s/[[:space:]]*$//p' "${REPO_ROOT}/VERSION")"
+case "$REPO_VERSION" in
+    *[!0-9A-Za-z.+~-]*|"")
+        echo "invalid repository VERSION: ${REPO_VERSION:-<empty>}" >&2
+        exit 64
+        ;;
+esac
+if [ "$VERSION" != "$REPO_VERSION" ]; then
+    echo "version mismatch: package version is ${VERSION}, root VERSION is ${REPO_VERSION}" >&2
+    exit 1
+fi
 NAME="wmr-bridge-${VERSION}"
 ARCHIVE="${OUT_DIR}/${NAME}.tar.gz"
 
@@ -53,7 +67,7 @@ tar \
     --transform "s,^,${NAME}/," \
     -C "$REPO_ROOT" \
     -czf "$ARCHIVE" \
-    pi docs/PI_BRIDGE.md samples/controller_frames.txt
+    VERSION pi docs/PI_BRIDGE.md samples/controller_frames.txt
 
 (
     cd "$OUT_DIR"

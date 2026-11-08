@@ -52,6 +52,21 @@ case "$DEB_VERSION" in
         ;;
 esac
 
+# The Pi package version tracks the repository VERSION. Keeping them separate
+# let the published .deb lag the release (0.2.4 against 0.3.12), so a mismatch
+# is a build error rather than a stale artifact.
+REPO_VERSION="$(sed -n '1s/[[:space:]]*$//p' "${REPO_ROOT}/VERSION")"
+case "$REPO_VERSION" in
+    *[!0-9A-Za-z.+~-]*|"")
+        echo "invalid repository VERSION: ${REPO_VERSION:-<empty>}" >&2
+        exit 64
+        ;;
+esac
+if [ "$DEB_VERSION" != "$REPO_VERSION" ]; then
+    echo "version mismatch: package version is ${DEB_VERSION}, root VERSION is ${REPO_VERSION}" >&2
+    exit 1
+fi
+
 command -v dpkg-deb >/dev/null 2>&1 || {
     echo "dpkg-deb is required (install dpkg)" >&2
     exit 69

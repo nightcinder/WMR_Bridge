@@ -11,9 +11,11 @@
 #   curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 #
 # Pin a release or a mirror (also used by the host tests). The Pi package
-# version and the firmware tag are independent, so name the tag too:
-#   WMR_BRIDGE_VERSION=0.2.4 WMR_BRIDGE_TAG=v0.3.11 sh install.sh
-#   WMR_BRIDGE_VERSION=0.2.4 WMR_BRIDGE_RELEASE_BASE_URL=https://example/pkg sh install.sh
+# version follows the repository VERSION and the build scripts reject a
+# mismatch, so a release cut from this tree carries a .deb with the tag's
+# version:
+#   WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_TAG=v<version> sh install.sh
+#   WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_RELEASE_BASE_URL=https://example/pkg sh install.sh
 #
 # Test / packaging staging mode (no root required when WMR_SKIP_PRIVILEGED=1):
 #   DESTDIR=/tmp/stage WMR_SKIP_PRIVILEGED=1 ./pi/install.sh
@@ -124,6 +126,12 @@ if [ -z "$SCRIPT_DIR" ]; then
         die "could not fetch ${BASE_URL}/${DEB}"
     verify_from_sums "$DEB"
     echo "install.sh: installing ${DEB} from ${BASE_URL}"
+    # apt-get drops to the unprivileged _apt user to read a local .deb. mktemp
+    # creates a 0700 root-owned directory, so let _apt traverse the directory
+    # and read the file; otherwise apt reports a Permission denied warning and
+    # performs the download unsandboxed.
+    chmod 0755 "$TMP_DIR"
+    chmod 0644 "${TMP_DIR}/${DEB}"
     DEBIAN_FRONTEND=noninteractive apt-get install -y "${TMP_DIR}/${DEB}"
     enable_service
     exit 0
@@ -153,10 +161,16 @@ DEST_SYSTEMD="${DESTDIR}${SYSTEMD_DIR}"
 DEST_NETWORKMANAGER="${DESTDIR}${NETWORKMANAGER_DIR}"
 
 if [ "$SKIP_PRIVILEGED" != "1" ]; then
+    # bluez is a .deb dependency, but a checkout/tarball install can run on a
+    # host without it. Join the bluetooth group only when it exists.
+    SERVICE_GROUPS="input"
+    if getent group bluetooth >/dev/null 2>&1; then
+        SERVICE_GROUPS="input,bluetooth"
+    fi
     if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
-        useradd --system --create-home --groups input "$SERVICE_USER"
+        useradd --system --create-home --groups "$SERVICE_GROUPS" "$SERVICE_USER"
     else
-        usermod -aG input "$SERVICE_USER" 2>/dev/null || true
+        usermod -aG "$SERVICE_GROUPS" "$SERVICE_USER" 2>/dev/null || true
     fi
 fi
 

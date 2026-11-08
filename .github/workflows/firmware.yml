@@ -176,9 +176,10 @@ jobs:
 
   package:
     name: Build Pi bridge packages
-    # The Pi package version is independent of the firmware tag (it comes from
-    # pi/wmr_bridge/__version__), so the tag does not override it. The ESP-IDF
-    # build container has no dpkg-deb, hence the separate ubuntu-latest job.
+    # The Pi package version comes from pi/wmr_bridge/__version__, and the build
+    # scripts fail unless it equals the repository VERSION, so a tag build
+    # cannot publish a .deb from a different version. The ESP-IDF build
+    # container has no dpkg-deb, hence the separate ubuntu-latest job.
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:

@@ -3,8 +3,8 @@ Version: @VERSION@
 Architecture: all
 Maintainer: nightcinder <67344577+nightcinder@users.noreply.github.com>
 Installed-Size: @INSTALLED_SIZE@
-Depends: python3 (>= 3.10)
-Recommends: bluez, network-manager
+Depends: python3 (>= 3.10), bluez
+Recommends: network-manager
 Section: net
 Priority: optional
 Homepage: https://github.com/nightcinder/WMR_Bridge
