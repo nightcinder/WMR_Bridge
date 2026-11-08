@@ -19,8 +19,13 @@ This module has no third-party dependency and no import-time hardware access.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import re
+import shutil
+import subprocess
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 HIDRAW_ROOT = "/sys/class/hidraw"
@@ -31,6 +36,11 @@ WMR_NAMES = {
 HAND_NAMES = {0: "LEFT", 1: "RIGHT"}
 
 _HIDRAW_RE = re.compile(r"^hidraw\d+$")
+_ADDRESS_RE = re.compile(r"^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}$")
+_DEVICE_RE = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})(?:\s+(.*))?$")
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -194,3 +204,206 @@ class HidrawReader:
 
     def __exit__(self, *_exc: object) -> None:
         self.close()
+
+
+@dataclass(frozen=True)
+class BluezDevice:
+    """One device known to BlueZ, with the flags ``bluetoothctl info`` reports."""
+
+    address: str
+    name: str = ""
+    paired: bool = False
+    trusted: bool = False
+    connected: bool = False
+
+    @property
+    def is_wmr(self) -> bool:
+        return self.name.strip().casefold() in WMR_NAMES
+
+    @property
+    def hand(self) -> int | None:
+        return WMR_NAMES.get(self.name.strip().casefold())
+
+
+def _clean(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
+
+def parse_devices(output: str) -> list[BluezDevice]:
+    """Parse the ``Device <address> <name>`` lines of ``bluetoothctl devices``."""
+
+    devices: list[BluezDevice] = []
+    for line in _clean(output).splitlines():
+        match = _DEVICE_RE.match(line.strip())
+        if not match:
+            continue
+        devices.append(
+            BluezDevice(address=match.group(1).upper(), name=(match.group(2) or "").strip())
+        )
+    return devices
+
+
+def parse_info(output: str, address: str = "") -> BluezDevice | None:
+    """Parse ``bluetoothctl info <address>`` output into a :class:`BluezDevice`."""
+
+    name = ""
+    flags = {"Paired": False, "Trusted": False, "Connected": False}
+    for line in _clean(output).splitlines():
+        line = line.strip()
+        if line.startswith("Device "):
+            fields = line.split()
+            if len(fields) > 1 and _ADDRESS_RE.match(fields[1]):
+                address = fields[1].upper()
+            continue
+        key, sep, value = line.partition(":")
+        if not sep:
+            continue
+        key = key.strip()
+        value = value.strip()
+        if key == "Name":
+            name = value
+        elif key in flags:
+            flags[key] = value.casefold() == "yes"
+    if not address:
+        return None
+    return BluezDevice(
+        address=address.upper(),
+        name=name,
+        paired=flags["Paired"],
+        trusted=flags["Trusted"],
+        connected=flags["Connected"],
+    )
+
+
+Runner = Callable[[list[str], float], "subprocess.CompletedProcess[str] | None"]
+
+
+def _run_command(args: list[str], timeout: float) -> subprocess.CompletedProcess[str] | None:
+    try:
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+class BluezAutoPairer:
+    """Pair, trust and connect WMR controllers through ``bluetoothctl``.
+
+    BlueZ keeps the bonds; this class only drives the command-line client so the
+    Pi package stays dependency-free. A bounded scan burst runs while any
+    allowed hand is still missing from ``hidraw``. Matching controllers are
+    paired, trusted and connected; once every allowed hand is open, scanning
+    stops so Classic inquiry does not compete with the live HID links.
+
+    Without ``bluetoothctl`` or a working adapter the pairer logs once and
+    disables itself. ``HidrawManager`` keeps running in that case, so a
+    manually paired controller still works.
+    """
+
+    def __init__(
+        self,
+        bridge: object,
+        *,
+        allowed_hands: Iterable[int] = (0, 1),
+        command: str = "bluetoothctl",
+        scan_seconds: float = 8.0,
+        poll_interval: float = 5.0,
+        runner: Runner | None = None,
+        which: Callable[[str], str | None] = shutil.which,
+    ) -> None:
+        self.bridge = bridge
+        self.allowed_hands = frozenset(allowed_hands)
+        self.command = command
+        self.scan_seconds = max(1.0, scan_seconds)
+        self.poll_interval = max(1.0, poll_interval)
+        self._runner = runner or _run_command
+        self._which = which
+        self._task: asyncio.Task[None] | None = None
+        self._disabled = False
+
+    def hands_ready(self) -> bool:
+        """True when every allowed hand already has an open hidraw node."""
+
+        hands = getattr(self.bridge, "hands")
+        return all(hands[hand].connected for hand in self.allowed_hands)
+
+    def start(self) -> None:
+        self._task = asyncio.create_task(self._loop(), name="bluez-auto-pair")
+
+    async def close(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+
+    async def _loop(self) -> None:
+        while True:
+            try:
+                await asyncio.to_thread(self._tick)
+            except Exception:  # keep the daemon alive; log the reason
+                LOG.exception("automatic pairing iteration failed")
+            await asyncio.sleep(self.poll_interval)
+
+    def _run(self, *args: str, timeout: float) -> subprocess.CompletedProcess[str] | None:
+        return self._runner([self.command, *args], timeout)
+
+    def _tick(self) -> None:
+        if self._disabled:
+            return
+        if self._which(self.command) is None:
+            LOG.warning(
+                "bluetoothctl is not installed; automatic controller pairing is off "
+                "(install bluez or pass --no-auto-pair to silence this)"
+            )
+            self._disabled = True
+            return
+        if self.hands_ready():
+            return
+        for device in self._scan():
+            if device.is_wmr:
+                self._ensure(device)
+
+    def _scan(self) -> list[BluezDevice]:
+        self._run(
+            "--timeout", str(int(self.scan_seconds)), "scan on",
+            timeout=self.scan_seconds + 5.0,
+        )
+        result = self._run("devices", timeout=10.0)
+        if result is None or result.returncode != 0:
+            return []
+        return parse_devices(result.stdout or "")
+
+    def _info(self, address: str) -> BluezDevice | None:
+        result = self._run("info", address, timeout=10.0)
+        if result is None or result.returncode != 0:
+            return None
+        return parse_info(result.stdout or "", address)
+
+    def _command(self, action: str, address: str) -> bool:
+        result = self._run(action, address, timeout=20.0)
+        if result is None or result.returncode != 0:
+            LOG.debug("bluetoothctl %s %s failed", action, address)
+            return False
+        return True
+
+    def _ensure(self, device: BluezDevice) -> None:
+        info = self._info(device.address) or device
+        name = info.name or device.name
+        if not info.paired:
+            LOG.info("auto-pair: pairing %s (%s)", device.address, name)
+            if not self._command("pair", device.address):
+                return
+        if not info.trusted:
+            LOG.info("auto-pair: trusting %s (%s)", device.address, name)
+            self._command("trust", device.address)
+        if not info.connected:
+            LOG.info("auto-pair: connecting %s (%s)", device.address, name)
+            self._command("connect", device.address)

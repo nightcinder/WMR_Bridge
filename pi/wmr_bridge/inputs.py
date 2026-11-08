@@ -290,8 +290,8 @@ class HidrawManager:
                     self._open(path)
                 if not self._readers and not self._no_controllers_warned:
                     LOG.warning(
-                        "no WMR controllers found; pair one in bluetoothctl, check "
-                        "`python3 -m wmr_bridge --list`, then leave it connected"
+                        "no WMR controllers found; put one in pairing mode and keep it "
+                        "near the Pi, then check `python3 -m wmr_bridge --list`"
                     )
                     self._no_controllers_warned = True
             except Exception:  # keep the monitor alive; log the reason

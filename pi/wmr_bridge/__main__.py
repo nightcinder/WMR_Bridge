@@ -14,7 +14,7 @@ import stat
 import sys
 
 from . import __version__
-from .bluez import discover_hidraw
+from .bluez import BluezAutoPairer, discover_hidraw
 from .bridge import Bridge
 from .inputs import HidrawManager, ReplaySource, read_capture
 from .mdns import MdnsAdvertiser
@@ -76,6 +76,15 @@ def _build_parser() -> argparse.ArgumentParser:
     hid.add_argument("--left", metavar="MATCH", help="assign a device to LEFT by address, path or name part")
     hid.add_argument("--right", metavar="MATCH", help="assign a device to RIGHT by address, path or name part")
     hid.add_argument("--poll-interval", type=float, default=1.0, help="hidraw hotplug poll interval in seconds")
+    hid.add_argument(
+        "--no-auto-pair",
+        dest="auto_pair",
+        action="store_false",
+        help=(
+            "do not run bluetoothctl to pair, trust and connect WMR controllers "
+            "while a hand is missing"
+        ),
+    )
 
     replay = parser.add_argument_group("replay (no hardware)")
     replay.add_argument("--replay", metavar="FILE", help="replay a '<label> <hex>' capture")
@@ -231,6 +240,7 @@ async def _run(args: argparse.Namespace) -> int:
     advertiser: MdnsAdvertiser | None = None
     replay: ReplaySource | None = None
     manager: HidrawManager | None = None
+    pairer: BluezAutoPairer | None = None
     status_task: asyncio.Task[None] | None = None
     duration_task: asyncio.Task[None] | None = None
     replay_task: asyncio.Task[None] | None = None
@@ -268,6 +278,19 @@ async def _run(args: argparse.Namespace) -> int:
             )
             manager.start()
             LOG.info("watching hidraw for WMR controllers (hand=%s)", args.hand)
+            if args.auto_pair:
+                pairer = BluezAutoPairer(
+                    bridge,
+                    allowed_hands=allowed_hands,
+                    poll_interval=args.poll_interval,
+                )
+                pairer.start()
+                LOG.info(
+                    "automatic pairing: scanning for WMR controllers in pairing mode "
+                    "(disable with --no-auto-pair)"
+                )
+            else:
+                LOG.info("automatic pairing: disabled (--no-auto-pair)")
 
         loop = asyncio.get_running_loop()
         for signame in (signal.SIGINT, signal.SIGTERM):
@@ -314,6 +337,8 @@ async def _run(args: argparse.Namespace) -> int:
             replay_task.cancel()
         if replay is not None:
             await replay.close()
+        if pairer is not None:
+            await pairer.close()
         if manager is not None:
             await manager.close()
         if advertiser is not None:
