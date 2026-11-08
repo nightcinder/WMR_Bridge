@@ -17,6 +17,7 @@ VERSION = re.search(
     (PI_DIR / "wmr_bridge" / "__init__.py").read_text(encoding="utf-8"),
     re.MULTILINE,
 ).group(1)
+ROOT_VERSION = (PI_DIR.parent / "VERSION").read_text(encoding="utf-8").strip()
 
 
 def _have_dpkg_deb() -> bool:
@@ -28,6 +29,9 @@ def _have_dpkg_deb() -> bool:
 
 @unittest.skipUnless(_have_dpkg_deb(), "dpkg-deb is not installed")
 class DebPackagingTests(unittest.TestCase):
+    def test_package_version_matches_root_version(self) -> None:
+        self.assertEqual(VERSION, ROOT_VERSION)
+
     def test_build_deb_has_architecture_all_and_conffiles(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "dist"
@@ -61,7 +65,10 @@ class DebPackagingTests(unittest.TestCase):
             ).stdout
             self.assertIn(" Package: wmr-bridge", info)
             self.assertIn(f" Version: {VERSION}", info)
+            self.assertIn(f" Version: {ROOT_VERSION}", info)
             self.assertIn(" Architecture: all", info)
+            self.assertIn(" Depends: python3 (>= 3.10), bluez", info)
+            self.assertIn(" Recommends: network-manager", info)
 
             contents = subprocess.run(
                 ["dpkg-deb", "-c", str(deb)],
@@ -95,6 +102,10 @@ class DebPackagingTests(unittest.TestCase):
             )
             for script in ("postinst", "prerm", "postrm"):
                 self.assertTrue(os.access(control_dir / script, os.X_OK), script)
+            self.assertIn(
+                "input,bluetooth",
+                (control_dir / "postinst").read_text(encoding="utf-8"),
+            )
 
     def test_installed_wrapper_prints_version(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
