@@ -2,9 +2,10 @@
 # Build the installable Raspberry Pi / Linux host-bridge package.
 #
 # The package is a source tree, not a wheel: it carries pi/ (daemon, probe,
-# installer, systemd unit, udev rule), docs/PI_BRIDGE.md and a replay capture,
-# so it installs without a git checkout and can run the P2 replay check on the
-# Pi before any controller is paired.
+# installer, systemd unit, udev rule), docs/PI_BRIDGE.md, a replay capture and
+# the root VERSION, so it installs without a git checkout, builds its own
+# artifacts, and can run the P2 replay check on the Pi before any controller is
+# paired.
 #
 #   pi/build_package.sh                 # writes dist/wmr-bridge-<version>.tar.gz
 #   pi/build_package.sh --out DIR       # writes into DIR instead
@@ -66,7 +67,7 @@ tar \
     --transform "s,^,${NAME}/," \
     -C "$REPO_ROOT" \
     -czf "$ARCHIVE" \
-    pi docs/PI_BRIDGE.md samples/controller_frames.txt
+    VERSION pi docs/PI_BRIDGE.md samples/controller_frames.txt
 
 (
     cd "$OUT_DIR"

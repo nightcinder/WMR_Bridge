@@ -161,10 +161,16 @@ DEST_SYSTEMD="${DESTDIR}${SYSTEMD_DIR}"
 DEST_NETWORKMANAGER="${DESTDIR}${NETWORKMANAGER_DIR}"
 
 if [ "$SKIP_PRIVILEGED" != "1" ]; then
+    # bluez is a .deb dependency, but a checkout/tarball install can run on a
+    # host without it. Join the bluetooth group only when it exists.
+    SERVICE_GROUPS="input"
+    if getent group bluetooth >/dev/null 2>&1; then
+        SERVICE_GROUPS="input,bluetooth"
+    fi
     if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
-        useradd --system --create-home --groups input,bluetooth "$SERVICE_USER"
+        useradd --system --create-home --groups "$SERVICE_GROUPS" "$SERVICE_USER"
     else
-        usermod -aG input,bluetooth "$SERVICE_USER" 2>/dev/null || true
+        usermod -aG "$SERVICE_GROUPS" "$SERVICE_USER" 2>/dev/null || true
     fi
 fi
 

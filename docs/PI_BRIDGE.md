@@ -237,7 +237,7 @@ version comes from `pi/wmr_bridge/__version__`, not from the tag.
 Or run the equivalent manual steps:
 
 ```bash
-sudo useradd --system --create-home --groups input wmr
+sudo useradd --system --create-home --groups input,bluetooth wmr
 sudo mkdir -p /opt/wmr-bridge /etc/wmr-bridge
 sudo cp -r pi /opt/wmr-bridge/
 sudo cp pi/udev/99-wmr-bridge.rules /etc/udev/rules.d/
@@ -252,7 +252,7 @@ sudo systemctl enable --now wmr-bridge
 journalctl -u wmr-bridge -f
 ```
 
-The unit runs as `wmr` with `SupplementaryGroups=input`, restarts on failure,
+The unit runs as `wmr` with `SupplementaryGroups=input bluetooth`, restarts on failure,
 reads the token from `/etc/wmr-bridge/token`, and loads optional flags from
 `/etc/wmr-bridge/wmr-bridge.env` via `WMR_BRIDGE_ARGS` (for example,
 `WMR_BRIDGE_ARGS=--hand left` on a single-hand Pi without editing the unit
@@ -285,6 +285,8 @@ The tarball alternative is
 Both carry `pi/` (daemon, probe, installer, systemd unit, udev rule,
 NetworkManager drop-in), `docs/PI_BRIDGE.md` and
 `samples/controller_frames.txt`, so they install without a git checkout. The
+tarball also carries the root `VERSION`, so a build run from the extracted tree
+can rebuild its own artifacts. The
 installed `/opt/wmr-bridge/pi` keeps the drop-in next to `install.sh`, so
 re-running the installer from the installed tree works. `run_tests.sh` stays in
 the checkout/release tree because the suite needs the repo build scripts. The
@@ -345,8 +347,9 @@ origin was allowed at startup with `--allow-origin <value>` (repeatable). This
 stops a web page on the LAN from opening a socket to the daemon. Origin matching
 is case-insensitive on the normalised value. `*` is not a wildcard.
 
-JSON examples below use the current 0.3.12 package version.
-`pi/wmr_bridge/__version__` reports `0.3.12`.
+JSON examples below use the package version in this tree, `0.3.12`.
+`pi/wmr_bridge/__version__` reports `0.3.12`. The `v0.3.12` release shipped
+the `0.2.4` package; the ONY-1025 packaging fixes land in the next release.
 
 ```json
 {
