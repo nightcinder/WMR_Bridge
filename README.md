@@ -123,8 +123,12 @@ python3 tools/firmware/build.py --idf-export ~/esp/esp-idf/export.sh --flash /de
 ```
 
 The first run clones the pinned BTstack commit into `.fw-build/`. Later runs
-reuse it. The output in `dist/` includes a merged factory image and a browser
-flasher page. `0.3.12` is the current release. Its firmware is the
+reuse it. The output in `dist/` includes the bootloader, partition table,
+application and merged factory images, plus a browser flasher page. The browser
+manifest writes the three separate images at offsets `0x1000`, `0x8000` and
+`0x10000`. It does not write NVS (`0x9000`-`0xFFFF`), so a reflash with
+"Erase device" unchecked keeps the stored pairings. `0.3.12` is the current
+release. Its firmware is the
 controller-family release on top of 0.3.5: one driver table per model,
 PSVR2 FF12/FF14 decoding, and Nintendo Switch Joy-Con/Pro handshake and
 `0x30` decoding. Switch support
@@ -138,7 +142,10 @@ install the current release without ESP-IDF, use the hosted browser installer at
 <https://nightcinder.github.io/WMR_Bridge/>, which serves all three variants,
 or the Pi setup page at <https://nightcinder.github.io/WMR_Bridge/pi.html>. The
 [GitHub release](https://github.com/nightcinder/WMR_Bridge/releases/latest)
-also carries the images and manifests. For a local build, serve `dist/` over
+carries the three merged factory images and the three application images;
+the per-variant bootloader and partition images stay in the workflow artifacts.
+For a local build, serve
+`dist/` over
 HTTP. Details are in [docs/FLASHING.md](docs/FLASHING.md).
 
 For one hand per bridge (or single-hand testing on a single board), add
@@ -263,9 +270,10 @@ builds the installable package `wmr-bridge_<version>_all.deb` plus a piped
 `install.sh` that fetches and verifies the release `.deb`. The
 `wmr-pi-bridge-0.1.0.tar.gz` asset on the v0.1.0 GitHub release is the only old
 packaged Pi tarball. Releases cut by the current workflow attach the `.deb`,
-`install.sh` and `SHA256SUMS` alongside the factory and application images;
-older tags published different asset lists, and any tarball stays a local build
-from `pi/build_package.sh`. The one-line install works from
+`install.sh` and `SHA256SUMS` alongside the three merged factory images and the three application images;
+the per-variant bootloader and partition images stay in the workflow
+artifacts. Older tags published different asset lists, and any tarball stays a
+local build from `pi/build_package.sh`. The one-line install works from
 `releases/latest/download/install.sh` and needs `apt-get`. The Pi setup page on
 GitHub Pages is at <https://nightcinder.github.io/WMR_Bridge/pi.html>.
 
