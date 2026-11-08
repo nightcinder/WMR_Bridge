@@ -620,9 +620,24 @@ class ScanAndPairTests(unittest.TestCase):
     def test_real_session_registers_agent_and_waits_for_the_pair_reply(self) -> None:
         left = "AA:BB:CC:DD:EE:00"
         fake = """#!{python}
-import sys, time
+import sys, threading, time
 LOG = {log!r}
 agent = False
+lock = threading.Lock()
+replied = threading.Event()
+
+
+def finish_pair():
+    # Real bluetoothctl answers `pair` asynchronously. A session that quits
+    # before this reply arrives tears down the agent; model that by suppressing
+    # the reply once `quit` has been seen.
+    time.sleep(0.05)
+    with lock:
+        if not replied.is_set():
+            replied.set()
+            print("Pairing successful", flush=True)
+
+
 print("Failed to register agent: org.bluez.Error.InvalidArguments", flush=True)
 for line in sys.stdin:
     line = line.strip()
@@ -643,11 +658,14 @@ for line in sys.stdin:
             print("Failed to pair: org.bluez.Error.AuthenticationFailed", flush=True)
             continue
         print("Attempting to pair with " + line.split()[1], flush=True)
-        time.sleep(0.05)
-        print("Pairing successful", flush=True)
+        threading.Thread(target=finish_pair, daemon=True).start()
     elif line == "scan off":
         print("Discovery stopped", flush=True)
     elif line == "quit":
+        with lock:
+            if not replied.is_set():
+                replied.set()  # quit before the reply: no bond result
+                break
         break
 """
         with tempfile.TemporaryDirectory() as temp:
