@@ -177,13 +177,27 @@ jobs:
   package:
     name: Build Pi bridge packages
     # The Pi package version comes from pi/wmr_bridge/__version__, and the build
-    # scripts fail unless it equals the repository VERSION, so a tag build
+    # scripts fail unless it equals the repository VERSION. The first step below
+    # also fails unless the tag is v plus that same VERSION, so a tag build
     # cannot publish a .deb from a different version. The ESP-IDF build
     # container has no dpkg-deb, hence the separate ubuntu-latest job.
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      # The build scripts compare the package version with VERSION, but only
+      # the tag tells us which release this is. Without this guard, tagging a
+      # tree v0.3.13 while VERSION still says 0.3.12 publishes a .deb whose
+      # version disagrees with the firmware tag.
+      - name: Check tag matches VERSION
+        run: |
+          set -eu
+          expected="v$(cat VERSION)"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match VERSION ($expected)" >&2
+            exit 1
+          fi
 
       - name: Build tarball, .deb and release installer
         run: |

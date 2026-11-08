@@ -42,6 +42,7 @@ class PackagingTests(unittest.TestCase):
         unit_text = SERVICE_FILE.read_text(encoding="utf-8")
         self.assertIn("EnvironmentFile=-/etc/wmr-bridge/wmr-bridge.env", unit_text)
         self.assertIn("$WMR_BRIDGE_ARGS", unit_text)
+        self.assertIn("--advertise-mdns", unit_text)
         self.assertIn("User=wmr", unit_text)
         self.assertIn("SupplementaryGroups=input bluetooth", unit_text)
 
@@ -165,6 +166,10 @@ class PackagingTests(unittest.TestCase):
             self.assertIn("udevadm control --reload-rules", calls)
             self.assertIn("udevadm trigger", calls)
             self.assertIn("systemctl daemon-reload", calls)
+            self.assertIn("systemctl enable bluetooth.service", calls)
+            self.assertIn("systemctl start bluetooth.service", calls)
+            self.assertIn("systemctl enable wmr-bridge.service", calls)
+            self.assertIn("systemctl restart wmr-bridge.service", calls)
 
 
     def test_installer_without_bluetooth_group_still_creates_user(self) -> None:

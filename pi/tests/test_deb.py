@@ -102,10 +102,10 @@ class DebPackagingTests(unittest.TestCase):
             )
             for script in ("postinst", "prerm", "postrm"):
                 self.assertTrue(os.access(control_dir / script, os.X_OK), script)
-            self.assertIn(
-                "input,bluetooth",
-                (control_dir / "postinst").read_text(encoding="utf-8"),
-            )
+            postinst = (control_dir / "postinst").read_text(encoding="utf-8")
+            self.assertIn("input,bluetooth", postinst)
+            self.assertIn("systemctl enable bluetooth.service", postinst)
+            self.assertIn("systemctl start bluetooth.service", postinst)
 
     def test_installed_wrapper_prints_version(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

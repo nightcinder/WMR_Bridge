@@ -578,6 +578,19 @@ def test_pages_workflow_ships_pi_setup():
           "the PR firmware job inspects the artifact deploy-pages downloads")
 
 
+def test_package_job_rejects_tag_version_mismatch():
+    path = os.path.join(HERE, "..", ".github", "workflows", "firmware.yml")
+    with open(path, encoding="utf-8") as fh:
+        workflow = fh.read()
+    package = workflow.split("\n  package:", 1)[1].split("\n  release:", 1)[0]
+    check("GITHUB_REF_NAME" in package,
+          "the package job compares the release tag with VERSION")
+    check('v$(cat VERSION)' in package,
+          "the expected tag is v plus the root VERSION")
+    check("exit 1" in package,
+          "a tag/VERSION mismatch fails the package job")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
