@@ -158,9 +158,18 @@ class BluezParseTests(unittest.TestCase):
 
 class BluezAutoPairerTests(unittest.TestCase):
     LEFT = "AA:BB:CC:DD:EE:00"
+    RIGHT = "AA:BB:CC:DD:EE:01"
 
-    def make_pairer(self, bridge: _Bridge, runner, *, which=lambda _command: "/usr/bin/bluetoothctl"):
-        return BluezAutoPairer(bridge, runner=runner, which=which, scan_seconds=1.0, poll_interval=1.0)
+    def make_pairer(self, bridge: _Bridge, runner, *, allowed_hands=(0, 1),
+                    which=lambda _command: "/usr/bin/bluetoothctl"):
+        return BluezAutoPairer(
+            bridge,
+            allowed_hands=allowed_hands,
+            runner=runner,
+            which=which,
+            scan_seconds=1.0,
+            poll_interval=1.0,
+        )
 
     def test_pairs_trusts_and_connects_matching_controller(self) -> None:
         calls: list[list[str]] = []
@@ -178,7 +187,7 @@ class BluezAutoPairerTests(unittest.TestCase):
             return _completed(args)
 
         pairer = self.make_pairer(_Bridge(), runner)
-        pairer._tick()
+        self.assertTrue(pairer._tick())
 
         actions = [call[1:] for call in calls if call[1] in ("pair", "trust", "connect")]
         self.assertEqual(
@@ -208,6 +217,44 @@ class BluezAutoPairerTests(unittest.TestCase):
             raise AssertionError(f"unexpected bluetoothctl call: {args}")
 
         self.make_pairer(_Bridge(left=True, right=True), runner)._tick()
+
+    def test_ignores_controllers_outside_allowed_hands(self) -> None:
+        calls: list[list[str]] = []
+
+        def runner(args: list[str], timeout: float):
+            calls.append(args)
+            if args[1] == "--timeout":
+                return _completed(args)
+            if args[1] == "devices":
+                return _completed(args, f"Device {self.RIGHT} Motion controller - Right\n")
+            if args[1] == "info":
+                return _completed(args, "        Paired: no\n        Trusted: no\n        Connected: no\n")
+            return _completed(args)
+
+        pairer = self.make_pairer(_Bridge(), runner, allowed_hands=(0,))
+        self.assertFalse(pairer._tick())
+
+        self.assertFalse([call for call in calls if call[1] in ("pair", "trust", "connect")])
+        self.assertFalse([call for call in calls if self.RIGHT in call])
+
+    def test_idle_scans_back_off_between_bursts(self) -> None:
+        def runner(args: list[str], timeout: float):
+            if args[1] == "--timeout":
+                return _completed(args)
+            if args[1] == "devices":
+                return _completed(args, f"Device {self.LEFT} Motion controller - Left\n")
+            if args[1] == "info":
+                return _completed(args, "        Paired: yes\n        Trusted: yes\n        Connected: yes\n")
+            return _completed(args)
+
+        pairer = self.make_pairer(_Bridge(left=True), runner)
+
+        self.assertFalse(pairer._tick())
+        self.assertEqual(pairer._next_delay(0), 1.0)
+        self.assertEqual(pairer._next_delay(1), 1.0)
+        self.assertEqual(pairer._next_delay(2), 2.0)
+        self.assertEqual(pairer._next_delay(7), 60.0)
+        self.assertEqual(pairer._next_delay(100), 60.0)
 
     def test_missing_bluetoothctl_disables_pairing_without_raising(self) -> None:
         calls: list[list[str]] = []

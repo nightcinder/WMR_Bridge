@@ -298,7 +298,9 @@ class BluezAutoPairer:
     Pi package stays dependency-free. A bounded scan burst runs while any
     allowed hand is still missing from ``hidraw``. Matching controllers are
     paired, trusted and connected; once every allowed hand is open, scanning
-    stops so Classic inquiry does not compete with the live HID links.
+    stops so Classic inquiry does not compete with the live HID links. Bursts
+    that find nothing to do back off up to ``max_poll_interval``, so a single
+    connected hand is not disturbed by constant inquiry either.
 
     Without ``bluetoothctl`` or a working adapter the pairer logs once and
     disables itself. ``HidrawManager`` keeps running in that case, so a
@@ -313,6 +315,7 @@ class BluezAutoPairer:
         command: str = "bluetoothctl",
         scan_seconds: float = 8.0,
         poll_interval: float = 5.0,
+        max_poll_interval: float = 60.0,
         runner: Runner | None = None,
         which: Callable[[str], str | None] = shutil.which,
     ) -> None:
@@ -321,6 +324,7 @@ class BluezAutoPairer:
         self.command = command
         self.scan_seconds = max(1.0, scan_seconds)
         self.poll_interval = max(1.0, poll_interval)
+        self.max_poll_interval = max(self.poll_interval, max_poll_interval)
         self._runner = runner or _run_command
         self._which = which
         self._task: asyncio.Task[None] | None = None
@@ -345,31 +349,45 @@ class BluezAutoPairer:
             self._task = None
 
     async def _loop(self) -> None:
+        idle = 0
         while True:
             try:
-                await asyncio.to_thread(self._tick)
+                acted = await asyncio.to_thread(self._tick)
             except Exception:  # keep the daemon alive; log the reason
                 LOG.exception("automatic pairing iteration failed")
-            await asyncio.sleep(self.poll_interval)
+                acted = False
+            idle = 0 if acted else idle + 1
+            await asyncio.sleep(self._next_delay(idle))
+
+    def _next_delay(self, idle: int) -> float:
+        """Back off repeated inquiry bursts that found nothing to do."""
+
+        if idle <= 0:
+            return self.poll_interval
+        return min(self.max_poll_interval, self.poll_interval * (2 ** (idle - 1)))
 
     def _run(self, *args: str, timeout: float) -> subprocess.CompletedProcess[str] | None:
         return self._runner([self.command, *args], timeout)
 
-    def _tick(self) -> None:
+    def _tick(self) -> bool:
+        """Run one scan burst; return whether any controller needed action."""
+
         if self._disabled:
-            return
+            return False
         if self._which(self.command) is None:
             LOG.warning(
                 "bluetoothctl is not installed; automatic controller pairing is off "
                 "(install bluez or pass --no-auto-pair to silence this)"
             )
             self._disabled = True
-            return
+            return False
         if self.hands_ready():
-            return
+            return True
+        acted = False
         for device in self._scan():
-            if device.is_wmr:
-                self._ensure(device)
+            if device.is_wmr and device.hand in self.allowed_hands:
+                acted = self._ensure(device) or acted
+        return acted
 
     def _scan(self) -> list[BluezDevice]:
         self._run(
@@ -394,16 +412,19 @@ class BluezAutoPairer:
             return False
         return True
 
-    def _ensure(self, device: BluezDevice) -> None:
+    def _ensure(self, device: BluezDevice) -> bool:
         info = self._info(device.address) or device
         name = info.name or device.name
+        acted = False
         if not info.paired:
             LOG.info("auto-pair: pairing %s (%s)", device.address, name)
             if not self._command("pair", device.address):
-                return
+                return acted
+            acted = True
         if not info.trusted:
             LOG.info("auto-pair: trusting %s (%s)", device.address, name)
-            self._command("trust", device.address)
+            acted = self._command("trust", device.address) or acted
         if not info.connected:
             LOG.info("auto-pair: connecting %s (%s)", device.address, name)
-            self._command("connect", device.address)
+            acted = self._command("connect", device.address) or acted
+        return acted
