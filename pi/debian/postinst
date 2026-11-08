@@ -15,13 +15,13 @@ case "$1" in
     configure)
         if [ "$SKIP_PRIVILEGED" != "1" ]; then
             if ! id -u wmr >/dev/null 2>&1; then
-                useradd --system --create-home --groups input wmr 2>/dev/null || true
+                useradd --system --create-home --groups input,bluetooth wmr 2>/dev/null || true
                 if ! id -u wmr >/dev/null 2>&1; then
-                    echo "wmr-bridge: could not create the 'wmr' user (missing 'input' group?)" >&2
+                    echo "wmr-bridge: could not create the 'wmr' user (missing 'input' or 'bluetooth' group?)" >&2
                     exit 1
                 fi
             else
-                usermod -aG input wmr 2>/dev/null || true
+                usermod -aG input,bluetooth wmr 2>/dev/null || true
             fi
         fi
 
