@@ -22,11 +22,13 @@ config survive updates.
       `active`.
 - [ ] Install the package; `wmr-bridge --version` prints the installed version.
 - [ ] Service is `enabled` and `active`.
-- [ ] Pair, trust and connect both controllers; both appear in
-      `/sys/class/hidraw/*/device/uevent`.
+- [ ] Let the bridge auto-pair both controllers (or pair by hand with
+      `--no-auto-pair`); both appear in `/sys/class/hidraw/*/device/uevent`.
+- [ ] P11 auto-pair check passes: from unpaired, both controllers pair, trust
+      and connect within 60 s; `--no-auto-pair` leaves pairing to the operator.
 - [ ] Replay smoke test passes with zero gaps.
 - [ ] Live `wifi_probe` shows both hands above 0 records/s and `dropped=0`.
-- [ ] Record the host metadata and P1-P10 results for
+- [ ] Record the host metadata and P1-P11 results for
       [`pi-bridge.md`](runs/sheets/pi-bridge.md) §5.
 
 The 3B+ is a Cortex-A53 at 1.4 GHz with 1 GB RAM and Bluetooth 4.2 Classic.

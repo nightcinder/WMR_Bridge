@@ -202,8 +202,25 @@ systemctl is-active wmr-bridge</code></pre>
     </div>
     <p>
       You should see <code>Motion controller - Left</code> and
-      <code>Motion controller - Right</code>. Restart the bridge so it sees both
-      controllers: <code>sudo systemctl restart wmr-bridge</code>.
+      <code>Motion controller - Right</code>. The bridge sees each controller as
+      soon as it connects; you do not restart the service.
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2><span class="step-number">Step 4</span>Connect a client</h2>
+    <p>
+      The bridge listens on <code>ws://&lt;pi-ip&gt;:8765/wmr</code>. Read the
+      token on the Pi:
+    </p>
+    <div class="cmd">
+      <pre><code id="token-cmd">sudo cat /etc/wmr-bridge/token</code></pre>
+      <button class="copy" type="button" data-copy-target="token-cmd">Copy</button>
+    </div>
+    <p>
+      Paste that token into the companion app. The app can also find the Pi on
+      the LAN by mDNS, since the service advertises
+      <code>_wmr-bridge._tcp</code>.
     </p>
   </section>
 

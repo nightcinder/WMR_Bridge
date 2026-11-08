@@ -833,10 +833,11 @@ tester checklist and pinned image/package checksums are in
 | P8 | Network reconnect | drop/rejoin Wi-Fi; client reconnects and re-subscribes; token still enforced |
 | P9 | Two clients | raw and batched clients both receive, independent queues |
 | P10 | 8 h soak | no memory growth, no fd leak, no queue drops at idle |
+| P11 | Auto-pair from unpaired | start with both controllers unpaired; put one in pairing mode; unattended pair/trust/connect within 60 s; repeat for the other hand; with `--no-auto-pair` the bridge does not pair and pairing stays with the operator |
 
 Record host model, OS, BlueZ/kernel versions, Wi-Fi band/channel, controller
 addresses (or omit them), and the probe output in the bring-up run sheet
-[`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md). Until P1-P10 have
+[`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md). Until P1-P11 have
 been run, treat the Pi path as unverified.
 
 ## Daemon logs

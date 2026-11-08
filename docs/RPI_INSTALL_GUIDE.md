@@ -100,10 +100,11 @@ To pin a release, set the version and the tag:
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.12/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.12 sudo -E bash
 ```
 
-The Pi package version tracks the repository `VERSION`, and the build scripts
-refuse a mismatch, so a release cut from this tree reports the same version as
-its firmware tag. The current release is v0.3.12; its Pi package is `0.2.4`,
-and the packaging fixes on `main` (ONY-1025) land in the next release.
+The Pi package version matches the repository `VERSION`, and the release
+workflow refuses to build unless the tag equals `v$(cat VERSION)`. So a release
+cut from this tree reports one version across firmware, Pi package and tag.
+The current released version is v0.3.12; its Pi package is `0.2.4`. The
+packaging fixes on `main` (ONY-1025) land in the next release.
 
 To check a download by hand, fetch SHA256SUMS from the same release and run:
 
@@ -143,6 +144,9 @@ If the service is not running, start it with `sudo systemctl enable --now wmr-br
 
 ## Step 6: Pair the controllers (automatic)
 
+The Pi bridge supports Windows Mixed Reality controllers only. It does not
+support PSVR2 Sense or Nintendo Switch controllers.
+
 The bridge pairs controllers on its own. You put a controller in pairing mode.
 The bridge finds it, pairs it, trusts it, and connects it. You do not run
 `bluetoothctl`.
@@ -165,12 +169,8 @@ cat /sys/class/hidraw/hidraw*/device/uevent | grep -E 'HID_NAME|HID_UNIQ'
 You should see entries for both `Motion controller - Left` and
 `Motion controller - Right`.
 
-Restart the bridge so it sees both controllers:
-
-```bash
-sudo systemctl restart wmr-bridge
-journalctl -u wmr-bridge -n 30 --no-pager
-```
+The bridge sees each controller as soon as it connects; you do not restart
+the service.
 
 If a controller does not pair on its own, see "Manual pairing (optional)" in
 the "If something fails" section.
@@ -188,6 +188,17 @@ sudo python3 /opt/wmr-bridge/pi/tools/wifi_probe.py \
 ```
 
 Check the output. Both hands should show records above zero. Gaps should be zero. Dropped should be zero.
+
+## Step 8: Connect a client
+
+The bridge listens on `ws://<pi-ip>:8765/wmr`. Read the token on the Pi:
+
+```bash
+sudo cat /etc/wmr-bridge/token
+```
+
+Paste that token into the companion app. The app can also find the Pi on the LAN
+by mDNS, since the service advertises `_wmr-bridge._tcp`.
 
 ## If something fails
 

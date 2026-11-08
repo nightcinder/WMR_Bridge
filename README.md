@@ -262,8 +262,9 @@ advertisement (`--advertise-mdns`), a udev rule for `/dev/hidraw*` access and a
 self-contained `pi/install.sh` installer for a systemd service.
 `--replay-once` stops after one replay pass.
 
-For live use, pair the controllers with the Pi first. `python3 -m wmr_bridge --list`
-shows the hidraw nodes. Full setup, the wire protocol, security notes and the
+For live use, the bridge pairs controllers on its own: put a controller in pairing
+mode and it pairs, trusts and connects. `python3 -m wmr_bridge --list` shows the
+hidraw nodes. Full setup, the wire protocol, security notes and the
 hardware test checklist are in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md). The
 first-sitting bring-up procedure is in
 [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). The `pi/` tree
