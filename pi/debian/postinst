@@ -45,6 +45,8 @@ case "$1" in
             fi
             if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
                 systemctl daemon-reload || true
+                systemctl enable bluetooth.service || true
+                systemctl start bluetooth.service || true
                 systemctl enable wmr-bridge.service || true
                 systemctl restart wmr-bridge.service || true
             fi

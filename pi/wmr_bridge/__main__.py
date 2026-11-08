@@ -282,7 +282,6 @@ async def _run(args: argparse.Namespace) -> int:
                 pairer = BluezAutoPairer(
                     bridge,
                     allowed_hands=allowed_hands,
-                    poll_interval=args.poll_interval,
                 )
                 pairer.start()
                 LOG.info(

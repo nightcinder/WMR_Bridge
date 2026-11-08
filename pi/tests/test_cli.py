@@ -86,6 +86,38 @@ class ReplayOnceTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(_run(args), 5)
 
 
+class AutoPairIntervalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_pairer_keeps_its_own_poll_interval(self) -> None:
+        captured: dict[str, object] = {}
+
+        class FakePairer:
+            def __init__(self, bridge, **kwargs) -> None:
+                captured.update(kwargs)
+
+            def start(self) -> None:
+                pass
+
+            async def close(self) -> None:
+                pass
+
+        class FakeManager:
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+            def start(self) -> None:
+                pass
+
+            async def close(self) -> None:
+                pass
+
+        args = _build_parser().parse_args(["--duration", "0.05", "--port", "0"])
+        with mock.patch("wmr_bridge.__main__.BluezAutoPairer", FakePairer), \
+             mock.patch("wmr_bridge.__main__.HidrawManager", FakeManager):
+            await asyncio.wait_for(_run(args), 5)
+
+        self.assertNotIn("poll_interval", captured)
+
+
 class HandFilterTests(unittest.TestCase):
     def test_hand_option_parses_both_left_and_right(self) -> None:
         parser = _build_parser()

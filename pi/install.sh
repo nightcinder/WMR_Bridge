@@ -68,6 +68,8 @@ esac
 
 enable_service() {
     if [ "${WMR_SKIP_PRIVILEGED:-0}" != "1" ] && command -v systemctl >/dev/null 2>&1; then
+        systemctl enable bluetooth.service || true
+        systemctl start bluetooth.service || true
         systemctl enable wmr-bridge.service || true
         systemctl restart wmr-bridge.service || true
     fi
@@ -251,3 +253,5 @@ if [ "$SKIP_PRIVILEGED" != "1" ]; then
         systemctl daemon-reload || true
     fi
 fi
+
+enable_service
