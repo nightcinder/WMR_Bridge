@@ -299,6 +299,60 @@ def parse_info(output: str, address: str = "") -> BluezDevice | None:
     )
 
 
+@dataclass(frozen=True)
+class BluezAdapter:
+    """Adapter state from ``bluetoothctl show``."""
+
+    address: str
+    name: str = ""
+    powered: bool = False
+    pairable: bool = False
+    discoverable: bool = False
+    discovering: bool = False
+
+
+def parse_adapter(output: str) -> BluezAdapter | None:
+    """Parse ``bluetoothctl show`` into a :class:`BluezAdapter`."""
+
+    address = ""
+    name = ""
+    flags = {"Powered": False, "Pairable": False, "Discoverable": False, "Discovering": False}
+    for line in _clean(output).splitlines():
+        line = line.strip()
+        match = re.match(r"^Controller\s+([0-9A-Fa-f:]{17})", line)
+        if match:
+            address = match.group(1).upper()
+            continue
+        key, sep, value = line.partition(":")
+        if not sep:
+            continue
+        key = key.strip()
+        value = value.strip()
+        if key == "Name":
+            name = value
+        elif key in flags:
+            flags[key] = value.casefold() == "yes"
+    if not address:
+        return None
+    return BluezAdapter(
+        address=address,
+        name=name,
+        powered=flags["Powered"],
+        pairable=flags["Pairable"],
+        discoverable=flags["Discoverable"],
+        discovering=flags["Discovering"],
+    )
+
+
+@dataclass(frozen=True)
+class BluezStatus:
+    """Everything ``wmr-bridge status`` reports about pairing."""
+
+    adapter: BluezAdapter | None
+    devices: tuple[BluezDevice, ...]
+    hidraw: tuple[HidrawDevice, ...]
+
+
 Runner = Callable[[list[str], float], "subprocess.CompletedProcess[str] | None"]
 Session = Callable[[float, Callable[[BluezDevice], bool]], "list[BluezDevice] | None"]
 
@@ -316,11 +370,68 @@ def _run_command(args: list[str], timeout: float) -> subprocess.CompletedProcess
         return None
 
 
+def read_adapter(command: str = "bluetoothctl", runner: Runner = _run_command) -> BluezAdapter | None:
+    """Read adapter power/pairable/discovering state from ``bluetoothctl show``."""
+
+    result = runner([command, "show"], 10.0)
+    if result is None or result.returncode != 0:
+        return None
+    return parse_adapter(result.stdout or "")
+
+
+def read_devices(command: str = "bluetoothctl", runner: Runner = _run_command) -> list[BluezDevice]:
+    result = runner([command, "devices"], 10.0)
+    if result is None or result.returncode != 0:
+        return []
+    return parse_devices(result.stdout or "")
+
+
+def read_device_info(
+    command: str, address: str, runner: Runner = _run_command
+) -> BluezDevice | None:
+    result = runner([command, "info", address], 10.0)
+    if result is None or result.returncode != 0:
+        return None
+    return parse_info(result.stdout or "", address)
+
+
+def collect_status(
+    command: str = "bluetoothctl",
+    runner: Runner = _run_command,
+    sysfs_root: str = HIDRAW_ROOT,
+) -> BluezStatus:
+    """Gather adapter, WMR bond and hidraw state without the daemon running."""
+
+    nodes = discover_hidraw(sysfs_root)
+    adapter = read_adapter(command, runner)
+    listed = {device.address: device for device in read_devices(command, runner)}
+    for node in nodes:
+        if node.uniq:
+            listed.setdefault(node.uniq.upper(), BluezDevice(address=node.uniq.upper()))
+    devices: list[BluezDevice] = []
+    for address in sorted(listed):
+        info = read_device_info(command, address, runner) or listed[address]
+        devices.append(info)
+    return BluezStatus(adapter=adapter, devices=tuple(devices), hidraw=tuple(nodes))
+
+
 _FAILURE_MARKERS = (
     "No default controller available",
     "Failed to start discovery",
     "Failed to set power",
 )
+
+_PAIR_RESULT_RE = re.compile(r"Pairing successful|Failed to pair(?::\s*(.*))?")
+
+
+def pair_results(output: str) -> list[tuple[bool, str]]:
+    """Return ``(succeeded, reason)`` for each ``bluetoothctl`` pair reply."""
+
+    results: list[tuple[bool, str]] = []
+    for match in _PAIR_RESULT_RE.finditer(_clean(output)):
+        succeeded = match.group(0) == "Pairing successful"
+        results.append((succeeded, (match.group(1) or "").strip()))
+    return results
 
 
 def scan_and_pair(
@@ -337,7 +448,11 @@ def scan_and_pair(
     process can pair, and bluetoothd removes temporary unbonded devices when
     discovery stops. Keeping one interactive client alive from ``scan on``
     through ``pair`` preserves them. A pty keeps ``bluetoothctl``'s output
-    line-buffered so the ``[NEW]``/``[CHG]`` lines arrive while it scans.
+    line-buffered so the ``[NEW]``/``[CHG]`` lines arrive while it scans. The
+    session registers a ``NoInputNoOutput`` agent first: without one BlueZ
+    rejects every pair attempt, which is the failure that made a real Pi never
+    bond a controller. It also waits for each pair reply before quitting,
+    because ``pair`` is asynchronous.
 
     Returns ``None`` when the client cannot be started or the scan output
     reports a failure (no adapter, discovery refused, power failure). A client
@@ -387,21 +502,43 @@ def scan_and_pair(
     def output() -> str:
         return b"".join(chunks).decode("utf-8", errors="replace")
 
+    to_pair: list[BluezDevice] = []
     try:
-        os.write(master_fd, b"scan on\n")
+        # bluetoothctl's built-in agent is registered with an empty capability
+        # unless one is requested, and bluetoothd rejects that. Pairing then
+        # fails with org.bluez.Error.AuthenticationFailed and no bond is made.
+        # Register a NoInputNoOutput agent (Just Works) before touching the
+        # controller.
+        os.write(master_fd, b"agent NoInputNoOutput\n")
+        # RegisterAgent is asynchronous in bluetoothctl. Wait for its reply
+        # before default-agent, which would otherwise race it. bluetoothctl's
+        # own startup registration with an empty capability also prints
+        # "Failed to register agent", so only our success reply counts here.
+        agent_deadline = time.monotonic() + 2.0
+        while time.monotonic() < agent_deadline:
+            drain(0.05)
+            if "Agent registered" in output():
+                break
+        os.write(master_fd, b"default-agent\npairable on\nscan on\n")
         drain(scan_seconds)
         discovered = parse_devices(output())
         to_pair = [device for device in discovered if should_pair(device)]
         for device in to_pair:
+            LOG.info("auto-pair: pairing %s (%s)", device.address, device.name or "?")
             os.write(master_fd, f"pair {device.address}\n".encode())
+        # cmd_pair is asynchronous: quitting before the reply arrives tears
+        # down the agent and aborts the pairing. Wait for a result per device.
+        deadline = time.monotonic() + max(5.0, pair_timeout * max(1, len(to_pair)))
+        while to_pair and proc.poll() is None and time.monotonic() < deadline:
+            drain(0.1)
+            if len(pair_results(output())) >= len(to_pair):
+                break
         drain(settle_seconds)
         os.write(master_fd, b"scan off\nquit\n")
-        deadline = time.monotonic() + max(5.0, pair_timeout * len(to_pair))
+        deadline = time.monotonic() + 5.0
         while proc.poll() is None and time.monotonic() < deadline:
             drain(0.1)
         if proc.poll() is None:
-            # Pairing may still be settling. Keep what was discovered and let
-            # _ensure() re-read the bond state on the next pass.
             proc.kill()
             proc.wait()
         drain(0.1)
@@ -417,6 +554,16 @@ def scan_and_pair(
             proc.wait()
 
     text = output()
+    results = pair_results(text)
+    for index, device in enumerate(to_pair):
+        if index >= len(results):
+            LOG.warning("auto-pair: pairing %s gave no result (timed out)", device.address)
+            continue
+        succeeded, reason = results[index]
+        if succeeded:
+            LOG.info("auto-pair: paired %s", device.address)
+        else:
+            LOG.warning("auto-pair: pairing %s failed: %s", device.address, reason or "unknown error")
     if any(marker in text for marker in _FAILURE_MARKERS):
         return None
     return parse_devices(text)
@@ -449,9 +596,9 @@ class BluezAutoPairer:
         *,
         allowed_hands: Iterable[int] = (0, 1),
         command: str = "bluetoothctl",
-        scan_seconds: float = 8.0,
+        scan_seconds: float = 10.0,
         poll_interval: float = 5.0,
-        max_poll_interval: float = 60.0,
+        max_poll_interval: float = 30.0,
         runner: Runner | None = None,
         session: Session | None = None,
         which: Callable[[str], str | None] = shutil.which,
@@ -546,11 +693,17 @@ class BluezAutoPairer:
                 acted = self._command("trust", device.address) or acted
                 scan_hands.discard(hand)
                 continue
-            acted = self._ensure(device) or acted
-            scan_hands.discard(hand)
+            # An unpaired device must be in pairing mode to be seen, and only
+            # the interactive scan session has a pairing agent. Leave the hand
+            # in scan_hands instead of trying a separate pair command.
 
         if not scan_hands:
             return acted
+        LOG.info(
+            "auto-pair: scanning %.0f s for %s; put the controller in pairing mode",
+            self.scan_seconds,
+            ", ".join(HAND_NAMES[hand] for hand in sorted(scan_hands)),
+        )
         discovered = self._scan_and_pair(scan_hands)
         if discovered is None:
             LOG.warning(
@@ -560,9 +713,15 @@ class BluezAutoPairer:
             )
             self._disabled = True
             return acted
-        for device in discovered:
-            if device.is_wmr and device.hand in scan_hands:
-                acted = self._ensure(device) or acted
+        found = [
+            device for device in discovered
+            if device.is_wmr and device.hand in scan_hands
+        ]
+        if not found:
+            LOG.info("auto-pair: no WMR controller answered this scan")
+        for device in found:
+            LOG.info("auto-pair: found %s (%s)", device.address, device.name or "?")
+            acted = self._ensure(device) or acted
         return acted
 
     def _hand_connected(self, hand: int) -> bool:
@@ -631,17 +790,30 @@ class BluezAutoPairer:
     def _ensure(self, device: BluezDevice) -> bool:
         info = self._info(device.address) or device
         name = info.name or device.name
-        bonded = info.paired and info.trusted
-        acted = False
         if not info.paired:
-            LOG.info("auto-pair: pairing %s (%s)", device.address, name)
-            if not self._command("pair", device.address):
-                return acted
-            acted = True
+            # Pairing only works inside scan_and_pair(), where the agent is
+            # registered. Keep the controller and retry next scan.
+            LOG.warning(
+                "auto-pair: %s (%s) is not paired; will retry on the next scan",
+                device.address,
+                name,
+            )
+            return False
+        bonded = info.trusted
+        acted = False
         if not info.trusted:
             LOG.info("auto-pair: trusting %s (%s)", device.address, name)
             acted = self._command("trust", device.address) or acted
         if not info.connected and not bonded:
             LOG.info("auto-pair: connecting %s (%s)", device.address, name)
-            acted = self._command("connect", device.address) or acted
+            if self._command("connect", device.address):
+                acted = True
+                connected = self._info(device.address)
+                if connected is not None and connected.connected:
+                    LOG.info("auto-pair: connected %s (%s)", device.address, name)
+                else:
+                    LOG.info(
+                        "auto-pair: connect sent to %s; waiting for its HID node",
+                        device.address,
+                    )
         return acted

@@ -27,7 +27,7 @@ New to the Pi? Read the simple-English beginner guide:
 
 ```bash
 cd pi
-python3 -m unittest discover -s tests -v          # 137 host tests
+python3 -m unittest discover -s tests -v          # 174 host tests
 python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 
 # in a second terminal
@@ -94,6 +94,7 @@ sudo systemctl enable --now bluetooth
 
 sudo usermod -aG input "$USER"   # or run the bridge as a user in group input
 wmr-bridge --list                # confirm both controllers are visible
+wmr-bridge status                # adapter, bond and hidraw state when pairing fails
 
 # Pi on the LAN, phone connecting to it: a token is required.
 wmr-bridge --bind 0.0.0.0 --token-file /etc/wmr-bridge/token

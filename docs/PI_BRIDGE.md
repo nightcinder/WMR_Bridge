@@ -111,6 +111,52 @@ Wait for the bridge to pair it. Repeat for the other controller. The
 controllers normally reconnect to a trusted host on their own after waking.
 Pass `--no-auto-pair` to disable the auto-pairer and pair by hand.
 
+Check the pairing state at any time:
+
+```bash
+wmr-bridge status      # or: wmr-bridge --status
+```
+
+It prints the adapter (`powered`, `pairable`, `discovering`), each hand's
+hidraw node, and the BlueZ bond flags. A hand that has not paired says
+`no hidraw node` and `no bond known`.
+
+The service logs each pairing step. Watch it while a controller is in pairing
+mode:
+
+```bash
+journalctl -u wmr-bridge -f
+```
+
+Expected lines (the address and name are yours):
+
+```text
+auto-pair: scanning 10 s for LEFT, RIGHT; put the controller in pairing mode
+auto-pair: found AA:BB:CC:DD:EE:01 (Motion controller - Right)
+auto-pair: pairing AA:BB:CC:DD:EE:01 (Motion controller - Right)
+auto-pair: paired AA:BB:CC:DD:EE:01
+auto-pair: trusting AA:BB:CC:DD:EE:01 (Motion controller - Right)
+auto-pair: connecting AA:BB:CC:DD:EE:01 (Motion controller - Right)
+auto-pair: connected AA:BB:CC:DD:EE:01 (Motion controller - Right)
+```
+
+If no `found` line appears, the Pi is not hearing the controller. Check that
+the controller is in pairing mode, that it is not still bonded to the ESP32 or
+another host, and:
+
+```bash
+rfkill list bluetooth
+bluetoothctl show
+bluetoothctl devices
+journalctl -u wmr-bridge -n 200 --no-pager
+```
+
+`automatic controller pairing is off` in the log names the adapter or scan
+failure that stopped the pairer; fix that and restart the service. A
+`pairing ... failed: org.bluez...` line is the BlueZ error for that attempt. If
+it says `AuthenticationFailed`, remove the controller's old bond on the other
+host (or with `bluetoothctl remove <MAC>`), then put it in pairing mode again.
+
 Check the nodes:
 
 ```bash
@@ -178,6 +224,8 @@ Useful flags:
 | `--replay FILE` | replay `samples/controller_frames.txt` without hardware |
 | `--duration SECONDS` | stop after a fixed time (bench convenience) |
 | `--list` | print hidraw nodes and exit |
+| `--status` (or `status`) | print adapter, BlueZ bond and hidraw state, then exit |
+| `--no-auto-pair` | do not run the BlueZ auto-pairer |
 
 ### Installation
 
@@ -851,6 +899,7 @@ INFO/WARNING:
 - Subscribe/unsubscribe: `client <peer> subscribed to batched` /
   `client <peer> unsubscribed`.
 - No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check ...`.
+- Auto-pair: one `auto-pair: scanning ...` line per attempt (at most every 30 s while a hand is missing), then `found`, `pairing`, `paired`, `trusting`, `connecting`, and `connected` lines for the controller it hears. A failed attempt logs `pairing <MAC> failed: <BlueZ error>`. `wmr-bridge status` prints the same state without reading the journal.
 - Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
 - `hello.version` reports the package version (`0.3.13`; `0.1.0` before PR #78 merged).
 

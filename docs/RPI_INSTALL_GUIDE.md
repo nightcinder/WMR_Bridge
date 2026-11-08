@@ -160,7 +160,21 @@ Put each controller in pairing mode, one at a time:
 
 Wait for the bridge to pair the controller. Repeat for the other controller.
 
-Check that both controllers are registered:
+Check the pairing state:
+
+```bash
+wmr-bridge status
+```
+
+Each hand should show its `/dev/hidrawN` node. A hand that is still missing
+shows `no hidraw node`. You can also watch the pairing steps live:
+
+```bash
+journalctl -u wmr-bridge -f
+```
+
+Look for `auto-pair: scanning`, then `found`, `paired` and `connected` with the
+controller's address. Then check that both controllers are registered:
 
 ```bash
 cat /sys/class/hidraw/hidraw*/device/uevent | grep -E 'HID_NAME|HID_UNIQ'
@@ -172,8 +186,8 @@ You should see entries for both `Motion controller - Left` and
 The bridge sees each controller as soon as it connects; you do not restart
 the service.
 
-If a controller does not pair on its own, see "Manual pairing (optional)" in
-the "If something fails" section.
+If a controller does not pair on its own, see "Automatic pairing does not
+work" and "Manual pairing (optional)" in the "If something fails" section.
 
 ## Step 7: Check it works
 
@@ -234,6 +248,34 @@ Make sure the controller is trusted. Run:
 ```bash
 bluetoothctl trust <MAC-ADDRESS>
 ```
+
+**Automatic pairing does not work.**
+Run the status command and read the recent service log:
+
+```bash
+wmr-bridge status
+journalctl -u wmr-bridge -n 200 --no-pager
+```
+
+`wmr-bridge status` shows whether the Bluetooth adapter is powered, pairable
+and scanning, and whether each hand has a bond and a hidraw node. In the log,
+`auto-pair: scanning` is the heartbeat, `found`/`paired` shows a controller was
+heard, and `pairing <MAC> failed: ...` gives the BlueZ error.
+
+If the log says `automatic controller pairing is off`, check that Bluetooth is
+running and not blocked, then restart the service:
+
+```bash
+rfkill list bluetooth
+systemctl status bluetooth
+sudo systemctl restart wmr-bridge
+```
+
+If `found` never appears, the controller is still bonded to another host (the
+ESP32 or a PC). Remove that old pairing, or forget the controller on the other
+host, then put it in pairing mode again. If it says `AuthenticationFailed`,
+remove the stale bond on the Pi with `bluetoothctl remove <MAC-ADDRESS>` and
+retry.
 
 **Manual pairing (optional).**
 If automatic pairing fails, pair by hand with `bluetoothctl`:

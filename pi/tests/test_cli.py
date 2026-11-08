@@ -3,19 +3,26 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import os
+import subprocess
+import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
 from wmr_bridge.__main__ import (
     _build_parser,
+    _format_status,
     _is_loopback_bind,
     _parse_cli_args,
+    _print_status,
     _read_token,
     _require_auth_for_bind,
     _run,
 )
+from wmr_bridge.bluez import BluezAdapter, BluezDevice, BluezStatus, HidrawDevice
 
 SAMPLES = Path(__file__).resolve().parents[2] / "samples" / "controller_frames.txt"
 
@@ -172,6 +179,86 @@ class HandFilterTests(unittest.TestCase):
         self.assertEqual(args.bind, "0.0.0.0")
         self.assertEqual(args.hand, "left")
         self.assertEqual(args.batch_max, 4)
+
+
+class StatusTests(unittest.TestCase):
+    def test_status_argument_parses(self) -> None:
+        self.assertEqual(_build_parser().parse_args(["status"]).command, "status")
+        self.assertIsNone(_build_parser().parse_args([]).command)
+        self.assertTrue(_build_parser().parse_args(["--status"]).status)
+
+    def test_format_status_names_both_hands_and_the_log_hint(self) -> None:
+        status = BluezStatus(
+            adapter=BluezAdapter("11:22:33:44:55:66", "wmr-pi", True, True, False, True),
+            devices=(
+                BluezDevice(
+                    "AA:BB:CC:DD:EE:00", "Motion controller - Left", True, True, True
+                ),
+            ),
+            hidraw=(
+                HidrawDevice("/dev/hidraw0", "Motion controller - Left", "AA:BB:CC:DD:EE:00"),
+            ),
+        )
+        lines = _format_status(status)
+        self.assertIn("powered=yes", lines[0])
+        self.assertIn("discovering=yes", lines[0])
+        self.assertIn("LEFT: /dev/hidraw0", lines[1])
+        self.assertIn("paired=yes trusted=yes connected=yes", lines[1])
+        self.assertIn("RIGHT: no hidraw node", lines[2])
+        self.assertIn("journalctl -u wmr-bridge", lines[3])
+
+    def test_print_status_reads_bluetoothctl(self) -> None:
+        def runner(args: list[str], timeout: float):
+            if args[1] == "show":
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=(
+                        "Controller 11:22:33:44:55:66 (public)\n"
+                        "\tName: wmr-pi\n\tPowered: yes\n\tPairable: yes\n"
+                    ),
+                    stderr="",
+                )
+            if args[1] == "devices":
+                return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+            raise AssertionError(args)
+
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as temp, redirect_stdout(output):
+            code = _print_status(
+                runner=runner,
+                which=lambda _command: "/usr/bin/bluetoothctl",
+                sysfs_root=temp,
+            )
+
+        self.assertEqual(code, 0)
+        self.assertIn("Bluetooth adapter 11:22:33:44:55:66", output.getvalue())
+        self.assertIn("journalctl -u wmr-bridge", output.getvalue())
+
+    def test_print_status_without_adapter_explains(self) -> None:
+        def runner(args: list[str], timeout: float):
+            return subprocess.CompletedProcess(
+                args, 1, stdout="No default controller available\n", stderr=""
+            )
+
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as temp, redirect_stdout(output):
+            code = _print_status(
+                runner=runner,
+                which=lambda _command: "/usr/bin/bluetoothctl",
+                sysfs_root=temp,
+            )
+
+        self.assertEqual(code, 1)
+        self.assertIn("rfkill list bluetooth", output.getvalue())
+
+    def test_print_status_without_bluetoothctl_explains(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = _print_status(which=lambda _command: None)
+
+        self.assertEqual(code, 1)
+        self.assertIn("install bluez", output.getvalue())
 
 
 if __name__ == "__main__":
