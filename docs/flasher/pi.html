@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Set up WMR Bridge on a Raspberry Pi</title>
-<meta name="description" content="Three steps from a blank SD card to a working WMR Bridge on a Raspberry Pi: flash the OS, run one install command, pair the controllers.">
+<meta name="description" content="Four steps from a blank SD card to a working WMR Bridge on a Raspberry Pi: flash the OS, run one install command, pair the controllers, connect a client.">
 <style>
   :root {
     color-scheme: dark;
@@ -96,7 +96,7 @@
 <main>
   <h1>Set up WMR Bridge on a Raspberry Pi</h1>
   <p class="version">
-    Three steps from a blank SD card to controllers streaming over Wi-Fi.
+    Four steps from a blank SD card to controllers streaming over Wi-Fi.
   </p>
   <p class="nav">
     Flashing an ESP32 board instead?
@@ -202,8 +202,26 @@ systemctl is-active wmr-bridge</code></pre>
     </div>
     <p>
       You should see <code>Motion controller - Left</code> and
-      <code>Motion controller - Right</code>. Restart the bridge so it sees both
-      controllers: <code>sudo systemctl restart wmr-bridge</code>.
+      <code>Motion controller - Right</code>. The bridge sees each controller as
+      soon as it connects; you do not restart the service.
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2><span class="step-number">Step 4</span>Connect a client</h2>
+    <p>
+      The bridge listens on <code>ws://&lt;pi-ip&gt;:8765/wmr</code>. Read the
+      token on the Pi:
+    </p>
+    <div class="cmd">
+      <pre><code id="token-cmd">sudo cat /etc/wmr-bridge/token</code></pre>
+      <button class="copy" type="button" data-copy-target="token-cmd">Copy</button>
+    </div>
+    <p>
+      Paste that token into the companion app. The companion app does not
+      discover the Pi: enter its host and port by hand. The v0.3.12 release
+      does not enable mDNS advertisement (<code>--advertise-mdns</code>); that
+      lands in the next release.
     </p>
   </section>
 

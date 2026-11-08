@@ -262,8 +262,9 @@ advertisement (`--advertise-mdns`), a udev rule for `/dev/hidraw*` access and a
 self-contained `pi/install.sh` installer for a systemd service.
 `--replay-once` stops after one replay pass.
 
-For live use, pair the controllers with the Pi first. `python3 -m wmr_bridge --list`
-shows the hidraw nodes. Full setup, the wire protocol, security notes and the
+For live use, the bridge pairs controllers on its own: put a controller in pairing
+mode and it pairs, trusts and connects. `python3 -m wmr_bridge --list` shows the
+hidraw nodes. Full setup, the wire protocol, security notes and the
 hardware test checklist are in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md). The
 first-sitting bring-up procedure is in
 [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). The `pi/` tree
@@ -399,7 +400,7 @@ Open:
 - BLE UUID cutover to the project-owned 128-bit set, and the owner decision that
   ends FF10 support: see [docs/BLE_MIGRATION.md](docs/BLE_MIGRATION.md).
 - Hardware validation of the supported Linux/Raspberry Pi Wi-Fi host bridge
-  (P1-P10 in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) and
+  (P1-P11 in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) and
   [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md)). It is
   host-tested only.
 

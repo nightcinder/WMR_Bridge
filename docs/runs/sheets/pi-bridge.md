@@ -1,4 +1,4 @@
-# Run sheet: Linux / Raspberry Pi Wi-Fi host bridge (P1-P10)
+# Run sheet: Linux / Raspberry Pi Wi-Fi host bridge (P1-P11)
 
 Status: proposed, not run. Nothing here is a hardware result. The owner is buying a Raspberry Pi; this sheet fixes the first sitting and keeps its numbers comparable with the ESP32 runs.
 
@@ -30,7 +30,7 @@ To compare with ESP32 runs:
   chmod 600 token
   ```
 
-Desk pre-flight (already run 2026-10-31, not Pi results): package build and layout, `.deb` contents, installer staging, and `pi/tools/dry_run.sh` all pass. Re-run `dry_run.sh` after any change under `pi/`. Hardware checks stay P1-P10.
+Desk pre-flight (already run 2026-10-31, not Pi results): package build and layout, `.deb` contents, installer staging, and `pi/tools/dry_run.sh` all pass. Re-run `dry_run.sh` after any change under `pi/`. Hardware checks stay P1-P11.
 
 ## 2. Go / no-go before timing
 
@@ -119,6 +119,10 @@ Run one `--stream raw` client and one `--stream batched` client for 30 s. Pass: 
 
 Run the daemon under systemd or with `--duration 28800`, and a client for the same period. Record RSS, open file descriptors and `status.dropped` at start and end. Pass: RSS flat within 10 MB, FDs constant, no drops, no restart.
 
+### P11 — Automatic pairing from unpaired
+
+Remove both controller bonds first (`bluetoothctl remove <MAC>` for each). Start the daemon without `--no-auto-pair`. Put LEFT in pairing mode. Pass: the bridge pairs, trusts and connects LEFT within 60 s without operator input; LEFT appears in `/sys/class/hidraw`. Repeat for RIGHT. Then stop the daemon, remove both bonds again, and start with `--no-auto-pair`. Put one controller in pairing mode. Pass: the bridge does not pair it; pairing stays with the operator.
+
 ## 4. Pass / refute
 
 Fixed before data:
@@ -131,7 +135,7 @@ Fixed before data:
 
 Once per session: Pi model, OS/kernel, BlueZ, Python, Wi-Fi interface and frequency, power save, controller MACs, bridge version and commit, client build.
 
-Then the P1-P10 table with observed figures and pass/fail, and the P6 comparison table:
+Then the P1-P11 table with observed figures and pass/fail, and the P6 comparison table:
 
 | Field | ESP32 alone | ESP32 both | Pi P6 |
 |---|---|---|---|
