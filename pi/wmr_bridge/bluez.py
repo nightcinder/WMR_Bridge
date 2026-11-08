@@ -339,8 +339,10 @@ def scan_and_pair(
     through ``pair`` preserves them. A pty keeps ``bluetoothctl``'s output
     line-buffered so the ``[NEW]``/``[CHG]`` lines arrive while it scans.
 
-    Returns ``None`` when the client cannot be started, fails to scan, or does
-    not exit cleanly.
+    Returns ``None`` when the client cannot be started or the scan output
+    reports a failure (no adapter, discovery refused, power failure). A client
+    that is still running after the pair timeout is killed; the devices found
+    up to that point are returned so the caller can re-read the bond state.
     """
 
     if pty is None:
