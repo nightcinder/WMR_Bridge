@@ -493,9 +493,9 @@ def test_pi_flasher_page_contract():
     reldir = os.path.join(HERE, "..", "docs", "flasher")
     with open(os.path.join(reldir, "pi.html"), encoding="utf-8") as fh:
         page = fh.read()
-    check(page.count('class="step-number"') == 3,
-          "the Pi page has exactly its three steps")
-    for label in ("Step 1", "Step 2", "Step 3"):
+    check(page.count('class="step-number"') == 4,
+          "the Pi page has exactly its four steps")
+    for label in ("Step 1", "Step 2", "Step 3", "Step 4"):
         check(label in page, "the Pi page labels %s" % label)
     check("Raspberry Pi Imager" in page, "step 1 uses Pi Imager")
     check("Raspberry Pi OS Lite (64-bit)" in page,
@@ -508,7 +508,7 @@ def test_pi_flasher_page_contract():
     )
     check("pairs controllers on its own" in page,
           "step 3 pairs controllers automatically")
-    for target in ("install-cmd", "check-cmd", "verify-cmd"):
+    for target in ("install-cmd", "check-cmd", "verify-cmd", "token-cmd"):
         check('data-copy-target="%s"' % target in page,
               "the %s command has a copy button" % target)
     check("navigator.clipboard" in page,

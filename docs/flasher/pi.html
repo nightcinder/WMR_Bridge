@@ -218,9 +218,9 @@ systemctl is-active wmr-bridge</code></pre>
       <button class="copy" type="button" data-copy-target="token-cmd">Copy</button>
     </div>
     <p>
-      Paste that token into the companion app. The app can also find the Pi on
-      the LAN by mDNS, since the service advertises
-      <code>_wmr-bridge._tcp</code>.
+      Paste that token into the companion app. The service advertises
+      <code>_wmr-bridge._tcp</code> for discovery tools, but the companion app
+      does not discover it: enter the Pi's host and port by hand.
     </p>
   </section>
 

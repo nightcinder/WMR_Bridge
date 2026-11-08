@@ -400,7 +400,7 @@ Open:
 - BLE UUID cutover to the project-owned 128-bit set, and the owner decision that
   ends FF10 support: see [docs/BLE_MIGRATION.md](docs/BLE_MIGRATION.md).
 - Hardware validation of the supported Linux/Raspberry Pi Wi-Fi host bridge
-  (P1-P10 in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) and
+  (P1-P11 in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) and
   [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md)). It is
   host-tested only.
 

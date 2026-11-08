@@ -314,7 +314,7 @@ zero tick-based missing reports, zero server drops and zero decode errors. It
 also checks the installed unit, udev rule, power-save drop-in and `0600` token,
 then runs `prerm`/`postrm` for remove and purge. A pass means the packaging
 path is sound. It is not a Pi, BlueZ or radio result. The hardware checks
-remain P1-P10 in the run sheet.
+remain P1-P11 in the run sheet.
 
 ### Wi-Fi and firewall
 
@@ -869,7 +869,7 @@ INFO/WARNING:
 
 ## Future work
 
-- Hardware validation of P1-P10 using the bring-up run sheet
+- Hardware validation of P1-P11 using the bring-up run sheet
   [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md).
 - Companion app Wi-Fi transport (`wmr_ws` and connect UI in `wmr-companion`).
 - Native TLS in the daemon itself (external termination is documented in

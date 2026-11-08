@@ -197,8 +197,9 @@ The bridge listens on `ws://<pi-ip>:8765/wmr`. Read the token on the Pi:
 sudo cat /etc/wmr-bridge/token
 ```
 
-Paste that token into the companion app. The app can also find the Pi on the LAN
-by mDNS, since the service advertises `_wmr-bridge._tcp`.
+Paste that token into the companion app. The service advertises
+`_wmr-bridge._tcp` for discovery tools, but the companion app does not
+discover it: enter the Pi's host and port by hand.
 
 ## If something fails
 
