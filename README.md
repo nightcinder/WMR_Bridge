@@ -127,7 +127,7 @@ reuse it. The output in `dist/` includes the bootloader, partition table,
 application and merged factory images, plus a browser flasher page. The browser
 manifest writes the three separate images at offsets `0x1000`, `0x8000` and
 `0x10000`. It does not write NVS (`0x9000`-`0xFFFF`), so a reflash with
-"Erase device" unchecked keeps the stored pairings. `0.3.13` is the current
+"Erase device" unchecked keeps the stored pairings. `0.3.14` is the current
 release. Its firmware is the
 controller-family release on top of 0.3.5: one driver table per model,
 PSVR2 FF12/FF14 decoding, and Nintendo Switch Joy-Con/Pro handshake and

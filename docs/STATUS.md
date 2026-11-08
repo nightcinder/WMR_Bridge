@@ -1,12 +1,12 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-08 (current release 0.3.13, whose firmware is the
+Last updated: 2026-11-08 (current release 0.3.14, whose firmware is the
 controller-family release on top of 0.3.5: one driver table per model with
 PSVR2 FF12/FF14 decoding, Nintendo Switch Joy-Con/Pro handshake and `0x30`
 decoding, and Pi FF13
 calibration-blob forwarding; Switch and PSVR2 support remain host-tested and
 firmware-build-tested only and have never run on a controller, with the Switch
-hardware check tracked in GitHub #145; the Pi package in this tree is `0.3.13`
+hardware check tracked in GitHub #145; the Pi package in this tree is `0.3.14`
 and pairs controllers through BlueZ automatically (the `v0.3.12` release
 shipped `0.2.4`), and it does not
 yet read FF13 calibration from controllers; FF10–FF17 keep their payloads, so
