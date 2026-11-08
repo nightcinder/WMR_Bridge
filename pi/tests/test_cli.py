@@ -98,6 +98,11 @@ class HandFilterTests(unittest.TestCase):
         self.assertFalse(parser.parse_args([]).advertise_mdns)
         self.assertTrue(parser.parse_args(["--advertise-mdns"]).advertise_mdns)
 
+    def test_auto_pair_is_on_by_default_and_can_be_disabled(self) -> None:
+        parser = _build_parser()
+        self.assertTrue(parser.parse_args([]).auto_pair)
+        self.assertFalse(parser.parse_args(["--no-auto-pair"]).auto_pair)
+
     def test_hidraw_manager_ignores_disallowed_hand(self) -> None:
         from wmr_bridge.bluez import HidrawDevice
         from wmr_bridge.bridge import Bridge
