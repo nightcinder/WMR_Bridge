@@ -8,13 +8,23 @@ import errno
 import ipaddress
 import logging
 import os
+import shutil
 import signal
 import socket
 import stat
 import sys
+from collections.abc import Callable
 
 from . import __version__
-from .bluez import BluezAutoPairer, discover_hidraw
+from .bluez import (
+    HIDRAW_ROOT,
+    BluezAutoPairer,
+    BluezStatus,
+    Runner,
+    _run_command,
+    collect_status,
+    discover_hidraw,
+)
 from .bridge import Bridge
 from .inputs import HidrawManager, ReplaySource, read_capture
 from .mdns import MdnsAdvertiser
@@ -98,6 +108,21 @@ def _build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--replay-once", action="store_true", help="stop after one pass of the capture")
 
     parser.add_argument("--list", action="store_true", help="list hidraw devices and exit")
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help=(
+            "show Bluetooth adapter, pairing and hidraw state, then exit "
+            "(same as the 'status' argument)"
+        ),
+    )
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=("status",),
+        metavar="{status}",
+        help="'status' is the same as --status",
+    )
     parser.add_argument(
         "--advertise-mdns",
         action="store_true",
@@ -195,6 +220,71 @@ def _print_devices() -> int:
         hand = ("LEFT", "RIGHT")[device.hand] if device.hand is not None else "-"
         print(f"{device.path:<20} {hand:<6} {device.name[:32]:<32} {device.uniq}")
     return 0
+
+
+def _yes(value: bool) -> str:
+    return "yes" if value else "no"
+
+
+def _format_status(status: BluezStatus) -> list[str]:
+    """Render the pairing state a user needs when a controller will not pair."""
+
+    lines: list[str] = []
+    if status.adapter is None:
+        lines.append(
+            "Bluetooth adapter: none (check 'rfkill list bluetooth' and "
+            "'systemctl status bluetooth')"
+        )
+    else:
+        adapter = status.adapter
+        name = f" ({adapter.name})" if adapter.name else ""
+        lines.append(
+            f"Bluetooth adapter {adapter.address}{name}: powered={_yes(adapter.powered)} "
+            f"pairable={_yes(adapter.pairable)} discovering={_yes(adapter.discovering)}"
+        )
+
+    missing = False
+    for hand, label in ((0, "LEFT"), (1, "RIGHT")):
+        node = next((item for item in status.hidraw if item.hand == hand), None)
+        device = next((item for item in status.devices if item.hand == hand), None)
+        if device is None and node is not None:
+            device = next(
+                (item for item in status.devices if item.address == node.uniq.upper()),
+                None,
+            )
+        if device is None:
+            bond = "no bond known"
+        else:
+            bond = (
+                f"{device.address} paired={_yes(device.paired)} "
+                f"trusted={_yes(device.trusted)} connected={_yes(device.connected)}"
+            )
+        if node is None:
+            missing = True
+            lines.append(f"{label}: no hidraw node ({bond})")
+        else:
+            lines.append(f"{label}: {node.path} ({bond})")
+
+    if missing:
+        lines.append(
+            "Pair a missing hand: put it in pairing mode and follow the service with "
+            "'journalctl -u wmr-bridge -n 200 --no-pager'"
+        )
+    return lines
+
+
+def _print_status(
+    command: str = "bluetoothctl",
+    runner: Runner | None = None,
+    which: Callable[[str], str | None] = shutil.which,
+    sysfs_root: str = HIDRAW_ROOT,
+) -> int:
+    if which(command) is None:
+        print(f"{command} not found; install bluez and try again")
+        return 1
+    status = collect_status(command, runner or _run_command, sysfs_root)
+    print("\n".join(_format_status(status)))
+    return 0 if status.adapter is not None else 1
 
 
 async def _run(args: argparse.Namespace) -> int:
@@ -379,6 +469,8 @@ def _parse_cli_args(argv: list[str] | None = None, env_args: str | None = None) 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_cli_args(argv, env_args=None if argv is None else "")
+    if args.status or args.command == "status":
+        return _print_status()
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",

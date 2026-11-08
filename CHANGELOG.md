@@ -5,6 +5,32 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## Unreleased — next Raspberry Pi release
+
+### Raspberry Pi bridge
+
+- **Auto-pairing works with real controllers (ONY-1050).** The BlueZ session
+  now registers a `NoInputNoOutput` (Just Works) agent before scanning. Without
+  one, `bluetoothctl` answered every `pair` with
+  `org.bluez.Error.AuthenticationFailed` and no bond was made. The session also
+  waits for each asynchronous pair reply before it sends `quit`; the previous
+  code quit one second after issuing `pair`, which tore down the agent and
+  aborted the attempt. Unpaired controllers known to BlueZ are left to the
+  scan session instead of a separate agentless `pair`.
+- **Visible pairing progress.** The daemon logs one `auto-pair: scanning ...`
+  line per attempt, then `found`, `pairing`, `paired`, `trusting`, `connecting`
+  and `connected`, and reports the BlueZ error on a failed `pair`. The new
+  `wmr-bridge status` (also `--status`) prints the adapter's
+  `powered`/`pairable`/`discovering` flags, each hand's hidraw node, and the
+  BlueZ bond flags without needing the daemon.
+- **Diagnostics in the Pi docs.** The Pi bridge guide, install guide and
+  deployment runbook now name `wmr-bridge status`, the `journalctl -u
+  wmr-bridge` diagnostic and the expected auto-pair log lines.
+- Host tests model a real `bluetoothctl` session: they fail if pairing is
+  attempted before the agent registers, or if `quit` precedes the pair reply.
+  The real BlueZ path has still not run on a Raspberry Pi or with real
+  controllers.
+
 ## 0.3.13 — 2026-11-08
 
 The Raspberry Pi automation release on top of 0.3.12. The Pi package now

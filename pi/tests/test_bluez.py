@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import pty
 import subprocess
+import sys
 import tempfile
 import types
 import unittest
@@ -15,10 +16,13 @@ from wmr_bridge.bluez import (
     BluezAutoPairer,
     BluezDevice,
     HidrawDevice,
+    collect_status,
     discover_hidraw,
     hand_from_name,
     hand_from_override,
     normalize_report,
+    pair_results,
+    parse_adapter,
     parse_devices,
     parse_info,
     scan_and_pair,
@@ -179,6 +183,85 @@ class BluezParseTests(unittest.TestCase):
         )
         self.assertEqual([device.hand for device in devices], [0, 1, None])
 
+    def test_adapter_state_is_parsed(self) -> None:
+        output = (
+            "Controller AA:BB:CC:DD:EE:FF (public)\n"
+            "\tName: wmr-pi\n"
+            "\tPowered: yes\n"
+            "\tDiscoverable: no\n"
+            "\tPairable: yes\n"
+            "\tDiscovering: yes\n"
+        )
+        adapter = parse_adapter(output)
+        self.assertIsNotNone(adapter)
+        assert adapter is not None
+        self.assertEqual(adapter.address, "AA:BB:CC:DD:EE:FF")
+        self.assertEqual(adapter.name, "wmr-pi")
+        self.assertTrue(adapter.powered)
+        self.assertTrue(adapter.pairable)
+        self.assertTrue(adapter.discovering)
+        self.assertIsNone(parse_adapter("No default controller available\n"))
+
+    def test_pair_replies_keep_order_and_reason(self) -> None:
+        output = (
+            "Attempting to pair with AA:BB:CC:DD:EE:00\n"
+            "Pairing successful\n"
+            "Attempting to pair with AA:BB:CC:DD:EE:01\n"
+            "Failed to pair: org.bluez.Error.AuthenticationFailed\n"
+        )
+        self.assertEqual(
+            pair_results(output),
+            [(True, ""), (False, "org.bluez.Error.AuthenticationFailed")],
+        )
+
+
+class StatusTests(unittest.TestCase):
+    def make_tree(self, root: Path, node: str, uniq: str, name: str) -> None:
+        directory = root / node / "device"
+        directory.mkdir(parents=True)
+        (directory / "uevent").write_text(
+            f"HID_NAME={name}\nHID_UNIQ={uniq}\n", encoding="utf-8"
+        )
+
+    def test_collects_adapter_bond_and_hidraw_state(self) -> None:
+        address = "AA:BB:CC:DD:EE:00"
+        calls: list[list[str]] = []
+
+        def runner(args: list[str], timeout: float):
+            calls.append(args)
+            if args[1] == "show":
+                return _completed(
+                    args,
+                    "Controller 11:22:33:44:55:66 (public)\n"
+                    "\tName: wmr-pi\n\tPowered: yes\n\tPairable: yes\n"
+                    "\tDiscovering: yes\n",
+                )
+            if args[1] == "devices":
+                return _completed(args, f"Device {address} Motion controller - Left\n")
+            if args[1] == "info":
+                return _completed(
+                    args,
+                    f"Device {address} (public)\n"
+                    "\tName: Motion controller - Left\n"
+                    "\tPaired: yes\n\tTrusted: yes\n\tConnected: yes\n",
+                )
+            raise AssertionError(args)
+
+        with tempfile.TemporaryDirectory() as temp:
+            self.make_tree(Path(temp), "hidraw0", address, "Motion controller - Left")
+            status = collect_status(runner=runner, sysfs_root=temp)
+
+        self.assertIsNotNone(status.adapter)
+        assert status.adapter is not None
+        self.assertEqual(status.adapter.name, "wmr-pi")
+        self.assertTrue(status.adapter.discovering)
+        self.assertEqual([device.address for device in status.devices], [address])
+        self.assertTrue(status.devices[0].paired)
+        self.assertTrue(status.devices[0].trusted)
+        self.assertEqual(status.hidraw[0].path, "/dev/hidraw0")
+        self.assertEqual(status.hidraw[0].hand, 0)
+        self.assertEqual([call[1] for call in calls], ["show", "devices", "info"])
+
 
 class BluezAutoPairerTests(unittest.TestCase):
     LEFT = "AA:BB:CC:DD:EE:00"
@@ -196,29 +279,54 @@ class BluezAutoPairerTests(unittest.TestCase):
             poll_interval=1.0,
         )
 
-    def test_pairs_trusts_and_connects_matching_controller(self) -> None:
+    def test_unpaired_device_is_left_to_the_scan_session(self) -> None:
         calls: list[list[str]] = []
+        scans: list[bool] = []
 
         def runner(args: list[str], timeout: float):
             calls.append(args)
             if args[1] == "power":
                 return _completed(args)
             if args[1] == "devices":
-                return _completed(args, f"Device {self.LEFT} Motion controller - Left\n"
-                                        "Device 11:22:33:44:55:66 Some keyboard\n")
+                return _completed(args, f"Device {self.LEFT} Motion controller - Left\n")
             if args[1] == "info":
-                return _completed(args, "        Name: Motion controller - Left\n"
-                                        "        Paired: no\n        Trusted: no\n        Connected: no\n")
+                return _completed(args, "        Paired: no\n        Trusted: no\n"
+                                        "        Connected: no\n")
             return _completed(args)
 
-        pairer = self.make_pairer(_Bridge(), runner)
+        def session(_seconds: float, _should_pair) -> list:
+            scans.append(True)
+            return []
+
+        self.assertFalse(self.make_pairer(_Bridge(), runner, session=session)._tick())
+
+        # A separate bluetoothctl pair has no pairing agent, so pairing must
+        # happen inside the interactive scan session instead.
+        self.assertEqual([call[1:] for call in calls if call[1] == "pair"], [])
+        self.assertEqual(scans, [True])
+
+    def test_discovers_trusts_and_connects_matching_controller(self) -> None:
+        calls: list[list[str]] = []
+        discovered = BluezDevice(self.RIGHT, "Motion controller - Right")
+
+        def runner(args: list[str], timeout: float):
+            calls.append(args)
+            if args[1] == "power":
+                return _completed(args)
+            if args[1] == "devices":
+                return _completed(args)
+            if args[1] == "info":
+                return _completed(args, "        Paired: yes\n        Trusted: no\n"
+                                        "        Connected: no\n")
+            return _completed(args)
+
+        pairer = self.make_pairer(
+            _Bridge(), runner, session=lambda _seconds, _should_pair: [discovered]
+        )
         self.assertTrue(pairer._tick())
 
         actions = [call[1:] for call in calls if call[1] in ("pair", "trust", "connect")]
-        self.assertEqual(
-            actions,
-            [["pair", self.LEFT], ["trust", self.LEFT], ["connect", self.LEFT]],
-        )
+        self.assertEqual(actions, [["trust", self.RIGHT], ["connect", self.RIGHT]])
 
     def test_powers_the_adapter_on_before_scanning(self) -> None:
         calls: list[list[str]] = []
@@ -292,7 +400,7 @@ class BluezAutoPairerTests(unittest.TestCase):
         actions = [call[1:] for call in calls if call[1] in ("pair", "trust", "connect")]
         self.assertEqual(actions, [["trust", self.RIGHT]])
 
-    def test_scan_session_pairs_discovered_controller_while_scanning(self) -> None:
+    def test_scan_session_found_controller_is_trusted_and_connected(self) -> None:
         calls: list[list[str]] = []
         discovered = BluezDevice(self.RIGHT, "Motion controller - Right")
 
@@ -303,7 +411,7 @@ class BluezAutoPairerTests(unittest.TestCase):
             if args[1] == "devices":
                 return _completed(args)
             if args[1] == "info":
-                return _completed(args, "        Paired: no\n        Trusted: no\n"
+                return _completed(args, "        Paired: yes\n        Trusted: no\n"
                                         "        Connected: no\n")
             return _completed(args)
 
@@ -317,10 +425,7 @@ class BluezAutoPairerTests(unittest.TestCase):
         self.assertTrue(pairer._tick())
 
         actions = [call[1:] for call in calls if call[1] in ("pair", "trust", "connect")]
-        self.assertEqual(
-            actions,
-            [["pair", self.RIGHT], ["trust", self.RIGHT], ["connect", self.RIGHT]],
-        )
+        self.assertEqual(actions, [["trust", self.RIGHT], ["connect", self.RIGHT]])
 
     def test_scan_failure_logs_once_and_disables_pairing(self) -> None:
         calls: list[list[str]] = []
@@ -402,8 +507,8 @@ class BluezAutoPairerTests(unittest.TestCase):
         self.assertEqual(pairer._next_delay(0), 1.0)
         self.assertEqual(pairer._next_delay(1), 1.0)
         self.assertEqual(pairer._next_delay(2), 2.0)
-        self.assertEqual(pairer._next_delay(7), 60.0)
-        self.assertEqual(pairer._next_delay(100), 60.0)
+        self.assertEqual(pairer._next_delay(6), 30.0)
+        self.assertEqual(pairer._next_delay(100), 30.0)
 
     def test_missing_bluetoothctl_disables_pairing_without_raising(self) -> None:
         calls: list[list[str]] = []
@@ -489,8 +594,11 @@ class ScanAndPairTests(unittest.TestCase):
 
     def test_successful_scan_returns_devices_and_pairs_in_one_session(self) -> None:
         script = (
+            "Agent registered\n"
             f"[NEW] Device {self.RIGHT} Motion controller - Right\n"
             f"[CHG] Device {self.KEYBOARD} RSSI: -40\n"
+            f"Attempting to pair with {self.RIGHT}\n"
+            "Pairing successful\n"
         ).encode()
 
         result, commands, popen_calls, process = self._run(script)
@@ -499,13 +607,81 @@ class ScanAndPairTests(unittest.TestCase):
         assert result is not None
         self.assertEqual([device.address for device in result], [self.RIGHT])
         self.assertEqual(len(popen_calls), 1)
+        self.assertIn("agent NoInputNoOutput", commands)
+        self.assertIn("default-agent", commands)
+        self.assertIn("pairable on", commands)
         self.assertIn("scan on", commands)
         self.assertIn(f"pair {self.RIGHT}", commands)
         self.assertNotIn(f"pair {self.KEYBOARD}", commands)
+        self.assertLess(commands.index("scan on"), commands.index(f"pair {self.RIGHT}"))
+        self.assertLess(commands.index(f"pair {self.RIGHT}"), commands.index("quit"))
         self.assertFalse(process.killed)
 
+    def test_real_session_registers_agent_and_waits_for_the_pair_reply(self) -> None:
+        left = "AA:BB:CC:DD:EE:00"
+        fake = """#!{python}
+import sys, time
+LOG = {log!r}
+agent = False
+print("Failed to register agent: org.bluez.Error.InvalidArguments", flush=True)
+for line in sys.stdin:
+    line = line.strip()
+    with open(LOG, "a", encoding="utf-8") as handle:
+        handle.write(line + "\\n")
+    if line.startswith("agent "):
+        agent = True
+        print("Agent registered", flush=True)
+    elif line == "default-agent":
+        print("Default agent registered", flush=True)
+    elif line == "pairable on":
+        print("Changing pairable on succeeded", flush=True)
+    elif line == "scan on":
+        print("Discovery started", flush=True)
+        print("[NEW] Device {address} Motion controller - Left", flush=True)
+    elif line.startswith("pair "):
+        if not agent:
+            print("Failed to pair: org.bluez.Error.AuthenticationFailed", flush=True)
+            continue
+        print("Attempting to pair with " + line.split()[1], flush=True)
+        time.sleep(0.05)
+        print("Pairing successful", flush=True)
+    elif line == "scan off":
+        print("Discovery stopped", flush=True)
+    elif line == "quit":
+        break
+"""
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "commands.log"
+            path = Path(temp) / "fake-bluetoothctl"
+            path.write_text(
+                fake.format(python=sys.executable, log=str(log), address=left),
+                encoding="utf-8",
+            )
+            path.chmod(0o755)
+            with self.assertLogs("wmr_bridge.bluez", level="INFO") as logs:
+                result = scan_and_pair(
+                    str(path),
+                    0.1,
+                    lambda device: device.hand == 0,
+                    settle_seconds=0.01,
+                    pair_timeout=2.0,
+                )
+            commands = log.read_text(encoding="utf-8").splitlines()
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual([device.address for device in result], [left])
+        self.assertTrue(any(f"paired {left}" in line for line in logs.output))
+        self.assertIn("agent NoInputNoOutput", commands)
+        self.assertLess(commands.index("agent NoInputNoOutput"), commands.index("default-agent"))
+        self.assertLess(commands.index("default-agent"), commands.index("scan on"))
+        self.assertLess(commands.index("scan on"), commands.index(f"pair {left}"))
+        self.assertLess(commands.index(f"pair {left}"), commands.index("quit"))
+
     def test_scan_failure_marker_returns_none(self) -> None:
-        result, _, popen_calls, _ = self._run(b"No default controller available\n")
+        result, _, popen_calls, _ = self._run(
+            b"Agent registered\nNo default controller available\n"
+        )
 
         self.assertIsNone(result)
         self.assertEqual(len(popen_calls), 1)

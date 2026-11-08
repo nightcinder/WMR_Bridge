@@ -169,9 +169,13 @@ Start and check:
 ```bash
 wmr-bridge --version
 wmr-bridge --list
+wmr-bridge status
 systemctl status wmr-bridge
 journalctl -u wmr-bridge -n 50 --no-pager
 ```
+
+`wmr-bridge status` prints the adapter's `powered`/`pairable`/`discovering`
+flags and the Bond/hidraw state of both hands.
 
 ## 5. Pair controllers (automatic)
 
@@ -188,15 +192,35 @@ Put one controller in pairing mode:
 Wait for the bridge to pair it. Repeat for the other controller. Trust is
 stored automatically, so the controller reconnects after a Pi reboot.
 
+Watch the pairing steps and check the state:
+
+```bash
+journalctl -u wmr-bridge -f
+wmr-bridge status
+```
+
+The log shows `auto-pair: scanning`, then `found`, `paired`, `trusting`,
+`connecting` and `connected` with the controller's address. `wmr-bridge status`
+shows each hand's `/dev/hidrawN` node and BlueZ bond flags; a missing hand says
+`no hidraw node`.
+
 Confirm the HID nodes:
 
 ```bash
 cat /sys/class/hidraw/hidraw*/device/uevent | grep -E 'HID_NAME|HID_UNIQ'
-sudo systemctl restart wmr-bridge
-journalctl -u wmr-bridge -n 30 --no-pager
 ```
 
 Both `Motion controller - Left` and `Motion controller - Right` should appear.
+
+If nothing is found, collect the diagnostic output and check the list below:
+
+```bash
+wmr-bridge status
+rfkill list bluetooth
+bluetoothctl show
+bluetoothctl devices
+journalctl -u wmr-bridge -n 200 --no-pager
+```
 
 **Manual pairing (optional).**
 If automatic pairing fails, pair by hand with `bluetoothctl`:
@@ -274,6 +298,12 @@ Both controllers should reconnect without re-pairing.
   `sudo chmod 0600 /etc/wmr-bridge/token`, then restart.
 - **No `/dev/hidraw*`:** load `hidp`, persist it in
   `/etc/modules-load.d/wmr-bridge.conf`, and restart Bluetooth.
+- **Automatic pairing does not pair a controller:** `wmr-bridge status` shows
+  adapter power/pairable/scanning and each hand's bond; `journalctl -u
+  wmr-bridge -n 200 --no-pager` shows `auto-pair: scanning`, `found`, `paired`
+  or the BlueZ error on a failed attempt. If `found` never appears, remove the
+  controller's stale bond on the ESP32 or PC, or `bluetoothctl remove <MAC>` on
+  the Pi, then retry in pairing mode.
 - **Controller will not reconnect after reboot:** `bluetoothctl trust <MAC>`.
 - **3B+ throttling:** use a 5 V / 2.5 A supply and cooling; re-check
   `vcgencmd get_throttled` and `vcgencmd measure_temp`.
