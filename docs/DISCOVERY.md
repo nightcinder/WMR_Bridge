@@ -204,7 +204,8 @@ name request".
 ### Pairing-mode procedure
 
 Assumed, not yet checked on these controllers: a WMR controller answers inquiry
-only in pairing mode (hold the Windows button until the LEDs flash). For a fresh
+only in pairing mode (turn it on with the front Windows button, then hold the
+small pairing button inside the battery compartment until the LEDs flash). For a fresh
 flash: power on the ESP32, put one or both controllers in pairing mode within
 the first minute, and watch for `Discovery: LEFT is ...` and
 `descriptor status=0x00`. If pairing mode times out first, put the controller in
@@ -311,8 +312,9 @@ the **Pair your controllers** panel.
 1. Click **Connect to bridge**. The browser opens the board's USB serial port at
    115200 baud. Chrome or Edge on a desktop is required.
 2. Turn the controller on.
-3. Put the controller in pairing mode. Hold the Windows button under the battery
-   cover or on the grip until the LEDs pulse slowly.
+3. Put the controller in pairing mode. Turn it on with the front Windows button,
+   then hold the small pairing button inside the battery compartment until the
+   LEDs pulse slowly.
 4. Click **Pair** on the matching card, Left or Right.
 5. Wait for the badge to say **Connected** and for the packet counter to climb.
 6. Repeat steps 2 to 5 for the other hand.

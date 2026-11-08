@@ -27,7 +27,7 @@ Do not enable the app's own HID output (`BluetoothHidDevice`) while bridge HOGP 
 
 ## 3. Pair both controllers
 1. Make sure no other host is connected to the controllers.
-2. Put **both** controllers in pairing mode at the same time (hold the Windows button until the LEDs flash).
+2. Put **both** controllers in pairing mode at the same time (turn them on with the front Windows button, then hold the small pairing button inside the battery compartment until the LEDs flash).
 3. On the debug screen, tap **Scan for controllers**.
 4. Wait up to 60 s. Pass: both hands `LEFT/RIGHT connected - WMR - HID ready`, live stream on both, LED green.
 5. If it fails: tap Forget bond for the failed hand, retry once, then stop.

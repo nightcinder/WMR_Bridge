@@ -168,23 +168,20 @@ systemctl status wmr-bridge
 journalctl -u wmr-bridge -n 50 --no-pager
 ```
 
-## 5. Pair controllers
+## 5. Pair controllers (automatic)
 
-```bash
-bluetoothctl
-scan on
-```
+The bridge pairs controllers on its own. Put each controller in pairing mode.
+The bridge scans, pairs, trusts, and connects it. You do not run `bluetoothctl`.
 
-Put LEFT in pairing mode (hold the Windows button until the LEDs pulse), then:
+Put one controller in pairing mode:
 
-```text
-pair AA:BB:CC:DD:EE:01
-trust AA:BB:CC:DD:EE:01
-connect AA:BB:CC:DD:EE:01
-```
+1. Turn on the controller. Hold the front Windows button for 2 seconds.
+2. Open the battery cover.
+3. Hold the small pairing button inside the battery compartment until the LEDs
+   pulse slowly.
 
-Repeat for RIGHT, then `scan off` and `exit`. Trust is required or the
-controller will not reconnect after a Pi reboot.
+Wait for the bridge to pair it. Repeat for the other controller. Trust is
+stored automatically, so the controller reconnects after a Pi reboot.
 
 Confirm the HID nodes:
 
@@ -195,6 +192,25 @@ journalctl -u wmr-bridge -n 30 --no-pager
 ```
 
 Both `Motion controller - Left` and `Motion controller - Right` should appear.
+
+**Manual pairing (optional).**
+If automatic pairing fails, pair by hand with `bluetoothctl`:
+
+```bash
+bluetoothctl
+scan on
+```
+
+Put one controller in pairing mode. Use the pairing button inside the battery
+compartment. Then:
+
+```text
+pair AA:BB:CC:DD:EE:01
+trust AA:BB:CC:DD:EE:01
+connect AA:BB:CC:DD:EE:01
+```
+
+Repeat for the other controller, then `scan off` and `exit`.
 
 ## 6. Test with `wifi_probe`
 

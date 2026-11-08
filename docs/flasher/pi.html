@@ -178,24 +178,23 @@ systemctl is-active wmr-bridge</code></pre>
   <section class="panel">
     <h2><span class="step-number">Step 3</span>Pair your controllers</h2>
     <p>
-      Start the Bluetooth tool, scan, then pair, trust and connect each
-      controller. Hold the <strong>Windows button</strong> under the battery
-      cover or on the grip until the LEDs pulse slowly to put a controller in
-      pairing mode.
+      The bridge pairs controllers on its own. Put one controller in pairing
+      mode. The bridge finds it, pairs it, trusts it, and connects it. You do
+      not run <code>bluetoothctl</code>.
     </p>
-    <div class="cmd">
-      <pre><code id="pair-cmd">bluetoothctl
-[bluetooth]# scan on
-[bluetooth]# pair AA:BB:CC:DD:EE:01
-[bluetooth]# trust AA:BB:CC:DD:EE:01
-[bluetooth]# connect AA:BB:CC:DD:EE:01
-[bluetooth]# scan off
-[bluetooth]# exit</code></pre>
-      <button class="copy" type="button" data-copy-target="pair-cmd">Copy</button>
-    </div>
     <p>
-      Replace the example address with the one from your scan output, and repeat
-      for the other controller. Then confirm both were found:
+      To put a controller in pairing mode:
+    </p>
+    <ol>
+      <li>Turn on the controller. Hold the front <strong>Windows button</strong>
+        for 2 seconds.</li>
+      <li>Open the battery cover.</li>
+      <li>Hold the small <strong>pairing button</strong> inside the battery
+        compartment until the LEDs pulse slowly.</li>
+    </ol>
+    <p>
+      Wait for the bridge to pair it, then repeat for the other controller.
+      Confirm both were found:
     </p>
     <div class="cmd">
       <pre><code id="verify-cmd">cat /sys/class/hidraw/hidraw*/device/uevent | grep -E 'HID_NAME|HID_UNIQ'</code></pre>

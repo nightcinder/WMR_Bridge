@@ -88,10 +88,9 @@ sudo apt install bluez
 sudo modprobe hidp
 sudo systemctl enable --now bluetooth
 
-# Put one controller in pairing mode, then:
-bluetoothctl --timeout 30 scan on
-bluetoothctl trust "AA:BB:CC:DD:EE:FF"
-bluetoothctl connect "AA:BB:CC:DD:EE:FF"
+# The bridge pairs controllers on its own. Put one controller in pairing mode:
+# turn it on with the front Windows button, then hold the small pairing button
+# inside the battery compartment until the LEDs pulse slowly.
 
 sudo usermod -aG input "$USER"   # or run the bridge as a user in group input
 wmr-bridge --list                # confirm both controllers are visible
@@ -142,7 +141,7 @@ The daemon logs hand and client events:
   `LEFT disconnected: /dev/hidraw0 after 123 report(s)`.
 - Client connect/disconnect: `client connected: <peer>` / `client disconnected: <peer>`.
 - Subscribe/unsubscribe: `client <peer> subscribed to batched` / `client <peer> unsubscribed`.
-- No controller: a one-time warning `no WMR controllers found; pair one in bluetoothctl, check ...`.
+- No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check ...`.
 - Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
 
 ## Status

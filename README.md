@@ -191,9 +191,10 @@ CMake file already does this.
    power them on. For a first flash, use the **Pair your controllers** panel on
    the web flasher page. Click **Connect to bridge** (Chrome or Edge, over USB at
    115200 baud), then click **Pair** on the Left card and on the Right card.
-   Before you click Pair, put the controller in pairing mode: turn it on, then
-   hold the Windows button under the battery cover or on the grip until the LEDs
-   pulse slowly. The packet counter on each card must start to climb. The bridge
+   Before you click Pair, put the controller in pairing mode: turn it on with the
+   front Windows button, then hold the small pairing button inside the battery
+   compartment until the LEDs pulse slowly. The packet counter on each card must
+   start to climb. The bridge
    finds the controllers by name, stores their addresses, and later they
    reconnect on their own. If a card shows **Not paired** or **Not connected**,
    press **Retry**. If it shows **Needs attention**, follow the note on that
