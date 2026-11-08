@@ -5,7 +5,16 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
-## Unreleased — next Raspberry Pi release
+## 0.3.14 — 2026-11-08
+
+The Pi pairing-hardware release on top of 0.3.13. Automatic pairing now
+registers a Just Works BlueZ agent and waits for the asynchronous pair reply,
+which fixes the pairing failures caused by an unregistered agent and an early
+`quit`, and `wmr-bridge status` plus new daemon log lines make pairing progress
+visible. Firmware payloads are unchanged from 0.3.13: FF10–FF17 keep their
+payloads and companions at 0.2.2 or later continue to work. Firmware and Pi
+artifacts remain CI-built; the real BlueZ path has not run on a Raspberry Pi or
+with real controllers yet.
 
 ### Raspberry Pi bridge
 
@@ -30,6 +39,14 @@ This file records what each release contains; hardware evidence stays in
   attempted before the agent registers, or if `quit` precedes the pair reply.
   The real BlueZ path has still not run on a Raspberry Pi or with real
   controllers.
+
+### Verification
+
+- Host C tests and the 174 Python tests run in CI before tagging; the tag runs
+  the ESP-IDF build and the Pi package job and stages exactly nine release
+  assets. The firmware reports the tag version over FF16. No packaged firmware
+  has been flashed to hardware, and the real BlueZ path has not run on a
+  Raspberry Pi or with real controllers yet.
 
 ## 0.3.13 — 2026-11-08
 
