@@ -5,6 +5,66 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.13 — 2026-11-08
+
+The Raspberry Pi automation release on top of 0.3.12. The Pi package now
+carries the release version instead of `0.2.4`, pairs WMR controllers by itself
+through BlueZ, and the tag build refuses a package whose version disagrees with
+the tag. Firmware payloads are unchanged from 0.3.12: FF10–FF17 keep their
+payloads and companions at 0.2.2 or later continue to work. The web flasher now
+writes the bootloader, partition table and application separately, and a
+release carries the three application images as well (nine assets).
+Firmware and Pi artifacts remain CI-built and hardware-unverified; automatic
+pairing has run only against a mocked `bluetoothctl`.
+
+### Raspberry Pi bridge
+
+- **Automatic pairing (#164, ONY-1026; hardened in #166, ONY-1037).** The
+  daemon scans, pairs, trusts and connects WMR controllers on its own, so the
+  operator only puts each hand in pairing mode. It looks at allowed hands only,
+  backs off idle scans, parses the `bluetoothctl` scan output in one session,
+  logs adapter power or scan failures once, and stops paging hands that already
+  have a `Paired: yes` + `Trusted: yes` bond. `--no-auto-pair` leaves pairing to
+  the operator.
+- **Package version and install (#165, ONY-1025; #166).** `pi/wmr_bridge` reports
+  the root `VERSION` (`0.3.13`), and `build_package.sh`/`build_deb.sh` fail on a
+  mismatch. The installer creates its staging directory readable by `_apt`,
+  adds the `wmr` user to the `bluetooth` group, moves `bluez` to `Depends`, and
+  starts the service from a checkout install. The systemd unit enables
+  `bluetooth` and passes `--advertise-mdns`.
+- **Tag/VERSION guard (#166).** The `package` job fails unless the tag equals
+  `v$(cat VERSION)`, so a release tag cannot publish a `.deb` from a different
+  version.
+
+### Flasher and release assets
+
+- **Three-image manifest (#161, ONY-1019; docs #162, ONY-1020).** The ESP Web
+  Tools manifest writes `bootloader.bin` at `0x1000`, `partition-table.bin` at
+  `0x8000` and `app.bin` at `0x10000` instead of the merged factory image at 0.
+  Flashing with "Erase device" unchecked leaves NVS (`0x9000`–`0xFFFF`) alone,
+  so the stored phone and controller pairings survive a reflash. Releases now
+  attach the three application images beside the factory images, the `.deb`,
+  `install.sh` and `SHA256SUMS`.
+
+### Docs
+
+- Pi setup and pairing rewritten for automatic pairing (#163, ONY-1027; #167,
+  ONY-1038): the run sheet gains P11 (start unpaired, put a controller in
+  pairing mode, unattended pair/trust/connect within 60 s, repeat for the other
+  hand, and confirm `--no-auto-pair` does not pair). The guide and flasher page
+  cover the token, omit the restart, state WMR-only support and say the app
+  still takes host and port manually. The GATT probe is retired from the
+  latency plan and ONY-23 is recorded as **Stay Flutter** (#160, ONY-1014).
+
+### Verification
+
+- Host C tests and Python tests run in CI before tagging; the tag runs the
+  ESP-IDF build and the Pi package job, and stages exactly nine release assets.
+  The firmware reports the tag version over FF16. No packaged firmware has been
+  flashed to hardware, automatic pairing has not run on a real Pi or the real
+  BlueZ service, and the Pi cannot yet read FF13 calibration from controllers
+  ([#145](https://github.com/nightcinder/WMR_Bridge/issues/145)).
+
 ## 0.3.12 — 2026-11-07
 
 The release-layout release on top of 0.3.11. A GitHub Release now carries six
