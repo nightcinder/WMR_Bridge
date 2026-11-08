@@ -506,9 +506,9 @@ def test_pi_flasher_page_contract():
         "latest/download/install.sh | sudo bash" in page,
         "step 2 gives the one-line install command",
     )
-    check("bluetoothctl" in page and "[bluetooth]# pair " in page,
-          "step 3 pairs controllers with bluetoothctl")
-    for target in ("install-cmd", "check-cmd", "pair-cmd", "verify-cmd"):
+    check("pairs controllers on its own" in page,
+          "step 3 pairs controllers automatically")
+    for target in ("install-cmd", "check-cmd", "verify-cmd"):
         check('data-copy-target="%s"' % target in page,
               "the %s command has a copy button" % target)
     check("navigator.clipboard" in page,
