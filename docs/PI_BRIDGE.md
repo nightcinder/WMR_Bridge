@@ -346,8 +346,9 @@ origin was allowed at startup with `--allow-origin <value>` (repeatable). This
 stops a web page on the LAN from opening a socket to the daemon. Origin matching
 is case-insensitive on the normalised value. `*` is not a wildcard.
 
-JSON examples below use the current 0.3.12 package version.
-`pi/wmr_bridge/__version__` reports `0.3.12`.
+JSON examples below use the package version in this tree, `0.3.12`.
+`pi/wmr_bridge/__version__` reports `0.3.12`. The `v0.3.12` release shipped
+the `0.2.4` package; the ONY-1025 packaging fixes land in the next release.
 
 ```json
 {

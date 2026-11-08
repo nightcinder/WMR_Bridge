@@ -100,9 +100,10 @@ To pin a release, set the version and the tag:
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.12/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.12 sudo -E bash
 ```
 
-The Pi package version tracks the repository `VERSION`, so a release cut from
-this tree reports the same version as its firmware tag. The current release is
-v0.3.12.
+The Pi package version tracks the repository `VERSION`, and the build scripts
+refuse a mismatch, so a release cut from this tree reports the same version as
+its firmware tag. The current release is v0.3.12; its Pi package is `0.2.4`,
+and the packaging fixes on `main` (ONY-1025) land in the next release.
 
 To check a download by hand, fetch SHA256SUMS from the same release and run:
 
@@ -111,8 +112,8 @@ sha256sum -c SHA256SUMS --ignore-missing
 ```
 
 The `v0.3.12` release carries six files: three merged factory images
-(`wmr-bridge-factory.bin`, `-left`, `-right`), the package, `install.sh`, and
-SHA256SUMS. There are no per-file checksum files.
+(`wmr-bridge-factory.bin`, `-left`, `-right`), the `0.2.4` package, `install.sh`,
+and SHA256SUMS. There are no per-file checksum files.
 
 Reboot the Pi so the Wi-Fi power-saving setting takes effect:
 
