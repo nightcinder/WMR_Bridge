@@ -23,6 +23,7 @@ from wmr_bridge.__main__ import (
     _read_token,
     _require_auth_for_bind,
     _run,
+    _validate_idle_timeouts,
     main,
 )
 from wmr_bridge.bluez import BluezAdapter, BluezDevice, BluezStatus, HidrawDevice
@@ -482,6 +483,105 @@ class StatusTests(unittest.TestCase):
         self.assertIn("Uplink eth0: kind=ethernet", output.getvalue())
         self.assertIn("Wi-Fi wlan0: band=2.4GHz", output.getvalue())
         self.assertIn("Wi-Fi warning:", output.getvalue())
+
+
+class IdleTimeoutTests(unittest.TestCase):
+    def test_defaults_match_the_two_stage_policy(self) -> None:
+        args = _build_parser().parse_args([])
+        self.assertEqual(args.idle_sleep_timeout, 300.0)
+        self.assertEqual(args.idle_poweroff_timeout, 900.0)
+
+    def test_flags_parse_seconds(self) -> None:
+        args = _build_parser().parse_args(
+            ["--idle-sleep-timeout", "120", "--idle-poweroff-timeout", "600"]
+        )
+        self.assertEqual(args.idle_sleep_timeout, 120.0)
+        self.assertEqual(args.idle_poweroff_timeout, 600.0)
+
+    def test_zero_disables_a_stage(self) -> None:
+        args = _build_parser().parse_args(
+            ["--idle-sleep-timeout", "0", "--idle-poweroff-timeout", "0"]
+        )
+        self.assertEqual(args.idle_sleep_timeout, 0.0)
+        self.assertEqual(args.idle_poweroff_timeout, 0.0)
+
+    def test_negative_timeout_is_rejected(self) -> None:
+        with self.assertRaises(SystemExit):
+            _build_parser().parse_args(["--idle-sleep-timeout", "-1"])
+        with self.assertRaises(SystemExit):
+            _build_parser().parse_args(["--idle-poweroff-timeout", "-1"])
+
+    def test_poweroff_must_be_disabled_or_at_least_the_sleep_timeout(self) -> None:
+        parser = _build_parser()
+        with self.assertRaises(SystemExit):
+            _validate_idle_timeouts(
+                parser.parse_args(
+                    ["--idle-sleep-timeout", "300", "--idle-poweroff-timeout", "60"]
+                )
+            )
+        _validate_idle_timeouts(
+            parser.parse_args(
+                ["--idle-sleep-timeout", "300", "--idle-poweroff-timeout", "0"]
+            )
+        )
+        _validate_idle_timeouts(
+            parser.parse_args(
+                ["--idle-sleep-timeout", "300", "--idle-poweroff-timeout", "300"]
+            )
+        )
+
+
+class IdleManagerWiringTests(unittest.IsolatedAsyncioTestCase):
+    async def test_run_passes_idle_timeouts_to_hidraw_manager(self) -> None:
+        captured: dict[str, object] = {}
+
+        class FakeManager:
+            def __init__(self, *_args, **kwargs) -> None:
+                captured.update(kwargs)
+
+            def start(self) -> None:
+                pass
+
+            async def close(self) -> None:
+                pass
+
+        args = _build_parser().parse_args(
+            [
+                "--duration",
+                "0.05",
+                "--port",
+                "0",
+                "--no-auto-pair",
+                "--no-ble",
+                "--idle-sleep-timeout",
+                "60",
+                "--idle-poweroff-timeout",
+                "120",
+            ]
+        )
+        with mock.patch("wmr_bridge.__main__.HidrawManager", FakeManager):
+            await asyncio.wait_for(_run(args), 5)
+
+        self.assertEqual(captured["idle_sleep_timeout"], 60.0)
+        self.assertEqual(captured["idle_poweroff_timeout"], 120.0)
+
+    async def test_run_rejects_poweroff_before_sleep(self) -> None:
+        args = _build_parser().parse_args(
+            [
+                "--duration",
+                "0.05",
+                "--port",
+                "0",
+                "--no-auto-pair",
+                "--no-ble",
+                "--idle-sleep-timeout",
+                "300",
+                "--idle-poweroff-timeout",
+                "60",
+            ]
+        )
+        with self.assertRaises(SystemExit):
+            await _run(args)
 
 
 class WifiStartupTests(unittest.TestCase):

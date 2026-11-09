@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from . import __version__
-from .decode import record_from_frame
+from .decode import decode_frame, record_from_frame
 from .protocol import (
     BATCH_MAX_COUNT,
     CALIBRATION_HEADER_SIZE,
@@ -46,6 +46,13 @@ from . import ws as wsmod
 
 STREAMS = ("raw", "decoded", "batched")
 HAND_NAMES = ("LEFT", "RIGHT")
+# Activity thresholds for the controller idle policy. Values match the plan in
+# ONY-1124: any button, a trigger past its dead zone, meaningful stick
+# deflection, or motion above the stationary MEMS bias/noise floor.
+ACTIVITY_TRIGGER_THRESHOLD = 0.05
+ACTIVITY_STICK_THRESHOLD = 0.10
+ACTIVITY_GYRO_SUM_THRESHOLD = 0.15
+ACTIVITY_GYRO_AXIS_THRESHOLD = 0.08
 MACHINE_ID_PATH = Path("/etc/machine-id")
 # `inspect_wifi()`/`inspect_uplink()` shell out to `iw`/NetworkManager with
 # subprocess timeouts, so re-sample at most this often and off the event loop.
@@ -86,6 +93,7 @@ class HandStats:
     connected: bool = False
     address: str = ""
     last_rx_us: int = 0
+    last_activity_us: int = 0
 
     def to_json(self, sequence: int, now_us: int) -> dict[str, Any]:
         return {
@@ -98,7 +106,32 @@ class HandStats:
             "dropped": self.dropped,
             "sequence": sequence,
             "lastRxAgeMs": None if not self.last_rx_us else round((now_us - self.last_rx_us) / 1000.0, 1),
+            "lastActivityAgeMs": None
+            if not self.last_activity_us
+            else round((now_us - self.last_activity_us) / 1000.0, 1),
         }
+
+
+def report_is_active(data: bytes) -> bool:
+    """True when a 0x01 report shows buttons, trigger, stick or gyro movement."""
+
+    state = decode_frame(data)
+    if state is None:
+        return False
+    if state.buttons:
+        return True
+    if state.trigger > ACTIVITY_TRIGGER_THRESHOLD:
+        return True
+    if (
+        abs(state.thumbstick_x) > ACTIVITY_STICK_THRESHOLD
+        or abs(state.thumbstick_y) > ACTIVITY_STICK_THRESHOLD
+    ):
+        return True
+    gx, gy, gz = state.gyro
+    return (
+        abs(gx) + abs(gy) + abs(gz) > ACTIVITY_GYRO_SUM_THRESHOLD
+        or max(abs(gx), abs(gy), abs(gz)) > ACTIVITY_GYRO_AXIS_THRESHOLD
+    )
 
 
 def _parse_json(text: str) -> dict[str, Any] | None:
@@ -350,6 +383,8 @@ class Bridge:
         except ProtocolError:
             stats.errors += 1
             return None
+        if report_is_active(frame.data):
+            stats.last_activity_us = now_us
         subscribers = tuple(subscriber for subscriber in self.subscribers if subscriber.stream)
         sinks = tuple(self.sinks)
         if not subscribers and not sinks:
@@ -380,6 +415,9 @@ class Bridge:
             # docs/PROTOCOL.md documents the FF11 counters as reports received
             # on the current connection, so a reconnect starts a fresh count.
             stats.reports = 0
+            # A new connection is the start of a fresh idle window even when
+            # the controller is motionless.
+            stats.last_activity_us = self.now_us()
         stats.connected = connected
         if address:
             stats.address = address

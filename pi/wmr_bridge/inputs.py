@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from collections.abc import Iterable
+import time
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from .bluez import (
@@ -13,12 +14,16 @@ from .bluez import (
     HidrawDevice,
     HidrawReader,
     discover_hidraw,
+    disconnect_device,
     hand_from_override,
     normalize_report,
 )
-from .bridge import Bridge
+from .bridge import Bridge, report_is_active
 
 LOG = logging.getLogger(__name__)
+
+IDLE_SLEEP_TIMEOUT = 300.0
+IDLE_POWEROFF_TIMEOUT = 900.0
 
 
 def read_capture(path: str | os.PathLike[str]) -> list[tuple[str, bytes]]:
@@ -137,6 +142,10 @@ class HidrawManager:
         include_all: bool = False,
         poll_interval: float = 1.0,
         keep_alive_interval: float = KEEP_ALIVE_INTERVAL,
+        idle_sleep_timeout: float = IDLE_SLEEP_TIMEOUT,
+        idle_poweroff_timeout: float = IDLE_POWEROFF_TIMEOUT,
+        poweroff: Callable[[str], bool] | None = None,
+        disconnect_command: str = "bluetoothctl",
     ) -> None:
         self.bridge = bridge
         self.left_spec = left_spec
@@ -146,10 +155,17 @@ class HidrawManager:
         self.include_all = include_all
         self.poll_interval = max(0.2, poll_interval)
         self.keep_alive_interval = max(1.0, keep_alive_interval)
+        self.idle_sleep_timeout = max(0.0, idle_sleep_timeout)
+        self.idle_poweroff_timeout = max(0.0, idle_poweroff_timeout)
+        self.disconnect_command = disconnect_command
+        self._poweroff = poweroff
         self._loop: asyncio.AbstractEventLoop | None = None
         self._readers: dict[str, HidrawReader] = {}
         self._hand_of: dict[str, int] = {}
         self._path_of_hand: dict[int, str] = {}
+        self._address_of_hand: dict[int, str] = {}
+        self._asleep: set[int] = set()
+        self._powered_off: set[int] = set()
         self._task: asyncio.Task[None] | None = None
         self._keep_alive_task: asyncio.Task[None] | None = None
         self._no_controllers_warned = False
@@ -225,6 +241,9 @@ class HidrawManager:
         self._readers[path] = reader
         self._hand_of[path] = hand
         self._path_of_hand[hand] = path
+        self._address_of_hand[hand] = device.uniq
+        self._asleep.discard(hand)
+        self._powered_off.discard(hand)
         self.bridge.set_hand_connected(hand, True, device.uniq)
         self._no_controllers_warned = False
         LOG.info(
@@ -248,6 +267,9 @@ class HidrawManager:
                 pass
             if self._path_of_hand.get(hand) == path:
                 del self._path_of_hand[hand]
+                self._address_of_hand.pop(hand, None)
+                self._asleep.discard(hand)
+                self._powered_off.discard(hand)
                 self.bridge.set_hand_connected(hand, False)
         reader.close()
         if hand is None:
@@ -285,17 +307,96 @@ class HidrawManager:
                 self.bridge.hands[hand].errors += 1
                 continue
             self.bridge.ingest(hand, frame)
+            if report_is_active(frame):
+                self._note_activity(hand, reader)
+
+    def _note_activity(self, hand: int, reader: HidrawReader) -> None:
+        """Resume streaming immediately when an idle controller moves."""
+
+        if hand not in self._asleep and hand not in self._powered_off:
+            return
+        self._asleep.discard(hand)
+        self._powered_off.discard(hand)
+        LOG.info(
+            "%s activity: resuming 0x06 keep-alives",
+            "LEFT" if hand == 0 else "RIGHT",
+        )
+        reader.send_enable()
+
+    def _now_us(self) -> int:
+        return time.monotonic_ns() // 1000
+
+    async def _idle_tick(self, now_us: int) -> None:
+        """Apply the two-stage idle policy to every open controller."""
+
+        for path, reader in list(self._readers.items()):
+            hand = self._hand_of.get(path)
+            if hand is None:
+                continue
+            stats = self.bridge.hands[hand]
+            last_activity = stats.last_activity_us or now_us
+            idle_s = max(0, now_us - last_activity) / 1_000_000.0
+            label = "LEFT" if hand == 0 else "RIGHT"
+
+            if (
+                self.idle_poweroff_timeout > 0
+                and idle_s >= self.idle_poweroff_timeout
+            ):
+                if hand in self._powered_off:
+                    continue
+                self._asleep.add(hand)
+                self._powered_off.add(hand)
+                address = self._address_of_hand.get(hand, "")
+                if not address:
+                    LOG.warning(
+                        "%s idle for %.0f s but has no Bluetooth address; "
+                        "cannot power it off",
+                        label,
+                        idle_s,
+                    )
+                    continue
+                LOG.info(
+                    "%s idle for %.0f s: disconnecting %s to power it off",
+                    label,
+                    idle_s,
+                    address,
+                )
+                if self._poweroff is not None:
+                    await asyncio.to_thread(self._poweroff, address)
+                else:
+                    await asyncio.to_thread(
+                        disconnect_device, address, self.disconnect_command
+                    )
+                continue
+
+            if (
+                self.idle_sleep_timeout > 0
+                and idle_s >= self.idle_sleep_timeout
+            ):
+                if hand not in self._asleep:
+                    self._asleep.add(hand)
+                    LOG.info(
+                        "%s idle for %.0f s: pausing 0x06 keep-alives",
+                        label,
+                        idle_s,
+                    )
+                continue
+
+            if hand in self._asleep:
+                self._asleep.discard(hand)
+                LOG.info("%s activity: resuming 0x06 keep-alives", label)
+                reader.send_enable()
+            reader.keep_alive()
 
     async def _keep_alive_loop(self) -> None:
-        """Re-send the controller streaming-enable reports while nodes are open."""
+        """Re-send the streaming-enable reports while a controller is active."""
 
         while True:
             # Tick faster than the configured interval and let each reader apply
             # its own clock, so a node opened mid-interval is not kept waiting
             # for up to two whole intervals before its first keep-alive.
             await asyncio.sleep(min(self.keep_alive_interval, 1.0))
-            for reader in list(self._readers.values()):
-                reader.keep_alive()
+            await self._idle_tick(self._now_us())
 
     async def _monitor(self) -> None:
         while True:

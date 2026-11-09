@@ -7,6 +7,7 @@ import asyncio
 import errno
 import ipaddress
 import logging
+import math
 import os
 import shutil
 import signal
@@ -28,12 +29,42 @@ from .bluez import (
 )
 from .bridge import Bridge
 from .discovery import DISCOVERY_PORT, DiscoveryResponder
-from .inputs import HidrawManager, ReplaySource, read_capture
+from .inputs import (
+    IDLE_POWEROFF_TIMEOUT,
+    IDLE_SLEEP_TIMEOUT,
+    HidrawManager,
+    ReplaySource,
+    read_capture,
+)
 from .mdns import MdnsAdvertiser
 from .server import BridgeServer
 from .wifi import inspect_uplink, inspect_wifi, interface_ipv4, prefer_5ghz
 
 LOG = logging.getLogger("wmr_bridge")
+
+
+def _idle_seconds(value: str) -> float:
+    """Parse a non-negative timeout; ``0`` disables the stage."""
+
+    try:
+        seconds = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid number of seconds: {value!r}") from exc
+    if not math.isfinite(seconds) or seconds < 0:
+        raise argparse.ArgumentTypeError("must be zero or a positive number of seconds")
+    return seconds
+
+
+def _validate_idle_timeouts(args: argparse.Namespace) -> None:
+    """Power-off must not fire before the controller has had a chance to sleep."""
+
+    sleep = args.idle_sleep_timeout
+    poweroff = args.idle_poweroff_timeout
+    if sleep > 0 and poweroff > 0 and poweroff < sleep:
+        raise SystemExit(
+            "--idle-poweroff-timeout must be 0 (disabled) or at least "
+            "--idle-sleep-timeout"
+        )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -128,6 +159,27 @@ def _build_parser() -> argparse.ArgumentParser:
     hid.add_argument("--left", metavar="MATCH", help="assign a device to LEFT by address, path or name part")
     hid.add_argument("--right", metavar="MATCH", help="assign a device to RIGHT by address, path or name part")
     hid.add_argument("--poll-interval", type=float, default=1.0, help="hidraw hotplug poll interval in seconds")
+    hid.add_argument(
+        "--idle-sleep-timeout",
+        type=_idle_seconds,
+        default=IDLE_SLEEP_TIMEOUT,
+        metavar="SECONDS",
+        help=(
+            "pause the 0x06 streaming keep-alive after this much inactivity so "
+            f"the controller can sleep (default {IDLE_SLEEP_TIMEOUT:g}, 0 disables)"
+        ),
+    )
+    hid.add_argument(
+        "--idle-poweroff-timeout",
+        type=_idle_seconds,
+        default=IDLE_POWEROFF_TIMEOUT,
+        metavar="SECONDS",
+        help=(
+            "disconnect an idle controller so it powers off (default "
+            f"{IDLE_POWEROFF_TIMEOUT:g}, 0 disables; must be 0 or >= "
+            "--idle-sleep-timeout)"
+        ),
+    )
     hid.add_argument(
         "--no-auto-pair",
         dest="auto_pair",
@@ -426,6 +478,7 @@ def _print_status(
 
 
 async def _run(args: argparse.Namespace) -> int:
+    _validate_idle_timeouts(args)
     token = _read_token(args)
     _require_auth_for_bind(args, token)
     wifi_info = inspect_wifi()
@@ -583,9 +636,17 @@ async def _run(args: argparse.Namespace) -> int:
                 explicit_paths=args.hidraw,
                 include_all=args.all_hidraw,
                 poll_interval=args.poll_interval,
+                idle_sleep_timeout=args.idle_sleep_timeout,
+                idle_poweroff_timeout=args.idle_poweroff_timeout,
             )
             manager.start()
             LOG.info("watching hidraw for WMR controllers (hand=%s)", args.hand)
+            LOG.info(
+                "controller idle policy: sleep after %g s, power off after %g s "
+                "(0 disables)",
+                args.idle_sleep_timeout,
+                args.idle_poweroff_timeout,
+            )
             if args.auto_pair:
                 pairer = BluezAutoPairer(
                     bridge,

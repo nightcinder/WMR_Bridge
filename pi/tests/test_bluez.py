@@ -20,6 +20,7 @@ from wmr_bridge.bluez import (
     WMR_ENABLE_SPACING,
     collect_status,
     discover_hidraw,
+    disconnect_device,
     hand_from_name,
     hand_from_override,
     normalize_report,
@@ -29,6 +30,8 @@ from wmr_bridge.bluez import (
     parse_info,
     scan_and_pair,
 )
+from wmr_bridge.bridge import Bridge, report_is_active
+from wmr_bridge.inputs import HidrawManager
 
 
 def payload() -> bytes:
@@ -912,6 +915,189 @@ for line in sys.stdin:
             "wmr_bridge.bluez.subprocess", subprocess_stub
         ):
             self.assertIsNone(scan_and_pair("bluetoothctl", 0.05, lambda device: True))
+
+
+def controller_frame(
+    *,
+    buttons: int = 0,
+    trigger: int = 0,
+    stick_x: int = 0x07FF,
+    stick_y: int = 0x07FF,
+    gyro: tuple[int, int, int] = (0, 0, 0),
+) -> bytes:
+    """Build a resting 0x01 frame, overriding only the field under test."""
+
+    payload = bytearray(44)
+    payload[0] = buttons
+    payload[1] = stick_x & 0xFF
+    payload[2] = ((stick_x >> 8) & 0x0F) | ((stick_y & 0x0F) << 4)
+    payload[3] = (stick_y >> 4) & 0xFF
+    payload[4] = trigger
+    for index, value in enumerate(gyro):
+        raw = value & 0xFFFFFF
+        offset = 19 + index * 3
+        payload[offset] = raw & 0xFF
+        payload[offset + 1] = (raw >> 8) & 0xFF
+        payload[offset + 2] = (raw >> 16) & 0xFF
+    return b"\xA1\x01" + bytes(payload)
+
+
+class ActivityDetectionTests(unittest.TestCase):
+    def test_resting_frame_is_idle(self) -> None:
+        self.assertFalse(report_is_active(controller_frame()))
+
+    def test_any_button_counts_as_activity(self) -> None:
+        self.assertTrue(report_is_active(controller_frame(buttons=0x01)))
+        self.assertTrue(report_is_active(controller_frame(buttons=0x40)))
+
+    def test_trigger_past_its_dead_zone_counts(self) -> None:
+        self.assertFalse(report_is_active(controller_frame(trigger=12)))
+        self.assertTrue(report_is_active(controller_frame(trigger=13)))
+
+    def test_stick_deflection_counts(self) -> None:
+        self.assertFalse(report_is_active(controller_frame(stick_x=0x07FF + 200)))
+        self.assertTrue(report_is_active(controller_frame(stick_x=0x07FF + 300)))
+        self.assertTrue(report_is_active(controller_frame(stick_y=0x07FF - 300)))
+
+    def test_gyro_motion_counts(self) -> None:
+        self.assertFalse(report_is_active(controller_frame(gyro=(7000, 0, 0))))
+        self.assertTrue(report_is_active(controller_frame(gyro=(9000, 0, 0))))
+        self.assertTrue(report_is_active(controller_frame(gyro=(6000, 6000, 6000))))
+
+
+class DisconnectTests(unittest.TestCase):
+    ADDRESS = "AA:BB:CC:DD:EE:00"
+
+    def test_disconnect_asks_bluetoothctl_to_drop_the_acl_link(self) -> None:
+        calls: list[tuple[list[str], float]] = []
+
+        def runner(args: list[str], timeout: float):
+            calls.append((args, timeout))
+            return _completed(args)
+
+        self.assertTrue(disconnect_device(self.ADDRESS, runner=runner))
+        self.assertEqual(calls[0][0], ["bluetoothctl", "disconnect", self.ADDRESS])
+
+    def test_disconnect_failure_and_missing_address_return_false(self) -> None:
+        def runner(args: list[str], timeout: float):
+            return _completed(args, "Failed\n", 1)
+
+        self.assertFalse(disconnect_device(self.ADDRESS, runner=runner))
+        self.assertFalse(disconnect_device("", runner=runner))
+
+
+class _FakeReader:
+    def __init__(self) -> None:
+        self.path = "/dev/hidraw0"
+        self.fd = 42
+        self.enables = 0
+        self.keep_alives = 0
+        self.reads: list[bytes] = []
+
+    def send_enable(self) -> bool:
+        self.enables += 1
+        return True
+
+    def keep_alive(self, now: float | None = None) -> bool:
+        self.keep_alives += 1
+        return True
+
+    def read(self) -> bytes | None:
+        return self.reads.pop(0) if self.reads else None
+
+    def close(self) -> None:
+        pass
+
+
+class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
+    ADDRESS = "AA:BB:CC:DD:EE:00"
+    START_US = 1_000_000
+
+    def make_manager(self, *, sleep: float = 300.0, poweroff: float = 900.0,
+                     poweroff_cb=None):
+        bridge = Bridge()
+        manager = HidrawManager(
+            bridge,
+            idle_sleep_timeout=sleep,
+            idle_poweroff_timeout=poweroff,
+            poweroff=poweroff_cb,
+        )
+        reader = _FakeReader()
+        manager._readers[reader.path] = reader  # type: ignore[assignment]
+        manager._hand_of[reader.path] = 0
+        manager._path_of_hand[0] = reader.path
+        manager._address_of_hand[0] = self.ADDRESS
+        bridge.hands[0].last_activity_us = self.START_US
+        return manager, bridge, reader
+
+    async def test_keep_alive_pauses_at_idle_timeout_and_wakes_on_activity(self) -> None:
+        manager, _bridge, reader = self.make_manager()
+
+        await manager._idle_tick(self.START_US + 299_000_000)
+        self.assertEqual(reader.keep_alives, 1)
+        self.assertNotIn(0, manager._asleep)
+
+        await manager._idle_tick(self.START_US + 300_000_000)
+        self.assertEqual(reader.keep_alives, 1)
+        self.assertIn(0, manager._asleep)
+
+        reader.reads = [controller_frame(buttons=0x01)]
+        manager._on_readable(0, reader)  # type: ignore[arg-type]
+
+        self.assertNotIn(0, manager._asleep)
+        self.assertEqual(reader.enables, 1)
+        # The immediate 0x06 wake counts as the keep-alive; no duplicate write
+        # happens on the next tick.
+        await manager._idle_tick(self.START_US + 301_000_000)
+        self.assertEqual(reader.enables, 1)
+
+    async def test_poweroff_disconnects_once_at_idle_timeout(self) -> None:
+        calls: list[str] = []
+
+        def poweroff(address: str) -> bool:
+            calls.append(address)
+            return True
+
+        manager, _bridge, reader = self.make_manager(poweroff_cb=poweroff)
+
+        await manager._idle_tick(self.START_US + 899_000_000)
+        self.assertEqual(calls, [])
+        self.assertEqual(reader.keep_alives, 0)
+
+        await manager._idle_tick(self.START_US + 900_000_000)
+        self.assertEqual(calls, [self.ADDRESS])
+        self.assertIn(0, manager._powered_off)
+
+        await manager._idle_tick(self.START_US + 1_000_000_000)
+        self.assertEqual(calls, [self.ADDRESS])
+
+    async def test_zero_timeouts_disable_both_stages(self) -> None:
+        calls: list[str] = []
+        manager, _bridge, reader = self.make_manager(
+            sleep=0.0,
+            poweroff=0.0,
+            poweroff_cb=lambda address: calls.append(address) or True,
+        )
+
+        await manager._idle_tick(self.START_US + 10_000_000_000)
+
+        self.assertEqual(reader.keep_alives, 1)
+        self.assertEqual(calls, [])
+        self.assertNotIn(0, manager._asleep)
+
+    async def test_poweroff_still_applies_when_sleep_is_disabled(self) -> None:
+        calls: list[str] = []
+        manager, _bridge, reader = self.make_manager(
+            sleep=0.0,
+            poweroff=900.0,
+            poweroff_cb=lambda address: calls.append(address) or True,
+        )
+
+        await manager._idle_tick(self.START_US + 899_000_000)
+        self.assertEqual(reader.keep_alives, 1)
+
+        await manager._idle_tick(self.START_US + 900_000_000)
+        self.assertEqual(calls, [self.ADDRESS])
 
 
 if __name__ == "__main__":
