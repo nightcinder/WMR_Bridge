@@ -398,14 +398,15 @@ async def _run(args: argparse.Namespace) -> int:
         )
         try:
             await ble.start()
-            LOG.info(
-                "BLE fallback: FF10 on %s, endpoint %s",
-                args.ble_adapter,
-                ", ".join(hosts) or "no LAN address yet",
-            )
         except Exception as exc:
             LOG.warning("BLE fallback disabled: %s", exc)
             ble = None
+        else:
+            LOG.info(
+                "BLE fallback: FF10 on %s, endpoint %s",
+                args.ble_adapter,
+                ", ".join(hosts()) or "no LAN address yet",
+            )
 
     advertiser: MdnsAdvertiser | None = None
     discovery: DiscoveryResponder | None = None

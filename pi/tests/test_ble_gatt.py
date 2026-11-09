@@ -63,9 +63,6 @@ class FakeBackend:
     async def set_pairable(self, pairable: bool) -> None:
         self.pairable = pairable
 
-    async def get_pairable(self) -> bool | None:
-        return self.pairable
-
     def notify(self, uuid: str, value: bytes) -> None:
         self.notifications.append((uuid, value))
 
@@ -362,7 +359,7 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.app.pairing_open)
         self.assertEqual(self.backend.pairable, False)
 
-    async def test_pairing_window_restores_an_already_pairable_adapter(self) -> None:
+    async def test_pairing_window_closes_on_an_already_pairable_adapter(self) -> None:
         backend = FakeBackend(pairable=True)
         peripheral = BluezGattPeripheral(
             Bridge(),
@@ -373,8 +370,10 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         )
         await peripheral.start()
         self.assertTrue(backend.pairable)
+        await peripheral.close_pairing_window()
+        self.assertFalse(peripheral.app.pairing_open)
+        self.assertFalse(backend.pairable)
         await peripheral.close()
-        self.assertTrue(backend.pairable)
 
     async def test_ff16_is_read_without_a_bond(self) -> None:
         raw = self.app.read_value(FF16_VERSION)

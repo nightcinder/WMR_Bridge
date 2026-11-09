@@ -155,6 +155,47 @@ class AutoPairIntervalTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("poll_interval", captured)
 
 
+class BleFallbackStartupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_ble_fallback_start_keeps_and_closes_the_peripheral(self) -> None:
+        events: list[str] = []
+        captured: dict[str, object] = {}
+
+        class FakeBle:
+            def __init__(self, _bridge, **kwargs) -> None:
+                captured.update(kwargs)
+
+            async def start(self) -> None:
+                events.append("start")
+
+            async def close(self) -> None:
+                events.append("close")
+
+        class FakeManager:
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+            def start(self) -> None:
+                pass
+
+            async def close(self) -> None:
+                pass
+
+        args = _build_parser().parse_args(
+            ["--duration", "0.05", "--port", "0", "--ble-fallback", "--no-auto-pair"]
+        )
+        with mock.patch("wmr_bridge.ble_gatt.BluezGattPeripheral", FakeBle), \
+             mock.patch("wmr_bridge.__main__.HidrawManager", FakeManager), \
+             self.assertLogs("wmr_bridge", level="INFO") as logs:
+            await asyncio.wait_for(_run(args), 5)
+
+        self.assertEqual(events, ["start", "close"])
+        self.assertTrue(any("BLE fallback: FF10" in line for line in logs.output))
+        self.assertFalse(any("BLE fallback disabled" in line for line in logs.output))
+        hosts = captured["hosts"]
+        self.assertTrue(callable(hosts))
+        self.assertIsInstance(hosts(), list)
+
+
 class HandFilterTests(unittest.TestCase):
     def test_hand_option_parses_both_left_and_right(self) -> None:
         parser = _build_parser()

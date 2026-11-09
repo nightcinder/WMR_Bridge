@@ -154,8 +154,6 @@ class GattBackend(Protocol):
 
     async def set_pairable(self, pairable: bool) -> None: ...
 
-    async def get_pairable(self) -> bool | None: ...
-
     def notify(self, uuid: str, value: bytes) -> None: ...
 
 
@@ -833,11 +831,6 @@ class DbusGattBackend:
             return
         await self._adapter_interface.set_pairable(bool(pairable))
 
-    async def get_pairable(self) -> bool | None:
-        if self._adapter_interface is None:
-            return None
-        return bool(await self._adapter_interface.get_pairable())
-
     async def stop(self) -> None:
         bus = self._bus
         if bus is None:
@@ -903,7 +896,6 @@ class BluezGattPeripheral:
         self.pairing_window_s = max(0.0, pairing_window_s)
         self._started = False
         self._pairing_task: asyncio.Task[None] | None = None
-        self._pairable_before: bool | None = None
 
     @property
     def started(self) -> bool:
@@ -928,11 +920,6 @@ class BluezGattPeripheral:
 
     async def open_pairing_window(self) -> None:
         self.app.pairing_open = True
-        if self._pairable_before is None:
-            try:
-                self._pairable_before = await self.backend.get_pairable()
-            except Exception as exc:
-                LOG.debug("could not read the adapter's pairable flag: %s", exc)
         try:
             await self.backend.set_pairable(True)
         except Exception as exc:
@@ -955,13 +942,12 @@ class BluezGattPeripheral:
     async def close_pairing_window(self) -> None:
         self.app.pairing_open = False
         self._cancel_pairing_task()
-        # Adapter1.Pairable is shared with the Classic auto-pairer on hci0.
-        # Only clear it when the fallback opened the window; restoring True
-        # keeps the Classic pairing door that the pairer had opened.
-        restore = self._pairable_before if self._pairable_before is not None else False
-        self._pairable_before = None
+        # Adapter1.Pairable is shared with the Classic auto-pairer on hci0, but
+        # it is the only switch that gates a new bond. Leaving it as it was (or
+        # True) would keep the BLE door open after the window, so the fallback
+        # always clears it; the Classic pairer sets it again for its own scan.
         try:
-            await self.backend.set_pairable(bool(restore))
+            await self.backend.set_pairable(False)
         except Exception as exc:
             LOG.debug("could not disable pairing: %s", exc)
 
