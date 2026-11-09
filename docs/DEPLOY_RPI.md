@@ -110,17 +110,17 @@ https://nightcinder.github.io/WMR_Bridge/pi.html.
 
 Tags before #104 (such as `v0.3.0`) carry firmware images only. Tags from
 #104 onward also publish `install.sh` and `wmr-bridge_<version>_all.deb`.
-`v0.3.14` publishes nine files: the three merged factory images
+`v0.3.15` publishes nine files: the three merged factory images
 (`wmr-bridge-factory.bin`, `-left`, `-right`), the three application images
 (`wmr-bridge-app.bin`, `-left`, `-right`), the `.deb`, `install.sh` and
-`SHA256SUMS`. `v0.3.13` also published nine; `v0.3.12` published six (no
-application images). Earlier tags
+`SHA256SUMS`. `v0.3.14` and `v0.3.13` also published nine; `v0.3.12` published
+six (no application images). Earlier tags
 such as `v0.3.11` attached the full build output: the factory, application,
 bootloader and partition-table images for all three variants, the three
 manifests, `build-info*.json`, `index.html`, the tarball and per-file `.sha256`
-checksums. The pinned list below is `v0.3.14`.
+checksums. The pinned list below is `v0.3.15`.
 
-Pinned 2026-11-08 assets:
+Pinned 2026-11-09 assets:
 
 | Asset | SHA-256 |
 |---|---|
@@ -131,7 +131,7 @@ Pinned 2026-11-08 assets:
 | `wmr-bridge-left-app.bin` | (see SHA256SUMS) |
 | `wmr-bridge-right-app.bin` | (see SHA256SUMS) |
 | `wmr-bridge_<version>_all.deb` | (see SHA256SUMS) |
-| `install.sh` | `7827b371653822d4e20c97600dbba074659a1ec642154615e97eab7e4820b9a4` |
+| `install.sh` | (see SHA256SUMS) |
 | `SHA256SUMS` | (shared digest list) |
 
 **From a checkout (current or pre-release):**
@@ -150,14 +150,14 @@ sudo apt install ./dist/*.deb
 # latest
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 # pin package and tag
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.14/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.14 sudo -E bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.15/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.15 sudo -E bash
 ```
 
 **Standalone `.deb`:**
 
 ```bash
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.14/wmr-bridge_<version>_all.deb
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.14/SHA256SUMS
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.15/wmr-bridge_<version>_all.deb
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.15/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 sudo apt install ./wmr-bridge_<version>_all.deb
 ```
