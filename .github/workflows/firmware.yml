@@ -32,6 +32,23 @@ jobs:
     container:
       image: espressif/idf:v6.1
     timeout-minutes: 90
+    # The image enables ccache (IDF_CCACHE_ENABLE=1), but its cache lives in the
+    # container, so without the steps below every run recompiles the whole
+    # ESP-IDF tree from scratch: 1335 objects per variant, about two minutes
+    # each. Persisting the cache between runs leaves a PR build compiling only
+    # the files it touched. ccache keys on the full command line, so each
+    # variant keeps its own entries (the variant defines are global
+    # EXTRA_CFLAGS) and reuse is across runs of the same variant. The first push
+    # of a new PR has nothing of its own to restore, so firmware-cache.yml keeps
+    # a warm cache on main for it to inherit.
+    env:
+      # Pin the path: ccache 4.x otherwise picks $HOME/.cache/ccache.
+      CCACHE_DIR: /root/.ccache
+      # Well above one full build's objects; the repo cache limit is 10 GB and
+      # least-recently-used entries are evicted, which is fine because a
+      # partial restore still saves the bulk of the compile.
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPRESS: "true"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -39,6 +56,18 @@ jobs:
 
       - name: Mark the checkout safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # Restore by prefix: an exact key match is rare (the key carries the
+      # commit), and a cache from an earlier commit is what makes the build
+      # incremental. Include the IDF image tag in the key so a toolchain bump
+      # starts from an empty cache instead of reusing incompatible objects.
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /root/.ccache
+          key: ccache-${{ runner.os }}-idf-v6.1-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-idf-v6.1-
 
       - name: Build, package and check all three variants
         env:
@@ -107,6 +136,24 @@ jobs:
           path: dist
           if-no-files-found: error
           retention-days: 30
+
+      # Printed before the save so the log shows what each run actually paid
+      # for; a warm run reports most objects as hits.
+      - name: Report the compiler cache
+        if: always()
+        run: ccache --show-stats
+
+      # Save even when the build failed: the objects that did compile are valid
+      # and the next attempt on this branch should not redo them. Duplicate keys
+      # (a re-run of the same commit) are a warning, not a failure, so the save
+      # cannot turn a good build red.
+      - name: Save the compiler cache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: /root/.ccache
+          key: ccache-${{ runner.os }}-idf-v6.1-${{ github.sha }}
 
   build-liesa:
     name: Build firmware (self-hosted)
