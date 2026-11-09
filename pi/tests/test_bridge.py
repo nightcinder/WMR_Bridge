@@ -16,6 +16,18 @@ from wmr_bridge import ws as wsmod
 
 SAMPLES = Path(__file__).resolve().parents[2] / "samples" / "controller_frames.txt"
 SAMPLE_DATA = read_capture(SAMPLES)[0][1]
+WIFI_INFO = {
+    "iface": "wlan0",
+    "connected": True,
+    "freqMhz": 2437,
+    "band": "2.4GHz",
+    "supports5Ghz": True,
+    "contentionWarning": True,
+    "warning": (
+        "Wi-Fi is connected on 2.4 GHz, which shares the radio with "
+        "Bluetooth; prefer a 5 GHz network."
+    ),
+}
 
 
 class BridgeTests(unittest.IsolatedAsyncioTestCase):
@@ -340,6 +352,18 @@ class HandFilterPayloadTests(unittest.TestCase):
         for bad in ((), (2,), (-1,), (0, 2)):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 Bridge(allowed_hands=bad)
+
+
+class WifiPayloadTests(unittest.TestCase):
+    def test_wifi_snapshot_reaches_hello_and_status(self) -> None:
+        bridge = Bridge(wifi=WIFI_INFO)
+        self.assertEqual(bridge.hello()["wifi"], WIFI_INFO)
+        self.assertEqual(bridge.status()["wifi"], WIFI_INFO)
+
+    def test_wifi_is_omitted_when_not_inspected(self) -> None:
+        bridge = Bridge()
+        self.assertNotIn("wifi", bridge.hello())
+        self.assertNotIn("wifi", bridge.status())
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ import socket
 import stat
 import sys
 from collections.abc import Callable
+from typing import Any
 
 from . import __version__
 from .bluez import (
@@ -30,6 +31,7 @@ from .discovery import DISCOVERY_PORT, DiscoveryResponder
 from .inputs import HidrawManager, ReplaySource, read_capture
 from .mdns import MdnsAdvertiser
 from .server import BridgeServer
+from .wifi import inspect_wifi, prefer_5ghz
 
 LOG = logging.getLogger("wmr_bridge")
 
@@ -162,6 +164,20 @@ def _build_parser() -> argparse.ArgumentParser:
             "systemd-resolved when available (optional; never fatal)"
         ),
     )
+    wifi_group = parser.add_argument_group("Wi-Fi")
+    wifi_group.add_argument(
+        "--prefer-5ghz",
+        action="store_true",
+        help=(
+            "clone the active NetworkManager connection into a 5 GHz-preferred "
+            "profile and use it when a 5 GHz BSSID is visible (non-lockout)"
+        ),
+    )
+    wifi_group.add_argument(
+        "--no-reconnect",
+        action="store_true",
+        help="with --prefer-5ghz, save the profile without switching to it",
+    )
     parser.add_argument("--duration", type=float, help="stop after this many seconds (bench/testing)")
     parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     parser.add_argument("--log-file", help="append logs to this file instead of stderr")
@@ -275,7 +291,7 @@ def _yes(value: bool) -> str:
     return "yes" if value else "no"
 
 
-def _format_status(status: BluezStatus) -> list[str]:
+def _format_status(status: BluezStatus, wifi: dict[str, Any] | None = None) -> list[str]:
     """Render the pairing state a user needs when a controller will not pair."""
 
     lines: list[str] = []
@@ -319,6 +335,30 @@ def _format_status(status: BluezStatus) -> list[str]:
             "Pair a missing hand: put it in pairing mode and follow the service with "
             "'journalctl -u wmr-bridge -n 200 --no-pager'"
         )
+    lines.extend(_format_wifi(wifi))
+    return lines
+
+
+def _format_wifi(wifi: dict[str, Any] | None) -> list[str]:
+    """Render the Wi-Fi band and contention warning, if one was inspected."""
+
+    if wifi is None:
+        return []
+    if wifi.get("iface") is None:
+        return [f"Wi-Fi: {wifi.get('warning') or 'not available'}"]
+    if wifi.get("connected"):
+        band = wifi.get("band") or "unknown"
+    else:
+        band = "not connected"
+    freq = wifi.get("freqMhz")
+    frequency = f" {freq} MHz" if freq else ""
+    supports = wifi.get("supports5Ghz")
+    supports_text = "yes" if supports else "no" if supports is False else "unknown"
+    lines = [
+        f"Wi-Fi {wifi['iface']}: band={band}{frequency} supports5Ghz={supports_text}"
+    ]
+    if wifi.get("warning"):
+        lines.append(f"Wi-Fi warning: {wifi['warning']}")
     return lines
 
 
@@ -327,18 +367,33 @@ def _print_status(
     runner: Runner | None = None,
     which: Callable[[str], str | None] = shutil.which,
     sysfs_root: str = HIDRAW_ROOT,
+    wifi: dict[str, Any] | None = None,
 ) -> int:
     if which(command) is None:
         print(f"{command} not found; install bluez and try again")
         return 1
     status = collect_status(command, runner or _run_command, sysfs_root)
-    print("\n".join(_format_status(status)))
+    print("\n".join(_format_status(status, wifi)))
     return 0 if status.adapter is not None else 1
 
 
 async def _run(args: argparse.Namespace) -> int:
     token = _read_token(args)
     _require_auth_for_bind(args, token)
+    wifi_info = inspect_wifi()
+    if wifi_info.get("contentionWarning"):
+        LOG.warning("%s", wifi_info.get("warning"))
+    if args.prefer_5ghz:
+        preference = prefer_5ghz(reconnect=not args.no_reconnect)
+        if preference.get("profile"):
+            LOG.info(
+                "5 GHz preference: profile %s%s",
+                preference["profile"],
+                " (active)" if preference.get("reconnected") else "",
+            )
+        if preference.get("warning"):
+            LOG.warning("5 GHz preference: %s", preference["warning"])
+        wifi_info = inspect_wifi()
     allowed_hands = (
         (0,) if args.hand == "left" else (1,) if args.hand == "right" else (0, 1)
     )
@@ -350,6 +405,7 @@ async def _run(args: argparse.Namespace) -> int:
         fragment_capacity=args.fragment_capacity,
         auth_timeout_s=args.auth_timeout,
         allowed_hands=allowed_hands,
+        wifi=wifi_info,
     )
     server = BridgeServer(
         bridge,
@@ -579,7 +635,7 @@ def _parse_cli_args(argv: list[str] | None = None, env_args: str | None = None) 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_cli_args(argv, env_args=None if argv is None else "")
     if args.status or args.command == "status":
-        return _print_status()
+        return _print_status(wifi=inspect_wifi())
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
