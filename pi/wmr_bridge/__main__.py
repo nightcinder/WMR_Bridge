@@ -476,6 +476,7 @@ async def _run(args: argparse.Namespace) -> int:
                 pairer = BluezAutoPairer(
                     bridge,
                     allowed_hands=allowed_hands,
+                    pairing_window_open=(ble.pairing_window_open if ble else None),
                 )
                 pairer.start()
                 LOG.info(

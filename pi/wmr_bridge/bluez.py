@@ -676,10 +676,7 @@ def scan_and_pair(
             if len(pair_results(output())) >= len(to_pair):
                 break
         drain(settle_seconds)
-        # Clear Pairable again: the adapter flag is shared with the BLE
-        # fallback's bounded pairing window, so the Classic scan must not leave
-        # the bonding door open after it ends.
-        os.write(master_fd, b"scan off\npairable off\nquit\n")
+        os.write(master_fd, b"scan off\nquit\n")
         deadline = time.monotonic() + 5.0
         while proc.poll() is None and time.monotonic() < deadline:
             drain(0.1)
@@ -753,6 +750,7 @@ class BluezAutoPairer:
         active_poll_interval: float = 60.0,
         runner: Runner | None = None,
         session: Session | None = None,
+        pairing_window_open: Callable[[], bool] | None = None,
         which: Callable[[str], str | None] = shutil.which,
         rfkill_root: str = RFKILL_ROOT,
     ) -> None:
@@ -766,6 +764,7 @@ class BluezAutoPairer:
         self.active_poll_interval = max(self.max_poll_interval, active_poll_interval)
         self._runner = runner or _run_command
         self._session = session
+        self._pairing_window_open = pairing_window_open
         self._which = which
         self._rfkill_root = rfkill_root
         self._task: asyncio.Task[None] | None = None
@@ -882,7 +881,11 @@ class BluezAutoPairer:
             scan_seconds,
             ", ".join(HAND_NAMES[hand] for hand in sorted(scan_hands)),
         )
-        discovered = self._scan_and_pair(scan_hands, scan_seconds)
+        discovered = None
+        try:
+            discovered = self._scan_and_pair(scan_hands, scan_seconds)
+        finally:
+            self._settle_pairable()
         if discovered is None:
             LOG.warning(
                 "auto-pair: bluetoothctl could not scan; automatic controller "
@@ -901,6 +904,19 @@ class BluezAutoPairer:
             LOG.info("auto-pair: found %s (%s)", device.address, device.name or "?")
             acted = self._ensure(device) or acted
         return acted
+
+    def _settle_pairable(self) -> None:
+        """Leave ``Adapter1.Pairable`` off once a scan ends.
+
+        ``Pairable`` is a single adapter flag shared with the BLE fallback's
+        bounded pairing window. The scan session opens it for Classic pairing;
+        this closes it again on every exit path (including a failed scan),
+        unless the BLE window is still open and wants it left on.
+        """
+
+        if self._pairing_window_open is not None and self._pairing_window_open():
+            return
+        self._run("pairable", "off", timeout=10.0)
 
     def _hand_connected(self, hand: int) -> bool:
         hands = getattr(self.bridge, "hands")

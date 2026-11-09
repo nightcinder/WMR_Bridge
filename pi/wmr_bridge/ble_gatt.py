@@ -901,6 +901,10 @@ class BluezGattPeripheral:
     def started(self) -> bool:
         return self._started
 
+    def pairing_window_open(self) -> bool:
+        """True while the bounded bonding window is open."""
+        return self.app.pairing_open
+
     async def start(self) -> None:
         if self._started:
             return
