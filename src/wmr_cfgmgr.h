@@ -56,14 +56,16 @@ typedef void (*wmr_cfgmgr_listener_t)(unsigned hand);
 void wmr_cfgmgr_init(wmr_cfgmgr_listener_t listener);
 
 /* The hand's HID descriptor is available: start reading block 0x02 unless the cache already
- * holds it (READY). The cache survives disconnects. */
+ * holds it (READY). For a READY hand the block is not re-read; instead the two
+ * streaming-enable commands are re-sent for this connection. The cache survives disconnects. */
 void wmr_cfgmgr_on_descriptor(unsigned hand);
 
 /* A config response report (class WMR_CFG_REPORT_CONFIG), as delivered by BTstack
  * (byte 0 is the 0xA1 header). Never counted or forwarded as a sample. */
 void wmr_cfgmgr_on_report(unsigned hand, const uint8_t *report, uint16_t length);
 
-/* The hand disconnected: abandon a read in progress (state returns to NOT_READ); READY stays. */
+/* The hand disconnected: abandon a read in progress (state returns to NOT_READ) and stop the
+ * keep-alive; a READY cache stays. */
 void wmr_cfgmgr_on_closed(unsigned hand);
 
 /* State for FF13. `blob`/`total` are valid only when state is READY. */

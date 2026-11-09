@@ -2,7 +2,8 @@
  * Host tests for src/wmr_cfgmgr.c: the FF13 config-block manager that runs on
  * BTstack timers. A fake run loop and a fake hid_host_send_report drive the
  * real state machine, so the request sequence, retries, timeouts, disconnect,
- * READY cache and enable-streaming commands are exercised without a radio.
+ * READY cache, enable-streaming commands and the keep-alive are exercised
+ * without a radio.
  *
  * Not tested here: that a controller answers these commands, the HID callback
  * plumbing and the GATT database.
@@ -128,16 +129,69 @@ static void test_full_read(void){
     host_advance_ms(100);
     CHECK(host_hid.calls == before + 2);    /* exactly two */
 
-    /* READY survives a descriptor event and a disconnect. */
-    wmr_cfgmgr_on_descriptor(WMR_HAND_LEFT);
-    host_advance_ms(2000);
-    CHECK(host_hid.calls == before + 2);
+    /* READY survives a disconnect, and a reconnect re-sends both enable commands without
+     * reading block 0x02 again. */
     wmr_cfgmgr_on_closed(WMR_HAND_LEFT);
     CHECK(wmr_cfgmgr_get(WMR_HAND_LEFT, &blob, &total) == WMR_CFG_READY);
     CHECK(total == 100);
+    host_advance_ms(WMR_CFG_KEEPALIVE_MS * 3);
+    CHECK(host_hid.calls == before + 2);    /* no keep-alive while disconnected */
     wmr_cfgmgr_on_descriptor(WMR_HAND_LEFT);
-    host_advance_ms(2000);
-    CHECK(host_hid.calls == before + 2);
+    CHECK(wmr_cfgmgr_get(WMR_HAND_LEFT, &blob, &total) == WMR_CFG_READY);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    CHECK(host_hid.calls == before + 3);
+    CHECK(host_hid.last_report[0] == 0x03 && host_hid.last_report[1] == 0x01);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    CHECK(host_hid.calls == before + 4);
+    CHECK(host_hid.last_report[0] == 0x03 && host_hid.last_report[1] == 0x02 &&
+          host_hid.last_report[2] == 0xE1);
+    host_advance_ms(WMR_CFG_KEEPALIVE_MS);
+    CHECK(host_hid.calls == before + 4);    /* the keep-alive timer was re-armed */
+}
+
+static void complete_read(unsigned hand){
+    start_read(hand);
+    uint8_t data[10] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    feed_response(hand, 0x02, 0, data, (uint8_t) sizeof(data));
+}
+
+static void test_keepalive(void){
+    printf("cfgmgr: keep-alive re-sends the enable pair while connected\n");
+    CHECK(WMR_CFG_KEEPALIVE_MS > 0);
+    setup(WMR_HAND_LEFT);
+    complete_read(WMR_HAND_LEFT);
+    const uint8_t *blob = NULL;
+    uint32_t total = 0;
+    CHECK(wmr_cfgmgr_get(WMR_HAND_LEFT, &blob, &total) == WMR_CFG_READY);
+
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    const unsigned after_pair = host_hid.calls;
+
+    /* The timer fires at the interval, then the pair goes out one spacing apart. */
+    host_advance_ms(WMR_CFG_KEEPALIVE_MS);
+    CHECK(host_hid.calls == after_pair);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    CHECK(host_hid.calls == after_pair + 1);
+    CHECK(host_hid.last_report[0] == 0x03 && host_hid.last_report[1] == 0x01);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    CHECK(host_hid.calls == after_pair + 2);
+    CHECK(host_hid.last_report[0] == 0x03 && host_hid.last_report[1] == 0x02 &&
+          host_hid.last_report[2] == 0xE1);
+
+    /* A second period repeats the pair. */
+    host_advance_ms(WMR_CFG_KEEPALIVE_MS);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    CHECK(host_hid.calls == after_pair + 3);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    CHECK(host_hid.calls == after_pair + 4);
+
+    /* Disconnecting clears the keep-alive timer. */
+    wmr_cfgmgr_on_closed(WMR_HAND_LEFT);
+    const unsigned closed = host_hid.calls;
+    host_advance_ms(WMR_CFG_KEEPALIVE_MS * 4);
+    CHECK(host_hid.calls == closed);
+    CHECK(wmr_cfgmgr_get(WMR_HAND_LEFT, &blob, &total) == WMR_CFG_READY);
 }
 
 static void test_disconnect_mid_read(void){
@@ -283,6 +337,7 @@ static void test_external_blob(void){
 
 int main(void){
     test_full_read();
+    test_keepalive();
     test_disconnect_mid_read();
     test_timeouts();
     test_bad_responses_ignored();

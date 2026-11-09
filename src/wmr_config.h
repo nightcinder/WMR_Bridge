@@ -473,6 +473,18 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #define WMR_CFG_FF13_READ                 1
 #endif
 
+/* While a WMR hand is connected with its config block READY, re-send the two 0x06
+ * streaming-enable commands every this many milliseconds. Without them the controller
+ * stops streaming and powers off soon after the initial read. The same pair is re-sent
+ * once on every reconnect of a READY hand, independent of this value. 0 disables the
+ * periodic timer. */
+#ifndef WMR_CFG_KEEPALIVE_MS
+#define WMR_CFG_KEEPALIVE_MS              10000
+#endif
+#if WMR_CFG_KEEPALIVE_MS < 0
+#error "WMR_CFG_KEEPALIVE_MS must be 0 (off) or positive"
+#endif
+
 /* ---- FF14 batching -------------------------------------------------------- */
 
 /* Longest a queued record waits before a partial FF14 batch is sent while the connection
