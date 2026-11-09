@@ -219,7 +219,7 @@ class GattApplication:
         """The ``GetManagedObjects`` reply, without any D-Bus types attached."""
 
         objects: dict[str, dict[str, dict[str, Any]]] = {
-            APP_PATH: {"org.bluez.GattApplication1": {}}
+            APP_PATH: {"org.freedesktop.DBus.ObjectManager": {}}
         }
         paths: list[str] = []
         for spec in CHARACTERISTICS:
@@ -577,7 +577,7 @@ class DbusGattBackend:
 
         class Application(ServiceInterface):
             def __init__(self) -> None:
-                super().__init__("org.bluez.GattApplication1")
+                super().__init__("org.freedesktop.DBus.ObjectManager")
 
             @method()
             def GetManagedObjects(self) -> "a{oa{sa{sv}}}":

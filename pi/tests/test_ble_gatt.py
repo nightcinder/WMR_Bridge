@@ -8,6 +8,7 @@ from pathlib import Path
 
 from wmr_bridge.__main__ import _build_parser
 from wmr_bridge.ble_gatt import (
+    APP_PATH,
     CHARACTERISTICS,
     CHARACTERISTIC_BY_UUID,
     FF10_SERVICE,
@@ -86,6 +87,7 @@ def _application(**overrides) -> GattApplication:
 class RegistrationTests(unittest.TestCase):
     def test_ff10_service_exposes_ff11_through_ff17(self) -> None:
         objects = _application().managed_objects()
+        self.assertIn("org.freedesktop.DBus.ObjectManager", objects[APP_PATH])
         service = objects["/org/wmr/bridge/service/ff10"]["org.bluez.GattService1"]
         self.assertEqual(service["UUID"], FF10_SERVICE)
         self.assertTrue(service["Primary"])
