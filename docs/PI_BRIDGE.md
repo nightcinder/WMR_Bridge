@@ -231,6 +231,8 @@ Useful flags:
 | `--list` | print hidraw nodes and exit |
 | `--status` (or `status`) | print adapter, BlueZ bond and hidraw state, then exit |
 | `--no-auto-pair` | do not run the BlueZ auto-pairer |
+| `--prefer-5ghz` | Create or update the `<connection>-5ghz` NetworkManager profile and prefer 5 GHz. This is a one-shot action and does not start the bridge. |
+| `--no-reconnect` | with `--prefer-5ghz`, save the profile without switching to it |
 
 ### Installation
 
@@ -387,6 +389,18 @@ remain P1-P11 in the run sheet.
 - Open only the bridge port: `sudo ufw allow 8765/tcp` and, for LAN
   auto-discovery, `sudo ufw allow 8765/udp`.
 - Do not expose the port to the internet. See [Security](#security).
+
+### Automatic 5 GHz preference
+
+The service runs `wmr-bridge --prefer-5ghz` before it starts the bridge. This command is a one-shot action. It does not start the daemon. It reads the active NetworkManager connection on the Wi-Fi interface and clones it into a profile named `<connection>-5ghz`. The clone keeps the base profile as the 2.4 GHz fallback. The clone sets `802-11-wireless.band` to `a` and `connection.autoconnect-priority` to 50. NetworkManager then prefers a 5 GHz BSSID when one is visible. The base profile stays in place, so a 2.4 GHz network still works.
+
+The command reconnects to the new profile only when a 5 GHz BSSID is visible. If the switch fails, the current connection stays in place. Pass `--no-reconnect` to save the profile without switching. The installer and `postinst` use that form so an SSH session stays on its current link.
+
+For a radio with no 5 GHz support, such as the CYW43439 in a Pi Zero 2 W, the command is a warning-only no-op. It reports that the adapter is 2.4 GHz only and leaves the connection alone.
+
+The bridge also reports the Wi-Fi band in its protocol messages. The `hello` and `status` JSON objects include a `"wifi"` field when the daemon inspected the radio. The field is an object with these keys: `iface`, `connected`, `freqMhz`, `band`, `supports5Ghz`, `contentionWarning`, and `warning`. `contentionWarning` is true when the Pi is connected on 2.4 GHz. That band shares the radio with Bluetooth. The `warning` text says whether a 5 GHz radio is available.
+
+`wmr-bridge status` prints the same data. It shows `band=`, `supports5Ghz=`, and any warning.
 
 ## Wire protocol, version 1
 

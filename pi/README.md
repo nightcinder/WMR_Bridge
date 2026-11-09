@@ -105,6 +105,14 @@ Then point the companion app's Wi-Fi transport (or `tools/wifi_probe.py`) at
 unless that origin is allow-listed with `--allow-origin`. The companion app and
 the probe do not send one.
 
+## Wi-Fi 5 GHz preference
+
+The service runs `wmr-bridge --prefer-5ghz` before the daemon starts. The command clones the active NetworkManager connection into `<connection>-5ghz`. It restricts the clone to 5 GHz. It sets the clone's autoconnect priority to 50. The base profile stays as the 2.4 GHz fallback. The command switches only when a 5 GHz BSSID is visible. A failed switch leaves the current connection in place. Pass `--no-reconnect` to save the profile without switching.
+
+A 2.4 GHz-only radio, such as the CYW43439 in a Pi Zero 2 W, is a warning-only no-op. The command reports that the adapter has no 5 GHz radio.
+
+The daemon includes a `"wifi"` object in `hello` and `status`. The object has `iface`, `connected`, `freqMhz`, `band`, `supports5Ghz`, `contentionWarning`, and `warning`. `contentionWarning` is true when the Pi is connected on 2.4 GHz. `wmr-bridge status` prints the band, 5 GHz support, and any warning.
+
 ## Files
 
 | Path | Purpose |
