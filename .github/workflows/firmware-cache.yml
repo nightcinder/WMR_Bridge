@@ -1,0 +1,83 @@
+# Keeps the ESP-IDF compiler cache warm on main so a pull request gets cache
+# hits on its first push. A cache saved by a pull request is scoped to that pull
+# request, so the PR build in firmware.yml can only inherit a cache written on
+# the default branch; this job is what writes it. Without it every new PR pays
+# the full three-variant compile (~6 minutes) before its own later pushes get
+# fast.
+#
+# Weekly is enough. The cache holds the ~1300 ESP-IDF and BTstack objects per
+# variant, which change only when the image tag or the BTstack pin does (the
+# key carries the image tag, see firmware.yml). Only the few application files a
+# PR edits can miss, and those are small. A restore counts as an access, so a
+# repository with regular PR traffic keeps the entry alive between runs; the
+# schedule is the backstop for quiet weeks.
+#
+# The build itself is duplicated from firmware.yml on purpose: this job needs no
+# artifacts and no Pages check, and firmware.yml's dispatch semantics (native
+# build on the self-hosted runner) must not change.
+name: firmware-cache
+
+on:
+  schedule:
+    - cron: "17 4 * * 1" # Mondays, 04:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware-cache
+  cancel-in-progress: false
+
+jobs:
+  warm:
+    name: Warm the compiler cache
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:v6.1
+    timeout-minutes: 90
+    env:
+      CCACHE_DIR: /root/.ccache
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPRESS: "true"
+      # Must match firmware.yml: the default mtime check is unstable across
+      # containers and makes every object miss. See the comment there.
+      CCACHE_COMPILERCHECK: content
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Same as the PR build: build.py reads `git describe` and `git status`
+      # without a guard, and git refuses the container-owned checkout otherwise.
+      - name: Mark the checkout safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /root/.ccache
+          key: ccache-${{ runner.os }}-idf-v6.1-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-idf-v6.1-
+
+      - name: Build all three variants
+        env:
+          IDF_PATH: /opt/esp/idf
+        run: |
+          . "$IDF_PATH/export.sh"
+          for variant in both left right; do
+            python3 tools/firmware/build.py --variant "$variant" --out dist
+          done
+
+      - name: Report the compiler cache
+        if: always()
+        run: ccache --show-stats
+
+      - name: Save the compiler cache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: /root/.ccache
+          key: ccache-${{ runner.os }}-idf-v6.1-${{ github.sha }}
