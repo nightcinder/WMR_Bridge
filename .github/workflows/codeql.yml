@@ -36,8 +36,10 @@ jobs:
       matrix:
         include:
           # The firmware is C parsing untrusted radio bytes: this is the
-          # language that matters here. CodeQL tracks taint from the HID/GATT
-          # read down into wmr_codec, which semgrep cannot do.
+          # language that matters here. The manual build below only compiles
+          # the root host project, so CodeQL analyses wmr_codec and its host
+          # tests; the ESP-IDF GATT receive path in wmr_transport.c is not in
+          # the database, and no taint is traced from that entry point.
           - language: c-cpp
             build-mode: manual
           # Python reaches subprocess, sockets and the packaging tools.
