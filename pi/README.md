@@ -105,22 +105,29 @@ Then point the companion app's Wi-Fi transport (or `tools/wifi_probe.py`) at
 unless that origin is allow-listed with `--allow-origin`. The companion app and
 the probe do not send one.
 
-To read `/etc/wmr-bridge/token`, run `sudo python3 tools/wifi_probe.py`, or run
-the probe as the `wmr` user with `sudo -u wmr python3 tools/wifi_probe.py`. The
-token file is mode 0600 and owned by `wmr:wmr`, so members of the `wmr` group
-cannot read it.
+To read `/etc/wmr-bridge/token`, run `sudo python3 tools/wifi_probe.py --token-file /etc/wmr-bridge/token`, or
+run the probe as a user in the `wmr` group with `--token-file /etc/wmr-bridge/token`. The token file is mode 0640
+and owned by `wmr:wmr`.
 
-## Wi-Fi 5 GHz preference
+## Wi-Fi uplink preference
 
 The service runs `wmr-bridge --prefer-5ghz` before the daemon starts. The command clones the active NetworkManager connection into `<connection>-5ghz`. It restricts the clone to 5 GHz. It sets the clone's autoconnect priority to 50. The base profile stays as the 2.4 GHz fallback. The command switches only when a 5 GHz BSSID is visible. A failed switch leaves the current connection in place. Pass `--no-reconnect` to save the profile without switching.
 
+`prefer_5ghz()` also lowers the route metric of the wired profile, so an Ethernet uplink wins over 5 GHz Wi-Fi and 5 GHz Wi-Fi wins over 2.4 GHz Wi-Fi. It uses route metrics (IPv4 and IPv6), not only autoconnect priority.
+
 A 2.4 GHz-only radio, such as the CYW43439 in a Pi Zero 2 W, is a warning-only no-op. The command reports that the adapter has no 5 GHz radio.
+
+The bridge picks the active uplink in this order: `eth0`, then `wlan0` on 5 GHz, then `wlan0` on 2.4 GHz. `hello` and `status` report the active uplink in a separate `uplink` object with `iface`, `kind`, and `addresses`.
 
 The daemon includes a `"wifi"` object in `hello` and `status`. The object has `iface`, `connected`, `freqMhz`, `band`, `supports5Ghz`, `contentionWarning`, and `warning`. `contentionWarning` is true when the Pi is connected on 2.4 GHz. `wmr-bridge status` prints the band, 5 GHz support, and any warning.
 
-## BLE fallback (opt-in)
+## BLE advertising
 
-The daemon does not advertise a BLE GATT service by default. Pass `--ble-fallback` to also serve FF11, FF12 and FF14 over BlueZ BLE when Wi-Fi is unreachable. It is off by default, needs `python3-dbus-next`, and takes `--ble-adapter`, `--ble-name` and `--ble-pairing-window`. It has not been verified on hardware.
+The daemon advertises the FF10 GATT service over BlueZ by default. Advertising is always on. Each client controls its own notifications through the CCCD (Client Characteristic Configuration Descriptor). A client with notifications enabled receives FF11, FF12, and FF14. A client with notifications off receives nothing. The bridge does not gate notifications per client.
+
+Slow advertising uses LEAdvertisement1 intervals of about 1000 to 1285 ms. You can also set this with `btmgmt`.
+
+Pass `--no-ble` to disable the BLE peripheral. `--ble-fallback` stays as a deprecated no-op alias and prints a deprecation warning. The peripheral needs `python3-dbus-next` and a free hci adapter. It has not been verified on hardware.
 
 ## Files
 
