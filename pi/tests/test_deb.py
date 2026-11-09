@@ -67,7 +67,9 @@ class DebPackagingTests(unittest.TestCase):
             self.assertIn(f" Version: {VERSION}", info)
             self.assertIn(f" Version: {ROOT_VERSION}", info)
             self.assertIn(" Architecture: all", info)
-            self.assertIn(" Depends: python3 (>= 3.10), bluez", info)
+            self.assertIn(
+                " Depends: python3 (>= 3.10), bluez, rfkill, avahi-utils", info
+            )
             self.assertIn(" Recommends: network-manager", info)
 
             contents = subprocess.run(
@@ -104,8 +106,10 @@ class DebPackagingTests(unittest.TestCase):
                 self.assertTrue(os.access(control_dir / script, os.X_OK), script)
             postinst = (control_dir / "postinst").read_text(encoding="utf-8")
             self.assertIn("input,bluetooth", postinst)
+            self.assertIn("rfkill unblock bluetooth", postinst)
             self.assertIn("systemctl enable bluetooth.service", postinst)
             self.assertIn("systemctl start bluetooth.service", postinst)
+            self.assertNotIn(".pyc", contents)
 
     def test_installed_wrapper_prints_version(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -122,6 +126,18 @@ class DebPackagingTests(unittest.TestCase):
                 ["dpkg-deb", "-x", str(out / f"wmr-bridge_{VERSION}_all.deb"), str(root)],
                 check=True,
             )
+            # Every shipped module must match this tree exactly: a mixed
+            # 0.3.13/0.3.14 tree produced a traceback whose line numbers did
+            # not match the installed source.
+            installed_modules = root / "opt" / "wmr-bridge" / "pi" / "wmr_bridge"
+            for source in (PI_DIR / "wmr_bridge").glob("*.py"):
+                self.assertEqual(
+                    (installed_modules / source.name).read_bytes(),
+                    source.read_bytes(),
+                    source.name,
+                )
+            self.assertFalse(list(installed_modules.rglob("*.pyc")))
+
             wrapper = root / "usr" / "bin" / "wmr-bridge"
             self.assertTrue(os.access(wrapper, os.X_OK))
             run = subprocess.run(

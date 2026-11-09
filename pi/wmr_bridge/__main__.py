@@ -199,13 +199,31 @@ def _require_auth_for_bind(args: argparse.Namespace, token: str | None) -> None:
 
 
 def _local_addresses() -> list[str]:
+    """IPv4 addresses this host can be reached on, plus loopback.
+
+    ``getaddrinfo(hostname)`` alone is not enough: a stock Pi OS image maps the
+    hostname to ``127.0.1.1`` in /etc/hosts, so the startup line listed only
+    loopback even though the service bound ``0.0.0.0``. The connected UDP
+    socket asks the kernel for the source address of the default route without
+    sending a packet.
+    """
+
     addresses: set[str] = set()
     try:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            addresses.add(info[4][0])
-    except OSError:
+            address = info[4][0]
+            if not ipaddress.ip_address(address).is_loopback:
+                addresses.add(address)
+    except (OSError, ValueError):
         pass
-    addresses.discard("0.0.0.0")
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("192.0.2.1", 9))
+            address = probe.getsockname()[0]
+            if not ipaddress.ip_address(address).is_loopback:
+                addresses.add(address)
+    except (OSError, ValueError):
+        pass
     addresses.add("127.0.0.1")
     return sorted(addresses)
 
@@ -310,9 +328,16 @@ async def _run(args: argparse.Namespace) -> int:
     )
     await server.start()
 
-    addresses = _local_addresses() if args.bind in ("0.0.0.0", "::") else [args.bind]
+    wildcard_bind = args.bind in ("0.0.0.0", "::")
+    addresses = _local_addresses() if wildcard_bind else [args.bind]
     LOG.info("wmr_bridge %s listening on %s", __version__,
              ", ".join(f"ws://{address}:{server.port}/wmr" for address in addresses))
+    if wildcard_bind and addresses == ["127.0.0.1"]:
+        LOG.warning(
+            "no non-loopback IPv4 address found yet; the service is bound to %s "
+            "but LAN clients need the Pi's Wi-Fi address",
+            args.bind,
+        )
     if token:
         LOG.info("authentication: shared token required")
     elif _is_loopback_bind(args.bind):

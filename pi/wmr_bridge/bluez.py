@@ -36,6 +36,7 @@ except ImportError:  # pragma: no cover
     pty = None  # type: ignore[assignment]
 
 HIDRAW_ROOT = "/sys/class/hidraw"
+RFKILL_ROOT = "/sys/class/rfkill"
 WMR_NAMES = {
     "motion controller - left": 0,
     "motion controller - right": 1,
@@ -345,6 +346,63 @@ def parse_adapter(output: str) -> BluezAdapter | None:
 
 
 @dataclass(frozen=True)
+class RfkillSwitch:
+    """One entry from ``/sys/class/rfkill``."""
+
+    path: str
+    name: str = ""
+    type: str = ""
+    soft: bool = False
+    hard: bool = False
+
+    @property
+    def blocked(self) -> bool:
+        return self.soft or self.hard
+
+
+def _read_sysfs(path: str) -> str:
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
+
+
+def read_rfkill(root: str = RFKILL_ROOT) -> list[RfkillSwitch]:
+    """Read the kernel rfkill switches; an absent directory means no info."""
+
+    try:
+        entries = sorted(os.listdir(root))
+    except OSError:
+        return []
+    switches: list[RfkillSwitch] = []
+    for entry in entries:
+        if not entry.startswith("rfkill"):
+            continue
+        path = os.path.join(root, entry)
+        switches.append(
+            RfkillSwitch(
+                path=path,
+                name=_read_sysfs(os.path.join(path, "name")),
+                type=_read_sysfs(os.path.join(path, "type")).casefold(),
+                soft=_read_sysfs(os.path.join(path, "soft")) == "1",
+                hard=_read_sysfs(os.path.join(path, "hard")) == "1",
+            )
+        )
+    return switches
+
+
+def bluetooth_blocked(root: str = RFKILL_ROOT) -> bool:
+    """True when any rfkill switch for Bluetooth is soft- or hard-blocked."""
+
+    return any(
+        switch.blocked
+        for switch in read_rfkill(root)
+        if switch.type == "bluetooth"
+    )
+
+
+@dataclass(frozen=True)
 class BluezStatus:
     """Everything ``wmr-bridge status`` reports about pairing."""
 
@@ -602,6 +660,7 @@ class BluezAutoPairer:
         runner: Runner | None = None,
         session: Session | None = None,
         which: Callable[[str], str | None] = shutil.which,
+        rfkill_root: str = RFKILL_ROOT,
     ) -> None:
         self.bridge = bridge
         self.allowed_hands = frozenset(allowed_hands)
@@ -612,10 +671,11 @@ class BluezAutoPairer:
         self._runner = runner or _run_command
         self._session = session
         self._which = which
+        self._rfkill_root = rfkill_root
         self._task: asyncio.Task[None] | None = None
         self._disabled = False
-        self._adapter_checked = False
         self._adapter_ready = False
+        self._adapter_warned = False
 
     def hands_ready(self) -> bool:
         """True when every allowed hand already has an open hidraw node."""
@@ -647,11 +707,17 @@ class BluezAutoPairer:
             await asyncio.sleep(self._next_delay(idle))
 
     def _next_delay(self, idle: int) -> float:
-        """Back off repeated inquiry bursts that found nothing to do."""
+        """Back off repeated inquiry bursts that found nothing to do.
+
+        ``idle`` grows without bound while a hand stays missing, so the
+        exponent is capped before float conversion. ``2 ** idle`` raised
+        ``OverflowError`` after enough iterations and killed the daemon.
+        """
 
         if idle <= 0:
             return self.poll_interval
-        return min(self.max_poll_interval, self.poll_interval * (2 ** (idle - 1)))
+        exponent = min(idle - 1, 32)
+        return min(self.max_poll_interval, self.poll_interval * float(2 ** exponent))
 
     def _run(self, *args: str, timeout: float) -> subprocess.CompletedProcess[str] | None:
         return self._runner([self.command, *args], timeout)
@@ -732,11 +798,19 @@ class BluezAutoPairer:
             return False
 
     def _ensure_adapter(self) -> bool:
-        """Power the adapter on once; disable the pairer if there is none."""
+        """Power the adapter on, clearing a soft rfkill block when possible.
 
-        if self._adapter_checked:
-            return self._adapter_ready
-        self._adapter_checked = True
+        A stock Pi OS image soft-blocks Bluetooth at boot. The service runs as
+        an unprivileged user, so the systemd unit clears the block as root
+        before start; this covers a block that appears later (or a daemon
+        started by hand) and retries instead of disabling pairing for the life
+        of the process. Only a missing ``bluetoothctl`` is permanent.
+        """
+
+        if self._adapter_ready:
+            return True
+        if bluetooth_blocked(self._rfkill_root):
+            self._clear_rfkill()
         result = self._run("power", "on", timeout=10.0)
         output = ""
         if result is not None:
@@ -747,16 +821,48 @@ class BluezAutoPairer:
             or "No default controller available" in output
             or "Failed to set power" in output
         ):
-            LOG.warning(
-                "auto-pair: no working Bluetooth adapter; automatic controller "
-                "pairing is off (check 'rfkill list bluetooth' and "
-                "'systemctl status bluetooth', or pass --no-auto-pair to silence this)"
-            )
-            self._disabled = True
             self._adapter_ready = False
+            self._warn_adapter(bluetooth_blocked(self._rfkill_root))
             return False
         self._adapter_ready = True
+        self._adapter_warned = False
+        # Pairable is not persisted across a Bluetooth daemon restart. The
+        # scan session sets it too; doing it here also covers a bonded hand
+        # that reconnects without a scan.
+        self._run("pairable", "on", timeout=10.0)
         return True
+
+    def _clear_rfkill(self) -> None:
+        """Best-effort ``rfkill unblock bluetooth``; needs root in the unit."""
+
+        if self._which("rfkill") is None:
+            LOG.debug("auto-pair: rfkill is not installed; cannot clear the Bluetooth block")
+            return
+        result = self._runner(["rfkill", "unblock", "bluetooth"], 10.0)
+        if result is not None and result.returncode == 0:
+            LOG.info("auto-pair: cleared the rfkill Bluetooth block")
+        else:
+            LOG.debug(
+                "auto-pair: 'rfkill unblock bluetooth' failed; the systemd unit "
+                "clears the block as root"
+            )
+
+    def _warn_adapter(self, blocked: bool) -> None:
+        if self._adapter_warned:
+            LOG.debug("auto-pair: Bluetooth adapter still unavailable; retrying")
+            return
+        self._adapter_warned = True
+        hint = (
+            "the adapter is still rfkill-blocked; run 'sudo rfkill unblock bluetooth'"
+            if blocked
+            else "check 'systemctl status bluetooth'"
+        )
+        LOG.warning(
+            "auto-pair: Bluetooth adapter is not usable yet (%s); retrying "
+            "instead of disabling automatic pairing (pass --no-auto-pair to "
+            "silence this)",
+            hint,
+        )
 
     def _devices(self) -> list[BluezDevice]:
         result = self._run("devices", timeout=10.0)

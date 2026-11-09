@@ -11,6 +11,11 @@ Group=wmr
 SupplementaryGroups=input bluetooth
 WorkingDirectory=/opt/wmr-bridge/pi
 EnvironmentFile=-/etc/wmr-bridge/wmr-bridge.env
+# A stock Pi OS image soft-blocks Bluetooth via rfkill, and the service runs as
+# wmr, which cannot clear it. Run this as root (the "+" prefix) before start.
+# rfkill talks to the kernel over netlink, so AF_NETLINK must stay allowed
+# below even though the Python daemon does not use it.
+ExecStartPre=-+/bin/sh -c 'command -v rfkill >/dev/null 2>&1 && rfkill unblock bluetooth'
 ExecStart=/usr/bin/python3 -m wmr_bridge --bind 0.0.0.0 --port 8765 --token-file /etc/wmr-bridge/token --advertise-mdns $WMR_BRIDGE_ARGS
 Restart=on-failure
 RestartSec=2
@@ -18,7 +23,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target

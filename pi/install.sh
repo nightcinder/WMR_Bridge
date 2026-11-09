@@ -188,6 +188,9 @@ mkdir -p \
     "${DEST_SYSTEMD}" \
     "${DEST_NETWORKMANAGER}"
 
+# A hand-copied or interrupted install can leave bytecode from another
+# version; never let it shadow the sources installed below.
+rm -rf "${DEST_PI}/wmr_bridge/__pycache__"
 for pyfile in "${SCRIPT_DIR}"/wmr_bridge/*.py; do
     install -m 0644 "$pyfile" "${DEST_PI}/wmr_bridge/$(basename "$pyfile")"
 done
