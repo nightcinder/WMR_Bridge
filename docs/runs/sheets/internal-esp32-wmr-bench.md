@@ -180,17 +180,19 @@ Procedure:
 2. Place both controllers untouched on their fixed desk marks at timestamp `T0`.
 3. Wait 300 s (5 minutes) without touching either controller.
 4. At `T0 + 300 s` (within one 10 s keep-alive tick, up to `T0 + 310 s`), make sure that the serial monitor prints:
-   `FF13 LEFT: idle for >= 300000 ms; keep-alive paused, controller may sleep`
-   `FF13 RIGHT: idle for >= 300000 ms; keep-alive paused, controller may sleep`
+   `FF13 LEFT: idle for <N> ms; keep-alive paused, controller may sleep`
+   `FF13 RIGHT: idle for <N> ms; keep-alive paused, controller may sleep`
+   where `<N>` is the measured idle time in milliseconds and is at least 300000.
 5. Make sure that both controllers enter standby mode (LEDs dim or pulse slowly). The Bluetooth ACL link stays connected. On the Pixel 11 Pro, make sure that `wmr_companion_app` still reports connected.
 6. At `T0 + 400 s`, test the activity wake on LEFT: move the thumbstick or press the trigger.
 7. Make sure that the serial monitor prints:
    `FF13 LEFT: activity after idle sleep; resuming the keep-alive`
 8. Make sure that LEFT resumes full streaming on the Pixel 11 Pro in under 1.0 s without an ACL reconnect.
 9. Leave RIGHT untouched until `T0 + 900 s` (15 minutes).
-10. At `T0 + 900 s`, make sure that the serial monitor prints:
-    `FF13 RIGHT: idle for 900000 ms; disconnecting so the controller powers off`
+10. At `T0 + 900 s` (up to `T0 + 910 s`), make sure that the serial monitor prints:
+    `FF13 RIGHT: idle for <N> ms; disconnecting so the controller powers off`
     `pair: RIGHT idle; disconnecting so it powers off, reconnects declined for 60000 ms`
+    where `<N>` is at least 900000.
 11. Make sure that the RIGHT controller turns off completely (ring LEDs extinguish).
 12. Test the 60-second reconnect cooldown: immediately press the Windows power button on RIGHT within the 60 s window.
 13. Make sure that the serial monitor prints:
@@ -201,7 +203,7 @@ Procedure:
 14. Wait for the 60 s cooldown to expire. Turn on RIGHT.
 15. Make sure that RIGHT reconnects and streams cleanly.
 
-Pass: keep-alive pauses at 300 s to 310 s (allowing up to one 10 s keep-alive tick). Motion wakes the controller in under 1.0 s. Power-off disconnect occurs at 900 s ± 5 s (or within one keep-alive tick). Reconnects during the 60 s cooldown are refused, and reconnect after 60 s succeeds cleanly.
+Pass: keep-alive pauses at 300 s to 310 s (allowing up to one 10 s keep-alive tick). Motion wakes the controller in under 1.0 s. Power-off disconnect occurs at 900 s to 910 s. Reconnects during the 60 s cooldown are refused, and reconnect after 60 s succeeds cleanly.
 
 ## 9. Block H: ONY-1070 BLE GATT two-controller streaming on Pixel 11 Pro
 

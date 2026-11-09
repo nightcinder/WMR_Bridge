@@ -210,21 +210,21 @@ Procedure:
 
    Make sure that `hello` reports `transport: "ethernet"` and `uplink.iface: "eth0"`.
 4. Disconnect the Ethernet cable. Wait 5 s for route metrics to update.
-5. Run `wmr-bridge status`. Make sure that the uplink switches to `wlan0` with `kind=wifi` and `supports5Ghz=true`.
+5. Run `wmr-bridge status`. Make sure that the uplink switches to `wlan0` with `kind=wifi` and `supports5Ghz=yes`.
 6. Run `wifi_probe.py` on 5 GHz Wi-Fi with both controllers active:
 
    ```bash
-   python3 tools/wifi_probe.py --host 127.0.0.1 --stream batched --duration 120 --token-file /etc/wmr-bridge/token > /tmp/probe-p14.json
+   python3 tools/wifi_probe.py --host 127.0.0.1 --stream batched --duration 120 --token-file /etc/wmr-bridge/token > /tmp/probe-p14.log
    ```
 
-7. Inspect the test summary in `/tmp/probe-p14.json` (or stdout).
+7. Inspect the test summary at the end of `/tmp/probe-p14.log` (or on stdout).
 
 Pass criteria for Sitting P gates:
 - Uplink reports `eth0` when wired and `wlan0` (5 GHz) when unwired.
 - `rttMs.p50` < 15.0 ms.
 - Missing share per hand <= 3.0 % (or LEFT <= 1.0 % and RIGHT ~10-12 % for asymmetry localisation).
 - Sequence gaps == 0 on both hands.
-- Server dropped messages == 0 (`serverStatus.dropped == 0` or null).
+- Server dropped messages == 0 (non-null `serverStatus` with `serverStatus.dropped == 0`).
 - `wifi_probe.py` exits with code 0.
 
 ## 4. Pass / refute
