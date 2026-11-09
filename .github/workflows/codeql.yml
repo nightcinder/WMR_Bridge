@@ -1,0 +1,65 @@
+name: codeql
+
+on:
+  # Same split as host-tests.yml and security.yml: branch pushes stay on
+  # `main`, so a PR gets one `pull_request` run rather than a second push run
+  # beside it.
+  push:
+    branches: [main]
+  pull_request:
+  # The query packs move under us; a weekly full scan catches what a diff-only
+  # run does not re-examine.
+  schedule:
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: codeql (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      # Job-level permissions replace the workflow-level set, so every scope
+      # the job needs is listed here.
+      contents: read
+      actions: read
+      security-events: write
+    strategy:
+      # One slow language must not cancel the other.
+      fail-fast: false
+      matrix:
+        include:
+          # The firmware is C parsing untrusted radio bytes: this is the
+          # language that matters here. CodeQL tracks taint from the HID/GATT
+          # read down into wmr_codec, which semgrep cannot do.
+          - language: c-cpp
+            build-mode: manual
+          # Python reaches subprocess, sockets and the packaging tools.
+          - language: python
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v7
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+      # The same host build host-tests.yml uses. Manual mode is deliberate: an
+      # autobuild would try to build the ESP-IDF firmware tree, which needs a
+      # toolchain this runner does not have.
+      - name: Build the host C targets
+        if: matrix.build-mode == 'manual'
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build --parallel
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
