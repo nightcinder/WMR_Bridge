@@ -485,6 +485,43 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #error "WMR_CFG_KEEPALIVE_MS must be 0 (off) or positive"
 #endif
 
+/* Idle policy for a connected, READY WMR hand. The keep-alive above keeps a controller
+ * awake forever; these two thresholds let it sleep and then power off:
+ *
+ * - After WMR_CFG_IDLE_SLEEP_MS without button/axis/gyro activity, stop sending the
+ *   keep-alive pair and let the controller enter its own standby. The ACL stays up.
+ * - After WMR_CFG_IDLE_POWEROFF_MS without activity, drop the ACL so the controller
+ *   powers off. Inbound reconnects from that hand are declined for
+ *   WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS so a still-awake controller cannot reopen the
+ *   link before its own shutdown timer expires. Any active input report before the
+ *   power-off threshold wakes the hand and re-sends the pair immediately.
+ *
+ * 0 disables the respective stage. WMR_CFG_IDLE_POWEROFF_MS must be 0 or no smaller
+ * than WMR_CFG_IDLE_SLEEP_MS. */
+#ifndef WMR_CFG_IDLE_SLEEP_MS
+#define WMR_CFG_IDLE_SLEEP_MS             300000
+#endif
+#ifndef WMR_CFG_IDLE_POWEROFF_MS
+#define WMR_CFG_IDLE_POWEROFF_MS          900000
+#endif
+#ifndef WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS
+#define WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS 60000
+#endif
+
+#if WMR_CFG_IDLE_SLEEP_MS < 0
+#error "WMR_CFG_IDLE_SLEEP_MS must be 0 (off) or positive"
+#endif
+#if WMR_CFG_IDLE_POWEROFF_MS < 0
+#error "WMR_CFG_IDLE_POWEROFF_MS must be 0 (off) or positive"
+#endif
+#if WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS < 0
+#error "WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS must be 0 (off) or positive"
+#endif
+#if WMR_CFG_IDLE_POWEROFF_MS > 0 && WMR_CFG_IDLE_SLEEP_MS > 0 && \
+    WMR_CFG_IDLE_POWEROFF_MS < WMR_CFG_IDLE_SLEEP_MS
+#error "WMR_CFG_IDLE_POWEROFF_MS must be 0 or no smaller than WMR_CFG_IDLE_SLEEP_MS"
+#endif
+
 /* ---- FF14 batching -------------------------------------------------------- */
 
 /* Longest a queued record waits before a partial FF14 batch is sent while the connection

@@ -124,6 +124,12 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size);
 wmr_connect_result_t wmr_controller_connect(unsigned hand);
 wmr_disconnect_result_t wmr_controller_disconnect(unsigned hand);
 
+/* Idle power-off: the hand has been inactive past WMR_CFG_IDLE_POWEROFF_MS. Drop its ACL
+ * (not only the HID channel) and decline inbound reconnects from it for
+ * WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS so an awake controller cannot immediately reopen the
+ * link. Called by wmr_cfgmgr; the HID close event then clears the per-hand state. */
+void wmr_controller_idle_power_off(unsigned hand);
+
 /* MANUAL BOND RESET: delete only this ESP32's stored link key for `hand`.
  * Never called automatically. Refused while the controller is connected or
  * a connection attempt is pending. */

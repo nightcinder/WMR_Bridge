@@ -63,6 +63,8 @@ typedef struct {
     uint32_t             send_errors;
     unsigned             enable_step;    /* next streaming-enable command to send */
     bool                 connected;
+    uint32_t             last_activity_ms;  /* last active 0x01 report (or connection) */
+    bool                 idle_sleeping;
 } hand_t;
 
 static hand_t hands[WMR_NUM_CONTROLLERS];
@@ -103,6 +105,71 @@ static void arm_keepalive(hand_t *h){
 static void start_enable(hand_t *h){
     h->enable_step = 0;
     arm(h, PHASE_ENABLE, WMR_CFG_SPACING_MS);
+}
+
+static float abs_value(float v){
+    return v < 0.0f ? -v : v;
+}
+
+bool wmr_cfgmgr_state_is_active(const wmr_controller_state_t *state){
+    if (!state) return false;
+    if (state->thumbstick_click || state->home || state->menu || state->squeeze ||
+        state->trackpad_click || state->bt_pairing || state->trackpad_touch) return true;
+    if (state->trigger > 0.05f) return true;
+    if (abs_value(state->thumbstick_x) > 0.10f ||
+        abs_value(state->thumbstick_y) > 0.10f) return true;
+    float sum = 0.0f;
+    for (unsigned i = 0; i < 3; i++){
+        float g = abs_value(state->gyro[i]);
+        if (g > 0.08f) return true;
+        sum += g;
+    }
+    return sum > 0.15f;
+}
+
+void wmr_cfgmgr_on_activity(unsigned hand, const wmr_controller_state_t *state){
+    if (hand >= WMR_NUM_CONTROLLERS || !state) return;
+    hand_t *h = &hands[hand];
+    if (!h->connected || !wmr_cfgmgr_state_is_active(state)) return;
+    h->last_activity_ms = btstack_run_loop_get_time_ms();
+    if (!h->idle_sleeping) return;
+    h->idle_sleeping = false;
+    if (h->state != WMR_CFG_READY) return;
+    printf("FF13 %s: activity after idle sleep; resuming the keep-alive\n", hand_name(hand));
+    start_enable(h);
+}
+
+/* At each keep-alive tick: stop sending the pair once the hand has been idle past the
+ * sleep threshold, then drop the ACL at the power-off threshold. A timer armed while
+ * asleep is the power-off deadline. */
+static void keepalive_fire(hand_t *h){
+    if (h->state != WMR_CFG_READY || !h->connected) return;
+    uint32_t idle = btstack_run_loop_get_time_ms() - h->last_activity_ms;
+    if (WMR_CFG_IDLE_POWEROFF_MS > 0 && idle >= WMR_CFG_IDLE_POWEROFF_MS){
+        printf("FF13 %s: idle for %lu ms; disconnecting so the controller powers off\n",
+               hand_name(h->hand), (unsigned long) idle);
+        h->idle_sleeping = false;
+        h->connected = false;       /* do not wake on a report still in flight */
+        disarm(h);
+        wmr_controller_idle_power_off(h->hand);
+        return;
+    }
+    if (WMR_CFG_IDLE_SLEEP_MS > 0 && idle >= WMR_CFG_IDLE_SLEEP_MS){
+        if (!h->idle_sleeping){
+            h->idle_sleeping = true;
+            printf("FF13 %s: idle for %lu ms; keep-alive paused, controller may sleep\n",
+                   hand_name(h->hand), (unsigned long) idle);
+        }
+        if (WMR_CFG_IDLE_POWEROFF_MS > 0){
+            uint32_t remaining = WMR_CFG_IDLE_POWEROFF_MS - idle;
+            arm(h, PHASE_KEEPALIVE, remaining);
+        } else {
+            disarm(h);
+        }
+        return;
+    }
+    h->idle_sleeping = false;
+    start_enable(h);
 }
 
 /* Send the reader's current request and wait up to the timeout for the answer. A send error
@@ -165,8 +232,7 @@ static void timer_fire(btstack_timer_source_t *timer){
         return;
     }
     if (phase == PHASE_KEEPALIVE){
-        if (h->state != WMR_CFG_READY || !h->connected) return;
-        start_enable(h);
+        keepalive_fire(h);
         return;
     }
     if (h->state != WMR_CFG_READING) return;
@@ -194,6 +260,7 @@ void wmr_cfgmgr_init(wmr_cfgmgr_listener_t l){
         hand_t *h = &hands[i];
         memset(h, 0, sizeof(*h));
         h->hand = i;
+        h->last_activity_ms = btstack_run_loop_get_time_ms();
         wmr_cfg_reader_init(&h->reader, h->blob, sizeof(h->blob));
         h->timer.process = timer_fire;
         btstack_run_loop_set_timer_context(&h->timer, h);
@@ -205,6 +272,8 @@ void wmr_cfgmgr_on_descriptor(unsigned hand){
     if (!WMR_CFG_FF13_READ) return;
     hand_t *h = &hands[hand];
     h->connected = true;
+    h->last_activity_ms = btstack_run_loop_get_time_ms();
+    h->idle_sleeping = false;
     if (h->state == WMR_CFG_READY){
         /* The cached block is still valid: do not read it again, but restore streaming on
          * this fresh link with the enable pair the initial read uses. */
@@ -238,6 +307,7 @@ void wmr_cfgmgr_on_closed(unsigned hand){
     hand_t *h = &hands[hand];
     h->connected = false;
     h->enable_step = 0;
+    h->idle_sleeping = false;
     disarm(h);
     if (h->state == WMR_CFG_READING) set_state(h, WMR_CFG_NOT_READ);
 }
