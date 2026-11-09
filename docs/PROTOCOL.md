@@ -958,6 +958,62 @@ rest of the BLE service, FF13 has no authentication or encryption (see
 - Behaviour if a controller never answers (this design: FAILED after the
   bounded retries; a console key could retry).
 
+# Idle sleep and power-off (0x06 keep-alive)
+
+The 0x06 keep-alive pair keeps a connected controller awake and streaming. It
+goes out every `WMR_CFG_KEEPALIVE_MS` (default 10000 ms). Without it the
+controller sleeps and stops sending reports. The idle policy below lets a
+controller sleep and then power off after inactivity.
+
+Two stages. Both measure time since the last active input report.
+
+- After `WMR_CFG_IDLE_SLEEP_MS` (default 300000 ms, 5 min) without activity,
+  the bridge stops sending the 0x06 pair. The controller can enter its own
+  standby. The Bluetooth link stays up.
+- After `WMR_CFG_IDLE_POWEROFF_MS` (default 900000 ms, 15 min) without
+  activity, the bridge drops the ACL. The controller powers off.
+
+Set either macro to 0 to disable that stage. `WMR_CFG_IDLE_POWEROFF_MS` must be
+0 or no smaller than `WMR_CFG_IDLE_SLEEP_MS`. A report that shows activity
+before the power-off threshold wakes the controller. The bridge sends the 0x06
+pair again at once.
+
+Activity means any of these in a decoded report:
+
+- a button is pressed (buttons, thumbstick click, home, menu, squeeze,
+  trackpad click or touch, BT pairing).
+- trigger value above 0.05;
+- thumbstick X or Y above 0.10 in either direction;
+- gyro: any axis above 0.08, or the sum of the three axes above 0.15.
+
+A report below all of these thresholds does not count as activity. It does not
+reset the idle timer and does not wake a sleeping controller.
+
+After a power-off, inbound reconnects from that hand are declined for
+`WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS` (default 60000 ms). This stops a
+still-awake controller from reopening the link before its own shutdown timer
+runs out. Normal reconnects resume after that time.
+
+On the Pi host bridge the same policy runs in `HidrawManager`. The flags are
+`--idle-sleep-timeout` and `--idle-poweroff-timeout` (seconds, default 300 and
+900). 0 disables a stage. The power-off timeout must be 0 or at least the
+sleep timeout. The bridge pauses the 10 s 0x06 keep-alive after the sleep
+timeout and disconnects Bluetooth after the power-off timeout so the
+controller powers off. Pass the flags through `WMR_BRIDGE_ARGS` when running
+under systemd. Activity uses the same thresholds as the firmware. If a
+controller has no Bluetooth address, the bridge cannot power it off. It logs a
+warning and retries on the next tick.
+
+Configuration macros (ESP32):
+
+- `WMR_CFG_KEEPALIVE_MS` (default 10000): keep-alive interval. 0 disables the
+  periodic timer.
+- `WMR_CFG_IDLE_SLEEP_MS` (default 300000).
+- `WMR_CFG_IDLE_POWEROFF_MS` (default 900000).
+- `WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS` (default 60000).
+
+Set them in `src/wmr_config.h` or pass `-D` at build time.
+
 # Controller scan and status v2, FF17 (implemented in firmware)
 
 Characteristic `0000FF17-0000-1000-8000-00805F9B34FB`, READ | WRITE | NOTIFY
