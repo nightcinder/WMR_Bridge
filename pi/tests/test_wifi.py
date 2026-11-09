@@ -224,6 +224,40 @@ class Prefer5GhzTests(unittest.TestCase):
             commands,
         )
 
+    def test_active_5ghz_clone_is_mapped_back_to_the_base_profile(self) -> None:
+        runner = _prefer_runner(
+            IW_DEV_5GHZ,
+            IW_PHY_DUAL_BAND,
+            **{
+                "nmcli -t -f NAME,DEVICE connection show --active": "HomeNet-5ghz:wlan0\n",
+                "nmcli -t -f NAME connection show": "HomeNet\nHomeNet-5ghz\n",
+            },
+        )
+
+        result = prefer_5ghz(runner=runner)
+
+        self.assertEqual(result["baseProfile"], "HomeNet")
+        self.assertEqual(result["profile"], "HomeNet-5ghz")
+        commands = runner.commands()
+        self.assertFalse(any("connection clone" in command for command in commands))
+        self.assertIn(
+            "nmcli connection modify HomeNet-5ghz 802-11-wireless.band a "
+            "connection.autoconnect-priority 50 ipv4.route-metric 200 "
+            "ipv6.route-metric 200",
+            commands,
+        )
+        self.assertIn(
+            "nmcli connection modify HomeNet connection.autoconnect-priority 0 "
+            "ipv4.route-metric 300 ipv6.route-metric 300",
+            commands,
+        )
+        self.assertFalse(
+            any(
+                "modify HomeNet-5ghz" in command and "300" in command
+                for command in commands
+            )
+        )
+
     def test_no_visible_5ghz_bssid_leaves_the_current_connection_alone(self) -> None:
         runner = _prefer_runner(
             IW_DEV_24GHZ,

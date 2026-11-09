@@ -4,10 +4,11 @@ Bluetooth Classic lives in the 2.4 GHz band. On a Pi whose Wi-Fi is also on
 2.4 GHz the two share the radio, so the bridge prefers a 5 GHz BSSID when one
 is available. The preference is deliberately non-lockout:
 
-* the user's existing connection profile is left untouched and keeps working
-  as the 2.4 GHz fallback;
-* a separate ``<connection>-5ghz`` profile is cloned from it, restricted to
-  ``802-11-wireless.band=a`` and given a higher autoconnect priority;
+* the user's existing connection profile keeps its band and security and
+  stays available as the 2.4 GHz fallback, but its autoconnect priority and
+  route metric are lowered so it ranks below the 5 GHz clone and wired eth0;
+* a separate ``<connection>-5ghz`` profile is cloned from the base, restricted
+  to ``802-11-wireless.band=a`` and given the 5 GHz route metric;
 * the bridge only switches to the new profile when a 5 GHz BSSID is actually
   visible, and a failed switch leaves the current connection alone;
 * a 2.4 GHz-only radio (for example the CYW43439 in a Pi Zero 2 W) is a
@@ -436,10 +437,11 @@ def prefer_5ghz(
 ) -> dict[str, Any]:
     """Create or update a ``<connection>-5ghz`` NetworkManager profile.
 
-    The base profile is left in place as the 2.4 GHz fallback. With
-    ``reconnect`` true the new profile is activated only when a 5 GHz BSSID is
-    visible; otherwise the current connection is untouched. A radio with no
-    5 GHz support is a warning-only no-op.
+    The base profile stays in place as the 2.4 GHz fallback; only its
+    autoconnect priority and route metric are lowered. With ``reconnect`` true
+    the new profile is activated only when a 5 GHz BSSID is visible; otherwise
+    the current connection is untouched. A radio with no 5 GHz support is a
+    warning-only no-op.
     """
 
     run = runner or _default_runner
@@ -482,14 +484,24 @@ def prefer_5ghz(
     active = run(
         [NMCLI, "-t", "-f", "NAME,DEVICE", "connection", "show", "--active"]
     )
-    base_profile = (
+    active_profile = (
         _active_connection(active.stdout, info["iface"])
         if active.returncode == 0
         else None
     )
-    if base_profile is None:
+    if active_profile is None:
         result["warning"] = "Could not determine the active NetworkManager connection."
         return result
+
+    # After the first switch (or any reboot) the active profile is already the
+    # 5 GHz clone. Strip that suffix so we always name the 2.4 GHz base, never
+    # clone a clone, and never apply the 300 metric to the 5 GHz profile.
+    base_profile = active_profile
+    if (
+        base_profile.endswith(FIVE_GHZ_PROFILE_SUFFIX)
+        and len(base_profile) > len(FIVE_GHZ_PROFILE_SUFFIX)
+    ):
+        base_profile = base_profile[: -len(FIVE_GHZ_PROFILE_SUFFIX)]
     result["baseProfile"] = base_profile
 
     profile = f"{base_profile}{FIVE_GHZ_PROFILE_SUFFIX}"

@@ -47,6 +47,9 @@ from . import ws as wsmod
 STREAMS = ("raw", "decoded", "batched")
 HAND_NAMES = ("LEFT", "RIGHT")
 MACHINE_ID_PATH = Path("/etc/machine-id")
+# `inspect_wifi()`/`inspect_uplink()` shell out to `iw`/NetworkManager with
+# subprocess timeouts, so re-sample at most this often and off the event loop.
+NETWORK_REFRESH_INTERVAL_S = 10.0
 LOG = logging.getLogger(__name__)
 
 
@@ -279,6 +282,7 @@ class Bridge:
         wifi: dict[str, Any] | None = None,
         uplink: dict[str, Any] | None = None,
         network: Callable[[], tuple[dict[str, Any] | None, dict[str, Any] | None]] | None = None,
+        network_refresh_s: float = NETWORK_REFRESH_INTERVAL_S,
     ) -> None:
         if not 1 <= batch_max <= BATCH_MAX_COUNT:
             raise ValueError(f"batch_max must be 1..{BATCH_MAX_COUNT}")
@@ -292,6 +296,9 @@ class Bridge:
         self.wifi = dict(wifi) if wifi is not None else None
         self.uplink = dict(uplink) if uplink is not None else None
         self._network = network
+        self._network_refresh_s = max(0.0, network_refresh_s)
+        self._network_refreshed_at: float | None = None
+        self._network_lock = asyncio.Lock()
         self.token = token
         self.queue_size = max(1, queue_size)
         self.batch_max = batch_max
@@ -423,18 +430,33 @@ class Bridge:
     def now_us(self) -> int:
         return time.monotonic_ns() // 1000
 
-    def _refresh_network(self) -> None:
-        """Sample the uplink and Wi-Fi state again, if a probe was supplied."""
+    async def refresh_network(self) -> None:
+        """Re-sample the uplink and Wi-Fi state off the event loop.
+
+        The probe shells out to ``iw``/``nmcli``, so it must not run inside the
+        loop. Samples are throttled to ``network_refresh_s`` so repeated
+        ``hello`` messages (including from unauthenticated peers) cannot force
+        continuous probes.
+        """
 
         if self._network is None:
             return
-        try:
-            wifi, uplink = self._network()
-        except Exception:  # a failed probe must not break the handshake
-            LOG.exception("network snapshot failed")
-            return
-        self.wifi = wifi
-        self.uplink = uplink
+        async with self._network_lock:
+            now = time.monotonic()
+            if (
+                self._network_refreshed_at is not None
+                and now - self._network_refreshed_at < self._network_refresh_s
+            ):
+                return
+            try:
+                wifi, uplink = await asyncio.to_thread(self._network)
+            except Exception:  # a failed probe must not break the handshake
+                LOG.exception("network snapshot failed")
+                self._network_refreshed_at = time.monotonic()
+                return
+            self.wifi = wifi
+            self.uplink = uplink
+            self._network_refreshed_at = time.monotonic()
 
     def status(self) -> dict[str, Any]:
         now = self.now_us()
@@ -465,7 +487,6 @@ class Bridge:
         return payload
 
     def hello(self) -> dict[str, Any]:
-        self._refresh_network()
         transport = (
             "ethernet"
             if (self.uplink or {}).get("kind") == "ethernet"
@@ -503,6 +524,7 @@ class Bridge:
         peer = websocket.peer
         LOG.info("client connected: %s", peer)
         try:
+            await self.refresh_network()
             await subscriber.send_json(self.hello())
             if self.token is not None:
                 if not await self._authenticate(subscriber):
@@ -603,6 +625,7 @@ class Bridge:
             return True
 
         if kind == "hello":
+            await self.refresh_network()
             await subscriber.send_json(self.hello())
             return True
 

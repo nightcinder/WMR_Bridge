@@ -392,7 +392,7 @@ remain P1-P11 in the run sheet.
 
 ### Automatic 5 GHz preference
 
-The service runs `wmr-bridge --prefer-5ghz` before it starts the bridge. This command is a one-shot action. It does not start the daemon. It reads the active NetworkManager connection on the Wi-Fi interface and clones it into a profile named `<connection>-5ghz`. The clone keeps the base profile as the 2.4 GHz fallback. The clone sets `802-11-wireless.band` to `a` and `connection.autoconnect-priority` to 50. NetworkManager then prefers a 5 GHz BSSID when one is visible. The base profile stays in place, so a 2.4 GHz network still works.
+The service runs `wmr-bridge --prefer-5ghz` before it starts the bridge. This command is a one-shot action. It does not start the daemon. It reads the active NetworkManager connection on the Wi-Fi interface, drops a trailing `-5ghz` to identify the 2.4 GHz base, and creates or updates a profile named `<base>-5ghz`. The clone keeps the base profile as the 2.4 GHz fallback. The clone sets `802-11-wireless.band` to `a` and `connection.autoconnect-priority` to 50. NetworkManager then prefers a 5 GHz BSSID when one is visible. The base profile stays in place, so a 2.4 GHz network still works.
 
 The command also orders the uplinks with NetworkManager route metrics: wired profiles (`802-3-ethernet`) get `ipv4.route-metric` and `ipv6.route-metric` 100, the 5 GHz clone gets 200, and the 2.4 GHz base profile gets 300. A wired `eth0` therefore beats 5 GHz Wi-Fi, which beats 2.4 GHz, regardless of which profile autoconnected.
 

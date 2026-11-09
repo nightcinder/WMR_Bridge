@@ -389,17 +389,53 @@ class UplinkPayloadTests(unittest.TestCase):
         self.assertNotIn("uplink", bridge.hello())
         self.assertNotIn("uplink", bridge.status())
 
-    def test_hello_refreshes_the_network_snapshot(self) -> None:
+    def test_refresh_network_updates_the_snapshot(self) -> None:
         snapshots = [
             (WIFI_INFO, {"iface": "wlan0", "kind": "wifi", "addresses": []}),
             (WIFI_INFO, UPLINK_INFO),
         ]
-        bridge = Bridge(network=lambda: snapshots.pop(0))
+        bridge = Bridge(network=lambda: snapshots.pop(0), network_refresh_s=0)
 
-        self.assertEqual(bridge.hello()["transport"], "wifi")
-        refreshed = bridge.hello()
+        async def refresh_between_hellos():
+            await bridge.refresh_network()
+            first = bridge.hello()
+            await bridge.refresh_network()
+            return first, bridge.hello()
+
+        first, refreshed = asyncio.run(refresh_between_hellos())
+        self.assertEqual(first["transport"], "wifi")
         self.assertEqual(refreshed["transport"], "ethernet")
         self.assertEqual(refreshed["uplink"], UPLINK_INFO)
+
+    def test_hello_does_not_probe_the_network_synchronously(self) -> None:
+        calls: list[int] = []
+
+        def probe():
+            calls.append(1)
+            return WIFI_INFO, UPLINK_INFO
+
+        bridge = Bridge(network=probe)
+
+        bridge.hello()
+
+        self.assertEqual(calls, [])
+
+    def test_refresh_network_is_throttled(self) -> None:
+        calls: list[int] = []
+
+        def probe():
+            calls.append(1)
+            return WIFI_INFO, UPLINK_INFO
+
+        bridge = Bridge(network=probe, network_refresh_s=60)
+
+        async def refresh_twice():
+            await bridge.refresh_network()
+            await bridge.refresh_network()
+
+        asyncio.run(refresh_twice())
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(bridge.uplink, UPLINK_INFO)
 
 
 if __name__ == "__main__":
