@@ -170,7 +170,9 @@ def inspect_wifi(
 
     The result always has the keys ``iface``, ``connected``, ``freqMhz``,
     ``band``, ``supports5Ghz``, ``contentionWarning`` and ``warning``.
-    ``warning`` is ``None`` when there is nothing to report.
+    ``supports5Ghz`` is ``None`` when the radio capabilities could not be
+    read, so callers never mistake "unknown" for "2.4 GHz only". ``warning``
+    is ``None`` when there is nothing to report.
     """
 
     run = runner or _default_runner
@@ -192,7 +194,7 @@ def inspect_wifi(
             "connected": False,
             "freqMhz": None,
             "band": None,
-            "supports5Ghz": False,
+            "supports5Ghz": None,
             "contentionWarning": False,
             "warning": warning,
         }
@@ -210,7 +212,14 @@ def inspect_wifi(
 
     freq_mhz = selected["freqMhz"]
     band = _band_for(freq_mhz)
-    supports_5ghz = _supports_5ghz(phy_frequencies) or band == "5GHz"
+    supports_5ghz: bool | None
+    if phy_result.returncode == 0 and phy_frequencies:
+        supports_5ghz = _supports_5ghz(phy_frequencies) or band == "5GHz"
+    elif band == "5GHz":
+        # Already associated on 5 GHz, so support is proven without `iw phy`.
+        supports_5ghz = True
+    else:
+        supports_5ghz = None
     connected = bool(selected["connected"])
 
     warning: str | None = None
@@ -223,10 +232,15 @@ def inspect_wifi(
                 "Wi-Fi is connected on 2.4 GHz, which shares the radio with "
                 "Bluetooth; prefer a 5 GHz network."
             )
-        else:
+        elif supports_5ghz is False:
             warning = (
                 "Wi-Fi is connected on 2.4 GHz and this adapter has no 5 GHz "
                 "radio; Bluetooth shares that band."
+            )
+        else:
+            warning = (
+                "Wi-Fi is connected on 2.4 GHz, which shares the radio with "
+                "Bluetooth, but 5 GHz support could not be determined."
             )
 
     return {
@@ -300,10 +314,18 @@ def prefer_5ghz(
     if info["iface"] is None:
         return result
     if not info["supports5Ghz"]:
-        result["warning"] = (
-            "Wi-Fi adapter is 2.4 GHz only; Bluetooth shares that band and "
-            "5 GHz cannot be preferred."
-        )
+        if info["supports5Ghz"] is False and info["band"] == "2.4GHz":
+            result["warning"] = (
+                "Wi-Fi adapter is 2.4 GHz only; Bluetooth shares that band and "
+                "5 GHz cannot be preferred."
+            )
+        else:
+            # Support is unknown (missing interface, unreadable `iw phy`):
+            # keep the inspection warning instead of claiming 2.4 GHz only.
+            result["warning"] = info["warning"] or (
+                "Wi-Fi 5 GHz support could not be determined; the current "
+                "connection was left in place."
+            )
         return result
     if not info["connected"]:
         result["warning"] = "Wi-Fi is not connected; no NetworkManager profile to clone."

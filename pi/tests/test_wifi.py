@@ -145,7 +145,16 @@ class InspectTests(unittest.TestCase):
 
         self.assertEqual(result["iface"], "wlan9")
         self.assertFalse(result["connected"])
+        self.assertIsNone(result["supports5Ghz"])
         self.assertIn("not found", result["warning"])
+
+    def test_unreadable_phy_leaves_5ghz_support_unknown(self) -> None:
+        runner = FakeRunner({"iw dev": IW_DEV_24GHZ}, failures={"iw phy"})
+
+        result = inspect_wifi(runner=runner)
+
+        self.assertIsNone(result["supports5Ghz"])
+        self.assertIn("could not be determined", result["warning"])
 
 
 class Prefer5GhzTests(unittest.TestCase):
@@ -234,6 +243,44 @@ class Prefer5GhzTests(unittest.TestCase):
         self.assertTrue(result["changed"])
         self.assertFalse(result["reconnected"])
         self.assertFalse(any("connection up" in command for command in runner.commands()))
+
+    def test_missing_interface_keeps_the_inspection_warning(self) -> None:
+        runner = _prefer_runner(IW_DEV_24GHZ, IW_PHY_DUAL_BAND)
+
+        result = prefer_5ghz(iface="wlan9", runner=runner)
+
+        self.assertFalse(result["changed"])
+        self.assertFalse(result["reconnected"])
+        self.assertIn("wlan9", result["warning"])
+        self.assertIn("not found", result["warning"])
+        self.assertNotIn("2.4 GHz only", result["warning"])
+        self.assertEqual(runner.commands(), ["iw dev"])
+
+    def test_unreadable_phy_keeps_the_inspection_warning(self) -> None:
+        runner = FakeRunner({"iw dev": IW_DEV_24GHZ}, failures={"iw phy"})
+
+        result = prefer_5ghz(runner=runner)
+
+        self.assertIsNone(result["supports5Ghz"])
+        self.assertFalse(result["changed"])
+        self.assertFalse(result["reconnected"])
+        self.assertIn("could not be determined", result["warning"])
+        self.assertNotIn("2.4 GHz only", result["warning"])
+        self.assertEqual(runner.commands(), ["iw dev", "iw phy"])
+
+    def test_failed_activation_keeps_the_current_connection(self) -> None:
+        runner = _prefer_runner(IW_DEV_24GHZ, IW_PHY_DUAL_BAND)
+        runner.failures.add("nmcli connection up HomeNet-5ghz ifname wlan0")
+
+        result = prefer_5ghz(runner=runner)
+
+        self.assertTrue(result["changed"])
+        self.assertFalse(result["reconnected"])
+        self.assertIn("left in place", result["warning"])
+        commands = runner.commands()
+        self.assertIn("nmcli connection up HomeNet-5ghz ifname wlan0", commands)
+        self.assertFalse(any("connection down" in command for command in commands))
+        self.assertFalse(any("modify HomeNet " in command for command in commands))
 
 
 if __name__ == "__main__":
