@@ -448,7 +448,10 @@ stream payloads or tagged FF13 calibration windows. Binary messages from the
 client are rejected with `{"type":"error","code":"binary_not_accepted"}`.
 
 `bridge_id` is a stable identity derived from the hostname and
-`/etc/machine-id`; it is the same value advertised by mDNS and UDP discovery.
+`/etc/machine-id`; it is the same value advertised by mDNS and UDP discovery,
+and by the BLE fallback when it is enabled. The BLE address of a Pi may be
+random, so the BLE advertisement carries the first eight bytes of
+`bridge_id` in its service data instead of relying on the address.
 `version` is the bridge's FF16 analogue: the daemon/package version, not the
 controller firmware. `handFilter` is the configured hand selector (`--hand`):
 `["LEFT", "RIGHT"]` for a both-hand daemon, `["LEFT"]` or `["RIGHT"]` for a
@@ -465,7 +468,7 @@ omits it and answers calibration requests with `calibration_unavailable`.
 The daemon listens on UDP port 8765 on the `--bind` address; unlike the
 WebSocket port this does not follow `--port`, so a client always probes the
 fixed discovery port and learns the actual WebSocket port from the reply. A
-client broadcasts a probe:
+client broadcasts a nonce probe:
 
 ```
 WMR_DISCOVER_V1 <nonce>
@@ -514,6 +517,54 @@ Python dependency:
 
 Advertisement exposes the bridge's hostname and port to the local network. It is
 not authentication and does not change the token requirement.
+
+### BlueZ BLE GATT fallback (optional)
+
+The daemon can also serve the same FF11, FF12 and FF14 payloads over a BlueZ
+BLE GATT service. This is a fallback for when the Wi-Fi WebSocket is
+unreachable. It is off by default. Enable it with `--ble-fallback`. It needs
+`python3-dbus-next` and a free hci adapter (default `hci0`).
+
+The fallback registers the firmware's FF10 service (characteristics FF11 to
+FF17) with BlueZ through `org.bluez.GattManager1` and advertises it with
+`org.bluez.LEAdvertisingManager1`. The advertising name defaults to
+`WMR Bridge` (`--ble-name`). The adapter stays pairable for a limited time
+(`--ble-pairing-window`, default 120 seconds).
+
+Discovery and identity:
+
+- `bridge_id` is the same value on BLE and on TCP. A client that learns it on
+  one transport can match the same bridge on the other.
+- A Pi's BLE address may be random, so a scanner cannot key on it. The BLE
+  advertisement carries the first eight bytes of `bridge_id` in its service
+  data, as `WMB1` followed by those eight bytes. A client matches the
+  advertisement to the `bridge_id` it reads from FF16.
+- FF16 is plaintext and carries `bridge_id`, `name`, `version`, `hosts`,
+  `port`, `path` and `authRequired`. It never carries the token.
+- FF13 is encrypt-read because it carries the session token next to the
+  calibration windows. It also reports `pairingOpen`.
+
+Per-client gating:
+
+- Notifications are gated by each central's CCCD state, not by the bridge.
+  A phone with notifications enabled keeps receiving FF11, FF12 and FF14 even
+  while another client is on TCP. A phone with notifications off receives
+  nothing.
+- FF14 is capped at 50 Hz because the Pi shares `hci0` with the two Classic
+  HID controller links.
+- Bonding is accepted only while the pairing window is open.
+
+Coexistence with TCP:
+
+- The BLE fallback runs beside the WebSocket. A client can use both at once.
+- A client that prefers TCP turns its own BLE notifications off when TCP
+  becomes active. It writes 0x0000 only to the characteristics it enabled. It
+  does not ask the bridge to silence other clients.
+- While on BLE, the client retries TCP at a fixed interval (default 2 seconds).
+  When TCP connects, the notification subscriptions move to TCP without being
+  closed.
+- The UDP probe nonce and `hello.bridge_id` check still apply: a reply is a
+  hint only, and the client confirms `hello.bridge_id` before it sends a token.
 
 ### Authentication
 
