@@ -537,6 +537,30 @@ def read_device_info(
     return parse_info(result.stdout or "", address)
 
 
+def disconnect_device(
+    address: str,
+    command: str = "bluetoothctl",
+    runner: Runner = _run_command,
+    timeout: float = 20.0,
+) -> bool:
+    """Drop the Classic ACL link, which lets an idle controller power off."""
+
+    if not address:
+        return False
+    result = runner([command, "disconnect", address], timeout)
+    output = ""
+    if result is not None:
+        output = f"{result.stdout or ''}\n{result.stderr or ''}"
+    if result is None or result.returncode != 0 or "failed" in output.casefold():
+        LOG.warning(
+            "bluetoothctl disconnect %s failed; the controller may stay connected",
+            address,
+        )
+        return False
+    LOG.info("bluetoothctl disconnected %s", address)
+    return True
+
+
 def collect_status(
     command: str = "bluetoothctl",
     runner: Runner = _run_command,
