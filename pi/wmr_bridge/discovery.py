@@ -85,6 +85,7 @@ class DiscoveryResponder:
         self._clock = clock
         self._log = log
         self._transport: asyncio.DatagramTransport | None = None
+        self._bound_port: int | None = None
         self._last_reply: dict[str, float] = {}
 
     def reply_json(self, nonce: str) -> dict[str, Any]:
@@ -136,16 +137,23 @@ class DiscoveryResponder:
         self._transport = transport
         sockname = transport.get_extra_info("sockname")
         if sockname:
-            self.port = int(sockname[1])
+            self._bound_port = int(sockname[1])
         self._log.info(
             "UDP discovery listening on %s:%d (bridge_id %s)",
             self.listen_host,
-            self.port,
+            self._bound_port if self._bound_port is not None else self.listen_port,
             self.bridge_id,
         )
 
+    @property
+    def bound_port(self) -> int | None:
+        """Port the discovery socket is bound to, or ``None`` before ``start``."""
+
+        return self._bound_port
+
     async def close(self) -> None:
         transport, self._transport = self._transport, None
+        self._bound_port = None
         if transport is not None:
             transport.close()
 

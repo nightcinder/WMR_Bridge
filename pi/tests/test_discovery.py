@@ -132,7 +132,7 @@ class UdpRoundTripTests(unittest.IsolatedAsyncioTestCase):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setblocking(False)
         try:
-            sock.sendto(b"WMR_DISCOVER_V1 8f3a2c", ("127.0.0.1", responder.port))
+            sock.sendto(b"WMR_DISCOVER_V1 8f3a2c", ("127.0.0.1", responder.bound_port))
             data, _addr = await asyncio.wait_for(loop.sock_recvfrom(sock, 4096), 2)
         finally:
             sock.close()
@@ -141,6 +141,21 @@ class UdpRoundTripTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply["nonce"], "8f3a2c")
         self.assertEqual(reply["bridge_id"], "wmr-pi-abc123")
 
+    async def test_reply_advertises_websocket_port_not_discovery_port(self) -> None:
+        responder = _responder(port=9000)
+        await responder.start()
+        self.assertIsNotNone(responder.bound_port)
+        loop = asyncio.get_running_loop()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setblocking(False)
+        try:
+            sock.sendto(b"WMR_DISCOVER_V1 8f3a2c", ("127.0.0.1", responder.bound_port))
+            data, _addr = await asyncio.wait_for(loop.sock_recvfrom(sock, 4096), 2)
+        finally:
+            sock.close()
+            await responder.close()
+        self.assertEqual(json.loads(data)["port"], 9000)
+
     async def test_malformed_probe_gets_no_reply(self) -> None:
         responder = _responder()
         await responder.start()
@@ -148,7 +163,7 @@ class UdpRoundTripTests(unittest.IsolatedAsyncioTestCase):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setblocking(False)
         try:
-            sock.sendto(b"not a probe", ("127.0.0.1", responder.port))
+            sock.sendto(b"not a probe", ("127.0.0.1", responder.bound_port))
             with self.assertRaises(asyncio.TimeoutError):
                 await asyncio.wait_for(loop.sock_recvfrom(sock, 4096), 0.2)
         finally:
