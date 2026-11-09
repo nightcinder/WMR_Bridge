@@ -74,6 +74,36 @@ def _build_parser() -> argparse.ArgumentParser:
         help="raw fragment size ceiling including the 12-byte header (default 244)",
     )
     parser.add_argument("--auth-timeout", type=float, default=5.0, help="seconds a client has to authenticate")
+    parser.add_argument(
+        "--ble-fallback",
+        action="store_true",
+        help=(
+            "also serve the FF10 GATT service over BlueZ BLE as a fallback when "
+            "the Wi-Fi WebSocket is unreachable (off by default; needs "
+            "python3-dbus-next and a free hci adapter)"
+        ),
+    )
+    parser.add_argument(
+        "--ble-adapter",
+        default="hci0",
+        metavar="NAME",
+        help="BlueZ adapter for --ble-fallback (default hci0)",
+    )
+    parser.add_argument(
+        "--ble-name",
+        default="WMR Bridge",
+        help="BLE advertising name for --ble-fallback (default 'WMR Bridge')",
+    )
+    parser.add_argument(
+        "--ble-pairing-window",
+        type=float,
+        default=120.0,
+        metavar="SECONDS",
+        help=(
+            "how long --ble-fallback stays pairable for a new bond "
+            "(default 120, 0 keeps the adapter non-pairable)"
+        ),
+    )
 
     hid = parser.add_argument_group("controllers (BlueZ)")
     hid.add_argument("--hidraw", action="append", default=[], metavar="PATH", help="open this /dev/hidrawN")
@@ -353,6 +383,30 @@ async def _run(args: argparse.Namespace) -> int:
     LOG.info("payloads: FF11 raw, FF12 decoded, FF14 batched; protocol 1")
     LOG.info("hand filter: %s", ", ".join(bridge.hand_filter))
 
+    ble = None
+    if args.ble_fallback:
+        from .ble_gatt import BluezGattPeripheral
+
+        hosts = [address for address in _local_addresses() if address != "127.0.0.1"]
+        ble = BluezGattPeripheral(
+            bridge,
+            adapter=args.ble_adapter,
+            hosts=hosts,
+            port=server.port,
+            name=args.ble_name,
+            pairing_window_s=args.ble_pairing_window,
+        )
+        try:
+            await ble.start()
+            LOG.info(
+                "BLE fallback: FF10 on %s, endpoint %s",
+                args.ble_adapter,
+                ", ".join(hosts) or "no LAN address yet",
+            )
+        except Exception as exc:
+            LOG.warning("BLE fallback disabled: %s", exc)
+            ble = None
+
     advertiser: MdnsAdvertiser | None = None
     discovery: DiscoveryResponder | None = None
     replay: ReplaySource | None = None
@@ -483,6 +537,8 @@ async def _run(args: argparse.Namespace) -> int:
             advertiser.close()
         if discovery is not None:
             await discovery.close()
+        if ble is not None:
+            await ble.close()
         await server.close()
         LOG.info("stopped: %s", bridge.status())
     return 0

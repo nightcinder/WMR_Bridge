@@ -202,6 +202,29 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         record = unpack_record(await asyncio.wait_for(client.recv_binary(), 2))
         self.assertEqual(record.sequence, 3)
 
+    async def test_sink_receives_frames_without_a_tcp_subscriber(self) -> None:
+        class RecordingSink:
+            needs_decoded = True
+
+            def __init__(self) -> None:
+                self.items: list[tuple] = []
+
+            def deliver(self, frame, record) -> None:
+                self.items.append((frame, record))
+
+        sink = RecordingSink()
+        self.bridge.add_sink(sink)  # type: ignore[arg-type]
+        try:
+            self.bridge.ingest(0, SAMPLE_DATA, rx_time_us=99)
+        finally:
+            self.bridge.remove_sink(sink)  # type: ignore[arg-type]
+        self.assertEqual(len(sink.items), 1)
+        frame, record = sink.items[0]
+        self.assertEqual(frame.hand, 0)
+        self.assertIsNotNone(record)
+        self.assertEqual(record.rx_time_us, 99)
+        self.assertEqual(self.bridge.status()["clients"], 0)
+
     async def test_server_close_closes_active_clients(self) -> None:
         client, _ = await self.connect()
         await self.server.close()
