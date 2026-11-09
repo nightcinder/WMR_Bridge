@@ -105,6 +105,11 @@ Then point the companion app's Wi-Fi transport (or `tools/wifi_probe.py`) at
 unless that origin is allow-listed with `--allow-origin`. The companion app and
 the probe do not send one.
 
+To read `/etc/wmr-bridge/token`, run `sudo python3 tools/wifi_probe.py`, or run
+the probe as the `wmr` user with `sudo -u wmr python3 tools/wifi_probe.py`. The
+token file is mode 0600 and owned by `wmr:wmr`, so members of the `wmr` group
+cannot read it.
+
 ## Wi-Fi 5 GHz preference
 
 The service runs `wmr-bridge --prefer-5ghz` before the daemon starts. The command clones the active NetworkManager connection into `<connection>-5ghz`. It restricts the clone to 5 GHz. It sets the clone's autoconnect priority to 50. The base profile stays as the 2.4 GHz fallback. The command switches only when a 5 GHz BSSID is visible. A failed switch leaves the current connection in place. Pass `--no-reconnect` to save the profile without switching.
@@ -112,6 +117,10 @@ The service runs `wmr-bridge --prefer-5ghz` before the daemon starts. The comman
 A 2.4 GHz-only radio, such as the CYW43439 in a Pi Zero 2 W, is a warning-only no-op. The command reports that the adapter has no 5 GHz radio.
 
 The daemon includes a `"wifi"` object in `hello` and `status`. The object has `iface`, `connected`, `freqMhz`, `band`, `supports5Ghz`, `contentionWarning`, and `warning`. `contentionWarning` is true when the Pi is connected on 2.4 GHz. `wmr-bridge status` prints the band, 5 GHz support, and any warning.
+
+## BLE fallback (opt-in)
+
+The daemon does not advertise a BLE GATT service by default. Pass `--ble-fallback` to also serve FF11, FF12 and FF14 over BlueZ BLE when Wi-Fi is unreachable. It is off by default, needs `python3-dbus-next`, and takes `--ble-adapter`, `--ble-name` and `--ble-pairing-window`. It has not been verified on hardware.
 
 ## Files
 
