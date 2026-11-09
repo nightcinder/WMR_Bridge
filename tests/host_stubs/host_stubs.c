@@ -297,6 +297,10 @@ wmr_disconnect_result_t wmr_controller_disconnect(unsigned hand){
     return WMR_DISCONNECT_OK;
 }
 
+void wmr_controller_idle_power_off(unsigned hand){
+    if (hand < WMR_NUM_CONTROLLERS) host.disconnect_calls[hand]++;
+}
+
 wmr_discovery_start_result_t wmr_controller_discover(void){
     host.discover_calls++;
     return WMR_DISCOVERY_STARTED;

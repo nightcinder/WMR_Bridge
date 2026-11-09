@@ -49,6 +49,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "wmr_cfg.h"
+#include "wmr_decode.h"
 
 /* Called (in the BTstack run loop) when a hand's blob state changes. */
 typedef void (*wmr_cfgmgr_listener_t)(unsigned hand);
@@ -63,6 +64,16 @@ void wmr_cfgmgr_on_descriptor(unsigned hand);
 /* A config response report (class WMR_CFG_REPORT_CONFIG), as delivered by BTstack
  * (byte 0 is the 0xA1 header). Never counted or forwarded as a sample. */
 void wmr_cfgmgr_on_report(unsigned hand, const uint8_t *report, uint16_t length);
+
+/* One decoded input report (WMR report ID 0x01) for `hand`. Active buttons, trigger,
+ * thumbstick deflection or gyro motion refresh the idle timer; if the keep-alive had been
+ * paused for idle sleep, the enable pair is re-sent immediately to wake the controller. */
+void wmr_cfgmgr_on_activity(unsigned hand, const wmr_controller_state_t *state);
+
+/* True when `state` counts as user activity under the idle policy: any button, trigger
+ * above 0.05, thumbstick deflection above 0.10, a gyro axis above 0.08 rad/s, or the sum
+ * of the gyro axes above 0.15 rad/s. Exposed for the host test. */
+bool wmr_cfgmgr_state_is_active(const wmr_controller_state_t *state);
 
 /* The hand disconnected: abandon a read in progress (state returns to NOT_READ) and stop the
  * keep-alive; a READY cache stays. */
