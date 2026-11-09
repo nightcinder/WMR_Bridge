@@ -45,6 +45,12 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("--advertise-mdns", unit_text)
         self.assertIn("User=wmr", unit_text)
         self.assertIn("SupplementaryGroups=input bluetooth", unit_text)
+        # The service user cannot clear a boot-time rfkill soft block itself.
+        self.assertIn("ExecStartPre=-+", unit_text)
+        self.assertIn("rfkill unblock bluetooth", unit_text)
+        # rfkill uses /dev/rfkill, so the unit must not widen the socket families.
+        self.assertIn("RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX\n", unit_text)
+        self.assertNotIn("AF_NETLINK", unit_text)
 
         env_text = ENV_EXAMPLE.read_text(encoding="utf-8")
         self.assertIn("WMR_BRIDGE_ARGS", env_text)

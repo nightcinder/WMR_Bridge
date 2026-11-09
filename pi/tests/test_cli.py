@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import io
 import os
+import socket
 import subprocess
 import tempfile
 import unittest
@@ -16,6 +17,7 @@ from wmr_bridge.__main__ import (
     _build_parser,
     _format_status,
     _is_loopback_bind,
+    _local_addresses,
     _parse_cli_args,
     _print_status,
     _read_token,
@@ -62,6 +64,34 @@ class BindTests(unittest.TestCase):
 
     def test_insecure_flag_allows_non_loopback(self) -> None:
         _require_auth_for_bind(_args("0.0.0.0", insecure=True), None)
+
+
+class LocalAddressTests(unittest.TestCase):
+    def test_hostname_loopback_does_not_hide_the_lan_address(self) -> None:
+        class Probe:
+            address: tuple[str, int] = ("192.0.2.50", 12345)
+
+            def __enter__(self) -> "Probe":
+                return self
+
+            def __exit__(self, *_exc: object) -> bool:
+                return False
+
+            def connect(self, _address: tuple[str, int]) -> None:
+                pass
+
+            def getsockname(self) -> tuple[str, int]:
+                return self.address
+
+        infos = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.1.1", 0))]
+        with mock.patch("wmr_bridge.__main__.socket.getaddrinfo", return_value=infos), \
+             mock.patch("wmr_bridge.__main__.socket.socket", return_value=Probe()):
+            self.assertEqual(_local_addresses(), ["127.0.0.1", "192.0.2.50"])
+
+    def test_probe_failure_still_returns_loopback(self) -> None:
+        with mock.patch("wmr_bridge.__main__.socket.getaddrinfo", side_effect=OSError), \
+             mock.patch("wmr_bridge.__main__.socket.socket", side_effect=OSError):
+            self.assertEqual(_local_addresses(), ["127.0.0.1"])
 
 
 class TokenFileTests(unittest.TestCase):

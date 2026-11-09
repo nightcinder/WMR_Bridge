@@ -3,7 +3,7 @@ Version: @VERSION@
 Architecture: all
 Maintainer: nightcinder <67344577+nightcinder@users.noreply.github.com>
 Installed-Size: @INSTALLED_SIZE@
-Depends: python3 (>= 3.10), bluez
+Depends: python3 (>= 3.10), bluez, rfkill, avahi-utils
 Recommends: network-manager
 Section: net
 Priority: optional
