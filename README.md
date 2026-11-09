@@ -413,9 +413,27 @@ Every tunable is a named constant in [src/wmr_config.h](src/wmr_config.h)
 notification limits, timers, advertising). Raw hex dumps and detailed HCI tracing
 are off by default (`WMR_CFG_REPORT_HEXDUMP`, `WMR_CFG_HCI_TRACE`). It ships with
 no controller addresses. `WMR_CFG_LEFT_ADDRESS` / `WMR_CFG_RIGHT_ADDRESS` are
-optional overrides that skip discovery for that hand (WMR only; a PSVR2
+optional overrides that skip discovery for that hand (WMR only. A PSVR2
 controller has to be discovered by name). Discovery settings:
 `WMR_CFG_DISCOVERY_*`.
+
+### Controller idle sleep and power-off
+
+Both bridges keep a connected controller awake with a 0x06 keep-alive. After 5
+minutes without activity they pause it so the controller can sleep; after 15
+minutes they drop the link so the controller powers off. Activity means button
+presses, trigger above 0.05, stick movement above 0.10, or gyro movement above
+the thresholds in [docs/PROTOCOL.md](docs/PROTOCOL.md).
+
+On the ESP32 firmware set `WMR_CFG_IDLE_SLEEP_MS` (default 300000 ms) and
+`WMR_CFG_IDLE_POWEROFF_MS` (default 900000 ms) in `src/wmr_config.h` or with
+`-D`. Set either to 0 to disable it. The power-off value must be 0 or at
+least the sleep value. `WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS` (default 60000
+ms) blocks reconnects after a power-off.
+
+On the Pi bridge use `--idle-sleep-timeout` (default 300) and
+`--idle-poweroff-timeout` (default 900) in seconds. Pass them through
+`WMR_BRIDGE_ARGS` under systemd. 0 disables a stage.
 
 ## Running the host tests
 
