@@ -105,9 +105,10 @@ Then point the companion app's Wi-Fi transport (or `tools/wifi_probe.py`) at
 unless that origin is allow-listed with `--allow-origin`. The companion app and
 the probe do not send one.
 
-To read `/etc/wmr-bridge/token`, run `sudo python3 tools/wifi_probe.py` or add
-your user to the `wmr` group. The token file is mode 0600 and owned by
-`wmr:wmr`.
+To read `/etc/wmr-bridge/token`, run `sudo python3 tools/wifi_probe.py`, or run
+the probe as the `wmr` user with `sudo -u wmr python3 tools/wifi_probe.py`. The
+token file is mode 0600 and owned by `wmr:wmr`, so members of the `wmr` group
+cannot read it.
 
 ## Wi-Fi 5 GHz preference
 

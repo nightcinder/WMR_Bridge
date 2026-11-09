@@ -17,8 +17,9 @@ or later continue to work.
 ### Raspberry Pi bridge
 
 - **Token access for `wifi_probe.py`.** Read `/etc/wmr-bridge/token` with
-  `sudo python3 tools/wifi_probe.py` or as a user in the `wmr` group. The
-  token file is mode 0600 and owned by `wmr:wmr`.
+  `sudo python3 tools/wifi_probe.py`, or run the probe as the `wmr` user with
+  `sudo -u wmr python3 tools/wifi_probe.py`. The token file is mode 0600 and
+  owned by `wmr:wmr`, so members of the `wmr` group cannot read it.
 - **BLE fallback remains opt-in.** `--ble-fallback` serves FF11, FF12 and FF14
   over BlueZ BLE when Wi-Fi is unreachable. It is off by default and needs
   `python3-dbus-next`. It has not been verified on hardware.
