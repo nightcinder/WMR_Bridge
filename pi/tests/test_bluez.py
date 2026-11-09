@@ -17,6 +17,7 @@ from wmr_bridge.bluez import (
     BluezDevice,
     HidrawDevice,
     HidrawReader,
+    WMR_ENABLE_SPACING,
     collect_status,
     discover_hidraw,
     hand_from_name,
@@ -130,7 +131,8 @@ class HidrawReaderTests(unittest.TestCase):
 
     def test_open_uses_read_write_and_sends_both_enable_reports(self) -> None:
         with mock.patch("wmr_bridge.bluez.os.open", return_value=7) as opened, \
-             mock.patch("wmr_bridge.bluez.os.write") as written:
+             mock.patch("wmr_bridge.bluez.os.write") as written, \
+             mock.patch("wmr_bridge.bluez.time.sleep") as slept:
             reader = HidrawReader("/dev/hidraw0", clock=lambda: 100.0)
             self.assertEqual(reader.open(), 7)
 
@@ -144,6 +146,8 @@ class HidrawReaderTests(unittest.TestCase):
         )
         self.assertTrue(all(len(call.args[1]) == 64 for call in written.call_args_list))
         self.assertTrue(all(call.args[0] == 7 for call in written.call_args_list))
+        # The second enable report must be spaced by WMR_CFG_SPACING_MS.
+        slept.assert_called_once_with(WMR_ENABLE_SPACING)
 
     def test_open_falls_back_to_read_only_and_skips_keep_alive(self) -> None:
         with mock.patch(
@@ -156,7 +160,7 @@ class HidrawReaderTests(unittest.TestCase):
 
         self.assertFalse(reader.writable)
         self.assertEqual(opened.call_args_list[0].args[1] & os.O_RDWR, os.O_RDWR)
-        self.assertEqual(opened.call_args_list[1].args[1] & os.O_RDONLY, os.O_RDONLY)
+        self.assertFalse(opened.call_args_list[1].args[1] & os.O_RDWR)
         self.assertFalse(reader.keep_alive(now=1000.0))
         written.assert_not_called()
 

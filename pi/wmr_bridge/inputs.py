@@ -212,7 +212,9 @@ class HidrawManager:
                 "ignoring %s: %s is already assigned to %s", path, other, "LEFT" if hand == 0 else "RIGHT"
             )
             return False
-        reader = HidrawReader(path)
+        reader = HidrawReader(
+            path, keep_alive_interval=self.keep_alive_interval
+        )
         try:
             reader.open()
         except OSError as exc:
@@ -288,7 +290,10 @@ class HidrawManager:
         """Re-send the controller streaming-enable reports while nodes are open."""
 
         while True:
-            await asyncio.sleep(self.keep_alive_interval)
+            # Tick faster than the configured interval and let each reader apply
+            # its own clock, so a node opened mid-interval is not kept waiting
+            # for up to two whole intervals before its first keep-alive.
+            await asyncio.sleep(min(self.keep_alive_interval, 1.0))
             for reader in list(self._readers.values()):
                 reader.keep_alive()
 

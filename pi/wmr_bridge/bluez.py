@@ -176,6 +176,9 @@ WMR_ENABLE_REPORTS = (
 )
 WMR_OUTPUT_REPORT_SIZE = 64
 KEEP_ALIVE_INTERVAL = 10.0
+# The controller drops a back-to-back second enable command; firmware and
+# Monado separate them by WMR_CFG_SPACING_MS (10 ms).
+WMR_ENABLE_SPACING = 0.010
 
 
 class HidrawReader:
@@ -232,7 +235,9 @@ class HidrawReader:
         if self._fd is None or not self._writable:
             return False
         sent = True
-        for command in WMR_ENABLE_REPORTS:
+        for index, command in enumerate(WMR_ENABLE_REPORTS):
+            if index:
+                time.sleep(WMR_ENABLE_SPACING)
             report = command.ljust(WMR_OUTPUT_REPORT_SIZE, b"\x00")
             try:
                 os.write(self._fd, report)
