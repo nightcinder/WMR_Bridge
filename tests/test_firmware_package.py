@@ -395,29 +395,44 @@ def test_variant_build_environment():
         "-DWMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_RIGHT",
     ], "RIGHT defines the hand and the token")
 
-    base = {"PATH": "/bin", "EXTRA_CFLAGS": "-DOTHER=1"}
-    both_env = build.build_env("both", base)
-    check(both_env["EXTRA_CFLAGS"] == "-DOTHER=1",
-          "the both-hands build leaves EXTRA_CFLAGS alone")
-    left_env = build.build_env("left", base)
-    check(left_env["EXTRA_CFLAGS"] ==
-          "-DOTHER=1 -DWMR_CFG_BRIDGE_HANDS=1 "
-          "-DWMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_LEFT",
-          "the variant defines are appended to existing EXTRA_CFLAGS")
-    check(base["EXTRA_CFLAGS"] == "-DOTHER=1",
-          "build_env does not mutate the caller's environment")
-    check(build.build_env("right", {})["EXTRA_CFLAGS"] ==
-          "-DWMR_CFG_BRIDGE_HANDS=2 -DWMR_CFG_BLE_NAME=WMR_CFG_BLE_NAME_RIGHT",
-          "a variant works without a pre-existing EXTRA_CFLAGS")
-
     check(build.build_dir_name("both") == build.BUILD_DIR,
           "both keeps the original build directory and its cache")
-    check(build.build_dir_name("left") == build.BUILD_DIR + "-left",
-          "LEFT gets its own build directory")
-    check(build.build_dir_name("right") == build.BUILD_DIR + "-right",
-          "RIGHT gets its own build directory")
-    check(len({build.build_dir_name(v) for v in fp.VARIANTS}) == 3,
-          "no two variants share a build directory")
+    check(build.build_dir_name("left") == build.BUILD_DIR,
+          "LEFT shares the build directory")
+    check(build.build_dir_name("right") == build.BUILD_DIR,
+          "RIGHT shares the build directory")
+    check(len({build.build_dir_name(v) for v in fp.VARIANTS}) == 1,
+          "every variant shares one build directory")
+
+
+def test_variant_header():
+    both = build.variant_header_text("both")
+    check("WMR_CFG_BRIDGE_HANDS" not in both,
+          "the both-hands header defines nothing; the source defaults stand")
+    left = build.variant_header_text("left")
+    check("#define WMR_CFG_BRIDGE_HANDS 1" in left,
+          "LEFT defines the hand count as a #define")
+    check("#define WMR_CFG_BLE_NAME WMR_CFG_BLE_NAME_LEFT" in left,
+          "LEFT defines the advertised-name token, never a quoted string")
+    right = build.variant_header_text("right")
+    check("#define WMR_CFG_BRIDGE_HANDS 2" in right and
+          "#define WMR_CFG_BLE_NAME WMR_CFG_BLE_NAME_RIGHT" in right,
+          "RIGHT defines its own hand and name")
+    check(len({both, left, right}) == 3,
+          "each variant has its own header text")
+
+    with tempfile.TemporaryDirectory() as root:
+        build_dir = Path(root) / "build-wmr-bridge"
+        check(build.write_variant_header(build_dir, "left"),
+              "the first write reports a change")
+        path = build_dir / build.VARIANT_HEADER
+        check(path.is_file(), "the header lands in the build directory")
+        check(path.read_text() == left, "the header holds the LEFT defines")
+        check(not build.write_variant_header(build_dir, "left"),
+              "repeating the same variant leaves the header (and ninja) alone")
+        check(build.write_variant_header(build_dir, "right"),
+              "switching variants rewrites the header")
+        check(path.read_text() == right, "the header now holds the RIGHT defines")
 
 
 def test_flasher_page_contract():

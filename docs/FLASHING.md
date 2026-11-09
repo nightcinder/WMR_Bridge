@@ -118,8 +118,9 @@ python3 tools/firmware/build.py --variant left  --idf-export ~/esp/esp-idf/expor
 python3 tools/firmware/build.py --variant right --idf-export ~/esp/esp-idf/export.sh --flash /dev/ttyUSB1
 ```
 
-The flags are compile-time defines only. The script appends them to
-`EXTRA_CFLAGS`. It never edits `src/wmr_config.h`:
+The flags are compile-time defines only. The script writes them into the build
+tree's generated `wmr_variant.h`, which the application component compiles with
+`-include`; it never edits `src/wmr_config.h`:
 
 | Variant | `WMR_CFG_BRIDGE_HANDS` | `WMR_CFG_BLE_NAME` | Advertised name |
 | --- | --- | --- | --- |
@@ -130,11 +131,17 @@ The flags are compile-time defines only. The script appends them to
 The `WMR Bridge` prefix is load-bearing. Clients find the bridge by prefix, so
 the single-hand names keep it.
 
-Each variant uses its own build directory (`build-wmr-bridge`,
-`build-wmr-bridge-left`, `build-wmr-bridge-right`). `EXTRA_CFLAGS` is read at
-configure time, so a shared directory could silently reuse the previous
-variant's defines. `--variant both` still uses `build-wmr-bridge` and produces
-today's artifact names.
+All three variants share one build directory (`build-wmr-bridge`). Only the
+application component includes the generated header, so building the second and
+third variant recompiles the application sources and relinks; the ESP-IDF and
+BTstack objects stay in place. That matters for CI, which builds all three
+variants on every pull request. The defines deliberately do not go through
+`EXTRA_CFLAGS`: ESP-IDF reads that at configure time and puts it on every
+component's command line, so changing it rebuilds the whole tree.
+
+A bare `idf.py build` (see [BUILD_WINDOWS.md](BUILD_WINDOWS.md)) keeps whichever
+variant the last `build.py --variant` wrote; `--variant both` restores the
+default image.
 
 ### One board, single-hand mode
 
