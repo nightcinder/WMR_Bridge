@@ -249,8 +249,9 @@ journalctl -u wmr-bridge -f
 
 The package is `Architecture: all` (the daemon is Python). `postinst` creates
 the `wmr` system user (`input` group), generates `/etc/wmr-bridge/token`
-(`0600 wmr:wmr`) if it is absent, reloads udev, then enables and starts the
-unit. `/etc/wmr-bridge/wmr-bridge.env` and its example are conffiles, so an
+(`0640 wmr:wmr`) if it is absent, adds the invoking `sudo` user to the `wmr`
+group, reloads udev, then enables and starts the unit.
+`/etc/wmr-bridge/wmr-bridge.env` and its example are conffiles, so an
 upgrade keeps local edits. The generated token is not a package file and
 survives reinstall and upgrade. `apt remove wmr-bridge` stops and disables the
 unit and keeps the token. `apt purge wmr-bridge` removes the token.
@@ -303,10 +304,10 @@ sudo useradd --system --create-home --groups input,bluetooth wmr
 sudo mkdir -p /opt/wmr-bridge /etc/wmr-bridge
 sudo cp -r pi /opt/wmr-bridge/
 sudo cp pi/udev/99-wmr-bridge.rules /etc/udev/rules.d/
-sudo install -m 600 /dev/null /etc/wmr-bridge/token
+sudo install -m 640 /dev/null /etc/wmr-bridge/token
 sudo sh -c 'head -c 24 /dev/urandom | base64 > /etc/wmr-bridge/token'
 sudo chown wmr:wmr /etc/wmr-bridge/token
-sudo chmod 600 /etc/wmr-bridge/token
+sudo chmod 640 /etc/wmr-bridge/token
 sudo cp /opt/wmr-bridge/pi/systemd/wmr-bridge.env.example /etc/wmr-bridge/wmr-bridge.env
 sudo cp /opt/wmr-bridge/pi/systemd/wmr-bridge.service /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -318,9 +319,11 @@ The unit runs as `wmr` with `SupplementaryGroups=input bluetooth`, restarts on f
 reads the token from `/etc/wmr-bridge/token`, and loads optional flags from
 `/etc/wmr-bridge/wmr-bridge.env` via `WMR_BRIDGE_ARGS` (for example,
 `WMR_BRIDGE_ARGS=--hand left` on a single-hand Pi without editing the unit
-file). The token file must be owned by `wmr` (mode 0600). A root-owned file is
-unreadable by the service, which then exits with a message naming the path and
-the uid it runs as.
+file). The token file must be owned by `wmr` (mode 0640, group `wmr`). Members
+of the `wmr` group (the installer adds the invoking `sudo` user) can read it
+and run `pi/tools/wifi_probe.py` without sudo; group membership applies on the
+next login. A root-owned file is unreadable by the service, which then exits
+with a message naming the path and the uid it runs as.
 
 ### Pre-flight kit (no hardware)
 
@@ -373,7 +376,7 @@ token, reinstalls it (keeping the token and a locally edited
 `wmr-bridge.env`), starts the daemon from the staged tree in replay mode, and
 asserts that the packaged probe receives both hands with zero sequence gaps,
 zero tick-based missing reports, zero server drops and zero decode errors. It
-also checks the installed unit, udev rule, power-save drop-in and `0600` token,
+also checks the installed unit, udev rule, power-save drop-in and `0640` token,
 then runs `prerm`/`postrm` for remove and purge. A pass means the packaging
 path is sound. It is not a Pi, BlueZ or radio result. The hardware checks
 remain P1-P11 in the run sheet.
@@ -472,7 +475,7 @@ client are rejected with `{"type":"error","code":"binary_not_accepted"}`.
 
 `bridge_id` is a stable identity derived from the hostname and
 `/etc/machine-id`; it is the same value advertised by mDNS and UDP discovery,
-and by the BLE fallback when it is enabled. The BLE address of a Pi may be
+and by the BLE GATT peripheral. The BLE address of a Pi may be
 random, so the BLE advertisement carries the first eight bytes of
 `bridge_id` in its service data instead of relying on the address.
 `version` is the bridge's FF16 analogue: the daemon/package version, not the
@@ -541,18 +544,22 @@ Python dependency:
 Advertisement exposes the bridge's hostname and port to the local network. It is
 not authentication and does not change the token requirement.
 
-### BlueZ BLE GATT fallback (optional)
+### BlueZ BLE GATT fallback (default)
 
-The daemon can also serve the same FF11, FF12 and FF14 payloads over a BlueZ
+The daemon also serves the same FF11, FF12 and FF14 payloads over a BlueZ
 BLE GATT service. This is a fallback for when the Wi-Fi WebSocket is
-unreachable. It is off by default. Enable it with `--ble-fallback`. It needs
-`python3-dbus-next` and a free hci adapter (default `hci0`).
+unreachable. It starts by default; disable it with `--no-ble`. The old
+`--ble-fallback` flag is a deprecated no-op alias. The peripheral needs
+`python3-dbus-next` and a free hci adapter (default `hci0`); if either is
+missing the daemon logs a warning and keeps serving TCP.
 
 The fallback registers the firmware's FF10 service (characteristics FF11 to
 FF17) with BlueZ through `org.bluez.GattManager1` and advertises it with
-`org.bluez.LEAdvertisingManager1`. The advertising name defaults to
-`WMR Bridge` (`--ble-name`). The adapter stays pairable for a limited time
-(`--ble-pairing-window`, default 120 seconds).
+`org.bluez.LEAdvertisingManager1`. Advertising uses a slow 1000–1285 ms
+interval so it leaves airtime for the two Classic HID links on the same
+radio. The advertising name defaults to `WMR Bridge` (`--ble-name`). The
+adapter stays pairable for a limited time (`--ble-pairing-window`, default
+120 seconds).
 
 Discovery and identity:
 

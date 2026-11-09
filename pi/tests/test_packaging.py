@@ -53,7 +53,8 @@ class PackagingTests(unittest.TestCase):
             "ExecStartPre=-+/usr/bin/python3 -m wmr_bridge --prefer-5ghz",
             unit_text,
         )
-        # iw reads cfg80211 over generic netlink; rfkill itself needs no family.
+        # rfkill uses /dev/rfkill; AF_NETLINK supports iw cfg80211 queries and
+        # route/interface checks.
         self.assertIn(
             "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK\n",
             unit_text,
@@ -128,7 +129,7 @@ class PackagingTests(unittest.TestCase):
             token_value = token_file.read_text(encoding="utf-8").strip()
             self.assertGreaterEqual(len(token_value), 24)
             mode = stat.S_IMODE(token_file.stat().st_mode)
-            self.assertEqual(mode, 0o600)
+            self.assertEqual(mode, 0o640)
 
     def test_installer_preserves_existing_token_and_env_and_invokes_system_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -141,6 +142,7 @@ class PackagingTests(unittest.TestCase):
             _write_stub(bin_dir, "id", "exit 1")
             _write_stub(bin_dir, "getent", "exit 0")
             _write_stub(bin_dir, "useradd", f'echo "useradd $*" >> "{log_file}"')
+            _write_stub(bin_dir, "usermod", f'echo "usermod $*" >> "{log_file}"')
             _write_stub(bin_dir, "chown", f'echo "chown $*" >> "{log_file}"')
             _write_stub(bin_dir, "udevadm", f'echo "udevadm $*" >> "{log_file}"')
             _write_stub(bin_dir, "systemctl", f'echo "systemctl $*" >> "{log_file}"')
@@ -160,6 +162,7 @@ class PackagingTests(unittest.TestCase):
                 **os.environ,
                 "DESTDIR": str(destdir),
                 "WMR_SKIP_PRIVILEGED": "0",
+                "SUDO_USER": "pi",
                 "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
             }
             proc = subprocess.run(
@@ -172,11 +175,12 @@ class PackagingTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
 
             self.assertEqual(token_file.read_text(encoding="utf-8"), "existing-secret-token\n")
-            self.assertEqual(stat.S_IMODE(token_file.stat().st_mode), 0o600)
+            self.assertEqual(stat.S_IMODE(token_file.stat().st_mode), 0o640)
             self.assertEqual(custom_env.read_text(encoding="utf-8"), "WMR_BRIDGE_ARGS=--hand right\n")
 
             calls = log_file.read_text(encoding="utf-8").splitlines()
             self.assertIn("useradd --system --create-home --groups input,bluetooth wmr", calls)
+            self.assertIn("usermod -aG wmr pi", calls)
             self.assertIn(f"chown wmr:wmr {token_file}", calls)
             self.assertIn("udevadm control --reload-rules", calls)
             self.assertIn("udevadm trigger", calls)

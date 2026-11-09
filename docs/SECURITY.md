@@ -116,7 +116,7 @@ The Pi bridge carries the same data over a Wi-Fi WebSocket instead of BLE. Its
 mechanical safeguards were added in #47 / ONY-116:
 
 - `--bind` defaults to `127.0.0.1`. A non-loopback bind requires a shared
-  bearer token (`--token-file` preferred, mode `0600`, owned by `wmr`).
+  bearer token (`--token-file` preferred, mode `0640`, owned by `wmr`).
   Otherwise the daemon exits before opening a socket.
 - Requests with an `Origin` header are rejected unless that exact origin was
   allow-listed.

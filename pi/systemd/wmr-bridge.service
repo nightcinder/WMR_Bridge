@@ -14,8 +14,8 @@ EnvironmentFile=-/etc/wmr-bridge/wmr-bridge.env
 # A stock Pi OS image soft-blocks Bluetooth via rfkill, and the service runs as
 # wmr, which cannot clear it. Run this as root (the "+" prefix) before start.
 # rfkill writes to /dev/rfkill, a character device, so it needs no extra
-# address family. The daemon uses AF_INET/AF_INET6/AF_UNIX, and `iw` needs
-# AF_NETLINK to read the Wi-Fi band from cfg80211.
+# address family. The daemon uses AF_INET/AF_INET6/AF_UNIX, and AF_NETLINK for
+# `iw` cfg80211 queries and route/interface inspection.
 ExecStartPre=-+/bin/sh -c 'command -v rfkill >/dev/null 2>&1 && rfkill unblock bluetooth'
 # Bluetooth Classic shares the 2.4 GHz radio, so save a 5 GHz-preferred
 # NetworkManager profile before the bridge starts. "+" runs this as root

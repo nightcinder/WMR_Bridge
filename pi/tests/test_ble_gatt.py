@@ -129,6 +129,8 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(data["service_uuids"], [FF10_SERVICE])
         self.assertEqual(data["local_name"], "WMR Bridge")
         self.assertEqual(data["service_data"][FF10_SERVICE], b"WMB1wmr-pi-a")
+        self.assertEqual(data["min_interval_ms"], 1000)
+        self.assertEqual(data["max_interval_ms"], 1285)
 
 
 class MetadataTests(unittest.TestCase):
@@ -164,10 +166,13 @@ class MetadataTests(unittest.TestCase):
         hosts.append("192.0.2.20")
         self.assertEqual(json.loads(application.ff16_value())["hosts"], ["192.0.2.20"])
 
-    def test_cli_ble_fallback_is_off_by_default(self) -> None:
+    def test_cli_ble_is_on_by_default_and_can_be_disabled(self) -> None:
         parser = _build_parser()
-        self.assertFalse(parser.parse_args([]).ble_fallback)
+        self.assertTrue(parser.parse_args([]).ble)
+        self.assertFalse(parser.parse_args(["--no-ble"]).ble)
+        # --ble-fallback stays accepted as a deprecated no-op alias.
         args = parser.parse_args(["--ble-fallback"])
+        self.assertTrue(args.ble)
         self.assertTrue(args.ble_fallback)
         self.assertEqual(args.ble_adapter, "hci0")
         self.assertEqual(args.ble_pairing_window, 120.0)

@@ -77,24 +77,33 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--auth-timeout", type=float, default=5.0, help="seconds a client has to authenticate")
     parser.add_argument(
+        "--no-ble",
+        dest="ble",
+        action="store_false",
+        help=(
+            "do not serve the FF10 GATT service over BlueZ BLE or advertise it "
+            "(the peripheral is on by default; needs python3-dbus-next and a free "
+            "hci adapter)"
+        ),
+    )
+    parser.add_argument(
         "--ble-fallback",
         action="store_true",
         help=(
-            "also serve the FF10 GATT service over BlueZ BLE as a fallback when "
-            "the Wi-Fi WebSocket is unreachable (off by default; needs "
-            "python3-dbus-next and a free hci adapter)"
+            "deprecated no-op alias; the BLE GATT peripheral is enabled by "
+            "default, use --no-ble to disable it"
         ),
     )
     parser.add_argument(
         "--ble-adapter",
         default="hci0",
         metavar="NAME",
-        help="BlueZ adapter for --ble-fallback (default hci0)",
+        help="BlueZ adapter for the BLE GATT peripheral (default hci0)",
     )
     parser.add_argument(
         "--ble-name",
         default="WMR Bridge",
-        help="BLE advertising name for --ble-fallback (default 'WMR Bridge')",
+        help="BLE advertising name for the GATT peripheral (default 'WMR Bridge')",
     )
     parser.add_argument(
         "--ble-pairing-window",
@@ -102,7 +111,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=120.0,
         metavar="SECONDS",
         help=(
-            "how long --ble-fallback stays pairable for a new bond "
+            "how long the BLE GATT peripheral stays pairable for a new bond "
             "(default 120, 0 keeps the adapter non-pairable)"
         ),
     )
@@ -197,7 +206,7 @@ def _read_token(args: argparse.Namespace) -> str | None:
                     "the provided systemd unit runs as user 'wmr', so a "
                     "root-owned token file is not readable by it. Check "
                     f"'ls -l {args.token_file}' and fix ownership with "
-                    f"'sudo chown wmr:wmr {args.token_file}' (mode 0600)"
+                    f"'sudo chown wmr:wmr {args.token_file}' (mode 0640)"
                 )
             else:
                 hint = f"check that {args.token_file} exists and is readable"
@@ -207,8 +216,11 @@ def _read_token(args: argparse.Namespace) -> str | None:
             ) from exc
         try:
             mode = os.stat(args.token_file).st_mode
-            if mode & (stat.S_IRGRP | stat.S_IROTH):
-                LOG.warning("%s is readable by group/other; chmod 600 is recommended", args.token_file)
+            if mode & stat.S_IROTH:
+                LOG.warning(
+                    "%s is world-readable; chmod 0640 is recommended",
+                    args.token_file,
+                )
         except OSError:
             pass
     if token == "":
@@ -482,6 +494,11 @@ async def _run(args: argparse.Namespace) -> int:
 
     ble = None
     if args.ble_fallback:
+        LOG.warning(
+            "--ble-fallback is deprecated and now a no-op: the BLE GATT "
+            "peripheral is enabled by default (use --no-ble to disable it)"
+        )
+    if args.ble:
         from .ble_gatt import BluezGattPeripheral
 
         hosts = lambda: [address for address in _local_addresses() if address != "127.0.0.1"]
@@ -496,11 +513,11 @@ async def _run(args: argparse.Namespace) -> int:
         try:
             await ble.start()
         except Exception as exc:
-            LOG.warning("BLE fallback disabled: %s", exc)
+            LOG.warning("BLE GATT disabled: %s", exc)
             ble = None
         else:
             LOG.info(
-                "BLE fallback: FF10 on %s, endpoint %s",
+                "BLE GATT: FF10 on %s, endpoint %s",
                 args.ble_adapter,
                 ", ".join(hosts()) or "no LAN address yet",
             )

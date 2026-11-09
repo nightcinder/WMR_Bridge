@@ -184,8 +184,10 @@ class AutoPairIntervalTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("poll_interval", captured)
 
 
-class BleFallbackStartupTests(unittest.IsolatedAsyncioTestCase):
-    async def test_ble_fallback_start_keeps_and_closes_the_peripheral(self) -> None:
+class BlePeripheralStartupTests(unittest.IsolatedAsyncioTestCase):
+    async def _run_with_ble(
+        self, argv: list[str]
+    ) -> tuple[list[str], dict[str, object], list[str]]:
         events: list[str] = []
         captured: dict[str, object] = {}
 
@@ -210,19 +212,50 @@ class BleFallbackStartupTests(unittest.IsolatedAsyncioTestCase):
                 pass
 
         args = _build_parser().parse_args(
-            ["--duration", "0.05", "--port", "0", "--ble-fallback", "--no-auto-pair"]
+            ["--duration", "0.05", "--port", "0", "--no-auto-pair", *argv]
         )
         with mock.patch("wmr_bridge.ble_gatt.BluezGattPeripheral", FakeBle), \
              mock.patch("wmr_bridge.__main__.HidrawManager", FakeManager), \
              self.assertLogs("wmr_bridge", level="INFO") as logs:
             await asyncio.wait_for(_run(args), 5)
+        return events, captured, logs.output
 
+    async def test_ble_peripheral_starts_by_default(self) -> None:
+        events, captured, output = await self._run_with_ble([])
         self.assertEqual(events, ["start", "close"])
-        self.assertTrue(any("BLE fallback: FF10" in line for line in logs.output))
-        self.assertFalse(any("BLE fallback disabled" in line for line in logs.output))
+        self.assertTrue(any("BLE GATT: FF10" in line for line in output))
+        self.assertFalse(any("BLE GATT disabled" in line for line in output))
         hosts = captured["hosts"]
         self.assertTrue(callable(hosts))
         self.assertIsInstance(hosts(), list)
+
+    async def test_no_ble_skips_the_peripheral(self) -> None:
+        class ForbiddenBle:
+            def __init__(self, *_args, **_kwargs) -> None:
+                raise AssertionError("--no-ble must not construct the peripheral")
+
+        class FakeManager:
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+            def start(self) -> None:
+                pass
+
+            async def close(self) -> None:
+                pass
+
+        args = _build_parser().parse_args(
+            ["--duration", "0.05", "--port", "0", "--no-auto-pair", "--no-ble"]
+        )
+        with mock.patch("wmr_bridge.ble_gatt.BluezGattPeripheral", ForbiddenBle), \
+             mock.patch("wmr_bridge.__main__.HidrawManager", FakeManager), \
+             self.assertLogs("wmr_bridge", level="INFO"):
+            await asyncio.wait_for(_run(args), 5)
+
+    async def test_ble_fallback_alias_warns_but_still_runs(self) -> None:
+        events, _captured, output = await self._run_with_ble(["--ble-fallback"])
+        self.assertEqual(events, ["start", "close"])
+        self.assertTrue(any("deprecated" in line for line in output))
 
 
 class HandFilterTests(unittest.TestCase):

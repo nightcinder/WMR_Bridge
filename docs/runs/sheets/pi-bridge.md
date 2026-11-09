@@ -23,7 +23,7 @@ To compare with ESP32 runs:
 - A dedicated 5 GHz SSID; `iw dev wlan0 link` must show `freq` above 5000.
 - Wi-Fi power save off: `sudo iw dev wlan0 set power_save off`.
 - Client: the Companion Wi-Fi path, or `pi/tools/wifi_probe.py` as fallback. The app path is host-tested only until this sitting runs.
-- Security: `--bind` defaults to loopback. A non-loopback bind needs `--token` or `--token-file`. Create a `0600` token:
+- Security: `--bind` defaults to loopback. A non-loopback bind needs `--token` or `--token-file`. Create a token for the probe:
 
   ```bash
   head -c 24 /dev/urandom | base64 > token
@@ -41,7 +41,7 @@ Desk pre-flight (already run 2026-10-31, not Pi results): package build and layo
 | hidraw | `test -r /dev/hidraw0` works without `sudo` |
 | Wi-Fi band | `iw dev wlan0 link` reports `freq` > 5000 |
 | Power save | `iw dev wlan0 get power_save` reports `off` |
-| Token | mode `0600`, owned by the service user |
+| Token | mode `0640`, owned by `wmr:wmr` |
 | Bind | `--bind 0.0.0.0` only with a token file |
 | Client auth | `auth_ok`, then `subscribed` within 5 s |
 | Stream | `rate_rx` 150-205/s per active hand, `errors=0` |
