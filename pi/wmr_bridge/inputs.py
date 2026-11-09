@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from .bluez import (
+    KEEP_ALIVE_INTERVAL,
     HidrawDevice,
     HidrawReader,
     discover_hidraw,
@@ -135,6 +136,7 @@ class HidrawManager:
         explicit_paths: Iterable[str] = (),
         include_all: bool = False,
         poll_interval: float = 1.0,
+        keep_alive_interval: float = KEEP_ALIVE_INTERVAL,
     ) -> None:
         self.bridge = bridge
         self.left_spec = left_spec
@@ -143,11 +145,13 @@ class HidrawManager:
         self.explicit_paths = list(explicit_paths)
         self.include_all = include_all
         self.poll_interval = max(0.2, poll_interval)
+        self.keep_alive_interval = max(1.0, keep_alive_interval)
         self._loop: asyncio.AbstractEventLoop | None = None
         self._readers: dict[str, HidrawReader] = {}
         self._hand_of: dict[str, int] = {}
         self._path_of_hand: dict[int, str] = {}
         self._task: asyncio.Task[None] | None = None
+        self._keep_alive_task: asyncio.Task[None] | None = None
         self._no_controllers_warned = False
 
     def start(self) -> None:
@@ -155,15 +159,20 @@ class HidrawManager:
         for path in self.explicit_paths:
             self._open(path)
         self._task = asyncio.create_task(self._monitor(), name="hidraw-monitor")
+        self._keep_alive_task = asyncio.create_task(
+            self._keep_alive_loop(), name="hidraw-keep-alive"
+        )
 
     async def close(self) -> None:
-        if self._task is not None:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
+        for task in (self._task, self._keep_alive_task):
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        self._task = None
+        self._keep_alive_task = None
         for path in list(self._readers):
             self._close(path)
 
@@ -274,6 +283,14 @@ class HidrawManager:
                 self.bridge.hands[hand].errors += 1
                 continue
             self.bridge.ingest(hand, frame)
+
+    async def _keep_alive_loop(self) -> None:
+        """Re-send the controller streaming-enable reports while nodes are open."""
+
+        while True:
+            await asyncio.sleep(self.keep_alive_interval)
+            for reader in list(self._readers.values()):
+                reader.keep_alive()
 
     async def _monitor(self) -> None:
         while True:
