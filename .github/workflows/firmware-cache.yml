@@ -40,6 +40,9 @@ jobs:
       CCACHE_DIR: /root/.ccache
       CCACHE_MAXSIZE: 2G
       CCACHE_COMPRESS: "true"
+      # Must match firmware.yml: the default mtime check is unstable across
+      # containers and makes every object miss. See the comment there.
+      CCACHE_COMPILERCHECK: content
     steps:
       - uses: actions/checkout@v7
         with:

@@ -49,6 +49,12 @@ jobs:
       # partial restore still saves the bulk of the compile.
       CCACHE_MAXSIZE: 2G
       CCACHE_COMPRESS: "true"
+      # Not the default (mtime). ccache hashes the compiler's mtime down to the
+      # nanosecond, and the same image presents a different nsec for
+      # /opt/esp/tools/.../xtensa-esp32-elf-gcc in each container, so every
+      # object missed even after a restore (measured: 3594/3594 misses, the
+      # only difference in the hash input was that one field).
+      CCACHE_COMPILERCHECK: content
     steps:
       - uses: actions/checkout@v7
         with:
