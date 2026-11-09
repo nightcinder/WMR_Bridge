@@ -88,6 +88,14 @@ iw dev wlan0 get power_save    # off; the installer adds a drop-in
 
 If the link is at 2.4 GHz, reconnect to the 5 GHz SSID before continuing.
 
+### Automatic 5 GHz preference
+
+The package applies a 5 GHz preference during install and on every service start. `postinst` and `install.sh` run `wmr-bridge --prefer-5ghz --no-reconnect`. This saves a profile named `<connection>-5ghz` without moving an active SSH session. The service unit runs `wmr-bridge --prefer-5ghz` before the daemon starts. That command may reconnect to the 5 GHz profile when a 5 GHz BSSID is visible.
+
+The base connection stays in place as the 2.4 GHz fallback. A 2.4 GHz-only radio, such as the CYW43439 in a Pi Zero 2 W, is a warning-only no-op. The command reports that the adapter has no 5 GHz radio.
+
+The bridge reports the Wi-Fi band in `hello` and `status`. The `"wifi"` object includes `iface`, `connected`, `freqMhz`, `band`, `supports5Ghz`, `contentionWarning`, and `warning`. `contentionWarning` is true when the Pi is on 2.4 GHz. `wmr-bridge status` prints the band, 5 GHz support, and any warning.
+
 ## 4. Install
 
 The fastest path is the one-line installer. It downloads the package, checks
