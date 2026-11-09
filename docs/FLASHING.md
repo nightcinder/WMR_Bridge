@@ -311,7 +311,8 @@ version.
 
 The pull-request job keeps the ESP-IDF ccache in the Actions cache
 (`/root/.ccache`, `CCACHE_COMPILERCHECK=content`), so a warm run compiles only
-the files the PR touched: all three variants take 1 m 20 s instead of 5 m 45 s.
+the files the PR touched, plus `esp_app_desc.c` (it carries the version): all
+three variants take 1 m 20 s instead of 5 m 45 s.
 A cache saved by a pull request is visible only to that pull request, so
 `firmware-cache.yml` runs the same three-variant build on `main` weekly (and on
 manual dispatch) to keep a cache every new pull request can restore. The
