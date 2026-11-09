@@ -48,6 +48,11 @@ class PackagingTests(unittest.TestCase):
         # The service user cannot clear a boot-time rfkill soft block itself.
         self.assertIn("ExecStartPre=-+", unit_text)
         self.assertIn("rfkill unblock bluetooth", unit_text)
+        # The unit stages a 5 GHz-preferred profile before the bridge starts.
+        self.assertIn(
+            "ExecStartPre=-+/usr/bin/python3 -m wmr_bridge --prefer-5ghz",
+            unit_text,
+        )
         # rfkill uses /dev/rfkill, so the unit must not widen the socket families.
         self.assertIn("RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX\n", unit_text)
         self.assertNotIn("AF_NETLINK", unit_text)
@@ -137,6 +142,8 @@ class PackagingTests(unittest.TestCase):
             _write_stub(bin_dir, "chown", f'echo "chown $*" >> "{log_file}"')
             _write_stub(bin_dir, "udevadm", f'echo "udevadm $*" >> "{log_file}"')
             _write_stub(bin_dir, "systemctl", f'echo "systemctl $*" >> "{log_file}"')
+            _write_stub(bin_dir, "nmcli", "exit 0")
+            _write_stub(bin_dir, "python3", f'echo "python3 $*" >> "{log_file}"')
 
             etc_dir = destdir / "etc" / "wmr-bridge"
             etc_dir.mkdir(parents=True)
@@ -171,6 +178,7 @@ class PackagingTests(unittest.TestCase):
             self.assertIn(f"chown wmr:wmr {token_file}", calls)
             self.assertIn("udevadm control --reload-rules", calls)
             self.assertIn("udevadm trigger", calls)
+            self.assertIn("python3 -m wmr_bridge --prefer-5ghz --no-reconnect", calls)
             self.assertIn("systemctl daemon-reload", calls)
             self.assertIn("systemctl enable bluetooth.service", calls)
             self.assertIn("systemctl start bluetooth.service", calls)

@@ -110,6 +110,7 @@ class DebPackagingTests(unittest.TestCase):
             self.assertIn("rfkill unblock bluetooth", postinst)
             self.assertIn("systemctl enable bluetooth.service", postinst)
             self.assertIn("systemctl start bluetooth.service", postinst)
+            self.assertIn("--prefer-5ghz --no-reconnect", postinst)
             self.assertNotIn(".pyc", contents)
 
     def test_installed_wrapper_prints_version(self) -> None:

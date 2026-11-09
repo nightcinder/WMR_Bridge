@@ -16,6 +16,11 @@ EnvironmentFile=-/etc/wmr-bridge/wmr-bridge.env
 # rfkill writes to /dev/rfkill, a character device, so it needs no extra
 # address family; the daemon itself only uses AF_INET/AF_INET6/AF_UNIX.
 ExecStartPre=-+/bin/sh -c 'command -v rfkill >/dev/null 2>&1 && rfkill unblock bluetooth'
+# Bluetooth Classic shares the 2.4 GHz radio, so save a 5 GHz-preferred
+# NetworkManager profile before the bridge starts. "+" runs this as root
+# outside the wmr/NoNewPrivileges restrictions so nmcli can write the profile;
+# "-" keeps a 2.4 GHz-only or unconfigured radio non-fatal.
+ExecStartPre=-+/usr/bin/python3 -m wmr_bridge --prefer-5ghz
 ExecStart=/usr/bin/python3 -m wmr_bridge --bind 0.0.0.0 --port 8765 --token-file /etc/wmr-bridge/token --advertise-mdns $WMR_BRIDGE_ARGS
 Restart=on-failure
 RestartSec=2

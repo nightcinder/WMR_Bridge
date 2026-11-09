@@ -23,6 +23,7 @@ from wmr_bridge.__main__ import (
     _read_token,
     _require_auth_for_bind,
     _run,
+    main,
 )
 from wmr_bridge.bluez import BluezAdapter, BluezDevice, BluezStatus, HidrawDevice
 
@@ -407,15 +408,9 @@ class StatusTests(unittest.TestCase):
         self.assertIn("Wi-Fi warning:", output.getvalue())
 
 
-class WifiStartupTests(unittest.IsolatedAsyncioTestCase):
-    async def test_run_warns_on_24ghz_and_applies_5ghz_preference(self) -> None:
+class WifiStartupTests(unittest.TestCase):
+    def test_prefer_5ghz_is_a_one_shot_action(self) -> None:
         calls: list[object] = []
-        captured: dict[str, object] = {}
-        from wmr_bridge.bridge import Bridge
-
-        def fake_inspect(*_args, **_kwargs):
-            calls.append("inspect")
-            return dict(WIFI_INFO)
 
         def fake_prefer(reconnect: bool = True, **_kwargs):
             calls.append(("prefer", reconnect))
@@ -426,41 +421,20 @@ class WifiStartupTests(unittest.IsolatedAsyncioTestCase):
                 "warning": None,
             }
 
-        def fake_bridge(**kwargs):
-            captured.update(kwargs)
-            return Bridge(**kwargs)
+        def no_bridge(*_args, **_kwargs):
+            raise AssertionError("--prefer-5ghz must not start the bridge")
 
-        class FakeManager:
-            def __init__(self, *_args, **_kwargs) -> None:
-                pass
+        with mock.patch("wmr_bridge.__main__.prefer_5ghz", side_effect=fake_prefer), \
+             mock.patch("wmr_bridge.__main__.Bridge", side_effect=no_bridge):
+            with self.assertLogs("wmr_bridge", level="INFO") as logs:
+                code = main(["--prefer-5ghz"])
+            self.assertEqual(code, 0)
+            self.assertEqual(calls, [("prefer", True)])
+            self.assertTrue(any("HomeNet-5ghz" in line for line in logs.output))
 
-            def start(self) -> None:
-                pass
-
-            async def close(self) -> None:
-                pass
-
-        args = _build_parser().parse_args(
-            [
-                "--duration",
-                "0.05",
-                "--port",
-                "0",
-                "--prefer-5ghz",
-                "--no-reconnect",
-                "--no-auto-pair",
-            ]
-        )
-        with mock.patch("wmr_bridge.__main__.inspect_wifi", side_effect=fake_inspect), \
-             mock.patch("wmr_bridge.__main__.prefer_5ghz", side_effect=fake_prefer), \
-             mock.patch("wmr_bridge.__main__.Bridge", side_effect=fake_bridge), \
-             mock.patch("wmr_bridge.__main__.HidrawManager", FakeManager), \
-             self.assertLogs("wmr_bridge", level="WARNING") as logs:
-            await asyncio.wait_for(_run(args), 5)
-
-        self.assertIn(("prefer", False), calls)
-        self.assertEqual(captured["wifi"], WIFI_INFO)
-        self.assertTrue(any("2.4 GHz" in line for line in logs.output))
+            code = main(["--prefer-5ghz", "--no-reconnect"])
+            self.assertEqual(code, 0)
+            self.assertEqual(calls[-1], ("prefer", False))
 
 
 if __name__ == "__main__":

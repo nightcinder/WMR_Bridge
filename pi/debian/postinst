@@ -43,6 +43,17 @@ case "$1" in
                 echo "wmr-bridge: could not give ${TOKEN_FILE} to wmr:wmr" >&2
                 exit 1
             }
+            # Stage the 5 GHz-preferred NetworkManager profile from the
+            # unpacked tree. --no-reconnect leaves an SSH session on its
+            # current link; the unit's ExecStartPre applies the preference when
+            # the service starts. No NetworkManager or a 2.4 GHz-only radio is
+            # non-fatal.
+            if command -v nmcli >/dev/null 2>&1 &&
+                [ -f "${DESTDIR}/opt/wmr-bridge/pi/wmr_bridge/__main__.py" ]; then
+                (cd "${DESTDIR}/opt/wmr-bridge/pi" &&
+                    python3 -m wmr_bridge --prefer-5ghz --no-reconnect) ||
+                    echo "wmr-bridge: could not stage the 5 GHz Wi-Fi preference (non-fatal)" >&2
+            fi
             if command -v udevadm >/dev/null 2>&1; then
                 udevadm control --reload-rules || true
                 udevadm trigger || true
