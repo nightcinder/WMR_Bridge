@@ -68,7 +68,8 @@ class DebPackagingTests(unittest.TestCase):
             self.assertIn(f" Version: {ROOT_VERSION}", info)
             self.assertIn(" Architecture: all", info)
             self.assertIn(
-                " Depends: python3 (>= 3.10), bluez, rfkill, avahi-utils", info
+                " Depends: python3 (>= 3.10), python3-dbus-next, bluez, rfkill, avahi-utils",
+                info,
             )
             self.assertIn(" Recommends: network-manager", info)
 

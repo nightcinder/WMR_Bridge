@@ -163,6 +163,21 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((pong["id"], pong["t"]), (7, 1234))
         self.assertIsInstance(pong["serverTimeUs"], int)
 
+    async def test_reports_reset_when_a_hand_reconnects(self) -> None:
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:00")
+        self.bridge.ingest(0, SAMPLE_DATA)
+        self.bridge.ingest(0, SAMPLE_DATA)
+        self.assertEqual(self.bridge.hands[0].reports, 2)
+
+        self.bridge.set_hand_connected(0, False)
+        self.assertEqual(self.bridge.hands[0].reports, 2)
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:00")
+        self.assertEqual(self.bridge.hands[0].reports, 0)
+        self.assertEqual(self.bridge.hands[0].address, "AA:BB:CC:DD:EE:00")
+
+        self.bridge.ingest(0, SAMPLE_DATA)
+        self.assertEqual(self.bridge.hands[0].reports, 1)
+
     async def test_multiple_clients_get_the_same_frames(self) -> None:
         first, _ = await self.connect()
         second, _ = await self.connect()
@@ -201,6 +216,29 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.bridge.ingest(0, SAMPLE_DATA)
         record = unpack_record(await asyncio.wait_for(client.recv_binary(), 2))
         self.assertEqual(record.sequence, 3)
+
+    async def test_sink_receives_frames_without_a_tcp_subscriber(self) -> None:
+        class RecordingSink:
+            needs_decoded = True
+
+            def __init__(self) -> None:
+                self.items: list[tuple] = []
+
+            def deliver(self, frame, record) -> None:
+                self.items.append((frame, record))
+
+        sink = RecordingSink()
+        self.bridge.add_sink(sink)  # type: ignore[arg-type]
+        try:
+            self.bridge.ingest(0, SAMPLE_DATA, rx_time_us=99)
+        finally:
+            self.bridge.remove_sink(sink)  # type: ignore[arg-type]
+        self.assertEqual(len(sink.items), 1)
+        frame, record = sink.items[0]
+        self.assertEqual(frame.hand, 0)
+        self.assertIsNotNone(record)
+        self.assertEqual(record.rx_time_us, 99)
+        self.assertEqual(self.bridge.status()["clients"], 0)
 
     async def test_server_close_closes_active_clients(self) -> None:
         client, _ = await self.connect()

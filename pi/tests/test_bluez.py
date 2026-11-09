@@ -336,12 +336,14 @@ class BluezAutoPairerTests(unittest.TestCase):
     def make_pairer(self, bridge: _Bridge, runner, *, allowed_hands=(0, 1),
                     which=lambda _command: "/usr/bin/bluetoothctl", session=None,
                     scan_seconds: float = 1.0,
+                    pairing_window_open=None,
                     rfkill_root="/nonexistent/rfkill"):
         return BluezAutoPairer(
             bridge,
             allowed_hands=allowed_hands,
             runner=runner,
             session=session or (lambda _seconds, _should_pair: []),
+            pairing_window_open=pairing_window_open,
             which=which,
             scan_seconds=scan_seconds,
             poll_interval=1.0,
@@ -452,7 +454,6 @@ class BluezAutoPairerTests(unittest.TestCase):
 
         self.assertEqual(calls[0][:3], ["rfkill", "unblock", "bluetooth"])
         self.assertEqual(calls[1][1:], ["power", "on"])
-        self.assertIn("pairable", [call[1] for call in calls])
         self.assertTrue(any("cleared the rfkill" in line for line in logs.output))
 
     def test_bonded_offline_controller_is_left_to_page_in(self) -> None:
@@ -544,9 +545,62 @@ class BluezAutoPairerTests(unittest.TestCase):
 
         self.assertEqual(
             [call[1:] for call in calls],
-            [["power", "on"], ["pairable", "on"], ["devices"]],
+            [["power", "on"], ["devices"], ["pairable", "off"]],
         )
         self.assertTrue(any("could not scan" in line for line in logs.output))
+
+    def test_pairable_is_cleared_after_a_scan(self) -> None:
+        calls: list[list[str]] = []
+
+        def runner(args: list[str], timeout: float):
+            calls.append(args)
+            return _completed(args)
+
+        pairer = self.make_pairer(
+            _Bridge(), runner, session=lambda _seconds, _should_pair: []
+        )
+        self.assertFalse(pairer._tick())
+
+        self.assertEqual(
+            [call[1:] for call in calls if call[1] == "pairable"],
+            [["pairable", "off"]],
+        )
+
+    def test_pairable_stays_on_while_the_ble_window_is_open(self) -> None:
+        calls: list[list[str]] = []
+
+        def runner(args: list[str], timeout: float):
+            calls.append(args)
+            return _completed(args)
+
+        pairer = self.make_pairer(
+            _Bridge(),
+            runner,
+            session=lambda _seconds, _should_pair: [],
+            pairing_window_open=lambda: True,
+        )
+        self.assertFalse(pairer._tick())
+
+        self.assertEqual([call for call in calls if call[1] == "pairable"], [])
+
+    def test_pairable_is_cleared_when_a_scan_raises(self) -> None:
+        calls: list[list[str]] = []
+
+        def runner(args: list[str], timeout: float):
+            calls.append(args)
+            return _completed(args)
+
+        def session(_seconds: float, _should_pair) -> list:
+            raise RuntimeError("scan failed")
+
+        pairer = self.make_pairer(_Bridge(), runner, session=session)
+        with self.assertRaises(RuntimeError):
+            pairer._tick()
+
+        self.assertEqual(
+            [call[1:] for call in calls if call[1] == "pairable"],
+            [["pairable", "off"]],
+        )
 
     def test_skips_devices_that_are_already_paired_and_connected(self) -> None:
         calls: list[list[str]] = []

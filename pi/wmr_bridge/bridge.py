@@ -20,7 +20,7 @@ import socket
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from . import __version__
 from .decode import record_from_frame
@@ -134,6 +134,14 @@ def _tokens_equal(candidate: str, expected: str) -> bool:
         return hmac.compare_digest(candidate.encode("utf-8"), expected.encode("utf-8"))
     except UnicodeEncodeError:
         return False
+
+
+class FrameSink(Protocol):
+    """A non-WebSocket consumer of the ingest stream (for example BLE GATT)."""
+
+    needs_decoded: bool
+
+    def deliver(self, frame: Frame, record: DecodedRecord | None) -> None: ...
 
 
 class Subscriber:
@@ -287,6 +295,7 @@ class Bridge:
         self.hands = [HandStats(), HandStats()]
         self.sequence = [0, 0]
         self.subscribers: set[Subscriber] = set()
+        self.sinks: list[FrameSink] = []
         self.started_us = time.monotonic_ns() // 1000
         self.stats_dropped = 0
         self.stats_batches = 0
@@ -298,6 +307,18 @@ class Bridge:
             self.calibration = CalibrationCache()
 
     # ---- ingest ----------------------------------------------------------
+
+    def add_sink(self, sink: FrameSink) -> None:
+        """Add a transport sink (BLE GATT) that is not a WebSocket client."""
+
+        if sink not in self.sinks:
+            self.sinks.append(sink)
+
+    def remove_sink(self, sink: FrameSink) -> None:
+        try:
+            self.sinks.remove(sink)
+        except ValueError:
+            pass
 
     def ingest(self, hand: int, data: bytes, rx_time_us: int | None = None) -> Frame | None:
         """Assign a sequence number and fan one report out to subscribers."""
@@ -317,10 +338,13 @@ class Bridge:
             stats.errors += 1
             return None
         subscribers = tuple(subscriber for subscriber in self.subscribers if subscriber.stream)
-        if not subscribers:
+        sinks = tuple(self.sinks)
+        if not subscribers and not sinks:
             return frame
         record = None
-        if any(subscriber.stream in ("decoded", "batched") for subscriber in subscribers):
+        if any(subscriber.stream in ("decoded", "batched") for subscriber in subscribers) or any(
+            sink.needs_decoded for sink in sinks
+        ):
             record = record_from_frame(frame)
             if record is None:
                 stats.errors += 1
@@ -328,14 +352,24 @@ class Bridge:
                 stats.decoded += 1
         for subscriber in subscribers:
             subscriber.deliver(frame, record)
+        for sink in sinks:
+            try:
+                sink.deliver(frame, record)
+            except Exception:  # a BLE/bus failure must not stop the TCP stream
+                LOG.exception("frame sink failed")
         return frame
 
     def set_hand_connected(self, hand: int, connected: bool, address: str = "") -> None:
         if not 0 <= hand < 2:
             return
-        self.hands[hand].connected = connected
+        stats = self.hands[hand]
+        if connected and not stats.connected:
+            # docs/PROTOCOL.md documents the FF11 counters as reports received
+            # on the current connection, so a reconnect starts a fresh count.
+            stats.reports = 0
+        stats.connected = connected
         if address:
-            self.hands[hand].address = address
+            stats.address = address
 
     # ---- calibration -----------------------------------------------------
 
