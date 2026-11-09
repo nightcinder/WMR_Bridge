@@ -12,6 +12,7 @@ Examples::
 
     python3 tools/wifi_probe.py --host wmr-pi.local --stream batched
     python3 tools/wifi_probe.py --host 192.168.1.10 --token-file /etc/wmr-bridge/token --duration 60
+    python3 tools/wifi_probe.py --host 192.168.1.10 --discover --assert-gates --json-out sitting-p.json
 """
 
 from __future__ import annotations
@@ -19,9 +20,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import secrets
+import socket
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -39,6 +43,136 @@ DEVLOSS_WARMUP = 16
 DEVLOSS_REFRESH = 32
 DEVLOSS_DISCONTINUITY_TICKS = 50_000_000  # 5 s at 100 ns per tick
 TICK_MS = 1e-4  # 100 ns in ms
+
+DISCOVERY_PREFIX = "WMR_DISCOVER_V1"
+DISCOVERY_PORT = 8765
+DISCOVERY_TIMEOUT_S = 2.0
+SITTING_P_RTT_P50_MS = 15.0
+SITTING_P_DEVLOSS_PCT = 3.0
+
+
+def discover(
+    host: str,
+    port: int = DISCOVERY_PORT,
+    *,
+    timeout: float = DISCOVERY_TIMEOUT_S,
+) -> dict[str, Any] | None:
+    """Send one ``WMR_DISCOVER_V1`` UDP probe and return the bridge reply.
+
+    The reply is matched by nonce so a stray datagram or an unrelated bridge
+    answer cannot be mistaken for this probe's response. Returns ``None`` when
+    no matching reply arrives before ``timeout``.
+    """
+
+    nonce = secrets.token_hex(4)
+    probe = f"{DISCOVERY_PREFIX} {nonce}".encode("ascii")
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.settimeout(timeout)
+        sock.sendto(probe, (host, port))
+        while True:
+            try:
+                data, _address = sock.recvfrom(4096)
+            except socket.timeout:
+                return None
+            except OSError:
+                return None
+            try:
+                reply = json.loads(data)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            if isinstance(reply, dict) and reply.get("nonce") == nonce:
+                return reply
+    finally:
+        sock.close()
+
+
+def evaluate_gates(
+    summary: dict[str, Any],
+    *,
+    rtt_p50_max_ms: float = SITTING_P_RTT_P50_MS,
+    devloss_max_pct: float = SITTING_P_DEVLOSS_PCT,
+) -> dict[str, Any]:
+    """Check the Sitting P pass criteria against a probe summary.
+
+    Gates: echo RTT p50 below 15 ms, tick-based missing-report share at or
+    below 3 % per hand, and zero sequence gaps. A missing RTT sample fails the
+    RTT gate because the criterion cannot be verified. Every hand the bridge
+    expects (``summary["handFilter"]``) must also have at least one record: a
+    hand with no frames would otherwise report 0 % loss and zero gaps and pass
+    a run that never streamed. Hands excluded by the filter are not checked.
+    """
+
+    checks: list[dict[str, Any]] = []
+    rtt = summary.get("rttMs")
+    rtt_p50 = rtt.get("p50") if isinstance(rtt, dict) else None
+    checks.append(
+        {
+            "name": "rtt_p50_ms",
+            "passed": isinstance(rtt_p50, (int, float)) and rtt_p50 < rtt_p50_max_ms,
+            "value": rtt_p50,
+            "limit": rtt_p50_max_ms,
+        }
+    )
+    hands = summary.get("hands")
+    hand_filter = summary.get("handFilter")
+    expected_names = (
+        {str(name).upper() for name in hand_filter}
+        if isinstance(hand_filter, list)
+        else None
+    )
+    expected = [
+        hand
+        for hand in (hands if isinstance(hands, list) else [])
+        if isinstance(hand, dict)
+        and (expected_names is None or str(hand.get("hand", "")).upper() in expected_names)
+    ]
+    total_records = 0
+    if expected:
+        for hand in expected:
+            loss = hand.get("lossPct")
+            records = hand.get("records")
+            if isinstance(records, int) and records > 0:
+                total_records += records
+            checks.append(
+                {
+                    "name": "devloss_pct",
+                    "hand": hand.get("hand"),
+                    "passed": (
+                        isinstance(records, int)
+                        and records > 0
+                        and isinstance(loss, (int, float))
+                        and loss <= devloss_max_pct
+                    ),
+                    "value": loss,
+                    "limit": devloss_max_pct,
+                    "records": records,
+                }
+            )
+    else:
+        checks.append(
+            {
+                "name": "devloss_pct",
+                "hand": None,
+                "passed": False,
+                "value": None,
+                "limit": devloss_max_pct,
+                "records": 0,
+            }
+        )
+    gaps = summary.get("gaps")
+    total_gaps = sum(gaps) if isinstance(gaps, list) and gaps else None
+    checks.append(
+        {
+            "name": "seq_gaps",
+            "passed": total_gaps == 0 and total_records > 0,
+            "value": total_gaps,
+            "limit": 0,
+            "records": total_records,
+        }
+    )
+    return {"passed": all(check["passed"] for check in checks), "checks": checks}
 
 
 class DevLossEstimator:
@@ -231,6 +365,19 @@ class Counters:
 
 
 async def run(args: argparse.Namespace) -> int:
+    if getattr(args, "discover", False):
+        reply = discover(
+            args.host,
+            getattr(args, "discovery_port", DISCOVERY_PORT),
+            timeout=getattr(args, "discovery_timeout", DISCOVERY_TIMEOUT_S),
+        )
+        if reply is None:
+            print(
+                f"discovery: no reply from {args.host}:{getattr(args, 'discovery_port', DISCOVERY_PORT)}",
+                file=sys.stderr,
+            )
+        else:
+            print("discovery:", json.dumps(reply, indent=2))
     token = args.token
     if args.token_file:
         try:
@@ -256,6 +403,13 @@ async def run(args: argparse.Namespace) -> int:
         )
         if wifi.get("warning"):
             print(f"wifi warning: {wifi['warning']}")
+    uplink = hello.get("uplink")
+    if isinstance(uplink, dict):
+        addresses = ", ".join(uplink.get("addresses") or []) or "no address"
+        print(
+            f"uplink: iface={uplink.get('iface')} kind={uplink.get('kind')} "
+            f"addresses={addresses}"
+        )
     if hello.get("authRequired"):
         if not token:
             print("server requires a token; pass --token or --token-file", file=sys.stderr)
@@ -371,12 +525,30 @@ async def run(args: argparse.Namespace) -> int:
     summary["elapsedS"] = round(elapsed, 2)
     summary["handFilter"] = hello.get("handFilter")
     summary["wifi"] = hello.get("wifi")
+    summary["uplink"] = hello.get("uplink")
     summary["recordsPerSecond"] = round(counters.records / elapsed, 1) if elapsed else 0
     if ping_times:
         summary["rttMs"] = summarize_rtt(ping_times)
     summary["dropped"] = status.get("dropped") if isinstance(status, dict) else None
     summary["serverStatus"] = status
+    gates = None
+    if getattr(args, "assert_gates", False):
+        gates = evaluate_gates(summary)
+        summary["gates"] = gates
+    json_out = getattr(args, "json_out", None)
+    if json_out:
+        Path(json_out).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(summary, indent=2))
+    if gates is not None:
+        print("gates:", json.dumps(gates, indent=2))
+        if not gates["passed"]:
+            failed = ", ".join(
+                check["name"] + (f"[{check['hand']}]" if check.get("hand") else "")
+                for check in gates["checks"]
+                if not check["passed"]
+            )
+            print(f"Sitting P gates failed: {failed}", file=sys.stderr)
+            return 1
     return 0
 
 
@@ -391,6 +563,19 @@ def main() -> int:
     parser.add_argument("--duration", type=float, default=10.0, help="seconds to run (0 = forever)")
     parser.add_argument("--report-interval", type=float, default=2.0)
     parser.add_argument("--ping-interval", type=float, default=2.0)
+    parser.add_argument(
+        "--discover",
+        action="store_true",
+        help="send a WMR_DISCOVER_V1 UDP probe before connecting",
+    )
+    parser.add_argument("--discovery-port", type=int, default=DISCOVERY_PORT)
+    parser.add_argument("--discovery-timeout", type=float, default=DISCOVERY_TIMEOUT_S)
+    parser.add_argument("--json-out", metavar="PATH", help="write the final summary JSON to PATH")
+    parser.add_argument(
+        "--assert-gates",
+        action="store_true",
+        help="exit non-zero unless the Sitting P gates pass",
+    )
     args = parser.parse_args()
     try:
         return asyncio.run(run(args))
