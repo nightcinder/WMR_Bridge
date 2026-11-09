@@ -18,7 +18,8 @@ from .bluez import (
     hand_from_override,
     normalize_report,
 )
-from .bridge import Bridge, report_is_active
+from .bridge import Bridge, state_is_active
+from .decode import decode_frame
 
 LOG = logging.getLogger(__name__)
 
@@ -166,6 +167,7 @@ class HidrawManager:
         self._address_of_hand: dict[int, str] = {}
         self._asleep: set[int] = set()
         self._powered_off: set[int] = set()
+        self._warned_no_address: set[int] = set()
         self._task: asyncio.Task[None] | None = None
         self._keep_alive_task: asyncio.Task[None] | None = None
         self._no_controllers_warned = False
@@ -244,6 +246,7 @@ class HidrawManager:
         self._address_of_hand[hand] = device.uniq
         self._asleep.discard(hand)
         self._powered_off.discard(hand)
+        self._warned_no_address.discard(hand)
         self.bridge.set_hand_connected(hand, True, device.uniq)
         self._no_controllers_warned = False
         LOG.info(
@@ -270,6 +273,7 @@ class HidrawManager:
                 self._address_of_hand.pop(hand, None)
                 self._asleep.discard(hand)
                 self._powered_off.discard(hand)
+                self._warned_no_address.discard(hand)
                 self.bridge.set_hand_connected(hand, False)
         reader.close()
         if hand is None:
@@ -306,8 +310,9 @@ class HidrawManager:
                 # the stream; count them separately from malformed input.
                 self.bridge.hands[hand].errors += 1
                 continue
-            self.bridge.ingest(hand, frame)
-            if report_is_active(frame):
+            state = decode_frame(frame)
+            self.bridge.ingest(hand, frame, state=state)
+            if state is not None and state_is_active(state):
                 self._note_activity(hand, reader)
 
     def _note_activity(self, hand: int, reader: HidrawReader) -> None:
@@ -333,6 +338,8 @@ class HidrawManager:
             hand = self._hand_of.get(path)
             if hand is None:
                 continue
+            if hand in self._powered_off:
+                continue
             stats = self.bridge.hands[hand]
             last_activity = stats.last_activity_us or now_us
             idle_s = max(0, now_us - last_activity) / 1_000_000.0
@@ -342,18 +349,17 @@ class HidrawManager:
                 self.idle_poweroff_timeout > 0
                 and idle_s >= self.idle_poweroff_timeout
             ):
-                if hand in self._powered_off:
-                    continue
-                self._asleep.add(hand)
-                self._powered_off.add(hand)
                 address = self._address_of_hand.get(hand, "")
                 if not address:
-                    LOG.warning(
-                        "%s idle for %.0f s but has no Bluetooth address; "
-                        "cannot power it off",
-                        label,
-                        idle_s,
-                    )
+                    self._asleep.add(hand)
+                    if hand not in self._warned_no_address:
+                        LOG.warning(
+                            "%s idle for %.0f s but has no Bluetooth address; "
+                            "cannot power it off",
+                            label,
+                            idle_s,
+                        )
+                        self._warned_no_address.add(hand)
                     continue
                 LOG.info(
                     "%s idle for %.0f s: disconnecting %s to power it off",
@@ -361,11 +367,36 @@ class HidrawManager:
                     idle_s,
                     address,
                 )
-                if self._poweroff is not None:
-                    await asyncio.to_thread(self._poweroff, address)
+                self._asleep.add(hand)
+                activity_before = stats.last_activity_us
+                powered_off = False
+                try:
+                    if self._poweroff is not None:
+                        powered_off = bool(
+                            await asyncio.to_thread(self._poweroff, address)
+                        )
+                    else:
+                        powered_off = await asyncio.to_thread(
+                            disconnect_device, address, self.disconnect_command
+                        )
+                except Exception:  # a failed power-off must be retried, not fatal
+                    LOG.exception("%s power-off attempt raised; will retry", label)
+                if self._hand_of.get(path) != hand:
+                    continue
+                if powered_off:
+                    # Latch only after the ACL actually dropped. A failure
+                    # leaves the hand eligible so the next tick retries.
+                    self._powered_off.add(hand)
+                    self._asleep.add(hand)
+                    if stats.last_activity_us != activity_before:
+                        LOG.info(
+                            "%s activity arrived while its ACL was "
+                            "disconnecting; the link is still dropped",
+                            label,
+                        )
                 else:
-                    await asyncio.to_thread(
-                        disconnect_device, address, self.disconnect_command
+                    LOG.warning(
+                        "%s power-off disconnect failed; will retry", label
                     )
                 continue
 

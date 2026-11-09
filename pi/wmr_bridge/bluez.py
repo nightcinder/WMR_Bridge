@@ -548,7 +548,10 @@ def disconnect_device(
     if not address:
         return False
     result = runner([command, "disconnect", address], timeout)
-    if result is None or result.returncode != 0:
+    output = ""
+    if result is not None:
+        output = f"{result.stdout or ''}\n{result.stderr or ''}"
+    if result is None or result.returncode != 0 or "failed" in output.casefold():
         LOG.warning(
             "bluetoothctl disconnect %s failed; the controller may stay connected",
             address,

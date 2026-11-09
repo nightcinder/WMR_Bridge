@@ -985,6 +985,12 @@ class DisconnectTests(unittest.TestCase):
         self.assertFalse(disconnect_device(self.ADDRESS, runner=runner))
         self.assertFalse(disconnect_device("", runner=runner))
 
+    def test_disconnect_detects_failed_output_with_zero_exit(self) -> None:
+        def runner(args: list[str], timeout: float):
+            return _completed(args, "Failed to disconnect: org.bluez.Error.Failed\n", 0)
+
+        self.assertFalse(disconnect_device(self.ADDRESS, runner=runner))
+
 
 class _FakeReader:
     def __init__(self) -> None:
@@ -992,14 +998,28 @@ class _FakeReader:
         self.fd = 42
         self.enables = 0
         self.keep_alives = 0
+        self.writes = 0
+        self.keep_alive_interval = 60.0
+        self.clock = 0.0
+        self._last_enable: float | None = None
         self.reads: list[bytes] = []
 
     def send_enable(self) -> bool:
         self.enables += 1
+        self.writes += 1
+        self._last_enable = self.clock
         return True
 
     def keep_alive(self, now: float | None = None) -> bool:
+        current = self.clock if now is None else now
+        if (
+            self._last_enable is not None
+            and current - self._last_enable < self.keep_alive_interval
+        ):
+            return False
         self.keep_alives += 1
+        self.writes += 1
+        self._last_enable = current
         return True
 
     def read(self) -> bytes | None:
@@ -1048,8 +1068,10 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reader.enables, 1)
         # The immediate 0x06 wake counts as the keep-alive; no duplicate write
         # happens on the next tick.
+        reader.writes = 0
         await manager._idle_tick(self.START_US + 301_000_000)
         self.assertEqual(reader.enables, 1)
+        self.assertEqual(reader.writes, 0)
 
     async def test_poweroff_disconnects_once_at_idle_timeout(self) -> None:
         calls: list[str] = []
@@ -1070,6 +1092,61 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
 
         await manager._idle_tick(self.START_US + 1_000_000_000)
         self.assertEqual(calls, [self.ADDRESS])
+
+    async def test_failed_poweroff_is_retried_and_keepalives_stay_paused(self) -> None:
+        results = [False, True]
+        calls: list[str] = []
+
+        def poweroff(address: str) -> bool:
+            calls.append(address)
+            return results.pop(0) if results else True
+
+        manager, _bridge, reader = self.make_manager(poweroff_cb=poweroff)
+
+        await manager._idle_tick(self.START_US + 900_000_000)
+        self.assertEqual(calls, [self.ADDRESS])
+        self.assertNotIn(0, manager._powered_off)
+        self.assertIn(0, manager._asleep)
+        self.assertEqual(reader.keep_alives, 0)
+
+        await manager._idle_tick(self.START_US + 901_000_000)
+        self.assertEqual(calls, [self.ADDRESS, self.ADDRESS])
+        self.assertIn(0, manager._powered_off)
+        self.assertEqual(reader.keep_alives, 0)
+
+        await manager._idle_tick(self.START_US + 1_000_000_000)
+        self.assertEqual(calls, [self.ADDRESS, self.ADDRESS])
+
+    async def test_poweroff_without_address_retries_until_one_is_known(self) -> None:
+        calls: list[str] = []
+        manager, _bridge, _reader = self.make_manager(
+            poweroff_cb=lambda address: calls.append(address) or True
+        )
+        manager._address_of_hand.pop(0)
+
+        await manager._idle_tick(self.START_US + 900_000_000)
+        self.assertEqual(calls, [])
+        self.assertNotIn(0, manager._powered_off)
+        self.assertIn(0, manager._asleep)
+
+        manager._address_of_hand[0] = self.ADDRESS
+        await manager._idle_tick(self.START_US + 901_000_000)
+        self.assertEqual(calls, [self.ADDRESS])
+        self.assertIn(0, manager._powered_off)
+
+    async def test_activity_during_inflight_poweroff_relatches_the_disconnect(self) -> None:
+        manager, bridge, reader = self.make_manager()
+
+        def poweroff(address: str) -> bool:
+            bridge.hands[0].last_activity_us = self.START_US + 900_000_000
+            manager._note_activity(0, reader)  # type: ignore[arg-type]
+            return True
+
+        manager._poweroff = poweroff
+        await manager._idle_tick(self.START_US + 900_000_000)
+
+        self.assertIn(0, manager._powered_off)
+        self.assertIn(0, manager._asleep)
 
     async def test_zero_timeouts_disable_both_stages(self) -> None:
         calls: list[str] = []

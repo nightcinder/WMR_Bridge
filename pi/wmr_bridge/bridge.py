@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from . import __version__
-from .decode import decode_frame, record_from_frame
+from .decode import ControllerState, decode_frame, record_from_state
 from .protocol import (
     BATCH_MAX_COUNT,
     CALIBRATION_HEADER_SIZE,
@@ -112,12 +112,9 @@ class HandStats:
         }
 
 
-def report_is_active(data: bytes) -> bool:
-    """True when a 0x01 report shows buttons, trigger, stick or gyro movement."""
+def state_is_active(state: ControllerState) -> bool:
+    """True when a decoded report shows buttons, trigger, stick or gyro movement."""
 
-    state = decode_frame(data)
-    if state is None:
-        return False
     if state.buttons:
         return True
     if state.trigger > ACTIVITY_TRIGGER_THRESHOLD:
@@ -132,6 +129,13 @@ def report_is_active(data: bytes) -> bool:
         abs(gx) + abs(gy) + abs(gz) > ACTIVITY_GYRO_SUM_THRESHOLD
         or max(abs(gx), abs(gy), abs(gz)) > ACTIVITY_GYRO_AXIS_THRESHOLD
     )
+
+
+def report_is_active(data: bytes) -> bool:
+    """True when a 0x01 report shows buttons, trigger, stick or gyro movement."""
+
+    state = decode_frame(data)
+    return state is not None and state_is_active(state)
 
 
 def _parse_json(text: str) -> dict[str, Any] | None:
@@ -366,8 +370,19 @@ class Bridge:
         except ValueError:
             pass
 
-    def ingest(self, hand: int, data: bytes, rx_time_us: int | None = None) -> Frame | None:
-        """Assign a sequence number and fan one report out to subscribers."""
+    def ingest(
+        self,
+        hand: int,
+        data: bytes,
+        rx_time_us: int | None = None,
+        *,
+        state: ControllerState | None = None,
+    ) -> Frame | None:
+        """Assign a sequence number and fan one report out to subscribers.
+
+        ``state`` may carry an already-decoded frame so a transport that needs
+        the activity flag does not force a second Fraction-based decode.
+        """
 
         if not 0 <= hand < 2:
             raise ValueError(f"bad hand {hand}")
@@ -383,7 +398,9 @@ class Bridge:
         except ProtocolError:
             stats.errors += 1
             return None
-        if report_is_active(frame.data):
+        if state is None:
+            state = decode_frame(frame.data)
+        if state is not None and state_is_active(state):
             stats.last_activity_us = now_us
         subscribers = tuple(subscriber for subscriber in self.subscribers if subscriber.stream)
         sinks = tuple(self.sinks)
@@ -393,10 +410,10 @@ class Bridge:
         if any(subscriber.stream in ("decoded", "batched") for subscriber in subscribers) or any(
             sink.needs_decoded for sink in sinks
         ):
-            record = record_from_frame(frame)
-            if record is None:
+            if state is None:
                 stats.errors += 1
             else:
+                record = record_from_state(state, hand, self.sequence[hand], now_us)
                 stats.decoded += 1
         for subscriber in subscribers:
             subscriber.deliver(frame, record)
