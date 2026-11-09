@@ -383,17 +383,8 @@ async def _run(args: argparse.Namespace) -> int:
     wifi_info = inspect_wifi()
     if wifi_info.get("contentionWarning"):
         LOG.warning("%s", wifi_info.get("warning"))
-    if args.prefer_5ghz:
-        preference = prefer_5ghz(reconnect=not args.no_reconnect)
-        if preference.get("profile"):
-            LOG.info(
-                "5 GHz preference: profile %s%s",
-                preference["profile"],
-                " (active)" if preference.get("reconnected") else "",
-            )
-        if preference.get("warning"):
-            LOG.warning("5 GHz preference: %s", preference["warning"])
-        wifi_info = inspect_wifi()
+    # --prefer-5ghz is a one-shot action in main(); a running daemon only
+    # reports the band it observes.
     allowed_hands = (
         (0,) if args.hand == "left" else (1,) if args.hand == "right" else (0, 1)
     )
@@ -643,6 +634,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.list:
         return _print_devices()
+    if args.prefer_5ghz:
+        # One-shot action so systemd (ExecStartPre) and the installer can
+        # stage or apply the profile without starting a second daemon.
+        preference = prefer_5ghz(reconnect=not args.no_reconnect)
+        if preference.get("profile"):
+            LOG.info(
+                "5 GHz preference: profile %s%s",
+                preference["profile"],
+                " (active)" if preference.get("reconnected") else "",
+            )
+        if preference.get("warning"):
+            LOG.warning("5 GHz preference: %s", preference.get("warning"))
+        return 0
     try:
         return asyncio.run(_run(args))
     except KeyboardInterrupt:

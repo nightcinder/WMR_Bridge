@@ -248,6 +248,15 @@ chmod 0600 "$TOKEN_FILE"
 
 if [ "$SKIP_PRIVILEGED" != "1" ]; then
     chown "${SERVICE_USER}:${SERVICE_GROUP}" "$TOKEN_FILE"
+    # Stage the 5 GHz-preferred NetworkManager profile from the installed tree.
+    # --no-reconnect keeps an SSH session on the current link; the unit's own
+    # ExecStartPre applies the preference when the service starts. A missing
+    # nmcli (no NetworkManager) or a 2.4 GHz-only radio is non-fatal.
+    if command -v nmcli >/dev/null 2>&1 &&
+        [ -f "${DEST_PI}/wmr_bridge/__main__.py" ]; then
+        (cd "${DEST_PI}" && python3 -m wmr_bridge --prefer-5ghz --no-reconnect) ||
+            echo "install.sh: could not stage the 5 GHz Wi-Fi preference (non-fatal)" >&2
+    fi
     if command -v udevadm >/dev/null 2>&1; then
         udevadm control --reload-rules || true
         udevadm trigger || true
