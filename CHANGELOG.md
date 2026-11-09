@@ -33,7 +33,8 @@ continue to work.
 - **Probe discovery and Sitting P gates (ONY-1144).** `wifi_probe.py` gains
   `--discover` (UDP `WMR_DISCOVER_V1`, port 8765), `--json-out PATH`, and
   `--assert-gates`, which exits non-zero unless RTT p50 is below 15 ms,
-  per-hand tick-based loss is at most 3 %, and sequence gaps are zero. The
+  per-hand tick-based loss is at most 3 %, and sequence gaps are zero. A hand
+  with no frames fails the loss and gap gates, so an idle run cannot pass. The
   probe prints the `hello` `uplink` object next to `wifi`.
 - **Service hardening (ONY-1114).** `AF_NETLINK` is added to
   `RestrictAddressFamilies` in the systemd unit.

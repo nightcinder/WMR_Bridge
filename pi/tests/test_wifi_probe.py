@@ -33,8 +33,8 @@ def _summary(**overrides) -> dict:
     summary = {
         "rttMs": {"samples": 10, "min": 1.0, "p50": 8.0, "p95": 9.0, "max": 10.0},
         "hands": [
-            {"hand": "LEFT", "lossPct": 0.0},
-            {"hand": "RIGHT", "lossPct": 3.0},
+            {"hand": "LEFT", "records": 100, "lossPct": 0.0},
+            {"hand": "RIGHT", "records": 100, "lossPct": 3.0},
         ],
         "gaps": [0, 0],
     }
@@ -63,8 +63,8 @@ class GateTests(unittest.TestCase):
         gates = evaluate_gates(
             _summary(
                 hands=[
-                    {"hand": "LEFT", "lossPct": 0.0},
-                    {"hand": "RIGHT", "lossPct": 3.01},
+                    {"hand": "LEFT", "records": 100, "lossPct": 0.0},
+                    {"hand": "RIGHT", "records": 100, "lossPct": 3.01},
                 ]
             )
         )
@@ -77,6 +77,49 @@ class GateTests(unittest.TestCase):
         gates = evaluate_gates(_summary(gaps=[0, 2]))
         self.assertFalse(gates["passed"])
         self.assertFalse(gates["checks"][-1]["passed"])
+
+    def test_hand_with_no_records_fails_despite_zero_loss(self) -> None:
+        gates = evaluate_gates(
+            _summary(
+                hands=[
+                    {"hand": "LEFT", "records": 100, "lossPct": 0.0},
+                    {"hand": "RIGHT", "records": 0, "lossPct": 0.0},
+                ]
+            )
+        )
+        self.assertFalse(gates["passed"])
+        failed = [check for check in gates["checks"] if not check["passed"]]
+        self.assertEqual([check["hand"] for check in failed], ["RIGHT"])
+
+    def test_zero_frames_fails_loss_and_gap_gates(self) -> None:
+        gates = evaluate_gates(
+            _summary(
+                hands=[
+                    {"hand": "LEFT", "records": 0, "lossPct": 0.0},
+                    {"hand": "RIGHT", "records": 0, "lossPct": 0.0},
+                ],
+                gaps=[0, 0],
+            )
+        )
+        self.assertFalse(gates["passed"])
+        failed = [check["name"] for check in gates["checks"] if not check["passed"]]
+        self.assertEqual(failed, ["devloss_pct", "devloss_pct", "seq_gaps"])
+
+    def test_hand_excluded_by_filter_is_not_required(self) -> None:
+        gates = evaluate_gates(
+            _summary(
+                handFilter=["LEFT"],
+                hands=[
+                    {"hand": "LEFT", "records": 100, "lossPct": 0.0},
+                    {"hand": "RIGHT", "records": 0, "lossPct": 0.0},
+                ],
+            )
+        )
+        self.assertTrue(gates["passed"])
+        self.assertEqual(
+            [check["hand"] for check in gates["checks"] if check["name"] == "devloss_pct"],
+            ["LEFT"],
+        )
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -167,6 +210,46 @@ class JsonOutAndGateRunTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(written["gates"]["passed"])
                 self.assertIn("uplink", written)
                 self.assertEqual(written["gaps"], [0, 0])
+        finally:
+            await server.close()
+
+    async def test_run_with_zero_frames_fails_gates(self) -> None:
+        bridge = Bridge(batch_max=4, batch_hold_ms=5)
+        server = BridgeServer(bridge, host="127.0.0.1", port=0)
+        await server.start()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                json_out = Path(tmp) / "sitting-p-empty.json"
+                args = argparse.Namespace(
+                    host="127.0.0.1",
+                    port=server.port,
+                    path="/wmr",
+                    stream="batched",
+                    token=None,
+                    token_file=None,
+                    duration=0.35,
+                    report_interval=10.0,
+                    ping_interval=0.05,
+                    discover=False,
+                    discovery_port=8765,
+                    discovery_timeout=0.1,
+                    json_out=str(json_out),
+                    assert_gates=True,
+                )
+                with redirect_stdout(io.StringIO()):
+                    rc = await run_probe(args)
+                self.assertEqual(rc, 1)
+                written = json.loads(json_out.read_text(encoding="utf-8"))
+                self.assertFalse(written["gates"]["passed"])
+                self.assertEqual(written["records"], 0)
+                self.assertEqual(written["gaps"], [0, 0])
+                failed = [
+                    check["name"]
+                    for check in written["gates"]["checks"]
+                    if not check["passed"]
+                ]
+                self.assertIn("devloss_pct", failed)
+                self.assertIn("seq_gaps", failed)
         finally:
             await server.close()
 

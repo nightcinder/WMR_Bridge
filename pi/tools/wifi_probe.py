@@ -98,7 +98,10 @@ def evaluate_gates(
 
     Gates: echo RTT p50 below 15 ms, tick-based missing-report share at or
     below 3 % per hand, and zero sequence gaps. A missing RTT sample fails the
-    RTT gate because the criterion cannot be verified.
+    RTT gate because the criterion cannot be verified. Every hand the bridge
+    expects (``summary["handFilter"]``) must also have at least one record: a
+    hand with no frames would otherwise report 0 % loss and zero gaps and pass
+    a run that never streamed. Hands excluded by the filter are not checked.
     """
 
     checks: list[dict[str, Any]] = []
@@ -113,16 +116,38 @@ def evaluate_gates(
         }
     )
     hands = summary.get("hands")
-    if isinstance(hands, list) and hands:
-        for hand in hands:
-            loss = hand.get("lossPct") if isinstance(hand, dict) else None
+    hand_filter = summary.get("handFilter")
+    expected_names = (
+        {str(name).upper() for name in hand_filter}
+        if isinstance(hand_filter, list)
+        else None
+    )
+    expected = [
+        hand
+        for hand in (hands if isinstance(hands, list) else [])
+        if isinstance(hand, dict)
+        and (expected_names is None or str(hand.get("hand", "")).upper() in expected_names)
+    ]
+    total_records = 0
+    if expected:
+        for hand in expected:
+            loss = hand.get("lossPct")
+            records = hand.get("records")
+            if isinstance(records, int) and records > 0:
+                total_records += records
             checks.append(
                 {
                     "name": "devloss_pct",
-                    "hand": hand.get("hand") if isinstance(hand, dict) else None,
-                    "passed": isinstance(loss, (int, float)) and loss <= devloss_max_pct,
+                    "hand": hand.get("hand"),
+                    "passed": (
+                        isinstance(records, int)
+                        and records > 0
+                        and isinstance(loss, (int, float))
+                        and loss <= devloss_max_pct
+                    ),
                     "value": loss,
                     "limit": devloss_max_pct,
+                    "records": records,
                 }
             )
     else:
@@ -133,6 +158,7 @@ def evaluate_gates(
                 "passed": False,
                 "value": None,
                 "limit": devloss_max_pct,
+                "records": 0,
             }
         )
     gaps = summary.get("gaps")
@@ -140,9 +166,10 @@ def evaluate_gates(
     checks.append(
         {
             "name": "seq_gaps",
-            "passed": total_gaps == 0,
+            "passed": total_gaps == 0 and total_records > 0,
             "value": total_gaps,
             "limit": 0,
+            "records": total_records,
         }
     )
     return {"passed": all(check["passed"] for check in checks), "checks": checks}
