@@ -309,6 +309,16 @@ requests never run on that host. Their `Build firmware` check builds in the
 either way. `actions/checkout` uses full history so `git describe` can produce a
 version.
 
+The pull-request job keeps the ESP-IDF ccache in the Actions cache
+(`/root/.ccache`, `CCACHE_COMPILERCHECK=content`), so a warm run compiles only
+the files the PR touched: all three variants take 1 m 20 s instead of 5 m 45 s.
+A cache saved by a pull request is visible only to that pull request, so
+`firmware-cache.yml` runs the same three-variant build on `main` weekly (and on
+manual dispatch) to keep a cache every new pull request can restore. The
+compiler check must be `content`: the image reports a different nanosecond
+mtime for `xtensa-esp32-elf-gcc` in each container, and with the default
+`mtime` check every object misses even with the cache restored.
+
 To publish a release, tag the intended `main` commit (for example, the `v0.3.11`
 release was published from `4e4df85`):
 
