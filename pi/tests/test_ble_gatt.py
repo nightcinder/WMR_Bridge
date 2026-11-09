@@ -47,9 +47,9 @@ class FakeClock:
 
 
 class FakeBackend:
-    def __init__(self) -> None:
+    def __init__(self, pairable: bool = False) -> None:
         self.notifications: list[tuple[str, bytes]] = []
-        self.pairable: bool | None = None
+        self.pairable: bool | None = pairable
         self.started = False
         self.app: GattApplication | None = None
 
@@ -62,6 +62,9 @@ class FakeBackend:
 
     async def set_pairable(self, pairable: bool) -> None:
         self.pairable = pairable
+
+    async def get_pairable(self) -> bool | None:
+        return self.pairable
 
     def notify(self, uuid: str, value: bytes) -> None:
         self.notifications.append((uuid, value))
@@ -157,6 +160,13 @@ class MetadataTests(unittest.TestCase):
         self.assertFalse(json.loads(application.ff16_value())["authRequired"])
         self.assertNotIn("token", json.loads(application.ff13_value()))
 
+    def test_ff16_hosts_are_sampled_on_each_read(self) -> None:
+        hosts: list[str] = []
+        application = _application(hosts=lambda: list(hosts))
+        self.assertEqual(json.loads(application.ff16_value())["hosts"], [])
+        hosts.append("192.0.2.20")
+        self.assertEqual(json.loads(application.ff16_value())["hosts"], ["192.0.2.20"])
+
     def test_cli_ble_fallback_is_off_by_default(self) -> None:
         parser = _build_parser()
         self.assertFalse(parser.parse_args([]).ble_fallback)
@@ -213,6 +223,7 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(frame.data, SAMPLE_DATA)
 
     async def test_ff12_streams_one_record_per_frame(self) -> None:
+        self.app.read_value(FF16_VERSION, {"mtu": 247})
         self.app.start_notify(FF12_DECODED)
         self.bridge.ingest(0, SAMPLE_DATA)
         values = self.backend.values(FF12_DECODED)
@@ -228,6 +239,7 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.bridge.status()["clients"], 1)
 
     async def test_ff14_batches_are_capped_at_50_hz(self) -> None:
+        self.app.read_value(FF16_VERSION, {"mtu": 517})
         self.app.start_notify(FF14_BATCHED)
         # The first record flushes at once; later ones wait for the next 20 ms slot.
         for _ in range(5):
@@ -242,7 +254,70 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.backend.values(FF14_BATCHED)), 2)
         self.assertEqual(len(parse_batch(self.backend.values(FF14_BATCHED)[1])), 5)
 
+    async def test_notifications_are_sized_to_the_negotiated_mtu(self) -> None:
+        self.app.start_notify(FF12_DECODED)
+        self.app.start_notify(FF14_BATCHED)
+        self.bridge.ingest(0, SAMPLE_DATA)
+        self.assertEqual(self.backend.values(FF12_DECODED), [])
+        self.assertEqual(self.backend.values(FF14_BATCHED), [])
+        self.assertEqual(self.app.dropped_records, 2)
+
+        self.app.read_value(FF16_VERSION, {"mtu": 59})
+        self.bridge.ingest(0, SAMPLE_DATA)
+        self.assertEqual(len(self.backend.values(FF12_DECODED)), 1)
+        self.assertEqual(self.backend.values(FF14_BATCHED), [])
+        self.assertEqual(self.app.dropped_records, 3)
+
+        self.app.read_value(FF16_VERSION, {"mtu": 61})
+        self.clock.advance(0.02)
+        self.bridge.ingest(0, SAMPLE_DATA)
+        batches = [parse_batch(value) for value in self.backend.values(FF14_BATCHED)]
+        self.assertEqual([len(batch) for batch in batches], [1])
+
+    async def test_ff14_batch_is_sized_to_the_mtu(self) -> None:
+        self.app.read_value(FF16_VERSION, {"mtu": 185})  # 3 records per batch
+        self.app.start_notify(FF14_BATCHED)
+        for _ in range(5):
+            self.bridge.ingest(0, SAMPLE_DATA)
+        batches = [parse_batch(value) for value in self.backend.values(FF14_BATCHED)]
+        self.assertEqual([len(batch) for batch in batches], [1, 3])
+        self.app.flush_batches()
+        batches = [parse_batch(value) for value in self.backend.values(FF14_BATCHED)]
+        self.assertEqual([len(batch) for batch in batches], [1, 3, 1])
+
+    async def test_pending_batch_flushes_at_the_protocol_limit(self) -> None:
+        self.app.read_value(FF16_VERSION, {"mtu": 517})
+        self.app.start_notify(FF14_BATCHED)
+        for _ in range(20):
+            self.bridge.ingest(0, SAMPLE_DATA)
+        batches = [parse_batch(value) for value in self.backend.values(FF14_BATCHED)]
+        self.assertTrue(all(1 <= len(batch) <= 9 for batch in batches))
+        self.app.flush_batches()
+        batches = [parse_batch(value) for value in self.backend.values(FF14_BATCHED)]
+        self.assertEqual(sum(len(batch) for batch in batches), 20)
+        self.assertEqual(self.app.dropped_records, 0)
+
+    async def test_ff11_fragment_size_follows_the_mtu(self) -> None:
+        self.assertEqual(self.app.fragment_size, 20)
+        self.app.read_value(FF16_VERSION, {"mtu": 185})
+        self.assertEqual(self.app.fragment_size, 182)
+        self.app.read_value(FF16_VERSION, {"mtu": 517})
+        self.assertEqual(self.app.fragment_size, 244)
+        self.app.start_notify(FF11_RAW)
+        self.bridge.ingest(0, SAMPLE_DATA)
+        self.assertTrue(all(len(value) <= 244 for value in self.backend.values(FF11_RAW)))
+
+    async def test_ff11_read_is_the_status_block(self) -> None:
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+        self.bridge.ingest(0, SAMPLE_DATA)
+        status = self.app.read_value(FF11_RAW)
+        self.assertEqual(len(status), 16)
+        self.assertEqual(status[0], 1)
+        self.assertEqual(status[1] & 0x01, 0x01)
+        self.assertEqual(int.from_bytes(status[8:12], "little"), 1)
+
     async def test_stop_notify_stops_the_stream(self) -> None:
+        self.app.read_value(FF16_VERSION, {"mtu": 247})
         self.app.start_notify(FF12_DECODED)
         self.bridge.ingest(0, SAMPLE_DATA)
         self.app.stop_notify(FF12_DECODED)
@@ -273,12 +348,33 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.app.write_value(FF17_CONTROL, b"\x01"), RESULT_NOTHING_TO_DO)
         self.assertEqual(self.app.ff17_status()[17:19], bytes([0x01, RESULT_NOTHING_TO_DO]))
 
+    async def test_ff17_write_notifies_the_result(self) -> None:
+        self.app.start_notify(FF17_CONTROL)
+        self.app.write_value(FF17_CONTROL, b"\x09")
+        values = self.backend.values(FF17_CONTROL)
+        self.assertEqual(len(values), 1)
+        self.assertEqual(values[0][17:19], bytes([0x09, RESULT_INVALID_PARAM]))
+
     async def test_pairing_window_closes(self) -> None:
         self.assertTrue(self.app.pairing_open)
         self.assertEqual(self.backend.pairable, True)
         await self.peripheral.close_pairing_window()
         self.assertFalse(self.app.pairing_open)
         self.assertEqual(self.backend.pairable, False)
+
+    async def test_pairing_window_restores_an_already_pairable_adapter(self) -> None:
+        backend = FakeBackend(pairable=True)
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=120.0,
+        )
+        await peripheral.start()
+        self.assertTrue(backend.pairable)
+        await peripheral.close()
+        self.assertTrue(backend.pairable)
 
     async def test_ff16_is_read_without_a_bond(self) -> None:
         raw = self.app.read_value(FF16_VERSION)

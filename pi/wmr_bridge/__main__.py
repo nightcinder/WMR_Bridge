@@ -387,7 +387,7 @@ async def _run(args: argparse.Namespace) -> int:
     if args.ble_fallback:
         from .ble_gatt import BluezGattPeripheral
 
-        hosts = [address for address in _local_addresses() if address != "127.0.0.1"]
+        hosts = lambda: [address for address in _local_addresses() if address != "127.0.0.1"]
         ble = BluezGattPeripheral(
             bridge,
             adapter=args.ble_adapter,

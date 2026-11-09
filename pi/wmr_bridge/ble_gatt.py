@@ -37,6 +37,9 @@ from typing import Any, Callable, Protocol
 from . import __version__
 from .bridge import Bridge
 from .protocol import (
+    BATCH_HEADER_SIZE,
+    BATCH_MAX_COUNT,
+    DECODED_SIZE,
     DEFAULT_FRAGMENT_CAPACITY,
     DecodedRecord,
     Frame,
@@ -151,6 +154,8 @@ class GattBackend(Protocol):
 
     async def set_pairable(self, pairable: bool) -> None: ...
 
+    async def get_pairable(self) -> bool | None: ...
+
     def notify(self, uuid: str, value: bytes) -> None: ...
 
 
@@ -193,6 +198,7 @@ class GattApplication:
         self._last_batch = float("-inf")
         self._batch_interval = 1.0 / self.batch_hz
         self._ff13_cursor: tuple[int, int] | None = None
+        self.dropped_records = 0
         self.last_command = 0
         self.last_result = RESULT_OK
 
@@ -327,6 +333,24 @@ class GattApplication:
         return self._mtu
 
     @property
+    def notification_limit(self) -> int:
+        """Largest ATT notification value at the negotiated MTU."""
+
+        return self._mtu - 3
+
+    @property
+    def batch_max_count(self) -> int:
+        """Records that fit one FF14 batch, capped by the protocol maximum.
+
+        Zero means the MTU is too small for even one 56-byte record.
+        """
+
+        if self.notification_limit < BATCH_HEADER_SIZE + DECODED_SIZE:
+            return 0
+        count = (self.notification_limit - BATCH_HEADER_SIZE) // DECODED_SIZE
+        return min(count, BATCH_MAX_COUNT)
+
+    @property
     def fragment_size(self) -> int:
         """Largest FF11 notification value for the current ATT MTU."""
 
@@ -334,6 +358,8 @@ class GattApplication:
 
     def read_value(self, uuid: str, options: dict[str, Any] | None = None) -> bytes:
         self._note_mtu(options)
+        if uuid == FF11_RAW:
+            return self.ff11_status()
         if uuid == FF16_VERSION:
             return self.ff16_value()
         if uuid == FF13_CONFIG:
@@ -359,8 +385,15 @@ class GattApplication:
         if uuid == FF13_CONFIG:
             return self._write_config_cursor(value)
         if uuid == FF17_CONTROL:
-            return self._write_control(value)
+            result = self._write_control(value)
+            self.notify_control_status()
+            return result
         return RESULT_OK
+
+    def notify_control_status(self) -> None:
+        """Push the FF17 last_command/last_result value after a write."""
+
+        self._notify(FF17_CONTROL, self.ff17_status())
 
     def _write_config_cursor(self, value: bytes) -> int:
         if not value:
@@ -397,6 +430,25 @@ class GattApplication:
             payload[base + 3 : base + 6] = tail
         payload[17] = self.last_command
         payload[18] = self.last_result
+        return bytes(payload)
+
+    def ff11_status(self) -> bytes:
+        """The 16-byte FF11 status read documented in docs/PROTOCOL.md.
+
+        The Pi has no HID-descriptor handshake, so the descriptor bits stay
+        zero; the remaining fields mirror the firmware's status value.
+        """
+
+        payload = bytearray(16)
+        payload[0] = 1
+        for hand, stats in enumerate(self.bridge.hands):
+            if stats.connected:
+                payload[1] |= 1 << hand
+        uptime_s = (self.bridge.now_us() - self.bridge.started_us) // 1_000_000
+        payload[4:8] = (max(0, uptime_s) & 0xFFFFFFFF).to_bytes(4, "little")
+        for hand, stats in enumerate(self.bridge.hands):
+            base = 8 + 4 * hand
+            payload[base : base + 4] = (stats.reports & 0xFFFFFFFF).to_bytes(4, "little")
         return bytes(payload)
 
     def _write_control(self, value: bytes) -> int:
@@ -447,9 +499,15 @@ class GattApplication:
             return
         packed = pack_record(record)
         if self.is_notifying(FF12_DECODED):
-            self._notify(FF12_DECODED, packed)
+            if len(packed) <= self.notification_limit:
+                self._notify(FF12_DECODED, packed)
+            else:
+                self.dropped_records += 1
         if self.is_notifying(FF14_BATCHED):
-            self._queue_batch(packed)
+            if self.batch_max_count:
+                self._queue_batch(packed)
+            else:
+                self.dropped_records += 1
 
     def _notify(self, uuid: str, value: bytes) -> None:
         if uuid not in self._subscribed:
@@ -472,6 +530,9 @@ class GattApplication:
 
     def _queue_batch(self, packed: bytes) -> None:
         self._batch.append(packed)
+        if len(self._batch) >= self.batch_max_count:
+            self.flush_batches()
+            return
         now = self._clock()
         if now - self._last_batch >= self._batch_interval:
             self.flush_batches()
@@ -500,12 +561,19 @@ class GattApplication:
             return
         records = self._batch
         self._batch = []
-        try:
-            payload = encode_batch(records)
-        except ProtocolError:
-            return
         self._last_batch = self._clock()
-        self._notify(FF14_BATCHED, payload)
+        max_count = max(1, self.batch_max_count)
+        for start in range(0, len(records), max_count):
+            chunk = records[start : start + max_count]
+            if BATCH_HEADER_SIZE + len(chunk) * DECODED_SIZE > self.notification_limit:
+                self.dropped_records += len(chunk)
+                continue
+            try:
+                payload = encode_batch(chunk)
+            except ProtocolError:
+                self.dropped_records += len(chunk)
+                continue
+            self._notify(FF14_BATCHED, payload)
 
     def _discard_batch(self) -> None:
         if self._batch_timer is not None:
@@ -546,6 +614,7 @@ class DbusGattBackend:
             from dbus_next import Variant
             from dbus_next.aio import MessageBus
             from dbus_next.constants import BusType, PropertyAccess
+            from dbus_next.errors import DBusError
             from dbus_next.service import ServiceInterface, dbus_property, method
         except ImportError as exc:  # pragma: no cover - depends on the host
             raise RuntimeError(
@@ -645,7 +714,14 @@ class DbusGattBackend:
 
             @method()
             def WriteValue(self, value: "ay", options: "a{sv}") -> None:
-                app.write_value(self.spec.uuid, bytes(value), options)
+                result = app.write_value(self.spec.uuid, bytes(value), options)
+                if result != RESULT_OK:
+                    # BlueZ turns a D-Bus error into an ATT error, so a client
+                    # sees a refused FF13 cursor/FF17 opcode as a failed write.
+                    raise DBusError(
+                        "org.bluez.Error.Failed",
+                        f"FF10 write refused (result 0x{result:02x})",
+                    )
 
             @method()
             def StartNotify(self) -> None:
@@ -757,6 +833,11 @@ class DbusGattBackend:
             return
         await self._adapter_interface.set_pairable(bool(pairable))
 
+    async def get_pairable(self) -> bool | None:
+        if self._adapter_interface is None:
+            return None
+        return bool(await self._adapter_interface.get_pairable())
+
     async def stop(self) -> None:
         bus = self._bus
         if bus is None:
@@ -822,6 +903,7 @@ class BluezGattPeripheral:
         self.pairing_window_s = max(0.0, pairing_window_s)
         self._started = False
         self._pairing_task: asyncio.Task[None] | None = None
+        self._pairable_before: bool | None = None
 
     @property
     def started(self) -> bool:
@@ -846,6 +928,11 @@ class BluezGattPeripheral:
 
     async def open_pairing_window(self) -> None:
         self.app.pairing_open = True
+        if self._pairable_before is None:
+            try:
+                self._pairable_before = await self.backend.get_pairable()
+            except Exception as exc:
+                LOG.debug("could not read the adapter's pairable flag: %s", exc)
         try:
             await self.backend.set_pairable(True)
         except Exception as exc:
@@ -868,8 +955,13 @@ class BluezGattPeripheral:
     async def close_pairing_window(self) -> None:
         self.app.pairing_open = False
         self._cancel_pairing_task()
+        # Adapter1.Pairable is shared with the Classic auto-pairer on hci0.
+        # Only clear it when the fallback opened the window; restoring True
+        # keeps the Classic pairing door that the pairer had opened.
+        restore = self._pairable_before if self._pairable_before is not None else False
+        self._pairable_before = None
         try:
-            await self.backend.set_pairable(False)
+            await self.backend.set_pairable(bool(restore))
         except Exception as exc:
             LOG.debug("could not disable pairing: %s", exc)
 
