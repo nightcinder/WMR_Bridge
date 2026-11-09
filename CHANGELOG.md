@@ -18,7 +18,7 @@ continue to work.
 
 - **Default always-on BLE advertising (ONY-1115).** The daemon advertises the
   FF10 GATT service by default. Each client controls its own notifications
-  through the CCCD. Pass `--no-ble` to stop advertising. `--ble-fallback`
+  through the CCCD. Pass `--no-ble` to disable the BLE peripheral. `--ble-fallback`
   stays as a deprecated no-op alias and prints a deprecation warning. Slow
   advertising uses LEAdvertisement1 intervals of about 1000 to 1285 ms.
 - **Uplink preference (ONY-1114).** The bridge picks the active uplink in this
@@ -27,8 +27,8 @@ continue to work.
   takes `eth0` into account and lowers the wired route metric. `hello` and
   `status` report the active uplink in a separate `uplink` object.
 - **Token access for `wifi_probe.py` (ONY-1115).** Read
-  `/etc/wmr-bridge/token` with `sudo python3 tools/wifi_probe.py`, or as a
-  user in the `wmr` group. The token file is mode 0640 and owned by
+  `/etc/wmr-bridge/token` with `sudo python3 tools/wifi_probe.py --token-file /etc/wmr-bridge/token`, or as a
+  user in the `wmr` group with `--token-file /etc/wmr-bridge/token`. The token file is mode 0640 and owned by
   `wmr:wmr`.
 - **Service hardening (ONY-1114).** `AF_NETLINK` is added to
   `RestrictAddressFamilies` in the systemd unit.

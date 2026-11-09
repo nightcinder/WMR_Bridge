@@ -105,9 +105,9 @@ Then point the companion app's Wi-Fi transport (or `tools/wifi_probe.py`) at
 unless that origin is allow-listed with `--allow-origin`. The companion app and
 the probe do not send one.
 
-To read `/etc/wmr-bridge/token`, run `sudo python3 tools/wifi_probe.py`, or run
-the probe as a user in the `wmr` group. The token file is mode 0640 and owned
-by `wmr:wmr`.
+To read `/etc/wmr-bridge/token`, run `sudo python3 tools/wifi_probe.py --token-file /etc/wmr-bridge/token`, or
+run the probe as a user in the `wmr` group with `--token-file /etc/wmr-bridge/token`. The token file is mode 0640
+and owned by `wmr:wmr`.
 
 ## Wi-Fi uplink preference
 
@@ -127,7 +127,7 @@ The daemon advertises the FF10 GATT service over BlueZ by default. Advertising i
 
 Slow advertising uses LEAdvertisement1 intervals of about 1000 to 1285 ms. You can also set this with `btmgmt`.
 
-Pass `--no-ble` to stop advertising. `--ble-fallback` stays as a deprecated no-op alias and prints a deprecation warning. The peripheral needs `python3-dbus-next` and a free hci adapter. It has not been verified on hardware.
+Pass `--no-ble` to disable the BLE peripheral. `--ble-fallback` stays as a deprecated no-op alias and prints a deprecation warning. The peripheral needs `python3-dbus-next` and a free hci adapter. It has not been verified on hardware.
 
 ## Files
 
