@@ -48,6 +48,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Same as the PR build: build.py reads `git describe` and `git status`
+      # without a guard, and git refuses the container-owned checkout otherwise.
+      - name: Mark the checkout safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Restore the compiler cache
         uses: actions/cache/restore@v6
         with:
