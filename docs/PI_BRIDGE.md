@@ -365,6 +365,17 @@ python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 python3 tools/wifi_probe.py --stream batched --duration 10
 ```
 
+The probe prints the `hello` Wi-Fi and uplink objects. `--discover` sends a
+`WMR_DISCOVER_V1` probe to UDP port 8765 before connecting. `--json-out PATH`
+writes the final summary as JSON. `--assert-gates` checks the Sitting P pass
+criteria (RTT p50 below 15 ms, tick-based missing-report share at or below 3 %
+per hand, zero sequence gaps) and exits non-zero when any fails:
+
+```bash
+python3 tools/wifi_probe.py --host 192.168.1.10 --discover \
+    --duration 600 --assert-gates --json-out sitting-p.json
+```
+
 Host-side dry run (no Pi, no controller, no root; safe to run in CI):
 
 ```bash
@@ -1073,7 +1084,7 @@ INFO/WARNING:
 | Path | Contents |
 | --- | --- |
 | `pi/wmr_bridge/` | host bridge package: protocol, decoder, BlueZ, WebSocket, server, UDP/mDNS discovery, CLI |
-| `pi/tools/wifi_probe.py` | bench client: throughput, sequence gaps, tick-based missing reports, RTT (min/p50/p95/max), status |
+| `pi/tools/wifi_probe.py` | bench client: throughput, sequence gaps, tick-based missing reports, RTT (min/p50/p95/max), status, UDP discovery, JSON output, Sitting P gates |
 | `pi/build_package.sh` | builds `dist/wmr-bridge-<version>.tar.gz` plus `.sha256` |
 | `pi/build_deb.sh` | builds `dist/wmr-bridge_<version>_all.deb` and its `.sha256` (no root; maintainer scripts in `pi/debian/`) |
 | `pi/tools/verify_package.sh` | checks package layout, version and checksum |

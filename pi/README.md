@@ -27,7 +27,7 @@ New to the Pi? Read the simple-English beginner guide:
 
 ```bash
 cd pi
-python3 -m unittest discover -s tests -v          # 189 host tests
+python3 -m unittest discover -s tests -v          # 297 host tests
 python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 
 # in a second terminal
@@ -38,8 +38,29 @@ The replay path is a complete smoke test of the WebSocket transport, the
 decoder and the three stream formats. `--bind` defaults to `127.0.0.1`. The
 quick start needs no token and is not reachable from the LAN. `decoded` can
 trail `reports` by the time the daemon ran before the client subscribed. That is
-not loss (see `docs/PI_BRIDGE.md`). To prove the installable package end to
-end on the desk (no Pi, no controller, no root):
+not loss (see `docs/PI_BRIDGE.md`).
+
+### Bench gates and discovery
+
+`wifi_probe.py` prints the `hello` Wi-Fi and uplink objects, and can send a UDP
+discovery probe before connecting:
+
+```bash
+python3 tools/wifi_probe.py --host 192.168.1.10 --discover
+```
+
+`--json-out PATH` writes the final summary as JSON. `--assert-gates` checks the
+Sitting P pass criteria and exits non-zero when any fails: echo RTT p50 below
+15 ms, tick-based missing-report share at or below 3 % per hand, and zero
+sequence gaps. A run without RTT samples fails the RTT gate.
+
+```bash
+python3 tools/wifi_probe.py --host 192.168.1.10 --duration 600 \
+    --assert-gates --json-out sitting-p.json
+```
+
+To prove the installable package end to end on the desk (no Pi, no controller,
+no root):
 
 ```bash
 pi/tools/dry_run.sh
@@ -142,7 +163,7 @@ Pass `--no-ble` to disable the BLE peripheral. `--ble-fallback` stays as a depre
 | `wmr_bridge/inputs.py` | live hidraw manager and capture replay |
 | `wmr_bridge/server.py` | asyncio server wrapper |
 | `wmr_bridge/__main__.py` | `python3 -m wmr_bridge` CLI |
-| `tools/wifi_probe.py` | bench client: throughput, gaps, tick-based missing reports, RTT, status |
+| `tools/wifi_probe.py` | bench client: throughput, gaps, tick-based missing reports, RTT, status, UDP discovery, JSON output, Sitting P gates |
 | `build_package.sh` | builds `dist/wmr-bridge-<version>.tar.gz` and its checksum |
 | `build_deb.sh` | builds `dist/wmr-bridge_<version>_all.deb` and its checksum (Architecture: all, no root) |
 | `debian/` | Debian control, conffiles and `postinst`/`prerm`/`postrm` templates |
