@@ -66,7 +66,10 @@ Do not time until every row passes.
 
 ## 2. Build and flash
 
-All three images come from one commit. `tools/firmware/build.py --variant` sets the flags and gives each variant its own build directory.
+All three images come from one commit. `tools/firmware/build.py --variant` writes
+the flags into the build tree's generated `wmr_variant.h`, which the application
+component compiles with `-include`; all three variants share one build
+directory, so build them one after another, never in parallel.
 
 ```powershell
 . C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1
@@ -78,7 +81,10 @@ python tools\firmware\build.py --variant left  --out $dist
 python tools\firmware\build.py --variant right --out $dist
 ```
 
-Check each `build-info*.json` for variant, hands and name. Check `compile_commands.json` in each build folder for the defines. If a check does not match, stop; that is not the variant.
+Check each `build-info*.json` for variant, hands and name. Check the
+`variant flags:` line each build prints (it names the defines written to
+`<work>/build-wmr-bridge/wmr_variant.h`). If a check does not match, stop; that
+is not the variant.
 
 Flash (NVS is kept, so pairing survives):
 

@@ -36,10 +36,10 @@ jobs:
     # container, so without the steps below every run recompiles the whole
     # ESP-IDF tree from scratch: 1335 objects, about two minutes. Persisting the
     # cache between runs leaves a PR build compiling only the files it touched.
-    # ccache keys on the full command line, so each variant keeps its own
-    # entries and reuse is across runs of the same variant. The first push of a
-    # new PR has nothing of its own to restore, so firmware-cache.yml keeps a
-    # warm cache on main for it to inherit.
+    # ccache keys on the compile command and the included header content, so
+    # each variant keeps its own entries and reuse is across runs of the same
+    # variant. The first push of a new PR has nothing of its own to restore, so
+    # firmware-cache.yml keeps a warm cache on main for it to inherit.
     env:
       # Pin the path: ccache 4.x otherwise picks $HOME/.cache/ccache.
       CCACHE_DIR: /root/.ccache

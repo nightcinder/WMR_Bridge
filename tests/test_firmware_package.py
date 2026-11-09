@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -211,6 +212,60 @@ def test_sync_source_into_btstack_layout():
             expected = fh.read()
         check(installed == expected,
               "port/esp32/main/CMakeLists.txt is replaced with the integration file")
+
+
+def test_sync_source_leaves_an_up_to_date_cmake_file_alone():
+    # Rewriting the port CMakeLists with identical bytes gives it a new mtime,
+    # which makes CMake re-run the project configure and the bootloader
+    # ExternalProject on every build.
+    with tempfile.TemporaryDirectory() as root:
+        root = os.path.realpath(root)
+        btstack = os.path.join(root, "btstack")
+        os.makedirs(os.path.join(btstack, "port", "esp32", "main"))
+        os.makedirs(os.path.join(btstack, ".git"))
+        cmake = os.path.join(btstack, "port", "esp32", "main", "CMakeLists.txt")
+
+        build.sync_source(Path(btstack), Path(root) / ".fw-build", Path(root) / "dist")
+        before = os.stat(cmake).st_mtime_ns
+        time.sleep(0.02)
+        build.sync_source(Path(btstack), Path(root) / ".fw-build", Path(root) / "dist")
+        check(os.stat(cmake).st_mtime_ns == before,
+              "an identical port CMakeLists is not rewritten")
+
+        with open(cmake, "a", encoding="utf-8") as fh:
+            fh.write("# edited by hand\n")
+        build.sync_source(Path(btstack), Path(root) / ".fw-build", Path(root) / "dist")
+        with open(cmake, encoding="utf-8") as fh:
+            check("# edited by hand" not in fh.read(),
+                  "a differing port CMakeLists is replaced")
+
+
+def test_sync_port_sdkconfig_writes_only_on_a_change():
+    # sdkconfig is a configure dependency; rewriting it with identical bytes
+    # makes ESP-IDF regenerate the configuration and recompile the tree.
+    with tempfile.TemporaryDirectory() as root:
+        port = Path(root) / "port" / "esp32"
+        port.mkdir(parents=True)
+        sdkconfig = port / "sdkconfig"
+        sdkconfig.write_text(
+            "%s=2\n%s_EFF=2\nOTHER=1\n"
+            % (build.PORT_SDKCONFIG_ACL, build.PORT_SDKCONFIG_ACL),
+            encoding="utf-8")
+        build.sync_port_sdkconfig(port)
+        text = sdkconfig.read_text(encoding="utf-8")
+        check("%s=%d" % (build.PORT_SDKCONFIG_ACL, build.PORT_SDKCONFIG_ACL_LINKS)
+              in text, "the ACL limit is raised in the generated sdkconfig")
+        before = sdkconfig.stat().st_mtime_ns
+        time.sleep(0.02)
+        build.sync_port_sdkconfig(port)
+        check(sdkconfig.stat().st_mtime_ns == before,
+              "an sdkconfig that already has the limit is not rewritten")
+
+        sdkconfig.write_text("%s=2\n" % build.PORT_SDKCONFIG_ACL, encoding="utf-8")
+        build.sync_port_sdkconfig(port)
+        check(sdkconfig.read_text(encoding="utf-8") ==
+              "%s=%d\n" % (build.PORT_SDKCONFIG_ACL, build.PORT_SDKCONFIG_ACL_LINKS),
+              "a stale value is corrected")
 
 
 def test_pick_version_falls_back_to_version_file():

@@ -139,9 +139,13 @@ variants on every pull request. The defines deliberately do not go through
 `EXTRA_CFLAGS`: ESP-IDF reads that at configure time and puts it on every
 component's command line, so changing it rebuilds the whole tree.
 
-A bare `idf.py build` (see [BUILD_WINDOWS.md](BUILD_WINDOWS.md)) keeps whichever
-variant the last `build.py --variant` wrote; `--variant both` restores the
-default image.
+`build.py` writes the header into its own work directory
+(`.fw-build/build-wmr-bridge`), so a manual `idf.py -B build-wmr-bridge build`
+from the port directory (see [BUILD_WINDOWS.md](BUILD_WINDOWS.md)) is a separate
+tree and always gets the source defaults. In the script's tree the header keeps
+whichever variant was written last, so `--variant both` restores the default
+image. The variants share one build directory and therefore cannot be built
+concurrently.
 
 ### One board, single-hand mode
 
