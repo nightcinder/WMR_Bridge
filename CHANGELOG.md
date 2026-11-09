@@ -7,26 +7,31 @@ This file records what each release contains; hardware evidence stays in
 
 ## 0.3.16 — 2026-11-09
 
-Documentation release on top of 0.3.15. The access rules for
-`/etc/wmr-bridge/token` when running `wifi_probe.py` are now documented. BLE
-advertising and uplink behaviour remain as in 0.3.15: `--ble-fallback` is
-opt-in, and `prefer_5ghz()` covers 5 GHz Wi-Fi only. Firmware payloads are
-unchanged from 0.3.15: FF10–FF17 keep their payloads and companions at 0.2.2
-or later continue to work.
+The Pi uplink and BLE advertising release on top of 0.3.15. The bridge now
+prefers an Ethernet uplink over 5 GHz Wi-Fi and 2.4 GHz Wi-Fi, advertises the
+FF10 GATT service by default with per-client CCCD gating, and the token file
+access rules for `wifi_probe.py` are documented. Firmware payloads are unchanged
+from 0.3.15: FF10–FF17 keep their payloads and companions at 0.2.2 or later
+continue to work.
 
 ### Raspberry Pi bridge
 
-- **Token access for `wifi_probe.py`.** Read `/etc/wmr-bridge/token` with
-  `sudo python3 tools/wifi_probe.py`, or run the probe as the `wmr` user with
-  `sudo -u wmr python3 tools/wifi_probe.py`. The token file is mode 0600 and
-  owned by `wmr:wmr`, so members of the `wmr` group cannot read it.
-- **BLE fallback remains opt-in.** `--ble-fallback` serves FF11, FF12 and FF14
-  over BlueZ BLE when Wi-Fi is unreachable. It is off by default and needs
-  `python3-dbus-next`. It has not been verified on hardware.
-- **Wi-Fi 5 GHz preference remains as in 0.3.15.** `--prefer-5ghz` clones the
-  active NetworkManager connection into a 5 GHz-only profile and switches only
-  when a 5 GHz BSSID is visible. A 2.4 GHz-only radio is a warning-only
-  no-op.
+- **Default always-on BLE advertising (ONY-1115).** The daemon advertises the
+  FF10 GATT service by default. Each client controls its own notifications
+  through the CCCD. Pass `--no-ble` to stop advertising. `--ble-fallback`
+  stays as a deprecated no-op alias and prints a deprecation warning. Slow
+  advertising uses LEAdvertisement1 intervals of about 1000 to 1285 ms.
+- **Uplink preference (ONY-1114).** The bridge picks the active uplink in this
+  order: `eth0`, then `wlan0` on 5 GHz, then `wlan0` on 2.4 GHz. It uses route
+  metrics (IPv4 and IPv6), not only autoconnect priority. `prefer_5ghz()`
+  takes `eth0` into account and lowers the wired route metric. `hello` and
+  `status` report the active uplink in a separate `uplink` object.
+- **Token access for `wifi_probe.py` (ONY-1115).** Read
+  `/etc/wmr-bridge/token` with `sudo python3 tools/wifi_probe.py`, or as a
+  user in the `wmr` group. The token file is mode 0640 and owned by
+  `wmr:wmr`.
+- **Service hardening (ONY-1114).** `AF_NETLINK` is added to
+  `RestrictAddressFamilies` in the systemd unit.
 
 ### Verification
 
