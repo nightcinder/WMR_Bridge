@@ -1,4 +1,4 @@
-# Run sheet: Linux / Raspberry Pi Wi-Fi host bridge (P1-P11)
+# Run sheet: Linux / Raspberry Pi Wi-Fi host bridge (P1-P14)
 
 Status: proposed, not run. Nothing here is a hardware result. The owner is buying a Raspberry Pi; this sheet fixes the first sitting and keeps its numbers comparable with the ESP32 runs.
 
@@ -30,7 +30,7 @@ To compare with ESP32 runs:
   chmod 600 token
   ```
 
-Desk pre-flight (already run 2026-10-31, not Pi results): package build and layout, `.deb` contents, installer staging, and `pi/tools/dry_run.sh` all pass. Re-run `dry_run.sh` after any change under `pi/`. Hardware checks stay P1-P11.
+Desk pre-flight (already run 2026-10-31, not Pi results): package build and layout, `.deb` contents, installer staging, and `pi/tools/dry_run.sh` all pass. Re-run `dry_run.sh` after any change under `pi/`. Hardware checks stay P1-P14.
 
 ## 2. Go / no-go before timing
 
@@ -123,6 +123,116 @@ Run the daemon under systemd or with `--duration 28800`, and a client for the sa
 
 Remove both controller bonds first (`bluetoothctl remove <MAC>` for each). Start the daemon without `--no-auto-pair`. Put LEFT in pairing mode. Pass: the bridge pairs, trusts and connects LEFT within 60 s without operator input; LEFT appears in `/sys/class/hidraw`. Repeat for RIGHT. Then stop the daemon, remove both bonds again, and start with `--no-auto-pair`. Put one controller in pairing mode. Pass: the bridge does not pair it; pairing stays with the operator.
 
+### P12: Two-controller TCP-to-BLE failover and jitter on Pixel 11 Pro (ONY-1070)
+
+The bridge enables BLE GATT fallback by default (PR #187). `wmr_companion_app` on the Pixel 11 Pro uses `CompositeBleTransport` to prefer TCP and fall back to BLE GATT when TCP disconnects.
+
+Prerequisites:
+- Raspberry Pi 3B+ runs `wmr-bridge` on 5 GHz Wi-Fi with token authentication.
+- Both WMR controllers are paired and streaming to the bridge.
+- The Pixel 11 Pro runs `wmr_companion_app` (0.3.19+24 or later) on the same 5 GHz network.
+
+Procedure:
+
+1. Open `wmr_companion_app` on the Pixel 11 Pro.
+2. In the Connect screen, enter the Pi IP address and port 8765. Provide the token.
+3. Make sure that the fallback switch for `CompositeBleTransport` is enabled.
+4. Tap Connect.
+5. Make sure that the status indicator shows connected and names the active leg as `TCP`.
+6. Open the Stream panel. Select the `batched` stream.
+7. Make sure that both controllers stream at 150-180 reports/s per hand with zero decode errors.
+8. Open the Latency panel and record the baseline round-trip time and frame delivery intervals.
+9. Disconnect Wi-Fi while both controllers stream: disable Wi-Fi on the Pixel 11 Pro or drop `wlan0` on the Pi:
+
+   ```bash
+   sudo ip link set wlan0 down
+   ```
+
+10. Observe the failover on the Pixel 11 Pro. `CompositeBleTransport` must fall back to BLE GATT without closing the stream session.
+11. Make sure that the active leg indicator changes from `TCP` to `BLE`.
+12. Measure the failover transition time and the inter-report jitter:
+    - Time from TCP disconnect to first BLE report must be under 2500 ms.
+    - Inter-frame delivery pause must not exceed 3000 ms.
+    - Controller sequence numbers must continue without resetting.
+    - Zero application crashes and zero unhandled transport exceptions.
+13. Restore Wi-Fi: enable Wi-Fi on the Pixel 11 Pro or run `sudo ip link set wlan0 up` on the Pi.
+14. Make sure that `CompositeBleTransport` upgrades back to TCP within 5 s, silences BLE notifications, and updates the active leg indicator to `TCP`.
+15. Tap Export Test Bundle to save the session bundle on the phone.
+
+Pass: failover to BLE GATT completes in under 2.5 s with sequence continuity, zero application crashes, and clean upgrade back to TCP when Wi-Fi recovers.
+
+### P13: Controller idle sleep, power-off, and cooldown on Pi 3B+ (ONY-1058, ONY-1064)
+
+The Pi bridge pauses 0x06 keep-alive reports after 300 s of inactivity and drops the Bluetooth link after 900 s (PR #190).
+
+Prerequisites:
+- The Pi 3B+ runs `wmr-bridge` with default idle timeouts (`--idle-sleep-timeout 300 --idle-poweroff-timeout 900`).
+- Both WMR controllers are paired and connected.
+
+Monitor the systemd journal in real time:
+
+```bash
+journalctl -u wmr-bridge -f
+```
+
+Procedure:
+
+1. Turn on both controllers. Make sure that both controllers stream in `wmr-bridge status` or `wifi_probe.py`.
+2. Place both controllers untouched on their fixed desk marks. Record timestamp `T0`.
+3. Wait 300 s (5 minutes) without moving either controller.
+4. At `T0 + 300 s`, make sure that the journal records keep-alive pausing:
+   `LEFT idle for 300 s: pausing 0x06 keep-alives`
+   `RIGHT idle for 300 s: pausing 0x06 keep-alives`
+5. Make sure that both controllers enter standby (LEDs dim or pulse slowly). The Bluetooth ACL link must remain connected (`bluetoothctl info <MAC>` reports `Connected: yes`).
+6. At `T0 + 400 s`, test the activity wake on LEFT: move the thumbstick or press the trigger.
+7. Make sure that the journal reports:
+   `LEFT activity: resuming 0x06 keep-alives`
+   Make sure that LEFT resumes full streaming in under 1.0 s without an ACL reconnect.
+8. Leave RIGHT untouched until `T0 + 900 s` (15 minutes).
+9. At `T0 + 900 s`, make sure that the bridge disconnects RIGHT:
+   `RIGHT idle for 900 s: disconnecting <MAC> to power it off`
+10. Make sure that the RIGHT controller turns off completely (ring LEDs extinguish).
+11. Test the 60-second reconnect cooldown: immediately press the Windows power button on RIGHT.
+12. Make sure that the bridge declines incoming connections or drops the link during the 60 s window.
+13. Wait for the 60 s cooldown to expire. Turn on RIGHT again.
+14. Make sure that RIGHT reconnects and streams cleanly.
+
+Pass: keep-alive pauses at 300 s ± 5 s. Motion wakes the controller in under 1.0 s. Power-off disconnect occurs at 900 s ± 5 s. Reconnect attempts are blocked during the 60 s cooldown and succeed afterwards.
+
+### P14: Uplink priority and automated Sitting P gates (ONY-1114, PR #188)
+
+PR #188 configures network route metrics so `eth0` (metric 100) takes priority over 5 GHz Wi-Fi (metric 200), which takes priority over 2.4 GHz Wi-Fi (metric 300). `pi/tools/wifi_probe.py` discovers the bridge and asserts Sitting P gates.
+
+Procedure:
+
+1. Connect the Pi 3B+ to both Ethernet (`eth0`) and 5 GHz Wi-Fi (`wlan0`).
+2. Run `wmr-bridge status`. Make sure that the output reports `eth0` as the active uplink:
+   `Uplink eth0: kind=ethernet addresses=[...]`
+3. Run `wifi_probe.py` with discovery:
+
+   ```bash
+   python3 tools/wifi_probe.py --discover --token-file /etc/wmr-bridge/token --duration 5
+   ```
+
+   Make sure that `hello` reports `transport: "ethernet"` and `uplink.iface: "eth0"`.
+4. Disconnect the Ethernet cable. Wait 5 s for route metrics to update.
+5. Run `wmr-bridge status`. Make sure that the uplink switches to `wlan0` with `kind=wifi` and `supports5Ghz=true`.
+6. Run the automated Sitting P gates test with both controllers active on 5 GHz Wi-Fi:
+
+   ```bash
+   python3 tools/wifi_probe.py --discover --assert-gates --stream batched --duration 120 --token-file /etc/wmr-bridge/token --json-out /tmp/probe-p14.json
+   ```
+
+7. Inspect the test summary and output JSON.
+
+Pass criteria for Sitting P gates:
+- Uplink reports `eth0` when wired and `wlan0` (5 GHz) when unwired.
+- `rttMs.p50` < 15.0 ms.
+- Missing share per hand <= 3.0 % (or LEFT <= 1.0 % and RIGHT ~10-12 % for asymmetry localisation).
+- Sequence gaps == 0 on both hands.
+- Server dropped messages == 0.
+- `wifi_probe.py` exits with code 0.
+
 ## 4. Pass / refute
 
 Fixed before data:
@@ -130,12 +240,32 @@ Fixed before data:
 - **Pass, asymmetry localised:** P6 LEFT <= 1 % and RIGHT ~10-12 %. The pair contention is gone; RIGHT's loss is controller hardware.
 - **Refute:** P6 both hands >= 15 % despite 5 GHz Wi-Fi. Shared 2.4 GHz air or Classic scheduling dominates, not ESP32 BLE coexistence.
 - **Robustness pass:** P7, P8 and P9 succeed with no crash and continuous sequence numbers.
+- **Failover pass (P12):** TCP-to-BLE failover occurs in under 2.5 s with sequence continuity, zero crashes, and clean upgrade back to TCP when Wi-Fi recovers.
+- **Power management pass (P13):** Keep-alive pauses at 5 min, ACL disconnects at 15 min, and 60 s cooldown prevents reconnection bounce.
+- **Uplink gate pass (P14):** Ethernet takes priority over 5 GHz Wi-Fi, and `--assert-gates` exits with code 0.
 
 ## 5. Paste back
 
 Once per session: Pi model, OS/kernel, BlueZ, Python, Wi-Fi interface and frequency, power save, controller MACs, bridge version and commit, client build.
 
-Then the P1-P11 table with observed figures and pass/fail, and the P6 comparison table:
+Then the P1-P14 table with observed figures and pass/fail, and the P6 comparison table:
+
+| Check | Name | Result | Notes |
+|---|---|---|---|
+| P1 | Daemon start and discovery | | |
+| P2 | Replay smoke test | | |
+| P3 | Live single controller | | |
+| P4 | Both controllers | | |
+| P5 | 5 GHz link quality | | |
+| P6 | Upstream loss (primary) | | |
+| P7 | Controller sleep and wake | | |
+| P8 | Network reconnect | | |
+| P9 | Multi-client fan-out | | |
+| P10 | Soak | | |
+| P11 | Automatic pairing from unpaired | | |
+| P12 | TCP-to-BLE failover and jitter | | |
+| P13 | Controller idle sleep and power-off | | |
+| P14 | Uplink priority and Sitting P gates | | |
 
 | Field | ESP32 alone | ESP32 both | Pi P6 |
 |---|---|---|---|
