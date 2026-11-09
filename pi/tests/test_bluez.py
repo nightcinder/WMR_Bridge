@@ -452,7 +452,7 @@ class BluezAutoPairerTests(unittest.TestCase):
 
         self.assertEqual(calls[0][:3], ["rfkill", "unblock", "bluetooth"])
         self.assertEqual(calls[1][1:], ["power", "on"])
-        self.assertIn("pairable", [call[1] for call in calls])
+        self.assertNotIn("pairable", [call[1] for call in calls])
         self.assertTrue(any("cleared the rfkill" in line for line in logs.output))
 
     def test_bonded_offline_controller_is_left_to_page_in(self) -> None:
@@ -544,7 +544,7 @@ class BluezAutoPairerTests(unittest.TestCase):
 
         self.assertEqual(
             [call[1:] for call in calls],
-            [["power", "on"], ["pairable", "on"], ["devices"]],
+            [["power", "on"], ["devices"]],
         )
         self.assertTrue(any("could not scan" in line for line in logs.output))
 
@@ -744,10 +744,13 @@ class ScanAndPairTests(unittest.TestCase):
         self.assertIn("agent NoInputNoOutput", commands)
         self.assertIn("default-agent", commands)
         self.assertIn("pairable on", commands)
+        self.assertIn("pairable off", commands)
         self.assertIn("scan on", commands)
         self.assertIn(f"pair {self.RIGHT}", commands)
         self.assertNotIn(f"pair {self.KEYBOARD}", commands)
         self.assertLess(commands.index("scan on"), commands.index(f"pair {self.RIGHT}"))
+        self.assertLess(commands.index("pairable on"), commands.index("pairable off"))
+        self.assertLess(commands.index("pairable off"), commands.index("quit"))
         self.assertLess(commands.index(f"pair {self.RIGHT}"), commands.index("quit"))
         self.assertFalse(process.killed)
 

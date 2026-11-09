@@ -676,7 +676,10 @@ def scan_and_pair(
             if len(pair_results(output())) >= len(to_pair):
                 break
         drain(settle_seconds)
-        os.write(master_fd, b"scan off\nquit\n")
+        # Clear Pairable again: the adapter flag is shared with the BLE
+        # fallback's bounded pairing window, so the Classic scan must not leave
+        # the bonding door open after it ends.
+        os.write(master_fd, b"scan off\npairable off\nquit\n")
         deadline = time.monotonic() + 5.0
         while proc.poll() is None and time.monotonic() < deadline:
             drain(0.1)
@@ -935,10 +938,9 @@ class BluezAutoPairer:
             return False
         self._adapter_ready = True
         self._adapter_warned = False
-        # Pairable is not persisted across a Bluetooth daemon restart. The
-        # scan session sets it too; doing it here also covers a bonded hand
-        # that reconnects without a scan.
-        self._run("pairable", "on", timeout=10.0)
+        # Pairable is only opened inside the scan session (and by the BLE
+        # fallback's pairing window), so a handler that never scans does not
+        # leave the adapter bonding-enabled indefinitely.
         return True
 
     def _clear_rfkill(self) -> None:
