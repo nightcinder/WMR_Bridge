@@ -32,7 +32,7 @@ build do not prove radio behavior.
 | T5 | On-path attacker on the Wi-Fi LAN | Sniffs the Pi WebSocket | Bearer token + loopback default + origin rejection. TLS is terminated externally (below) | Plaintext `ws://` on a hostile LAN is readable. The token is replayable by anyone who sees it |
 | T6 | Someone with the phone | Installs a malicious app | Android's own app sandbox and the OS pairing UI | A paired app can read the stream. The bridge has no per-app authorization |
 | T7 | Physical access to the ESP32 | Reads flash, replaces firmware | None yet: flash encryption and secure boot are off (plan below) | Full key and firmware compromise. Treat a stolen board as burned |
-| T8 | Random internet host | Reaches the Pi daemon | Loopback default, token required off-loopback, browser origins rejected, 5 s handshake bound | Never port-forward 8765. The daemon has no rate limiting |
+| T8 | Random internet host | Reaches the Pi daemon | Loopback default, token required off-loopback, browser origins rejected, 5 s handshake bound; UDP discovery replies are rate-limited per source | Never port-forward 8765. The WebSocket daemon has no rate limiting |
 
 ## BLE side (phone)
 

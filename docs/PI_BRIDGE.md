@@ -384,7 +384,8 @@ remain P1-P11 in the run sheet.
   (`wifi.powersave = 2`). Reconnect or reboot after install to apply it. For a
   host without NetworkManager, use `sudo iw dev wlan0 set power_save off` for the
   current boot and add it to your network bring-up script.
-- Open only the bridge port: `sudo ufw allow 8765/tcp`.
+- Open only the bridge port: `sudo ufw allow 8765/tcp` and, for LAN
+  auto-discovery, `sudo ufw allow 8765/udp`.
 - Do not expose the port to the internet. See [Security](#security).
 
 ## Wire protocol, version 1
@@ -418,6 +419,7 @@ ships this package.
   "protocol": 1,
   "transport": "wifi",
   "device": "wmr-pi",
+  "bridge_id": "wmr-pi-0123456789",
   "version": "0.3.14",
   "handFilter": ["LEFT", "RIGHT"],
   "hostname": "wmr-pi",
@@ -445,6 +447,8 @@ Text messages are JSON control messages. Binary messages from the server are
 stream payloads or tagged FF13 calibration windows. Binary messages from the
 client are rejected with `{"type":"error","code":"binary_not_accepted"}`.
 
+`bridge_id` is a stable identity derived from the hostname and
+`/etc/machine-id`; it is the same value advertised by mDNS and UDP discovery.
 `version` is the bridge's FF16 analogue: the daemon/package version, not the
 controller firmware. `handFilter` is the configured hand selector (`--hand`):
 `["LEFT", "RIGHT"]` for a both-hand daemon, `["LEFT"]` or `["RIGHT"]` for a
@@ -454,7 +458,43 @@ present in every `status` reply. `calibration` is present when the daemon runs
 with FF13 forwarding (the default); a daemon started with calibration disabled
 omits it and answers calibration requests with `calibration_unavailable`.
 
-### Service discovery (optional)
+### Service discovery
+
+#### UDP responder
+
+The daemon listens on UDP port 8765 on the `--bind` address; unlike the
+WebSocket port this does not follow `--port`, so a client always probes the
+fixed discovery port and learns the actual WebSocket port from the reply. A
+client broadcasts a probe:
+
+```
+WMR_DISCOVER_V1 <nonce>
+```
+
+Each bridge that hears it replies by unicast to the sender with one JSON object:
+
+```json
+{
+  "type": "wmr_bridge",
+  "protocol": 1,
+  "bridge_id": "wmr-pi-0123456789",
+  "name": "wmr-pi",
+  "port": 8765,
+  "path": "/wmr",
+  "hands": ["LEFT", "RIGHT"],
+  "version": "0.3.14",
+  "authMode": "token",
+  "nonce": "<nonce from the probe>"
+}
+```
+
+The reply echoes the nonce so the client can match it to its probe, and it never
+carries the shared token. Replies are rate-limited per source address (at most
+one per second by default). A reply is a hint only: open the WebSocket and
+confirm `hello.bridge_id` matches the reply before sending a token. With
+`--bind 127.0.0.1` the responder is loopback-only, like the WebSocket.
+
+#### mDNS (optional)
 
 `--advertise-mdns` publishes `_wmr-bridge._tcp.local.` on the LAN. It is off by
 default and never affects whether the daemon starts. The Debian package
@@ -463,7 +503,7 @@ works on a fresh install. Two host mechanisms are tried, with no third-party
 Python dependency:
 
 - `avahi-publish-service` publishes the instance while the daemon runs. TXT
-  records carry `version=`, `hands=LEFT,RIGHT` and `path=/wmr`.
+  records carry `id=<bridge_id>`, `version=`, `hands=LEFT,RIGHT` and `path=/wmr`.
 - otherwise `resolvectl` (systemd-resolved) is used: a `wmr-bridge.dnssd`
   service file is written to `/run/systemd/dnssd/` and removed on shutdown.
   This needs write access to that directory (normally root), so systemd units
@@ -754,8 +794,9 @@ safeguards below are enforced by the daemon. The transport is still plaintext.
   controllers deliberately and keep the Pi's Bluetooth adapter trusted-only.
 - Controller motion data can be personal data. Captures and logs should be
   handled accordingly. The repository samples contain no Bluetooth address.
-- There is no rate limiting, no per-client authorisation beyond the token, and
-  no TLS in the daemon itself. Treat it as bench equipment with a small, local
+- WebSocket clients have no rate limit and no authorisation beyond the token,
+  and the daemon itself has no TLS. UDP discovery replies are rate-limited per
+  source but carry no secret. Treat it as bench equipment with a small, local
   attack surface.
 
 ### TLS termination
@@ -862,9 +903,10 @@ the JSON control protocol, authentication, stream exclusion, batching and
 replay. It also covers the non-loopback-without-token refusal, the loopback
 default, Origin rejection and allow-listing, the handshake timeout, the
 `auth_failed` path for a non-ASCII token, per-hand drop accounting and closing
-active sockets on shutdown, the `handFilter` payload in `hello`/`status`, and
-mDNS advertisement via avahi/systemd-resolved plus the absent-tool no-op. No
-hardware or third-party packages.
+active sockets on shutdown, the `handFilter` payload in `hello`/`status`, the
+stable `bridge_id` in `hello`/discovery, UDP probes and rate limiting, and mDNS
+advertisement via avahi/systemd-resolved plus the absent-tool no-op. No hardware
+or third-party packages.
 
 Replay smoke test:
 
@@ -942,14 +984,14 @@ INFO/WARNING:
   are in place; a fresh daemon starts `not_read`).
 - Native system packaging beyond the released `.deb` (`pip install`,
   APT repository, signing, image).
-- Bench-validate `--hand` single-hand mode and `--advertise-mdns` discovery on
-  real hardware.
+- Bench-validate `--hand` single-hand mode and UDP/mDNS discovery on real
+  hardware.
 
 ## Files
 
 | Path | Contents |
 | --- | --- |
-| `pi/wmr_bridge/` | host bridge package: protocol, decoder, BlueZ, WebSocket, server, mDNS, CLI |
+| `pi/wmr_bridge/` | host bridge package: protocol, decoder, BlueZ, WebSocket, server, UDP/mDNS discovery, CLI |
 | `pi/tools/wifi_probe.py` | bench client: throughput, sequence gaps, tick-based missing reports, RTT (min/p50/p95/max), status |
 | `pi/build_package.sh` | builds `dist/wmr-bridge-<version>.tar.gz` plus `.sha256` |
 | `pi/build_deb.sh` | builds `dist/wmr-bridge_<version>_all.deb` and its `.sha256` (no root; maintainer scripts in `pi/debian/`) |

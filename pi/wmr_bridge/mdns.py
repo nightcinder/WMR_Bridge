@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import __version__
+from .bridge import default_bridge_id
 
 LOG = logging.getLogger("wmr_bridge.mdns")
 
@@ -38,6 +39,7 @@ class MdnsAdvertiser:
         *,
         port: int,
         hands: list[str],
+        bridge_id: str | None = None,
         hostname: str | None = None,
         version: str = __version__,
         path: str = "/wmr",
@@ -48,6 +50,7 @@ class MdnsAdvertiser:
     ) -> None:
         self.port = port
         self.hands = list(hands)
+        self.bridge_id = bridge_id or default_bridge_id()
         self.name = hostname or socket.gethostname()
         self.version = version
         self.path = path
@@ -64,6 +67,7 @@ class MdnsAdvertiser:
 
     def _txt(self) -> list[str]:
         return [
+            f"id={self.bridge_id}",
             f"version={self.version}",
             f"hands={','.join(self.hands)}",
             f"path={self.path}",
