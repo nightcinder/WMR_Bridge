@@ -167,7 +167,7 @@ Replace `<version>` with the Pi package version.
 The installer downloads the release `.deb` and verifies it against
 `SHA256SUMS`, then installs with `apt-get`. The package creates the `wmr`
 service user, installs to `/opt/wmr-bridge/pi`, adds the udev rule and the
-NetworkManager power-save drop-in, writes a `0600 wmr:wmr` token at
+NetworkManager power-save drop-in, writes a `0640 wmr:wmr` token at
 `/etc/wmr-bridge/token`, installs the systemd unit and puts
 `/usr/bin/wmr-bridge` on `PATH`. The piped installer needs `apt-get`; without
 it, install from a checkout or a locally built tarball (see the

@@ -304,10 +304,10 @@ sudo useradd --system --create-home --groups input,bluetooth wmr
 sudo mkdir -p /opt/wmr-bridge /etc/wmr-bridge
 sudo cp -r pi /opt/wmr-bridge/
 sudo cp pi/udev/99-wmr-bridge.rules /etc/udev/rules.d/
-sudo install -m 600 /dev/null /etc/wmr-bridge/token
+sudo install -m 640 /dev/null /etc/wmr-bridge/token
 sudo sh -c 'head -c 24 /dev/urandom | base64 > /etc/wmr-bridge/token'
 sudo chown wmr:wmr /etc/wmr-bridge/token
-sudo chmod 600 /etc/wmr-bridge/token
+sudo chmod 640 /etc/wmr-bridge/token
 sudo cp /opt/wmr-bridge/pi/systemd/wmr-bridge.env.example /etc/wmr-bridge/wmr-bridge.env
 sudo cp /opt/wmr-bridge/pi/systemd/wmr-bridge.service /etc/systemd/system/
 sudo systemctl daemon-reload

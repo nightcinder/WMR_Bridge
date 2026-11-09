@@ -280,6 +280,58 @@ class DebPackagingTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
             self.assertFalse(token.exists(), "purge must remove the token")
 
+    def test_postinst_adds_invoking_sudo_user_to_wmr_group(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "dist"
+            subprocess.run(
+                [str(BUILD), "--out", str(out)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            deb = out / f"wmr-bridge_{VERSION}_all.deb"
+            control = Path(tmp) / "control"
+            subprocess.run(["dpkg-deb", "-e", str(deb), str(control)], check=True)
+
+            fake_bin = Path(tmp) / "bin"
+            fake_bin.mkdir()
+            log_file = Path(tmp) / "calls.log"
+            for name, body in (
+                ("id", "exit 0"),
+                ("usermod", f'echo "usermod $*" >> "{log_file}"'),
+                ("chown", "exit 0"),
+                ("udevadm", "exit 0"),
+                ("rfkill", "exit 0"),
+                ("systemctl", "exit 0"),
+                ("nmcli", "exit 0"),
+            ):
+                shim = fake_bin / name
+                shim.write_text(f"#!/bin/sh\nset -eu\n{body}\n", encoding="utf-8")
+                shim.chmod(0o755)
+
+            root = Path(tmp) / "rootfs"
+            env = {
+                **os.environ,
+                "DESTDIR": str(root),
+                "SUDO_USER": "pi",
+                "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}",
+            }
+            env.pop("WMR_SKIP_PRIVILEGED", None)
+            proc = subprocess.run(
+                ["sh", str(control / "postinst"), "configure"],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+
+            calls = log_file.read_text(encoding="utf-8").splitlines()
+            self.assertIn("usermod -aG input,bluetooth wmr", calls)
+            self.assertIn("usermod -aG wmr pi", calls)
+            token = root / "etc" / "wmr-bridge" / "token"
+            self.assertEqual(stat.S_IMODE(token.stat().st_mode), 0o640)
+
 
 if __name__ == "__main__":
     unittest.main()
