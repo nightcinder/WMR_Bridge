@@ -5,6 +5,39 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.16 — 2026-11-09
+
+The Pi uplink and BLE advertising release on top of 0.3.15. The bridge now
+prefers an Ethernet uplink over 5 GHz Wi-Fi and 2.4 GHz Wi-Fi, advertises the
+FF10 GATT service by default with per-client CCCD gating, and the token file
+access rules for `wifi_probe.py` are documented. Firmware payloads are unchanged
+from 0.3.15: FF10–FF17 keep their payloads and companions at 0.2.2 or later
+continue to work.
+
+### Raspberry Pi bridge
+
+- **Default always-on BLE advertising (ONY-1115).** The daemon advertises the
+  FF10 GATT service by default. Each client controls its own notifications
+  through the CCCD. Pass `--no-ble` to stop advertising. `--ble-fallback`
+  stays as a no-op alias and prints a deprecation warning. Slow advertising
+  uses LEAdvertisement1 intervals of about 1000 to 1285 ms.
+- **Uplink preference (ONY-1114).** The bridge picks the active uplink in this
+  order: `eth0`, then `wlan0` on 5 GHz, then `wlan0` on 2.4 GHz. It uses route
+  metrics (IPv4 and IPv6), not only autoconnect priority. `prefer_5ghz()`
+  takes `eth0` into account. `hello` and `status` report the active uplink.
+- **Token access for `wifi_probe.py` (ONY-1115).** Read
+  `/etc/wmr-bridge/token` with `sudo python3 tools/wifi_probe.py` or as a user
+  in the `wmr` group. The token file is mode 0600 and owned by `wmr:wmr`.
+- **Service hardening (ONY-1114).** `AF_NETLINK` is added to
+  `RestrictAddressFamilies` in the systemd unit.
+
+### Verification
+
+- Host C tests, the Pi unittest suite and the ESP-IDF build run in CI before
+  tagging. BLE advertising waits on ONY-1070 in three states (advertising only,
+  connected-not-subscribed, notifying) with a pass bar of 0 gaps and at most
+  0.5 percent loss.
+
 ## 0.3.15 — 2026-11-09
 
 The Pi connectivity release on top of 0.3.14. The Pi bridge now prefers 5 GHz
