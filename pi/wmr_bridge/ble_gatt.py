@@ -82,6 +82,10 @@ RESULT_INVALID_PARAM = 0x06
 
 DEFAULT_MTU = 23
 DEFAULT_BATCH_HZ = 50.0
+# Slow advertising leaves airtime for the two Classic HID links on the same
+# radio while keeping a phone able to find the bridge promptly.
+ADV_MIN_INTERVAL_MS = 1000
+ADV_MAX_INTERVAL_MS = 1285
 
 
 @dataclass(frozen=True)
@@ -301,7 +305,8 @@ class GattApplication:
 
         A Pi's BLE address can be random, so a scanner cannot key on it. The
         first eight bytes are enough to match the advertisement with the
-        ``bridge_id`` read from FF16.
+        ``bridge_id`` read from FF16. The interval is deliberately slow so
+        advertising does not steal airtime from the Classic controller links.
         """
 
         tag = self.bridge.bridge_id.encode("ascii", "replace")[:8]
@@ -311,6 +316,8 @@ class GattApplication:
             "local_name": self.name,
             "service_data": {FF10_SERVICE: b"WMB1" + tag},
             "include_tx_power": False,
+            "min_interval_ms": ADV_MIN_INTERVAL_MS,
+            "max_interval_ms": ADV_MAX_INTERVAL_MS,
         }
 
     # ---- read/write ------------------------------------------------------
@@ -779,6 +786,14 @@ class DbusGattBackend:
             @dbus_property(access=PropertyAccess.READ)
             def LocalName(self) -> "s":
                 return app.name
+
+            @dbus_property(access=PropertyAccess.READ)
+            def MinInterval(self) -> "u":
+                return app.advertisement_data()["min_interval_ms"]
+
+            @dbus_property(access=PropertyAccess.READ)
+            def MaxInterval(self) -> "u":
+                return app.advertisement_data()["max_interval_ms"]
 
             @dbus_property(access=PropertyAccess.READ)
             def ServiceData(self) -> "a{sv}":

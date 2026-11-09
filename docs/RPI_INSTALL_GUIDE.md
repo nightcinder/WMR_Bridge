@@ -229,7 +229,8 @@ The token file permissions may be wrong. Fix them:
 
 ```bash
 sudo chown wmr:wmr /etc/wmr-bridge/token
-sudo chmod 0600 /etc/wmr-bridge/token
+sudo chmod 0640 /etc/wmr-bridge/token
+sudo usermod -aG wmr "$USER"   # log out and back in, or use sudo for the probe
 sudo systemctl restart wmr-bridge
 ```
 

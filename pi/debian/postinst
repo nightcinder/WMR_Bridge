@@ -32,7 +32,7 @@ case "$1" in
             head -c 24 /dev/urandom | base64 > "$TOKEN_FILE"
             umask "$umask_old"
         fi
-        chmod 0600 "$TOKEN_FILE"
+        chmod 0640 "$TOKEN_FILE"
 
         # Drop bytecode from a previous install so a stale .pyc can never
         # shadow the source files this package just unpacked.
@@ -43,6 +43,12 @@ case "$1" in
                 echo "wmr-bridge: could not give ${TOKEN_FILE} to wmr:wmr" >&2
                 exit 1
             }
+            # The token is group-readable so the invoking admin can run the
+            # host probe without sudo. Group membership applies on next login.
+            if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "wmr" ] &&
+                [ "$SUDO_USER" != "root" ]; then
+                usermod -aG wmr "$SUDO_USER" 2>/dev/null || true
+            fi
             # Stage the 5 GHz-preferred NetworkManager profile from the
             # unpacked tree. --no-reconnect leaves an SSH session on its
             # current link; the unit's ExecStartPre applies the preference when

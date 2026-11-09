@@ -304,7 +304,8 @@ Both controllers should reconnect without re-pairing.
   `/etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf` should contain
   `wifi.powersave = 2`.
 - **Token error:** `sudo chown wmr:wmr /etc/wmr-bridge/token`,
-  `sudo chmod 0600 /etc/wmr-bridge/token`, then restart.
+  `sudo chmod 0640 /etc/wmr-bridge/token`, then restart. For the host probe,
+  add your user to `wmr` (`sudo usermod -aG wmr "$USER"`) and log in again.
 - **No `/dev/hidraw*`:** load `hidp`, persist it in
   `/etc/modules-load.d/wmr-bridge.conf`, and restart Bluetooth.
 - **Automatic pairing does not pair a controller:** `wmr-bridge status` shows

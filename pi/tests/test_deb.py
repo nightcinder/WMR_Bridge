@@ -259,7 +259,7 @@ class DebPackagingTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
             token = root / "etc" / "wmr-bridge" / "token"
             self.assertTrue(token.is_file())
-            self.assertEqual(stat.S_IMODE(token.stat().st_mode), 0o600)
+            self.assertEqual(stat.S_IMODE(token.stat().st_mode), 0o640)
             first = token.read_text(encoding="utf-8").strip()
             self.assertGreaterEqual(len(first), 24)
             self.assertTrue((root / "etc" / "wmr-bridge" / "wmr-bridge.env").is_file())

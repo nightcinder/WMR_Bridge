@@ -233,7 +233,17 @@ class Counters:
 async def run(args: argparse.Namespace) -> int:
     token = args.token
     if args.token_file:
-        token = Path(args.token_file).read_text(encoding="utf-8").splitlines()[0]
+        try:
+            token = Path(args.token_file).read_text(encoding="utf-8").splitlines()[0]
+        except PermissionError:
+            print(
+                f"cannot read token file {args.token_file}: permission denied. "
+                "The token is mode 0640 and owned by wmr:wmr; add your user to "
+                "the wmr group (sudo usermod -aG wmr $USER), then log out and "
+                "back in, or run the probe with sudo.",
+                file=sys.stderr,
+            )
+            return 2
     client = await wsmod.connect(args.host, args.port, args.path, timeout=10)
     print(f"connected to ws://{args.host}:{args.port}{args.path} as {__version__}")
     hello = await asyncio.wait_for(client.recv_json(), 5)
