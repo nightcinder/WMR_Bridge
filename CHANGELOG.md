@@ -5,6 +5,66 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.15 — 2026-11-09
+
+The Pi connectivity release on top of 0.3.14. The Pi bridge now prefers 5 GHz
+without locking out 2.4 GHz-only hardware, answers UDP discovery probes with a
+stable identity, and has an opt-in BlueZ BLE GATT fallback for when Wi-Fi is
+unreachable. WMR controllers get a keep-alive on both targets: the ESP32
+re-sends the FF13 streaming-enable pair on reconnect and every 10 s, and the Pi
+re-sends the WMR `0x06` pair. FF10–FF17 payloads and companions at 0.2.2 or
+later are unchanged. The BLE fallback is opt-in (`--ble-fallback`), has not run
+on hardware, and waits on ONY-1070.
+
+### ESP32 bridge
+
+- **Controllers stay awake after reconnect (ONY-1062).** A reconnecting hand
+  with a cached config block no longer re-reads it; the firmware re-sends the
+  two streaming-enable commands for the fresh link, then repeats them every
+  10 s while the hand is connected and READY. `WMR_CFG_KEEPALIVE_MS=0` disables
+  the periodic timer. Host tests cover the reconnect and keep-alive phases.
+
+### Raspberry Pi bridge
+
+- **Wi-Fi band inspection and automatic 5 GHz preference (ONY-1091, ONY-1092,
+  ONY-1093).** The daemon inspects the radio before connecting, keeps a
+  5 GHz-capable adapter on 5 GHz, and treats a 2.4 GHz-only radio such as the
+  CYW43439 in a Pi Zero 2 W as a warning-only no-op. `hello`, `status` and
+  `wmr-bridge probe` report `freqMhz`, `band`, `supports5Ghz`,
+  `contentionWarning` and `warning`. `--prefer-5ghz` runs as a one-shot action;
+  the systemd unit and Debian installer stage the NetworkManager profile before
+  start, and `--no-reconnect` keeps an SSH session on its current link.
+- **UDP discovery and stable bridge identity (ONY-1068, ONY-1073).** The daemon
+  answers `WMR_DISCOVER_V1 <nonce>` probes on UDP port 8765 with its bridge id,
+  hostname, WebSocket port, path, hands and version, rate-limited per source.
+  The `bridge_id` is stable across restarts, the reply never carries the token,
+  and clients confirm `hello.bridge_id` before authenticating. mDNS
+  advertisement remains optional (`--advertise-mdns`), and `docs/PI_BRIDGE.md`
+  documents the client discovery contract.
+- **Opt-in BlueZ BLE GATT fallback (ONY-1069).** `--ble-fallback` serves the
+  same FF11, FF12 and FF14 payloads over a BlueZ GATT peripheral when Wi-Fi is
+  unreachable, with `--ble-adapter` and `--ble-pairing-window` overrides. It is
+  off by default, needs `python3-dbus-next`, and is not yet verified on
+  hardware (ONY-1070).
+- **Resilient service start and scan backoff (ONY-1057, ONY-1063).** The
+  service clears a boot-time Bluetooth rfkill soft block as root before start
+  and keeps retrying instead of exiting, caps discovery backoff, logs the LAN
+  address and advertises mDNS. The daemon throttles single-hand scans and sends
+  the WMR `0x06` keep-alive pair.
+
+### Tooling
+
+- CI adds CodeQL and publishes Semgrep SARIF to code scanning (ONY-1080), and
+  libFuzzer harnesses cover the three byte-level parsers (ONY-1087).
+
+### Verification
+
+- Host C tests, the Pi unittest suite and the ESP-IDF build run in CI before
+  tagging; the tag stages exactly nine release assets and the firmware reports
+  the tag version over FF16. No packaged firmware has been flashed to hardware,
+  the 5 GHz preference has no hardware run recorded, and the BLE fallback waits
+  on ONY-1070.
+
 ## 0.3.14 — 2026-11-08
 
 The Pi pairing-hardware release on top of 0.3.13. Automatic pairing now
