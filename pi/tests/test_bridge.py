@@ -163,6 +163,21 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((pong["id"], pong["t"]), (7, 1234))
         self.assertIsInstance(pong["serverTimeUs"], int)
 
+    async def test_reports_reset_when_a_hand_reconnects(self) -> None:
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:00")
+        self.bridge.ingest(0, SAMPLE_DATA)
+        self.bridge.ingest(0, SAMPLE_DATA)
+        self.assertEqual(self.bridge.hands[0].reports, 2)
+
+        self.bridge.set_hand_connected(0, False)
+        self.assertEqual(self.bridge.hands[0].reports, 2)
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:00")
+        self.assertEqual(self.bridge.hands[0].reports, 0)
+        self.assertEqual(self.bridge.hands[0].address, "AA:BB:CC:DD:EE:00")
+
+        self.bridge.ingest(0, SAMPLE_DATA)
+        self.assertEqual(self.bridge.hands[0].reports, 1)
+
     async def test_multiple_clients_get_the_same_frames(self) -> None:
         first, _ = await self.connect()
         second, _ = await self.connect()

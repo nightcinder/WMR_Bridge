@@ -362,9 +362,14 @@ class Bridge:
     def set_hand_connected(self, hand: int, connected: bool, address: str = "") -> None:
         if not 0 <= hand < 2:
             return
-        self.hands[hand].connected = connected
+        stats = self.hands[hand]
+        if connected and not stats.connected:
+            # docs/PROTOCOL.md documents the FF11 counters as reports received
+            # on the current connection, so a reconnect starts a fresh count.
+            stats.reports = 0
+        stats.connected = connected
         if address:
-            self.hands[hand].address = address
+            stats.address = address
 
     # ---- calibration -----------------------------------------------------
 
