@@ -76,3 +76,32 @@ add_test(NAME test_hid
     COMMAND test_hid
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/vectors/hid_gamepad.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/vectors/hid_report_descriptor.txt")
+
+# libFuzzer targets over the byte-level entry points the GATT notify path feeds:
+# the 46-byte HID frame, the 56-byte FF12 record and the FF14 batch envelope.
+# Host-only and opt-in: the firmware build never sees these, and libFuzzer needs
+# clang. The library is built with the same sanitizers so a fault inside
+# wmr_codec is caught, not just one in the harness:
+#
+#   cmake -B build-fuzz -DWMR_BUILD_FUZZERS=ON -DCMAKE_C_COMPILER=clang \
+#     -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+#     -DCMAKE_BUILD_TYPE=RelWithDebInfo
+#   cmake --build build-fuzz --parallel
+#   ./build-fuzz/fuzz_decode -max_total_time=60 fuzz/corpus/decode
+option(WMR_BUILD_FUZZERS "Build the libFuzzer targets (requires clang)" OFF)
+if(WMR_BUILD_FUZZERS)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "WMR_BUILD_FUZZERS requires clang")
+    endif()
+    foreach(fuzz_target decode decoded batch)
+        add_executable(fuzz_${fuzz_target} fuzz/fuzz_${fuzz_target}.c)
+        target_include_directories(fuzz_${fuzz_target} PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/src")
+        target_compile_options(fuzz_${fuzz_target} PRIVATE
+            ${WMR_TEST_WARNINGS}
+            -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -g)
+        target_link_options(fuzz_${fuzz_target} PRIVATE
+            -fsanitize=fuzzer,address,undefined)
+        target_link_libraries(fuzz_${fuzz_target} PRIVATE wmr_codec)
+    endforeach()
+endif()
