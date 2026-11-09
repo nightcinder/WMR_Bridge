@@ -5,6 +5,36 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.16 — 2026-11-09
+
+Documentation release on top of 0.3.15. The access rules for
+`/etc/wmr-bridge/token` when running `wifi_probe.py` are now documented. BLE
+advertising and uplink behaviour remain as in 0.3.15: `--ble-fallback` is
+opt-in, and `prefer_5ghz()` covers 5 GHz Wi-Fi only. Firmware payloads are
+unchanged from 0.3.15: FF10–FF17 keep their payloads and companions at 0.2.2
+or later continue to work.
+
+### Raspberry Pi bridge
+
+- **Token access for `wifi_probe.py`.** Read `/etc/wmr-bridge/token` with
+  `sudo python3 tools/wifi_probe.py`, or run the probe as the `wmr` user with
+  `sudo -u wmr python3 tools/wifi_probe.py`. The token file is mode 0600 and
+  owned by `wmr:wmr`, so members of the `wmr` group cannot read it.
+- **BLE fallback remains opt-in.** `--ble-fallback` serves FF11, FF12 and FF14
+  over BlueZ BLE when Wi-Fi is unreachable. It is off by default and needs
+  `python3-dbus-next`. It has not been verified on hardware.
+- **Wi-Fi 5 GHz preference remains as in 0.3.15.** `--prefer-5ghz` clones the
+  active NetworkManager connection into a 5 GHz-only profile and switches only
+  when a 5 GHz BSSID is visible. A 2.4 GHz-only radio is a warning-only
+  no-op.
+
+### Verification
+
+- Host C tests, the Pi unittest suite and the ESP-IDF build run in CI before
+  tagging. BLE advertising waits on ONY-1070 in three states (advertising only,
+  connected-not-subscribed, notifying) with a pass bar of 0 gaps and at most
+  0.5 percent loss.
+
 ## 0.3.15 — 2026-11-09
 
 The Pi connectivity release on top of 0.3.14. The Pi bridge now prefers 5 GHz
