@@ -16,6 +16,8 @@ from wmr_bridge.bluez import (
     BluezAutoPairer,
     BluezDevice,
     HidrawDevice,
+    HidrawReader,
+    WMR_ENABLE_SPACING,
     collect_status,
     discover_hidraw,
     hand_from_name,
@@ -121,6 +123,70 @@ class SelectionTests(unittest.TestCase):
         self.assertTrue(device.matches("hidraw3"))
         self.assertTrue(device.matches("left"))
         self.assertFalse(device.matches("right"))
+
+
+class HidrawReaderTests(unittest.TestCase):
+    LEFT_ENABLE = bytes.fromhex("0603010002")
+    RIGHT_ENABLE = bytes.fromhex("060302e102")
+
+    def test_open_uses_read_write_and_sends_both_enable_reports(self) -> None:
+        with mock.patch("wmr_bridge.bluez.os.open", return_value=7) as opened, \
+             mock.patch("wmr_bridge.bluez.os.write") as written, \
+             mock.patch("wmr_bridge.bluez.time.sleep") as slept:
+            reader = HidrawReader("/dev/hidraw0", clock=lambda: 100.0)
+            self.assertEqual(reader.open(), 7)
+
+        self.assertTrue(reader.writable)
+        flags = opened.call_args.args[1]
+        self.assertEqual(flags & os.O_RDWR, os.O_RDWR)
+        self.assertEqual(opened.call_args.args[0], "/dev/hidraw0")
+        self.assertEqual(
+            [call.args[1][:5] for call in written.call_args_list],
+            [self.LEFT_ENABLE, self.RIGHT_ENABLE],
+        )
+        self.assertTrue(all(len(call.args[1]) == 64 for call in written.call_args_list))
+        self.assertTrue(all(call.args[0] == 7 for call in written.call_args_list))
+        # The second enable report must be spaced by WMR_CFG_SPACING_MS.
+        slept.assert_called_once_with(WMR_ENABLE_SPACING)
+
+    def test_open_falls_back_to_read_only_and_skips_keep_alive(self) -> None:
+        with mock.patch(
+            "wmr_bridge.bluez.os.open",
+            side_effect=[PermissionError(13, "permission denied"), 9],
+        ) as opened, mock.patch("wmr_bridge.bluez.os.write") as written:
+            reader = HidrawReader("/dev/hidraw0")
+            self.assertEqual(reader.open(), 9)
+            written.assert_not_called()
+
+        self.assertFalse(reader.writable)
+        self.assertEqual(opened.call_args_list[0].args[1] & os.O_RDWR, os.O_RDWR)
+        self.assertFalse(opened.call_args_list[1].args[1] & os.O_RDWR)
+        self.assertFalse(reader.keep_alive(now=1000.0))
+        written.assert_not_called()
+
+    def test_keep_alive_resends_only_after_the_interval(self) -> None:
+        now = [100.0]
+        with mock.patch("wmr_bridge.bluez.os.open", return_value=7), \
+             mock.patch("wmr_bridge.bluez.os.write") as written:
+            reader = HidrawReader(
+                "/dev/hidraw0",
+                keep_alive_interval=10.0,
+                clock=lambda: now[0],
+            )
+            reader.open()
+            self.assertEqual(written.call_count, 2)
+
+            written.reset_mock()
+            now[0] = 109.9
+            self.assertFalse(reader.keep_alive())
+            written.assert_not_called()
+
+            now[0] = 110.0
+            self.assertTrue(reader.keep_alive())
+            self.assertEqual(
+                [call.args[1][:5] for call in written.call_args_list],
+                [self.LEFT_ENABLE, self.RIGHT_ENABLE],
+            )
 
 
 class _Hand:
@@ -269,6 +335,7 @@ class BluezAutoPairerTests(unittest.TestCase):
 
     def make_pairer(self, bridge: _Bridge, runner, *, allowed_hands=(0, 1),
                     which=lambda _command: "/usr/bin/bluetoothctl", session=None,
+                    scan_seconds: float = 1.0,
                     rfkill_root="/nonexistent/rfkill"):
         return BluezAutoPairer(
             bridge,
@@ -276,7 +343,7 @@ class BluezAutoPairerTests(unittest.TestCase):
             runner=runner,
             session=session or (lambda _seconds, _should_pair: []),
             which=which,
-            scan_seconds=1.0,
+            scan_seconds=scan_seconds,
             poll_interval=1.0,
             rfkill_root=rfkill_root,
         )
@@ -538,7 +605,7 @@ class BluezAutoPairerTests(unittest.TestCase):
                                         "        Connected: yes\n")
             return _completed(args)
 
-        pairer = self.make_pairer(_Bridge(left=True), runner)
+        pairer = self.make_pairer(_Bridge(), runner)
 
         self.assertFalse(pairer._tick())
         self.assertEqual(pairer._next_delay(0), 1.0)
@@ -549,6 +616,33 @@ class BluezAutoPairerTests(unittest.TestCase):
         # idle grows forever while a hand is missing; 2 ** idle must never
         # reach an int-to-float conversion that raises OverflowError.
         self.assertEqual(pairer._next_delay(10**9), 30.0)
+
+    def test_one_connected_hand_throttles_the_scan_for_the_other(self) -> None:
+        scans: list[float] = []
+
+        def runner(args: list[str], timeout: float):
+            if args[1] == "power":
+                return _completed(args)
+            if args[1] == "pairable":
+                return _completed(args)
+            if args[1] == "devices":
+                return _completed(args)
+            raise AssertionError(f"unexpected bluetoothctl call: {args}")
+
+        def session(seconds: float, _should_pair) -> list:
+            scans.append(seconds)
+            return []
+
+        pairer = self.make_pairer(
+            _Bridge(left=True), runner, session=session, scan_seconds=10.0
+        )
+        self.assertFalse(pairer._tick())
+
+        # The inquiry shares the radio with the live ACL link, so it is both
+        # shorter and much less frequent than a scan with no controller up.
+        self.assertEqual(scans, [2.0])
+        self.assertEqual(pairer._next_delay(0), 60.0)
+        self.assertEqual(pairer._next_delay(10), 60.0)
 
     def test_missing_bluetoothctl_disables_pairing_without_raising(self) -> None:
         calls: list[list[str]] = []

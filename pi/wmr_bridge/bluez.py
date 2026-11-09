@@ -167,18 +167,100 @@ def hand_from_override(device: HidrawDevice, left_spec: str | None, right_spec: 
     return device.hand
 
 
-class HidrawReader:
-    """Blocking/non-blocking reader for one hidraw node."""
+# WMR controllers stop streaming and can power down when the host only reads
+# from hidraw: they expect Monado's two output-report commands that re-enable
+# streaming. hidraw writes the report ID first, and the controller's output
+# report is 64 bytes, so the five command bytes are zero-padded.
+WMR_ENABLE_REPORTS = (
+    bytes((0x06, 0x03, 0x01, 0x00, 0x02)),
+    bytes((0x06, 0x03, 0x02, 0xE1, 0x02)),
+)
+WMR_OUTPUT_REPORT_SIZE = 64
+KEEP_ALIVE_INTERVAL = 10.0
+# The controller drops a back-to-back second enable command; firmware and
+# Monado separate them by WMR_CFG_SPACING_MS (10 ms).
+WMR_ENABLE_SPACING = 0.010
 
-    def __init__(self, path: str, read_size: int = 128) -> None:
+
+class HidrawReader:
+    """Blocking/non-blocking reader for one hidraw node.
+
+    The node is opened read-write when possible so the two 0x06 streaming-enable
+    reports can be written on open and then again as a periodic keep-alive. A
+    read-only fallback (for example a udev rule that grants only read access)
+    still delivers input reports, but keep-alive writes are then skipped.
+    """
+
+    def __init__(
+        self,
+        path: str,
+        read_size: int = 128,
+        *,
+        keep_alive_interval: float = KEEP_ALIVE_INTERVAL,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self.path = path
         self.read_size = read_size
+        self.keep_alive_interval = max(0.0, keep_alive_interval)
+        self._clock = clock
         self._fd: int | None = None
+        self._writable = False
+        self._last_keep_alive: float | None = None
+
+    @property
+    def writable(self) -> bool:
+        return self._writable
 
     def open(self) -> int:
         if self._fd is None:
-            self._fd = os.open(self.path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0))
+            flags = os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
+            try:
+                self._fd = os.open(self.path, os.O_RDWR | flags)
+            except OSError as exc:
+                LOG.warning(
+                    "%s: cannot open read-write (%s); input works but the 0x06 "
+                    "streaming keep-alive is disabled",
+                    self.path,
+                    exc,
+                )
+                self._fd = os.open(self.path, os.O_RDONLY | flags)
+                self._writable = False
+            else:
+                self._writable = True
+            self.send_enable()
         return self._fd
+
+    def send_enable(self) -> bool:
+        """Write both 0x06 streaming-enable reports; report whether they went out."""
+
+        if self._fd is None or not self._writable:
+            return False
+        sent = True
+        for index, command in enumerate(WMR_ENABLE_REPORTS):
+            if index:
+                time.sleep(WMR_ENABLE_SPACING)
+            report = command.ljust(WMR_OUTPUT_REPORT_SIZE, b"\x00")
+            try:
+                os.write(self._fd, report)
+            except OSError as exc:
+                LOG.warning("%s: 0x06 enable write failed: %s", self.path, exc)
+                sent = False
+        if sent:
+            self._last_keep_alive = self._clock()
+        return sent
+
+    def keep_alive(self, now: float | None = None) -> bool:
+        """Re-send the enable reports when the keep-alive interval has elapsed."""
+
+        if self._fd is None or not self._writable:
+            return False
+        current = self._clock() if now is None else now
+        if (
+            self._last_keep_alive is not None
+            and current - self._last_keep_alive < self.keep_alive_interval
+        ):
+            return False
+        return self.send_enable()
 
     @property
     def fd(self) -> int:
@@ -207,6 +289,8 @@ class HidrawReader:
                 os.close(self._fd)
             finally:
                 self._fd = None
+                self._writable = False
+                self._last_keep_alive = None
 
     def __enter__(self) -> "HidrawReader":
         self.open()
@@ -643,6 +727,11 @@ class BluezAutoPairer:
     Matching controllers are then trusted and connected. Bursts that find
     nothing to do back off up to ``max_poll_interval``.
 
+    While one controller is already connected, an inquiry would starve its ACL
+    link on the Pi's shared radio, so scans for the missing hand are throttled:
+    they repeat no faster than ``active_poll_interval`` and run for at most
+    ``active_scan_seconds``.
+
     Without ``bluetoothctl`` or a working adapter the pairer logs one warning
     and disables itself. ``HidrawManager`` keeps running in that case, so a
     manually paired controller still works.
@@ -657,6 +746,8 @@ class BluezAutoPairer:
         scan_seconds: float = 10.0,
         poll_interval: float = 5.0,
         max_poll_interval: float = 30.0,
+        active_scan_seconds: float = 2.0,
+        active_poll_interval: float = 60.0,
         runner: Runner | None = None,
         session: Session | None = None,
         which: Callable[[str], str | None] = shutil.which,
@@ -668,6 +759,8 @@ class BluezAutoPairer:
         self.scan_seconds = max(1.0, scan_seconds)
         self.poll_interval = max(1.0, poll_interval)
         self.max_poll_interval = max(self.poll_interval, max_poll_interval)
+        self.active_scan_seconds = max(1.0, active_scan_seconds)
+        self.active_poll_interval = max(self.max_poll_interval, active_poll_interval)
         self._runner = runner or _run_command
         self._session = session
         self._which = which
@@ -682,6 +775,9 @@ class BluezAutoPairer:
 
         hands = getattr(self.bridge, "hands")
         return all(hands[hand].connected for hand in self.allowed_hands)
+
+    def _any_hand_connected(self) -> bool:
+        return any(self._hand_connected(hand) for hand in self.allowed_hands)
 
     def start(self) -> None:
         self._task = asyncio.create_task(self._loop(), name="bluez-auto-pair")
@@ -709,15 +805,25 @@ class BluezAutoPairer:
     def _next_delay(self, idle: int) -> float:
         """Back off repeated inquiry bursts that found nothing to do.
 
+        A connected hand shares the Pi's radio with any inquiry for the missing
+        hand, so its scans are spaced out to ``active_poll_interval`` even
+        before the normal idle backoff would reach that far.
+
         ``idle`` grows without bound while a hand stays missing, so the
         exponent is capped before float conversion. ``2 ** idle`` raised
         ``OverflowError`` after enough iterations and killed the daemon.
         """
 
         if idle <= 0:
-            return self.poll_interval
-        exponent = min(idle - 1, 32)
-        return min(self.max_poll_interval, self.poll_interval * float(2 ** exponent))
+            delay = self.poll_interval
+        else:
+            exponent = min(idle - 1, 32)
+            delay = min(
+                self.max_poll_interval, self.poll_interval * float(2 ** exponent)
+            )
+        if self._any_hand_connected():
+            return max(delay, self.active_poll_interval)
+        return delay
 
     def _run(self, *args: str, timeout: float) -> subprocess.CompletedProcess[str] | None:
         return self._runner([self.command, *args], timeout)
@@ -765,12 +871,15 @@ class BluezAutoPairer:
 
         if not scan_hands:
             return acted
+        scan_seconds = self.scan_seconds
+        if self._any_hand_connected():
+            scan_seconds = min(scan_seconds, self.active_scan_seconds)
         LOG.info(
             "auto-pair: scanning %.0f s for %s; put the controller in pairing mode",
-            self.scan_seconds,
+            scan_seconds,
             ", ".join(HAND_NAMES[hand] for hand in sorted(scan_hands)),
         )
-        discovered = self._scan_and_pair(scan_hands)
+        discovered = self._scan_and_pair(scan_hands, scan_seconds)
         if discovered is None:
             LOG.warning(
                 "auto-pair: bluetoothctl could not scan; automatic controller "
@@ -870,15 +979,18 @@ class BluezAutoPairer:
             return []
         return parse_devices(result.stdout or "")
 
-    def _scan_and_pair(self, hands: Iterable[int]) -> list[BluezDevice] | None:
+    def _scan_and_pair(
+        self, hands: Iterable[int], seconds: float | None = None
+    ) -> list[BluezDevice] | None:
         wanted = frozenset(hands)
 
         def should_pair(device: BluezDevice) -> bool:
             return bool(device.is_wmr and device.hand in wanted)
 
+        scan_seconds = self.scan_seconds if seconds is None else seconds
         if self._session is not None:
-            return self._session(self.scan_seconds, should_pair)
-        return scan_and_pair(self.command, self.scan_seconds, should_pair)
+            return self._session(scan_seconds, should_pair)
+        return scan_and_pair(self.command, scan_seconds, should_pair)
 
     def _info(self, address: str) -> BluezDevice | None:
         result = self._run("info", address, timeout=10.0)
