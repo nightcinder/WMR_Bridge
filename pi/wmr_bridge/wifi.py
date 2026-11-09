@@ -4,10 +4,11 @@ Bluetooth Classic lives in the 2.4 GHz band. On a Pi whose Wi-Fi is also on
 2.4 GHz the two share the radio, so the bridge prefers a 5 GHz BSSID when one
 is available. The preference is deliberately non-lockout:
 
-* the user's existing connection profile is left untouched and keeps working
-  as the 2.4 GHz fallback;
-* a separate ``<connection>-5ghz`` profile is cloned from it, restricted to
-  ``802-11-wireless.band=a`` and given a higher autoconnect priority;
+* the user's existing connection profile keeps its band and security and
+  stays available as the 2.4 GHz fallback, but its autoconnect priority and
+  route metric are lowered so it ranks below the 5 GHz clone and wired eth0;
+* a separate ``<connection>-5ghz`` profile is cloned from the base, restricted
+  to ``802-11-wireless.band=a`` and given the 5 GHz route metric;
 * the bridge only switches to the new profile when a 5 GHz BSSID is actually
   visible, and a failed switch leaves the current connection alone;
 * a 2.4 GHz-only radio (for example the CYW43439 in a Pi Zero 2 W) is a
@@ -22,13 +23,17 @@ from __future__ import annotations
 
 import logging
 import re
+import socket
 import subprocess
 from collections.abc import Callable, Iterable
+from pathlib import Path
 from typing import Any
 
 LOG = logging.getLogger("wmr_bridge.wifi")
 
 IW = "iw"
+# systemd services run with a PATH that does not always include /usr/sbin.
+IW_FALLBACK = "/usr/sbin/iw"
 NMCLI = "nmcli"
 
 # 5 GHz runs from 4.9 GHz to just below the 6 GHz band (5925 MHz).
@@ -38,6 +43,16 @@ TWO_GHZ_MIN_MHZ = 2400
 TWO_GHZ_MAX_MHZ = 2500
 PREFERRED_PRIORITY = 50
 FIVE_GHZ_PROFILE_SUFFIX = "-5ghz"
+
+# Uplink order: wired (100) beats 5 GHz Wi-Fi (200) beats 2.4 GHz (300).
+WIRED_INTERFACE = "eth0"
+WIRED_ROUTE_METRIC = 100
+FIVE_GHZ_ROUTE_METRIC = 200
+TWO_GHZ_ROUTE_METRIC = 300
+WIRED_AUTOCONNECT_PRIORITY = 100
+TWO_GHZ_AUTOCONNECT_PRIORITY = 0
+ETHERNET_CONNECTION_TYPE = "802-3-ethernet"
+DEFAULT_ROUTE_PATH = "/proc/net/route"
 
 _INTERFACE_RE = re.compile(r"^\s*Interface\s+(\S+)\s*$")
 _PHY_RE = re.compile(r"^\s*phy#(\d+)\s*$")
@@ -65,6 +80,86 @@ def _default_runner(argv: list[str]) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(argv, 127, "", str(exc))
     except (OSError, subprocess.SubprocessError) as exc:
         return subprocess.CompletedProcess(argv, 1, "", str(exc))
+
+
+def _run_iw(run: Runner, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run ``iw`` and retry the absolute path when PATH does not find it."""
+
+    result = run([IW, *args])
+    if result.returncode == 127:
+        result = run([IW_FALLBACK, *args])
+    return result
+
+
+def interface_ipv4(iface: str) -> str | None:
+    """Return one interface's IPv4 address without shelling out."""
+
+    import fcntl
+    import struct
+
+    siocgifaddr = 0x8915
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            packed = fcntl.ioctl(
+                probe.fileno(),
+                siocgifaddr,
+                struct.pack("256s", iface.encode("utf-8")[:15]),
+            )
+    except OSError:
+        return None
+    return socket.inet_ntoa(packed[20:24])
+
+
+def _default_route_interface(text: str) -> str | None:
+    """Return the interface with the lowest-metric IPv4 default route."""
+
+    best: str | None = None
+    best_metric: int | None = None
+    for line in text.splitlines()[1:]:
+        fields = line.split()
+        if len(fields) < 8 or fields[1] != "00000000":
+            continue
+        try:
+            flags = int(fields[3], 16)
+            metric = int(fields[6])
+        except ValueError:
+            continue
+        if not flags & 0x1:  # RTF_UP
+            continue
+        if best_metric is None or metric < best_metric:
+            best, best_metric = fields[0], metric
+    return best
+
+
+def _uplink_kind(iface: str) -> str:
+    if iface.startswith(("eth", "en")):
+        return "ethernet"
+    if iface.startswith(("wlan", "wl")):
+        return "wifi"
+    return "other"
+
+
+def inspect_uplink(
+    route_path: str | Path = DEFAULT_ROUTE_PATH,
+    *,
+    address_lookup: Callable[[str], str | None] | None = None,
+) -> dict[str, Any]:
+    """Describe the interface carrying the IPv4 default route."""
+
+    try:
+        route_text = Path(route_path).read_text(encoding="utf-8")
+    except OSError:
+        route_text = ""
+    iface = _default_route_interface(route_text)
+    if iface is None:
+        return {"iface": None, "kind": None, "addresses": []}
+    lookup = address_lookup or interface_ipv4
+    address = lookup(iface)
+    return {
+        "iface": iface,
+        "kind": _uplink_kind(iface),
+        "addresses": [address] if address else [],
+    }
 
 
 def _band_for(freq_mhz: int | None) -> str | None:
@@ -176,7 +271,7 @@ def inspect_wifi(
     """
 
     run = runner or _default_runner
-    dev_result = run([IW, "dev"])
+    dev_result = _run_iw(run, "dev")
     interfaces = (
         _parse_iw_dev(dev_result.stdout) if dev_result.returncode == 0 else []
     )
@@ -199,7 +294,7 @@ def inspect_wifi(
             "warning": warning,
         }
 
-    phy_result = run([IW, "phy"])
+    phy_result = _run_iw(run, "phy")
     phy_frequencies: list[int] = []
     if phy_result.returncode == 0:
         by_phy = _parse_iw_phy(phy_result.stdout)
@@ -276,6 +371,56 @@ def _connection_names(text: str) -> set[str]:
     }
 
 
+def _connection_pairs(text: str) -> list[tuple[str, str]]:
+    """Parse ``nmcli -t -f NAME,TYPE connection show`` output."""
+
+    pairs: list[tuple[str, str]] = []
+    for line in text.splitlines():
+        name, separator, kind = line.rpartition(":")
+        if separator:
+            pairs.append((_unescape_nmcli(name), kind))
+    return pairs
+
+
+def _configure_wired(run: Runner) -> dict[str, Any]:
+    """Give wired NetworkManager profiles the best route metric (100)."""
+
+    listing = run([NMCLI, "-t", "-f", "NAME,TYPE", "connection", "show"])
+    profiles = (
+        [
+            name
+            for name, kind in _connection_pairs(listing.stdout)
+            if kind == ETHERNET_CONNECTION_TYPE
+        ]
+        if listing.returncode == 0
+        else []
+    )
+    changed: list[str] = []
+    for profile in profiles:
+        result = run(
+            [
+                NMCLI,
+                "connection",
+                "modify",
+                profile,
+                "ipv4.route-metric",
+                str(WIRED_ROUTE_METRIC),
+                "ipv6.route-metric",
+                str(WIRED_ROUTE_METRIC),
+                "connection.autoconnect-priority",
+                str(WIRED_AUTOCONNECT_PRIORITY),
+            ]
+        )
+        if result.returncode == 0:
+            changed.append(profile)
+    return {
+        "iface": WIRED_INTERFACE,
+        "profiles": profiles,
+        "metric": WIRED_ROUTE_METRIC,
+        "changed": changed,
+    }
+
+
 def _has_5ghz_bssid(text: str) -> bool:
     for line in text.splitlines():
         for match in _MHZ_RE.finditer(line):
@@ -292,13 +437,17 @@ def prefer_5ghz(
 ) -> dict[str, Any]:
     """Create or update a ``<connection>-5ghz`` NetworkManager profile.
 
-    The base profile is left in place as the 2.4 GHz fallback. With
-    ``reconnect`` true the new profile is activated only when a 5 GHz BSSID is
-    visible; otherwise the current connection is untouched. A radio with no
-    5 GHz support is a warning-only no-op.
+    The base profile stays in place as the 2.4 GHz fallback; only its
+    autoconnect priority and route metric are lowered. With ``reconnect`` true
+    the new profile is activated only when a 5 GHz BSSID is visible; otherwise
+    the current connection is untouched. A radio with no 5 GHz support is a
+    warning-only no-op.
     """
 
     run = runner or _default_runner
+    # Wired profiles are configured even when Wi-Fi is absent or disconnected:
+    # the metric must already be right when eth0 is plugged in later.
+    wired = _configure_wired(run)
     info = inspect_wifi(iface, runner=run)
     result: dict[str, Any] = {
         "iface": info["iface"],
@@ -306,6 +455,7 @@ def prefer_5ghz(
         "supports5Ghz": info["supports5Ghz"],
         "profile": None,
         "baseProfile": None,
+        "wired": wired,
         "changed": False,
         "reconnected": False,
         "warning": info["warning"],
@@ -334,14 +484,24 @@ def prefer_5ghz(
     active = run(
         [NMCLI, "-t", "-f", "NAME,DEVICE", "connection", "show", "--active"]
     )
-    base_profile = (
+    active_profile = (
         _active_connection(active.stdout, info["iface"])
         if active.returncode == 0
         else None
     )
-    if base_profile is None:
+    if active_profile is None:
         result["warning"] = "Could not determine the active NetworkManager connection."
         return result
+
+    # After the first switch (or any reboot) the active profile is already the
+    # 5 GHz clone. Strip that suffix so we always name the 2.4 GHz base, never
+    # clone a clone, and never apply the 300 metric to the 5 GHz profile.
+    base_profile = active_profile
+    if (
+        base_profile.endswith(FIVE_GHZ_PROFILE_SUFFIX)
+        and len(base_profile) > len(FIVE_GHZ_PROFILE_SUFFIX)
+    ):
+        base_profile = base_profile[: -len(FIVE_GHZ_PROFILE_SUFFIX)]
     result["baseProfile"] = base_profile
 
     profile = f"{base_profile}{FIVE_GHZ_PROFILE_SUFFIX}"
@@ -352,20 +512,23 @@ def prefer_5ghz(
         if names_result.returncode == 0
         else set()
     )
+    profile_settings = [
+        NMCLI,
+        "connection",
+        "modify",
+        profile,
+        "802-11-wireless.band",
+        "a",
+        "connection.autoconnect-priority",
+        str(PREFERRED_PRIORITY),
+        "ipv4.route-metric",
+        str(FIVE_GHZ_ROUTE_METRIC),
+        "ipv6.route-metric",
+        str(FIVE_GHZ_ROUTE_METRIC),
+    ]
 
     if profile in names:
-        changed = run(
-            [
-                NMCLI,
-                "connection",
-                "modify",
-                profile,
-                "802-11-wireless.band",
-                "a",
-                "connection.autoconnect-priority",
-                str(PREFERRED_PRIORITY),
-            ]
-        )
+        changed = run(profile_settings)
     else:
         created = run([NMCLI, "connection", "clone", base_profile, profile])
         if created.returncode != 0:
@@ -374,18 +537,7 @@ def prefer_5ghz(
                 f"{created.stderr.strip() or 'nmcli failed'}"
             )
             return result
-        changed = run(
-            [
-                NMCLI,
-                "connection",
-                "modify",
-                profile,
-                "802-11-wireless.band",
-                "a",
-                "connection.autoconnect-priority",
-                str(PREFERRED_PRIORITY),
-            ]
-        )
+        changed = run(profile_settings)
 
     if changed.returncode != 0:
         result["warning"] = (
@@ -395,27 +547,59 @@ def prefer_5ghz(
         return result
     result["changed"] = True
 
-    if not reconnect or info["band"] == "5GHz":
-        return result
-
-    visible = run(
-        [NMCLI, "-t", "-f", "BSSID,FREQ", "device", "wifi", "list", "ifname", info["iface"]]
+    # The base profile stays the 2.4 GHz fallback, but must rank below the
+    # 5 GHz clone (300 vs 200) and below wired eth0 (100).
+    base_metric = run(
+        [
+            NMCLI,
+            "connection",
+            "modify",
+            base_profile,
+            "connection.autoconnect-priority",
+            str(TWO_GHZ_AUTOCONNECT_PRIORITY),
+            "ipv4.route-metric",
+            str(TWO_GHZ_ROUTE_METRIC),
+            "ipv6.route-metric",
+            str(TWO_GHZ_ROUTE_METRIC),
+        ]
     )
-    if visible.returncode == 0 and _has_5ghz_bssid(visible.stdout):
-        activated = run(
-            [NMCLI, "connection", "up", profile, "ifname", info["iface"]]
+    result["baseMetricChanged"] = base_metric.returncode == 0
+
+    if reconnect and info["band"] != "5GHz":
+        visible = run(
+            [
+                NMCLI,
+                "-t",
+                "-f",
+                "BSSID,FREQ",
+                "device",
+                "wifi",
+                "list",
+                "ifname",
+                info["iface"],
+            ]
         )
-        if activated.returncode == 0:
-            result["reconnected"] = True
-            result["warning"] = None
+        if visible.returncode == 0 and _has_5ghz_bssid(visible.stdout):
+            activated = run(
+                [NMCLI, "connection", "up", profile, "ifname", info["iface"]]
+            )
+            if activated.returncode == 0:
+                result["reconnected"] = True
+                result["warning"] = None
+            else:
+                result["warning"] = (
+                    f"Could not activate {profile}; the current connection was left "
+                    f"in place: {activated.stderr.strip() or 'nmcli failed'}"
+                )
         else:
             result["warning"] = (
-                f"Could not activate {profile}; the current connection was left "
-                f"in place: {activated.stderr.strip() or 'nmcli failed'}"
+                "No 5 GHz BSSID is visible; the profile was saved and the current "
+                "connection was left in place."
             )
-    else:
+
+    if not result["baseMetricChanged"] and result["warning"] is None:
         result["warning"] = (
-            "No 5 GHz BSSID is visible; the profile was saved and the current "
-            "connection was left in place."
+            f"Could not set the 2.4 GHz route metric on {base_profile}: "
+            f"{base_metric.stderr.strip() or 'nmcli failed'}"
         )
     return result

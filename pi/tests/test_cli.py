@@ -40,6 +40,7 @@ WIFI_INFO = {
         "Bluetooth; prefer a 5 GHz network."
     ),
 }
+UPLINK_INFO = {"iface": "eth0", "kind": "ethernet", "addresses": ["192.0.2.60"]}
 
 
 def _args(bind: str = "127.0.0.1", insecure: bool = False):
@@ -98,11 +99,26 @@ class LocalAddressTests(unittest.TestCase):
 
         infos = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.1.1", 0))]
         with mock.patch("wmr_bridge.__main__.socket.getaddrinfo", return_value=infos), \
+             mock.patch("wmr_bridge.__main__.interface_ipv4", return_value=None), \
              mock.patch("wmr_bridge.__main__.socket.socket", return_value=Probe()):
             self.assertEqual(_local_addresses(), ["127.0.0.1", "192.0.2.50"])
 
+    def test_eth0_leads_the_lan_addresses(self) -> None:
+        infos = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.50", 0))]
+
+        def address(iface: str) -> str | None:
+            return {"eth0": "192.0.2.60", "wlan0": "192.0.2.50"}.get(iface)
+
+        with mock.patch("wmr_bridge.__main__.socket.getaddrinfo", return_value=infos), \
+             mock.patch("wmr_bridge.__main__.interface_ipv4", side_effect=address), \
+             mock.patch("wmr_bridge.__main__.socket.socket", side_effect=OSError):
+            self.assertEqual(
+                _local_addresses(), ["192.0.2.60", "192.0.2.50", "127.0.0.1"]
+            )
+
     def test_probe_failure_still_returns_loopback(self) -> None:
         with mock.patch("wmr_bridge.__main__.socket.getaddrinfo", side_effect=OSError), \
+             mock.patch("wmr_bridge.__main__.interface_ipv4", return_value=None), \
              mock.patch("wmr_bridge.__main__.socket.socket", side_effect=OSError):
             self.assertEqual(_local_addresses(), ["127.0.0.1"])
 
@@ -416,6 +432,31 @@ class StatusTests(unittest.TestCase):
         )
         self.assertIn(f"Wi-Fi warning: {WIFI_INFO['warning']}", lines)
 
+    def test_format_status_reports_the_active_uplink(self) -> None:
+        status = BluezStatus(
+            adapter=BluezAdapter("11:22:33:44:55:66", "wmr-pi", True, True, False, True),
+            devices=(),
+            hidraw=(),
+        )
+
+        lines = _format_status(status, WIFI_INFO, UPLINK_INFO)
+
+        self.assertIn("Uplink eth0: kind=ethernet addresses=192.0.2.60", lines)
+        self.assertIn("Wi-Fi wlan0: band=2.4GHz", "\n".join(lines))
+
+    def test_format_status_without_a_default_route_says_so(self) -> None:
+        status = BluezStatus(
+            adapter=BluezAdapter("11:22:33:44:55:66", "wmr-pi", True, True, False, True),
+            devices=(),
+            hidraw=(),
+        )
+
+        lines = _format_status(
+            status, uplink={"iface": None, "kind": None, "addresses": []}
+        )
+
+        self.assertIn("Uplink: none (no IPv4 default route)", lines)
+
     def test_print_status_includes_wifi(self) -> None:
         def runner(args: list[str], timeout: float):
             if args[1] == "show":
@@ -434,9 +475,11 @@ class StatusTests(unittest.TestCase):
                 which=lambda _command: "/usr/bin/bluetoothctl",
                 sysfs_root=temp,
                 wifi=WIFI_INFO,
+                uplink=UPLINK_INFO,
             )
 
         self.assertEqual(code, 0)
+        self.assertIn("Uplink eth0: kind=ethernet", output.getvalue())
         self.assertIn("Wi-Fi wlan0: band=2.4GHz", output.getvalue())
         self.assertIn("Wi-Fi warning:", output.getvalue())
 

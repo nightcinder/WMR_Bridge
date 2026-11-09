@@ -53,7 +53,8 @@ class PackagingTests(unittest.TestCase):
             "ExecStartPre=-+/usr/bin/python3 -m wmr_bridge --prefer-5ghz",
             unit_text,
         )
-        # rfkill uses /dev/rfkill; AF_NETLINK supports route/interface checks.
+        # rfkill uses /dev/rfkill; AF_NETLINK supports iw cfg80211 queries and
+        # route/interface checks.
         self.assertIn(
             "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK\n",
             unit_text,
