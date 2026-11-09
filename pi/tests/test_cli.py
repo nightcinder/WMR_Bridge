@@ -27,6 +27,18 @@ from wmr_bridge.__main__ import (
 from wmr_bridge.bluez import BluezAdapter, BluezDevice, BluezStatus, HidrawDevice
 
 SAMPLES = Path(__file__).resolve().parents[2] / "samples" / "controller_frames.txt"
+WIFI_INFO = {
+    "iface": "wlan0",
+    "connected": True,
+    "freqMhz": 2437,
+    "band": "2.4GHz",
+    "supports5Ghz": True,
+    "contentionWarning": True,
+    "warning": (
+        "Wi-Fi is connected on 2.4 GHz, which shares the radio with "
+        "Bluetooth; prefer a 5 GHz network."
+    ),
+}
 
 
 def _args(bind: str = "127.0.0.1", insecure: bool = False):
@@ -276,6 +288,15 @@ class StatusTests(unittest.TestCase):
         self.assertIsNone(_build_parser().parse_args([]).command)
         self.assertTrue(_build_parser().parse_args(["--status"]).status)
 
+    def test_prefer_5ghz_flags_parse(self) -> None:
+        parser = _build_parser()
+        defaults = parser.parse_args([])
+        self.assertFalse(defaults.prefer_5ghz)
+        self.assertFalse(defaults.no_reconnect)
+        args = parser.parse_args(["--prefer-5ghz", "--no-reconnect"])
+        self.assertTrue(args.prefer_5ghz)
+        self.assertTrue(args.no_reconnect)
+
     def test_format_status_names_both_hands_and_the_log_hint(self) -> None:
         status = BluezStatus(
             adapter=BluezAdapter("11:22:33:44:55:66", "wmr-pi", True, True, False, True),
@@ -348,6 +369,98 @@ class StatusTests(unittest.TestCase):
 
         self.assertEqual(code, 1)
         self.assertIn("install bluez", output.getvalue())
+
+    def test_format_status_reports_wifi_band_and_warning(self) -> None:
+        status = BluezStatus(
+            adapter=BluezAdapter("11:22:33:44:55:66", "wmr-pi", True, True, False, True),
+            devices=(),
+            hidraw=(),
+        )
+        lines = _format_status(status, WIFI_INFO)
+        self.assertIn(
+            "Wi-Fi wlan0: band=2.4GHz 2437 MHz supports5Ghz=yes", lines
+        )
+        self.assertIn(f"Wi-Fi warning: {WIFI_INFO['warning']}", lines)
+
+    def test_print_status_includes_wifi(self) -> None:
+        def runner(args: list[str], timeout: float):
+            if args[1] == "show":
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout="Controller 11:22:33:44:55:66 (public)\n\tName: wmr-pi\n",
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as temp, redirect_stdout(output):
+            code = _print_status(
+                runner=runner,
+                which=lambda _command: "/usr/bin/bluetoothctl",
+                sysfs_root=temp,
+                wifi=WIFI_INFO,
+            )
+
+        self.assertEqual(code, 0)
+        self.assertIn("Wi-Fi wlan0: band=2.4GHz", output.getvalue())
+        self.assertIn("Wi-Fi warning:", output.getvalue())
+
+
+class WifiStartupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_run_warns_on_24ghz_and_applies_5ghz_preference(self) -> None:
+        calls: list[object] = []
+        captured: dict[str, object] = {}
+        from wmr_bridge.bridge import Bridge
+
+        def fake_inspect(*_args, **_kwargs):
+            calls.append("inspect")
+            return dict(WIFI_INFO)
+
+        def fake_prefer(reconnect: bool = True, **_kwargs):
+            calls.append(("prefer", reconnect))
+            return {
+                "profile": "HomeNet-5ghz",
+                "changed": True,
+                "reconnected": False,
+                "warning": None,
+            }
+
+        def fake_bridge(**kwargs):
+            captured.update(kwargs)
+            return Bridge(**kwargs)
+
+        class FakeManager:
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+            def start(self) -> None:
+                pass
+
+            async def close(self) -> None:
+                pass
+
+        args = _build_parser().parse_args(
+            [
+                "--duration",
+                "0.05",
+                "--port",
+                "0",
+                "--prefer-5ghz",
+                "--no-reconnect",
+                "--no-auto-pair",
+            ]
+        )
+        with mock.patch("wmr_bridge.__main__.inspect_wifi", side_effect=fake_inspect), \
+             mock.patch("wmr_bridge.__main__.prefer_5ghz", side_effect=fake_prefer), \
+             mock.patch("wmr_bridge.__main__.Bridge", side_effect=fake_bridge), \
+             mock.patch("wmr_bridge.__main__.HidrawManager", FakeManager), \
+             self.assertLogs("wmr_bridge", level="WARNING") as logs:
+            await asyncio.wait_for(_run(args), 5)
+
+        self.assertIn(("prefer", False), calls)
+        self.assertEqual(captured["wifi"], WIFI_INFO)
+        self.assertTrue(any("2.4 GHz" in line for line in logs.output))
 
 
 if __name__ == "__main__":

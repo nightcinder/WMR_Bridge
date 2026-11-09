@@ -276,6 +276,7 @@ class Bridge:
         allowed_hands: tuple[int, ...] | list[int] = (0, 1),
         calibration: bool | CalibrationCache = True,
         bridge_id: str | None = None,
+        wifi: dict[str, Any] | None = None,
     ) -> None:
         if not 1 <= batch_max <= BATCH_MAX_COUNT:
             raise ValueError(f"batch_max must be 1..{BATCH_MAX_COUNT}")
@@ -286,6 +287,7 @@ class Bridge:
             raise ValueError("allowed_hands must be a non-empty subset of (0, 1)")
         self.allowed_hands = tuple(hand for hand in (0, 1) if hand in hands)
         self.bridge_id = bridge_id or default_bridge_id()
+        self.wifi = dict(wifi) if wifi is not None else None
         self.token = token
         self.queue_size = max(1, queue_size)
         self.batch_max = batch_max
@@ -439,6 +441,8 @@ class Bridge:
         calibration = self._calibration_info()
         if calibration is not None:
             payload["calibration"] = calibration
+        if self.wifi is not None:
+            payload["wifi"] = self.wifi
         return payload
 
     def hello(self) -> dict[str, Any]:
@@ -460,6 +464,8 @@ class Bridge:
         calibration = self._calibration_info()
         if calibration is not None:
             payload["calibration"] = calibration
+        if self.wifi is not None:
+            payload["wifi"] = self.wifi
         return payload
 
     # ---- client session --------------------------------------------------

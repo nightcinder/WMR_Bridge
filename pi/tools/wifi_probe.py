@@ -238,6 +238,14 @@ async def run(args: argparse.Namespace) -> int:
     print(f"connected to ws://{args.host}:{args.port}{args.path} as {__version__}")
     hello = await asyncio.wait_for(client.recv_json(), 5)
     print("hello:", json.dumps(hello, indent=2))
+    wifi = hello.get("wifi")
+    if isinstance(wifi, dict):
+        print(
+            f"wifi: iface={wifi.get('iface')} band={wifi.get('band')} "
+            f"freqMhz={wifi.get('freqMhz')} supports5Ghz={wifi.get('supports5Ghz')}"
+        )
+        if wifi.get("warning"):
+            print(f"wifi warning: {wifi['warning']}")
     if hello.get("authRequired"):
         if not token:
             print("server requires a token; pass --token or --token-file", file=sys.stderr)
@@ -352,6 +360,7 @@ async def run(args: argparse.Namespace) -> int:
     summary = counters.snapshot(elapsed)
     summary["elapsedS"] = round(elapsed, 2)
     summary["handFilter"] = hello.get("handFilter")
+    summary["wifi"] = hello.get("wifi")
     summary["recordsPerSecond"] = round(counters.records / elapsed, 1) if elapsed else 0
     if ping_times:
         summary["rttMs"] = summarize_rtt(ping_times)

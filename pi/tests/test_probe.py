@@ -18,6 +18,18 @@ from wmr_bridge.server import BridgeServer
 SAMPLES = Path(__file__).resolve().parents[2] / "samples" / "controller_frames.txt"
 SAMPLE_DATA = read_capture(SAMPLES)[0][1]
 P = 50_000  # 5 ms at 100 ns per tick (200 Hz controller)
+WIFI_INFO = {
+    "iface": "wlan0",
+    "connected": True,
+    "freqMhz": 2437,
+    "band": "2.4GHz",
+    "supports5Ghz": True,
+    "contentionWarning": True,
+    "warning": (
+        "Wi-Fi is connected on 2.4 GHz, which shares the radio with "
+        "Bluetooth; prefer a 5 GHz network."
+    ),
+}
 
 
 def _frame_with_ticks(ticks: int) -> bytes:
@@ -145,7 +157,7 @@ class RttAndCountersTests(unittest.TestCase):
 
 class ProbeEndToEndTests(unittest.IsolatedAsyncioTestCase):
     async def test_probe_reports_tick_loss_and_rtt_percentiles(self) -> None:
-        bridge = Bridge(batch_max=4, batch_hold_ms=5)
+        bridge = Bridge(batch_max=4, batch_hold_ms=5, wifi=WIFI_INFO)
         server = BridgeServer(bridge, host="127.0.0.1", port=0)
         await server.start()
         try:
@@ -191,6 +203,9 @@ class ProbeEndToEndTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(key, summary["rttMs"])
             self.assertEqual(summary["dropped"], 0)
             self.assertEqual(summary["bleFields"]["rssi"], "n/a")
+            self.assertEqual(summary["wifi"], WIFI_INFO)
+            self.assertIn("wifi: iface=wlan0 band=2.4GHz", output)
+            self.assertIn("wifi warning:", output)
         finally:
             await server.close()
 
