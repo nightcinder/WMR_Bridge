@@ -167,7 +167,7 @@ Replace `<version>` with the Pi package version.
 The installer downloads the release `.deb` and verifies it against
 `SHA256SUMS`, then installs with `apt-get`. The package creates the `wmr`
 service user, installs to `/opt/wmr-bridge/pi`, adds the udev rule and the
-NetworkManager power-save drop-in, writes a `0600 wmr:wmr` token at
+NetworkManager power-save drop-in, writes a `0640 wmr:wmr` token at
 `/etc/wmr-bridge/token`, installs the systemd unit and puts
 `/usr/bin/wmr-bridge` on `PATH`. The piped installer needs `apt-get`; without
 it, install from a checkout or a locally built tarball (see the
@@ -304,7 +304,8 @@ Both controllers should reconnect without re-pairing.
   `/etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf` should contain
   `wifi.powersave = 2`.
 - **Token error:** `sudo chown wmr:wmr /etc/wmr-bridge/token`,
-  `sudo chmod 0600 /etc/wmr-bridge/token`, then restart.
+  `sudo chmod 0640 /etc/wmr-bridge/token`, then restart. For the host probe,
+  add your user to `wmr` (`sudo usermod -aG wmr "$USER"`) and log in again.
 - **No `/dev/hidraw*`:** load `hidp`, persist it in
   `/etc/modules-load.d/wmr-bridge.conf`, and restart Bluetooth.
 - **Automatic pairing does not pair a controller:** `wmr-bridge status` shows

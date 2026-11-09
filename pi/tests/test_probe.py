@@ -7,8 +7,9 @@ import io
 import json
 import struct
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from tools.wifi_probe import Counters, DevLossEstimator, run as run_probe, summarize_rtt
 from wmr_bridge.bridge import Bridge
@@ -153,6 +154,21 @@ class RttAndCountersTests(unittest.TestCase):
                 "esp_timer": "n/a",
             },
         )
+
+
+class ProbeTokenTests(unittest.IsolatedAsyncioTestCase):
+    async def test_permission_error_prints_remediation_hint(self) -> None:
+        args = argparse.Namespace(token=None, token_file="/etc/wmr-bridge/token")
+        stderr = io.StringIO()
+        with mock.patch(
+            "pathlib.Path.read_text",
+            side_effect=PermissionError(13, "Permission denied", "/etc/wmr-bridge/token"),
+        ), redirect_stderr(stderr):
+            code = await run_probe(args)
+        self.assertEqual(code, 2)
+        self.assertIn("permission denied", stderr.getvalue())
+        self.assertIn("usermod -aG wmr", stderr.getvalue())
+        self.assertIn("0640", stderr.getvalue())
 
 
 class ProbeEndToEndTests(unittest.IsolatedAsyncioTestCase):

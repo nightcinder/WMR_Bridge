@@ -244,10 +244,16 @@ if [ ! -s "$TOKEN_FILE" ]; then
     head -c 24 /dev/urandom | base64 > "$TOKEN_FILE"
     umask "$umask_old"
 fi
-chmod 0600 "$TOKEN_FILE"
+chmod 0640 "$TOKEN_FILE"
 
 if [ "$SKIP_PRIVILEGED" != "1" ]; then
     chown "${SERVICE_USER}:${SERVICE_GROUP}" "$TOKEN_FILE"
+    # The token is group-readable so the invoking admin can run the host probe
+    # without sudo. Group membership applies on the next login.
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "$SERVICE_USER" ] &&
+        [ "$SUDO_USER" != "root" ]; then
+        usermod -aG "$SERVICE_USER" "$SUDO_USER" 2>/dev/null || true
+    fi
     # Stage the 5 GHz-preferred NetworkManager profile from the installed tree.
     # --no-reconnect keeps an SSH session on the current link; the unit's own
     # ExecStartPre applies the preference when the service starts. A missing

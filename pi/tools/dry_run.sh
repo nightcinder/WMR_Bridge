@@ -154,9 +154,9 @@ staged_tarball() {
     [ -f "$WORK/rootfs/etc/udev/rules.d/99-wmr-bridge.rules" ] || die "udev rule is missing"
     [ -f "$WORK/rootfs/etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf" ] || die "power-save config is missing"
     [ -f "$WORK/rootfs/etc/wmr-bridge/token" ] || die "token file is missing"
-    [ "$(stat -c '%a' "$WORK/rootfs/etc/wmr-bridge/token")" = "600" ] || die "token mode is not 0600"
+    [ "$(stat -c '%a' "$WORK/rootfs/etc/wmr-bridge/token")" = "640" ] || die "token mode is not 0640"
     assert_wrapper "$WORK/rootfs" "$staged"
-    echo "PASS install: staged tree, unit, udev rule, power-save config and 0600 token"
+    echo "PASS install: staged tree, unit, udev rule, power-save config and 0640 token"
     replay_from "$staged"
     echo "PASS dry run: Pi tarball and daemon are ready for the hardware sitting"
 }
@@ -200,7 +200,7 @@ assert_deb_install() {
         die "power-save config does not disable powersave"
     [ -f "$ROOT/etc/wmr-bridge/wmr-bridge.env" ] || die "wmr-bridge.env is missing"
     [ -f "$ROOT/etc/wmr-bridge/token" ] || die "token file is missing"
-    [ "$(stat -c '%a' "$ROOT/etc/wmr-bridge/token")" = "600" ] || die "token mode is not 0600"
+    [ "$(stat -c '%a' "$ROOT/etc/wmr-bridge/token")" = "640" ] || die "token mode is not 0640"
     assert_wrapper "$ROOT" "$ROOT/opt/wmr-bridge"
 }
 
@@ -223,7 +223,7 @@ staged_deb() {
     run_maintainer postinst configure >"$WORK/postinst.log" 2>&1 ||
         die "postinst failed (see $WORK/postinst.log)"
     assert_deb_install
-    echo "PASS install: staged .deb tree, unit, udev rule, power-save config, env and 0600 token"
+    echo "PASS install: staged .deb tree, unit, udev rule, power-save config, env and 0640 token"
 
     TOKEN_BEFORE="$(sha256sum "$ROOT/etc/wmr-bridge/token" | cut -d' ' -f1)"
     printf '\n# local admin edit kept across upgrades\n' >>"$ROOT/etc/wmr-bridge/wmr-bridge.env"
