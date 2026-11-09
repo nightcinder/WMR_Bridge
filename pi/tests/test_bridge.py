@@ -28,6 +28,7 @@ WIFI_INFO = {
         "Bluetooth; prefer a 5 GHz network."
     ),
 }
+UPLINK_INFO = {"iface": "eth0", "kind": "ethernet", "addresses": ["192.0.2.60"]}
 
 
 class BridgeTests(unittest.IsolatedAsyncioTestCase):
@@ -364,6 +365,41 @@ class WifiPayloadTests(unittest.TestCase):
         bridge = Bridge()
         self.assertNotIn("wifi", bridge.hello())
         self.assertNotIn("wifi", bridge.status())
+
+
+class UplinkPayloadTests(unittest.TestCase):
+    def test_eth0_uplink_reaches_hello_and_status(self) -> None:
+        bridge = Bridge(wifi=WIFI_INFO, uplink=UPLINK_INFO)
+
+        hello = bridge.hello()
+
+        self.assertEqual(hello["uplink"], UPLINK_INFO)
+        self.assertEqual(hello["wifi"], WIFI_INFO)
+        self.assertEqual(hello["transport"], "ethernet")
+        self.assertEqual(bridge.status()["uplink"], UPLINK_INFO)
+
+    def test_wifi_uplink_keeps_the_wifi_transport(self) -> None:
+        bridge = Bridge(uplink={"iface": "wlan0", "kind": "wifi", "addresses": []})
+
+        self.assertEqual(bridge.hello()["transport"], "wifi")
+
+    def test_uplink_is_omitted_when_not_inspected(self) -> None:
+        bridge = Bridge()
+
+        self.assertNotIn("uplink", bridge.hello())
+        self.assertNotIn("uplink", bridge.status())
+
+    def test_hello_refreshes_the_network_snapshot(self) -> None:
+        snapshots = [
+            (WIFI_INFO, {"iface": "wlan0", "kind": "wifi", "addresses": []}),
+            (WIFI_INFO, UPLINK_INFO),
+        ]
+        bridge = Bridge(network=lambda: snapshots.pop(0))
+
+        self.assertEqual(bridge.hello()["transport"], "wifi")
+        refreshed = bridge.hello()
+        self.assertEqual(refreshed["transport"], "ethernet")
+        self.assertEqual(refreshed["uplink"], UPLINK_INFO)
 
 
 if __name__ == "__main__":

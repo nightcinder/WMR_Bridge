@@ -394,13 +394,17 @@ remain P1-P11 in the run sheet.
 
 The service runs `wmr-bridge --prefer-5ghz` before it starts the bridge. This command is a one-shot action. It does not start the daemon. It reads the active NetworkManager connection on the Wi-Fi interface and clones it into a profile named `<connection>-5ghz`. The clone keeps the base profile as the 2.4 GHz fallback. The clone sets `802-11-wireless.band` to `a` and `connection.autoconnect-priority` to 50. NetworkManager then prefers a 5 GHz BSSID when one is visible. The base profile stays in place, so a 2.4 GHz network still works.
 
+The command also orders the uplinks with NetworkManager route metrics: wired profiles (`802-3-ethernet`) get `ipv4.route-metric` and `ipv6.route-metric` 100, the 5 GHz clone gets 200, and the 2.4 GHz base profile gets 300. A wired `eth0` therefore beats 5 GHz Wi-Fi, which beats 2.4 GHz, regardless of which profile autoconnected.
+
 The command reconnects to the new profile only when a 5 GHz BSSID is visible. If the switch fails, the current connection stays in place. Pass `--no-reconnect` to save the profile without switching. The installer and `postinst` use that form so an SSH session stays on its current link.
 
 For a radio with no 5 GHz support, such as the CYW43439 in a Pi Zero 2 W, the command is a warning-only no-op. It reports that the adapter is 2.4 GHz only and leaves the connection alone.
 
-The bridge also reports the Wi-Fi band in its protocol messages. The `hello` and `status` JSON objects include a `"wifi"` field when the daemon inspected the radio. The field is an object with these keys: `iface`, `connected`, `freqMhz`, `band`, `supports5Ghz`, `contentionWarning`, and `warning`. `contentionWarning` is true when the Pi is connected on 2.4 GHz. That band shares the radio with Bluetooth. The `warning` text says whether a 5 GHz radio is available.
+The bridge also reports the Wi-Fi band and the active uplink in its protocol messages. The `hello` and `status` JSON objects include a `"wifi"` field when the daemon inspected the radio. The field is an object with these keys: `iface`, `connected`, `freqMhz`, `band`, `supports5Ghz`, `contentionWarning`, and `warning`. `contentionWarning` is true when the Pi is connected on 2.4 GHz. That band shares the radio with Bluetooth. The `warning` text says whether a 5 GHz radio is available.
 
-`wmr-bridge status` prints the same data. It shows `band=`, `supports5Ghz=`, and any warning.
+The `"uplink"` field describes the interface carrying the IPv4 default route: `iface`, `kind` (`ethernet`, `wifi` or `other`), and `addresses`. `hello.transport` is `"ethernet"` when that interface is wired and `"wifi"` otherwise. `hello` samples the Wi-Fi and uplink state again on each handshake.
+
+`wmr-bridge status` prints the same data. It shows the uplink interface, `band=`, `supports5Ghz=`, and any warning. FF16 lists the wired address first, then Wi-Fi, so a client tries the preferred uplink before the fallback.
 
 ## Wire protocol, version 1
 
@@ -431,7 +435,7 @@ shipped the `0.3.14` package, and `v0.3.15` ships this package.
 {
   "type": "hello",
   "protocol": 1,
-  "transport": "wifi",
+  "transport": "ethernet",
   "device": "wmr-pi",
   "bridge_id": "wmr-pi-0123456789",
   "version": "0.3.15",
@@ -442,6 +446,11 @@ shipped the `0.3.14` package, and `v0.3.15` ships this package.
   "recordSize": 56,
   "batchMax": 9,
   "fragmentCapacity": 244,
+  "uplink": {
+    "iface": "eth0",
+    "kind": "ethernet",
+    "addresses": ["192.168.1.20"]
+  },
   "calibration": {
     "version": 1,
     "headerSize": 16,

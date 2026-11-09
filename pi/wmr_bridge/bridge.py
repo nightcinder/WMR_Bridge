@@ -20,7 +20,7 @@ import socket
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from . import __version__
 from .decode import record_from_frame
@@ -277,6 +277,8 @@ class Bridge:
         calibration: bool | CalibrationCache = True,
         bridge_id: str | None = None,
         wifi: dict[str, Any] | None = None,
+        uplink: dict[str, Any] | None = None,
+        network: Callable[[], tuple[dict[str, Any] | None, dict[str, Any] | None]] | None = None,
     ) -> None:
         if not 1 <= batch_max <= BATCH_MAX_COUNT:
             raise ValueError(f"batch_max must be 1..{BATCH_MAX_COUNT}")
@@ -288,6 +290,8 @@ class Bridge:
         self.allowed_hands = tuple(hand for hand in (0, 1) if hand in hands)
         self.bridge_id = bridge_id or default_bridge_id()
         self.wifi = dict(wifi) if wifi is not None else None
+        self.uplink = dict(uplink) if uplink is not None else None
+        self._network = network
         self.token = token
         self.queue_size = max(1, queue_size)
         self.batch_max = batch_max
@@ -419,6 +423,19 @@ class Bridge:
     def now_us(self) -> int:
         return time.monotonic_ns() // 1000
 
+    def _refresh_network(self) -> None:
+        """Sample the uplink and Wi-Fi state again, if a probe was supplied."""
+
+        if self._network is None:
+            return
+        try:
+            wifi, uplink = self._network()
+        except Exception:  # a failed probe must not break the handshake
+            LOG.exception("network snapshot failed")
+            return
+        self.wifi = wifi
+        self.uplink = uplink
+
     def status(self) -> dict[str, Any]:
         now = self.now_us()
         hands = []
@@ -443,13 +460,21 @@ class Bridge:
             payload["calibration"] = calibration
         if self.wifi is not None:
             payload["wifi"] = self.wifi
+        if self.uplink is not None:
+            payload["uplink"] = self.uplink
         return payload
 
     def hello(self) -> dict[str, Any]:
+        self._refresh_network()
+        transport = (
+            "ethernet"
+            if (self.uplink or {}).get("kind") == "ethernet"
+            else "wifi"
+        )
         payload: dict[str, Any] = {
             "type": "hello",
             "protocol": 1,
-            "transport": "wifi",
+            "transport": transport,
             "device": "wmr-pi",
             "bridge_id": self.bridge_id,
             "version": __version__,
@@ -466,6 +491,8 @@ class Bridge:
             payload["calibration"] = calibration
         if self.wifi is not None:
             payload["wifi"] = self.wifi
+        if self.uplink is not None:
+            payload["uplink"] = self.uplink
         return payload
 
     # ---- client session --------------------------------------------------

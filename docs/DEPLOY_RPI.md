@@ -94,7 +94,7 @@ The package applies a 5 GHz preference during install and on every service start
 
 The base connection stays in place as the 2.4 GHz fallback. A 2.4 GHz-only radio, such as the CYW43439 in a Pi Zero 2 W, is a warning-only no-op. The command reports that the adapter has no 5 GHz radio.
 
-The bridge reports the Wi-Fi band in `hello` and `status`. The `"wifi"` object includes `iface`, `connected`, `freqMhz`, `band`, `supports5Ghz`, `contentionWarning`, and `warning`. `contentionWarning` is true when the Pi is on 2.4 GHz. `wmr-bridge status` prints the band, 5 GHz support, and any warning.
+The bridge reports the Wi-Fi band and the active uplink in `hello` and `status`. The `"wifi"` object includes `iface`, `connected`, `freqMhz`, `band`, `supports5Ghz`, `contentionWarning`, and `warning`. `contentionWarning` is true when the Pi is on 2.4 GHz. The `"uplink"` object names the default-route interface (`eth0`, `wlan0`, or another), its kind, and its addresses; `hello.transport` is `"ethernet"` when `eth0` is active. `wmr-bridge status` prints the uplink, band, 5 GHz support, and any warning.
 
 ## 4. Install
 

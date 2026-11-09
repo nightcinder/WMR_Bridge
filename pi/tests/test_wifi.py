@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 
-from wmr_bridge.wifi import inspect_wifi, prefer_5ghz
+from wmr_bridge.wifi import inspect_uplink, inspect_wifi, prefer_5ghz
 
 IW_DEV_5GHZ = """phy#0
 \tInterface wlan0
@@ -59,6 +61,7 @@ IW_PHY_24GHZ_ONLY = """Wiphy phy0
 
 NM_ACTIVE = "HomeNet:wlan0\n"
 NM_NAMES = "HomeNet\nWired connection 1\n"
+NM_TYPES_ETHERNET = "HomeNet:802-11-wireless\nWired connection 1:802-3-ethernet\n"
 NM_WIFI_5GHZ = "AA\\:BB\\:CC\\:DD\\:EE\\:FF:5180 MHz\n11\\:22\\:33\\:44\\:55\\:66:2437 MHz\n"
 NM_WIFI_24GHZ = "11\\:22\\:33\\:44\\:55\\:66:2437 MHz\n"
 
@@ -70,14 +73,18 @@ class FakeRunner:
         self,
         responses: dict[str, str] | None = None,
         failures: set[str] | None = None,
+        missing: set[str] | None = None,
     ) -> None:
         self.responses = responses or {}
         self.failures = failures or set()
+        self.missing = missing or set()
         self.calls: list[list[str]] = []
 
     def __call__(self, argv: list[str]) -> subprocess.CompletedProcess[str]:
         self.calls.append(list(argv))
         key = " ".join(argv)
+        if key in self.missing:
+            return subprocess.CompletedProcess(argv, 127, "", f"{argv[0]}: not found")
         if key in self.failures:
             return subprocess.CompletedProcess(argv, 1, "", "nmcli failed")
         return subprocess.CompletedProcess(argv, 0, self.responses.get(key, ""), "")
@@ -92,6 +99,7 @@ def _inspect_runner(dev: str, phy: str) -> FakeRunner:
 
 def _prefer_runner(dev: str, phy: str, **responses: str) -> FakeRunner:
     defaults = {
+        "nmcli -t -f NAME,TYPE connection show": "",
         "nmcli -t -f NAME,DEVICE connection show --active": NM_ACTIVE,
         "nmcli -t -f NAME connection show": NM_NAMES,
         "nmcli -t -f BSSID,FREQ device wifi list ifname wlan0": NM_WIFI_5GHZ,
@@ -172,12 +180,19 @@ class Prefer5GhzTests(unittest.TestCase):
         self.assertIn("nmcli connection clone HomeNet HomeNet-5ghz", commands)
         self.assertIn(
             "nmcli connection modify HomeNet-5ghz 802-11-wireless.band a "
-            "connection.autoconnect-priority 50",
+            "connection.autoconnect-priority 50 ipv4.route-metric 200 "
+            "ipv6.route-metric 200",
             commands,
         )
         self.assertIn("nmcli connection up HomeNet-5ghz ifname wlan0", commands)
-        # The base profile remains the untouched 2.4 GHz fallback.
-        self.assertFalse(any("modify HomeNet " in command for command in commands))
+        # The base profile keeps its band and security; only its fallback
+        # route metric changes (300, below the 5 GHz clone at 200).
+        self.assertIn(
+            "nmcli connection modify HomeNet connection.autoconnect-priority 0 "
+            "ipv4.route-metric 300 ipv6.route-metric 300",
+            commands,
+        )
+        self.assertFalse(any("modify HomeNet 802-11-wireless" in command for command in commands))
 
     def test_reconnect_false_only_writes_the_profile(self) -> None:
         runner = _prefer_runner(IW_DEV_24GHZ, IW_PHY_DUAL_BAND)
@@ -204,7 +219,8 @@ class Prefer5GhzTests(unittest.TestCase):
         self.assertFalse(any("connection clone" in command for command in commands))
         self.assertIn(
             "nmcli connection modify HomeNet-5ghz 802-11-wireless.band a "
-            "connection.autoconnect-priority 50",
+            "connection.autoconnect-priority 50 ipv4.route-metric 200 "
+            "ipv6.route-metric 200",
             commands,
         )
 
@@ -233,7 +249,10 @@ class Prefer5GhzTests(unittest.TestCase):
         self.assertFalse(result["changed"])
         self.assertFalse(result["reconnected"])
         self.assertIn("2.4 GHz only", result["warning"])
-        self.assertEqual(runner.commands(), ["iw dev", "iw phy"])
+        self.assertEqual(
+            runner.commands(),
+            ["nmcli -t -f NAME,TYPE connection show", "iw dev", "iw phy"],
+        )
 
     def test_already_on_5ghz_does_not_reconnect(self) -> None:
         runner = _prefer_runner(IW_DEV_5GHZ, IW_PHY_DUAL_BAND)
@@ -254,7 +273,10 @@ class Prefer5GhzTests(unittest.TestCase):
         self.assertIn("wlan9", result["warning"])
         self.assertIn("not found", result["warning"])
         self.assertNotIn("2.4 GHz only", result["warning"])
-        self.assertEqual(runner.commands(), ["iw dev"])
+        self.assertEqual(
+            runner.commands(),
+            ["nmcli -t -f NAME,TYPE connection show", "iw dev"],
+        )
 
     def test_unreadable_phy_keeps_the_inspection_warning(self) -> None:
         runner = FakeRunner({"iw dev": IW_DEV_24GHZ}, failures={"iw phy"})
@@ -266,7 +288,10 @@ class Prefer5GhzTests(unittest.TestCase):
         self.assertFalse(result["reconnected"])
         self.assertIn("could not be determined", result["warning"])
         self.assertNotIn("2.4 GHz only", result["warning"])
-        self.assertEqual(runner.commands(), ["iw dev", "iw phy"])
+        self.assertEqual(
+            runner.commands(),
+            ["nmcli -t -f NAME,TYPE connection show", "iw dev", "iw phy"],
+        )
 
     def test_failed_activation_keeps_the_current_connection(self) -> None:
         runner = _prefer_runner(IW_DEV_24GHZ, IW_PHY_DUAL_BAND)
@@ -280,7 +305,84 @@ class Prefer5GhzTests(unittest.TestCase):
         commands = runner.commands()
         self.assertIn("nmcli connection up HomeNet-5ghz ifname wlan0", commands)
         self.assertFalse(any("connection down" in command for command in commands))
-        self.assertFalse(any("modify HomeNet " in command for command in commands))
+        self.assertFalse(any("modify HomeNet 802-11-wireless" in command for command in commands))
+
+
+class IWFallbackTests(unittest.TestCase):
+    def test_missing_iw_retries_the_absolute_path(self) -> None:
+        runner = FakeRunner(
+            {"/usr/sbin/iw dev": IW_DEV_5GHZ, "/usr/sbin/iw phy": IW_PHY_DUAL_BAND},
+            missing={"iw dev", "iw phy"},
+        )
+
+        result = inspect_wifi(runner=runner)
+
+        self.assertEqual(result["iface"], "wlan0")
+        self.assertEqual(result["band"], "5GHz")
+        self.assertEqual(runner.commands()[:2], ["iw dev", "/usr/sbin/iw dev"])
+
+
+class UplinkTests(unittest.TestCase):
+    def _route_file(self, text: str) -> Path:
+        handle = tempfile.NamedTemporaryFile("w", delete=False, suffix=".route")
+        handle.write(text)
+        handle.close()
+        self.addCleanup(Path(handle.name).unlink, missing_ok=True)
+        return Path(handle.name)
+
+    def test_eth0_wins_over_a_higher_metric_wifi_default_route(self) -> None:
+        path = self._route_file(
+            "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\n"
+            "wlan0\t00000000\t0102A8C0\t0003\t0\t0\t600\t00000000\n"
+            "eth0\t00000000\t0102A8C0\t0003\t0\t0\t100\t00000000\n"
+        )
+
+        result = inspect_uplink(path, address_lookup=lambda iface: "192.0.2.60")
+
+        self.assertEqual(
+            result,
+            {"iface": "eth0", "kind": "ethernet", "addresses": ["192.0.2.60"]},
+        )
+
+    def test_no_default_route_is_reported_as_none(self) -> None:
+        path = self._route_file("Iface\tDestination\tGateway\tFlags\n")
+
+        self.assertEqual(
+            inspect_uplink(path),
+            {"iface": None, "kind": None, "addresses": []},
+        )
+
+
+class RouteMetricTests(unittest.TestCase):
+    def test_eth0_5ghz_and_2_4ghz_metrics_are_ordered(self) -> None:
+        runner = _prefer_runner(
+            IW_DEV_24GHZ,
+            IW_PHY_DUAL_BAND,
+            **{"nmcli -t -f NAME,TYPE connection show": NM_TYPES_ETHERNET},
+        )
+
+        result = prefer_5ghz(runner=runner)
+
+        commands = runner.commands()
+        self.assertIn(
+            "nmcli connection modify Wired connection 1 ipv4.route-metric 100 "
+            "ipv6.route-metric 100 connection.autoconnect-priority 100",
+            commands,
+        )
+        self.assertIn(
+            "nmcli connection modify HomeNet-5ghz 802-11-wireless.band a "
+            "connection.autoconnect-priority 50 ipv4.route-metric 200 "
+            "ipv6.route-metric 200",
+            commands,
+        )
+        self.assertIn(
+            "nmcli connection modify HomeNet connection.autoconnect-priority 0 "
+            "ipv4.route-metric 300 ipv6.route-metric 300",
+            commands,
+        )
+        self.assertEqual(result["wired"]["changed"], ["Wired connection 1"])
+        self.assertEqual(result["wired"]["metric"], 100)
+        self.assertTrue(result["baseMetricChanged"])
 
 
 if __name__ == "__main__":

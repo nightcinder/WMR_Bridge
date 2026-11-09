@@ -53,9 +53,11 @@ class PackagingTests(unittest.TestCase):
             "ExecStartPre=-+/usr/bin/python3 -m wmr_bridge --prefer-5ghz",
             unit_text,
         )
-        # rfkill uses /dev/rfkill, so the unit must not widen the socket families.
-        self.assertIn("RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX\n", unit_text)
-        self.assertNotIn("AF_NETLINK", unit_text)
+        # iw reads cfg80211 over generic netlink; rfkill itself needs no family.
+        self.assertIn(
+            "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK\n",
+            unit_text,
+        )
 
         env_text = ENV_EXAMPLE.read_text(encoding="utf-8")
         self.assertIn("WMR_BRIDGE_ARGS", env_text)
