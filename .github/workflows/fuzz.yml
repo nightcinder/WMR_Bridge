@@ -1,0 +1,103 @@
+name: fuzz
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # Only a change to the parsers, the harnesses or their build can change
+    # what a run means; everything else stays off the queue.
+    paths:
+      - 'src/**'
+      - 'fuzz/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/fuzz.yml'
+  schedule:
+    # Monday 05:41 UTC. A pull request gets a smoke run; this is where a corpus
+    # gets the time to reach depth.
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: 'Seconds per target'
+        required: false
+        default: '120'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  libfuzzer:
+    name: libfuzzer (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # One target's crash must not hide the others.
+      fail-fast: false
+      matrix:
+        target: [decode, decoded, batch]
+    env:
+      FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '600' || (github.event_name == 'workflow_dispatch' && github.event.inputs.seconds || '60') }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # The corpus is the only state a fuzz run carries between executions; the
+      # seeds in fuzz/corpus only describe the shallow, well-formed cases.
+      - name: Restore the corpus
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/corpus
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.target }}-
+
+      - name: Build the target with the sanitizers
+        run: |
+          set -euo pipefail
+          clang --version
+          cmake --version
+          # The library is compiled with the same sanitizers as the harness, so
+          # a fault inside wmr_codec is caught, not only one in the runner.
+          cmake -B build-fuzz \
+            -DWMR_BUILD_FUZZERS=ON \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build-fuzz --parallel --target "fuzz_${{ matrix.target }}"
+
+      - name: Fuzz for ${{ env.FUZZ_SECONDS }} seconds
+        run: |
+          set -euo pipefail
+          # The seeds are copied in after the restore so a committed regression
+          # case is always present; libFuzzer adds whatever it discovers.
+          mkdir -p "$RUNNER_TEMP/corpus" "$RUNNER_TEMP/artifacts"
+          cp fuzz/corpus/"${{ matrix.target }}"/* "$RUNNER_TEMP/corpus/"
+          ls -l "$RUNNER_TEMP/corpus" | head -5
+          ./build-fuzz/"fuzz_${{ matrix.target }}" \
+            -max_total_time="$FUZZ_SECONDS" \
+            -timeout=30 \
+            -rss_limit_mb=2048 \
+            -print_final_stats=1 \
+            -artifact_prefix="$RUNNER_TEMP/artifacts/" \
+            "$RUNNER_TEMP/corpus"
+
+      - name: Save the corpus
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/corpus
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+
+      # The crashing input is what makes the failure actionable: libFuzzer exits
+      # non-zero and writes the reproducer here.
+      - name: Upload the crashing input
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-crash-${{ matrix.target }}
+          path: ${{ runner.temp }}/artifacts
+          if-no-files-found: ignore
+          retention-days: 90
