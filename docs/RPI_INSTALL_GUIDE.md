@@ -262,12 +262,21 @@ and scanning, and whether each hand has a bond and a hidraw node. In the log,
 `auto-pair: scanning` is the heartbeat, `found`/`paired` shows a controller was
 heard, and `pairing <MAC> failed: ...` gives the BlueZ error.
 
-If the log says `automatic controller pairing is off`, check that Bluetooth is
-running and not blocked, then restart the service:
+If the log says `auto-pair: Bluetooth adapter is not usable yet`, check that
+Bluetooth is running and not blocked. The service clears a boot-time soft
+block as root before start and keeps retrying, so no restart is needed once
+the block clears:
 
 ```bash
 rfkill list bluetooth
 systemctl status bluetooth
+sudo rfkill unblock bluetooth
+```
+
+`automatic controller pairing is off ... until restart` names a scan failure;
+restart the service after fixing it:
+
+```bash
 sudo systemctl restart wmr-bridge
 ```
 

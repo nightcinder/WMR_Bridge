@@ -48,7 +48,8 @@
 #define CFG_BLOCK_ID        0x02    /* the obfuscated JSON config block */
 #define CFG_START_DELAY_MS  1000    /* let the input stream settle before the first request */
 
-typedef enum { PHASE_NONE = 0, PHASE_START, PHASE_SPACING, PHASE_TIMEOUT, PHASE_ENABLE } phase_t;
+typedef enum { PHASE_NONE = 0, PHASE_START, PHASE_SPACING, PHASE_TIMEOUT, PHASE_ENABLE,
+               PHASE_KEEPALIVE } phase_t;
 
 typedef struct {
     wmr_cfg_blob_state_t state;
@@ -61,6 +62,7 @@ typedef struct {
     unsigned             hand;
     uint32_t             send_errors;
     unsigned             enable_step;    /* next streaming-enable command to send */
+    bool                 connected;
 } hand_t;
 
 static hand_t hands[WMR_NUM_CONTROLLERS];
@@ -86,6 +88,21 @@ static void arm(hand_t *h, phase_t phase, uint32_t ms){
 static void disarm(hand_t *h){
     h->phase = PHASE_NONE;
     btstack_run_loop_remove_timer(&h->timer);
+}
+
+/* Keep a connected, READY hand awake with the same enable pair the read uses. Armed only
+ * after the pair has been sent, so the keep-alive timer never competes with the spacing
+ * timer. */
+static void arm_keepalive(hand_t *h){
+    if (!h->connected || h->state != WMR_CFG_READY) return;
+    if (WMR_CFG_KEEPALIVE_MS == 0) return;
+    arm(h, PHASE_KEEPALIVE, WMR_CFG_KEEPALIVE_MS);
+}
+
+/* Start the two-command enable sequence; the first command follows one spacing interval. */
+static void start_enable(hand_t *h){
+    h->enable_step = 0;
+    arm(h, PHASE_ENABLE, WMR_CFG_SPACING_MS);
 }
 
 /* Send the reader's current request and wait up to the timeout for the answer. A send error
@@ -119,12 +136,12 @@ static void enable_streaming(hand_t *h){
         printf("FF13 %s: streaming-enable command not sent (0x%02x)\n", hand_name(h->hand), status);
     }
     if (h->enable_step < WMR_CFG_ENABLE_STEPS) arm(h, PHASE_ENABLE, WMR_CFG_SPACING_MS);
+    else arm_keepalive(h);
 }
 
 static void finish(hand_t *h){
     disarm(h);
-    h->enable_step = 0;
-    arm(h, PHASE_ENABLE, WMR_CFG_SPACING_MS);
+    start_enable(h);
     if (h->reader.state == WMR_CFG_DONE){
         h->total = h->reader.total;
         h->crc = wmr_cfg_crc32(h->blob, h->total);
@@ -145,6 +162,11 @@ static void timer_fire(btstack_timer_source_t *timer){
     h->phase = PHASE_NONE;
     if (phase == PHASE_ENABLE){
         enable_streaming(h);
+        return;
+    }
+    if (phase == PHASE_KEEPALIVE){
+        if (h->state != WMR_CFG_READY || !h->connected) return;
+        start_enable(h);
         return;
     }
     if (h->state != WMR_CFG_READING) return;
@@ -182,7 +204,14 @@ void wmr_cfgmgr_on_descriptor(unsigned hand){
     if (hand >= WMR_NUM_CONTROLLERS) return;
     if (!WMR_CFG_FF13_READ) return;
     hand_t *h = &hands[hand];
-    if (h->state == WMR_CFG_READY || h->state == WMR_CFG_READING) return;
+    h->connected = true;
+    if (h->state == WMR_CFG_READY){
+        /* The cached block is still valid: do not read it again, but restore streaming on
+         * this fresh link with the enable pair the initial read uses. */
+        start_enable(h);
+        return;
+    }
+    if (h->state == WMR_CFG_READING) return;
     /* NOT_READ, or FAILED on an earlier connection: try again. */
     printf("FF13 %s: reading config block in %u ms\n", hand_name(hand), CFG_START_DELAY_MS);
     set_state(h, WMR_CFG_READING);
@@ -207,6 +236,8 @@ void wmr_cfgmgr_on_report(unsigned hand, const uint8_t *report, uint16_t length)
 void wmr_cfgmgr_on_closed(unsigned hand){
     if (hand >= WMR_NUM_CONTROLLERS) return;
     hand_t *h = &hands[hand];
+    h->connected = false;
+    h->enable_step = 0;
     disarm(h);
     if (h->state == WMR_CFG_READING) set_state(h, WMR_CFG_NOT_READ);
 }
@@ -242,7 +273,10 @@ void wmr_cfgmgr_clear_blob(unsigned hand){
     hand_t *h = &hands[hand];
     h->total = 0;
     h->crc = 0;
-    if (h->state == WMR_CFG_READY) set_state(h, WMR_CFG_NOT_READ);
+    if (h->state == WMR_CFG_READY){
+        disarm(h);
+        set_state(h, WMR_CFG_NOT_READ);
+    }
 }
 
 void wmr_cfgmgr_print(void){

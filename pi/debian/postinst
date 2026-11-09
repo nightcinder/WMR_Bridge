@@ -34,6 +34,10 @@ case "$1" in
         fi
         chmod 0600 "$TOKEN_FILE"
 
+        # Drop bytecode from a previous install so a stale .pyc can never
+        # shadow the source files this package just unpacked.
+        rm -rf "${DESTDIR}/opt/wmr-bridge/pi/wmr_bridge/__pycache__"
+
         if [ "$SKIP_PRIVILEGED" != "1" ]; then
             chown wmr:wmr "$TOKEN_FILE" || {
                 echo "wmr-bridge: could not give ${TOKEN_FILE} to wmr:wmr" >&2
@@ -42,6 +46,11 @@ case "$1" in
             if command -v udevadm >/dev/null 2>&1; then
                 udevadm control --reload-rules || true
                 udevadm trigger || true
+            fi
+            if command -v rfkill >/dev/null 2>&1; then
+                # Stock Pi OS ships Bluetooth soft-blocked; clear it before
+                # the unit's own ExecStartPre runs so bluetoothd powers on.
+                rfkill unblock bluetooth || true
             fi
             if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
                 systemctl daemon-reload || true

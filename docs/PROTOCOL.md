@@ -932,6 +932,11 @@ apart). Those bytes come from the design notes, not from a source checked here.
 Build with `-DWMR_CFG_FF13_READ=0` (or set it in `wmr_config.h`) to send no
 config command at all. Input must then stream as it did before FF13.
 
+The enable pair is also re-sent once whenever a hand whose block is already
+READY reconnects (the cached block is not read again), and as a keep-alive
+every `WMR_CFG_KEEPALIVE_MS` (default 10000 ms) while the hand stays connected.
+Set `WMR_CFG_KEEPALIVE_MS` to 0 to disable the periodic timer.
+
 ## Still unverified (needs a controller)
 
 Whether the controller accepts block reads without Monado's init commands.

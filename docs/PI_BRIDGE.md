@@ -77,7 +77,7 @@ release is also supported. You need:
 
 ```bash
 sudo apt update
-sudo apt install bluez
+sudo apt install bluez rfkill avahi-utils
 sudo modprobe hidp
 echo hidp | sudo tee /etc/modules-load.d/wmr-bridge.conf
 sudo systemctl enable --now bluetooth
@@ -151,11 +151,16 @@ bluetoothctl devices
 journalctl -u wmr-bridge -n 200 --no-pager
 ```
 
-`automatic controller pairing is off` in the log names the adapter or scan
-failure that stopped the pairer; fix that and restart the service. A
-`pairing ... failed: org.bluez...` line is the BlueZ error for that attempt. If
-it says `AuthenticationFailed`, remove the controller's old bond on the other
-host (or with `bluetoothctl remove <MAC>`), then put it in pairing mode again.
+`auto-pair: Bluetooth adapter is not usable yet` means the adapter is still
+rfkill-blocked or `bluetoothd` is down. A stock Pi OS image soft-blocks
+Bluetooth at boot; the systemd unit clears that block as root before start and
+the pairer retries with a 30 s backoff instead of disabling itself. Check
+`rfkill list bluetooth` and `systemctl status bluetooth`. A
+`pairing is off until restart` line names a scan failure that stopped the
+pairer; fix that and restart the service. A `pairing ... failed:
+org.bluez...` line is the BlueZ error for that attempt. If it says
+`AuthenticationFailed`, remove the controller's old bond on the other host (or
+with `bluetoothctl remove <MAC>`), then put it in pairing mode again.
 
 Check the nodes:
 
@@ -247,6 +252,13 @@ unit. `/etc/wmr-bridge/wmr-bridge.env` and its example are conffiles, so an
 upgrade keeps local edits. The generated token is not a package file and
 survives reinstall and upgrade. `apt remove wmr-bridge` stops and disables the
 unit and keeps the token. `apt purge wmr-bridge` removes the token.
+
+If a traceback points at a line that does not match
+`/opt/wmr-bridge/pi/wmr_bridge/*.py`, the installed tree is stale from an
+earlier version, not a bytecode problem: reinstall the matching `.deb` with
+`sudo apt install --reinstall ./wmr-bridge_<version>_all.deb`. The package
+copies the tagged modules and ships no bytecode, and `postinst`/`install.sh`
+remove `__pycache__` left by a previous install.
 
 The piped installer installs the `.deb` and enables the unit for you:
 
@@ -445,8 +457,10 @@ omits it and answers calibration requests with `calibration_unavailable`.
 ### Service discovery (optional)
 
 `--advertise-mdns` publishes `_wmr-bridge._tcp.local.` on the LAN. It is off by
-default and never affects whether the daemon starts. Two host mechanisms are
-tried, with no third-party Python dependency:
+default and never affects whether the daemon starts. The Debian package
+depends on `avahi-utils` (which pulls in `avahi-daemon`), so advertisement
+works on a fresh install. Two host mechanisms are tried, with no third-party
+Python dependency:
 
 - `avahi-publish-service` publishes the instance while the daemon runs. TXT
   records carry `version=`, `hands=LEFT,RIGHT` and `path=/wmr`.

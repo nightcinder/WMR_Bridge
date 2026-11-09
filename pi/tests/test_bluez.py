@@ -335,7 +335,8 @@ class BluezAutoPairerTests(unittest.TestCase):
 
     def make_pairer(self, bridge: _Bridge, runner, *, allowed_hands=(0, 1),
                     which=lambda _command: "/usr/bin/bluetoothctl", session=None,
-                    scan_seconds: float = 1.0):
+                    scan_seconds: float = 1.0,
+                    rfkill_root="/nonexistent/rfkill"):
         return BluezAutoPairer(
             bridge,
             allowed_hands=allowed_hands,
@@ -344,7 +345,17 @@ class BluezAutoPairerTests(unittest.TestCase):
             which=which,
             scan_seconds=scan_seconds,
             poll_interval=1.0,
+            rfkill_root=rfkill_root,
         )
+
+    @staticmethod
+    def make_rfkill_tree(root: Path, soft: bool = True, hard: bool = False) -> None:
+        switch = root / "rfkill0"
+        switch.mkdir(parents=True)
+        (switch / "type").write_text("bluetooth\n", encoding="utf-8")
+        (switch / "name").write_text("hci0\n", encoding="utf-8")
+        (switch / "soft").write_text(f"{int(soft)}\n", encoding="utf-8")
+        (switch / "hard").write_text(f"{int(hard)}\n", encoding="utf-8")
 
     def test_unpaired_device_is_left_to_the_scan_session(self) -> None:
         calls: list[list[str]] = []
@@ -406,7 +417,7 @@ class BluezAutoPairerTests(unittest.TestCase):
 
         self.assertEqual(calls[0][1:], ["power", "on"])
 
-    def test_adapter_failure_logs_once_and_disables_pairing(self) -> None:
+    def test_adapter_failure_warns_once_and_keeps_retrying(self) -> None:
         calls: list[list[str]] = []
 
         def runner(args: list[str], timeout: float):
@@ -418,8 +429,31 @@ class BluezAutoPairerTests(unittest.TestCase):
             self.assertFalse(pairer._tick())
             self.assertFalse(pairer._tick())
 
-        self.assertEqual([call[1:] for call in calls], [["power", "on"]])
-        self.assertTrue(any("no working Bluetooth adapter" in line for line in logs.output))
+        # A blocked or absent adapter is retried on later ticks instead of
+        # disabling auto-pair for the life of the process.
+        self.assertEqual([call[1:] for call in calls], [["power", "on"], ["power", "on"]])
+        warnings = [line for line in logs.output if "adapter is not usable" in line]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("retrying", warnings[0])
+
+    def test_soft_blocked_adapter_is_unblocked_then_powered_on(self) -> None:
+        calls: list[list[str]] = []
+        with tempfile.TemporaryDirectory() as temp:
+            rfkill_root = Path(temp)
+            self.make_rfkill_tree(rfkill_root, soft=True)
+
+            def runner(args: list[str], timeout: float):
+                calls.append(args)
+                return _completed(args)
+
+            pairer = self.make_pairer(_Bridge(), runner, rfkill_root=str(rfkill_root))
+            with self.assertLogs("wmr_bridge.bluez", level="INFO") as logs:
+                self.assertFalse(pairer._tick())
+
+        self.assertEqual(calls[0][:3], ["rfkill", "unblock", "bluetooth"])
+        self.assertEqual(calls[1][1:], ["power", "on"])
+        self.assertIn("pairable", [call[1] for call in calls])
+        self.assertTrue(any("cleared the rfkill" in line for line in logs.output))
 
     def test_bonded_offline_controller_is_left_to_page_in(self) -> None:
         calls: list[list[str]] = []
@@ -508,7 +542,10 @@ class BluezAutoPairerTests(unittest.TestCase):
             self.assertFalse(pairer._tick())
             self.assertFalse(pairer._tick())
 
-        self.assertEqual([call[1:] for call in calls], [["power", "on"], ["devices"]])
+        self.assertEqual(
+            [call[1:] for call in calls],
+            [["power", "on"], ["pairable", "on"], ["devices"]],
+        )
         self.assertTrue(any("could not scan" in line for line in logs.output))
 
     def test_skips_devices_that_are_already_paired_and_connected(self) -> None:
@@ -531,7 +568,7 @@ class BluezAutoPairerTests(unittest.TestCase):
 
     def test_does_not_scan_when_both_hands_are_connected(self) -> None:
         def runner(args: list[str], timeout: float):
-            if args[1] == "power":
+            if args[1] in ("power", "pairable"):
                 return _completed(args)
             raise AssertionError(f"unexpected bluetoothctl call: {args}")
 
@@ -576,12 +613,17 @@ class BluezAutoPairerTests(unittest.TestCase):
         self.assertEqual(pairer._next_delay(2), 2.0)
         self.assertEqual(pairer._next_delay(6), 30.0)
         self.assertEqual(pairer._next_delay(100), 30.0)
+        # idle grows forever while a hand is missing; 2 ** idle must never
+        # reach an int-to-float conversion that raises OverflowError.
+        self.assertEqual(pairer._next_delay(10**9), 30.0)
 
     def test_one_connected_hand_throttles_the_scan_for_the_other(self) -> None:
         scans: list[float] = []
 
         def runner(args: list[str], timeout: float):
             if args[1] == "power":
+                return _completed(args)
+            if args[1] == "pairable":
                 return _completed(args)
             if args[1] == "devices":
                 return _completed(args)
