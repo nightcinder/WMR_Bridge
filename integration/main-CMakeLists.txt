@@ -132,6 +132,23 @@ endif()
 # define sources for main component
 target_sources(${COMPONENT_LIB} PRIVATE ${SRCS})
 
+# Variant selection without a reconfigure. tools/firmware/build.py writes the
+# --variant defines into this header before each build; every application object
+# depends on it, so switching variants recompiles the application and relinks
+# while the ESP-IDF and BTstack objects stay untouched. The defines cannot go
+# through EXTRA_CFLAGS for that: ESP-IDF reads EXTRA_CFLAGS at configure time and
+# puts it on every component's command line, so changing it rebuilds the tree.
+if( EXAMPLE STREQUAL "wmr_bridge" )
+    set(WMR_VARIANT_HEADER "${CMAKE_BINARY_DIR}/wmr_variant.h")
+    if( NOT EXISTS "${WMR_VARIANT_HEADER}" )
+        # The build script always writes it first; this keeps a bare `idf.py
+        # build` (and the first configure) from failing on a missing -include.
+        file(WRITE "${WMR_VARIANT_HEADER}" "/* written by tools/firmware/build.py */\n")
+    endif()
+    target_compile_options(${COMPONENT_LIB} PRIVATE
+        "-include" "${WMR_VARIANT_HEADER}")
+endif()
+
 # custom target to list all BTstack examples
 add_custom_target(list-examples
     COMMAND ${CMAKE_COMMAND} -D BTSTACK_ROOT=${BTSTACK_ROOT} -P ${BTSTACK_ROOT}/tool/cmake/BTstackListExamples.cmake

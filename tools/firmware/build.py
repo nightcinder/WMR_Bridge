@@ -9,16 +9,18 @@ reason flashing is awkward. This script does the same steps reproducibly:
      (default: <repo>/.fw-build/btstack),
   2. copy this repository to <btstack>/wmr_bridge,
   3. copy integration/main-CMakeLists.txt over port/esp32/main/CMakeLists.txt,
-  4. run `idf.py build` with EXAMPLE=wmr_bridge (and the variant's
-     EXTRA_CFLAGS for --variant left|right),
+  4. write the variant header into the build tree, then run `idf.py build`
+     with EXAMPLE=wmr_bridge,
   5. copy the images and a merged factory image to <repo>/dist, together with
      the ESP Web Tools manifest and the browser flasher pages,
   6. optionally run `idf.py flash` against a serial port.
 
 `--variant both|left|right` builds the default both-hands image or a
 single-hand image for two bridges (or single-hand testing on one board). The
-flags are compile-time EXTRA_CFLAGS; src/wmr_config.h is never edited. `both`
-keeps today's names and build directory.
+variant is a pair of compile-time defines written into the build tree's
+`wmr_variant.h`; src/wmr_config.h is never edited. All variants share one build
+directory, so building the second and third variant only recompiles the
+application and relinks.
 
 ESP-IDF must be on PATH. Load it first, or pass `--idf-export` on Linux/macOS:
 
@@ -57,14 +59,13 @@ BUILD_DIR = "build-wmr-bridge"
 DEFAULT_WORK = REPO_ROOT / ".fw-build"
 DEFAULT_OUT = REPO_ROOT / "dist"
 
-# One build directory per variant. EXTRA_CFLAGS is read at configure time, so
-# sharing a directory between variants could silently reuse the previous
-# defines. `both` keeps the original directory name.
-VARIANT_BUILD_DIRS = {
-    "both": BUILD_DIR,
-    "left": BUILD_DIR + "-left",
-    "right": BUILD_DIR + "-right",
-}
+# One build directory for every variant. The variant defines do not go through
+# EXTRA_CFLAGS (which ESP-IDF reads at configure time and puts on every
+# component's command line, so a change there rebuilds the whole tree): they go
+# into a generated header that only the application component includes, so
+# switching variants recompiles the application and relinks, and the ESP-IDF
+# and BTstack objects stay in place. See integration/main-CMakeLists.txt.
+VARIANT_HEADER = "wmr_variant.h"
 
 COPY_IGNORE_NAMES = {
     ".git",
@@ -140,8 +141,15 @@ def ensure_btstack(work):
     if not has_commit():
         log("fetching pinned BTstack commit %s" % BTSTACK_COMMIT)
         run(["git", "-C", str(btstack), "fetch", "--depth", "1", "origin", BTSTACK_COMMIT])
-    run(["git", "-C", str(btstack), "checkout", "-f", "--detach", BTSTACK_COMMIT])
+    # Only move the checkout when it is somewhere else. A forced checkout on
+    # every run reverts the port patches this script applies (the CTKD define
+    # and the ACL limit in sdkconfig.defaults), and the component then looks
+    # modified, so every BTstack object recompiles on every build.
     head = git(btstack, "rev-parse", "HEAD")
+    if head != BTSTACK_COMMIT:
+        run(["git", "-C", str(btstack), "checkout", "-f", "--detach",
+             BTSTACK_COMMIT])
+        head = git(btstack, "rev-parse", "HEAD")
     if head != BTSTACK_COMMIT:
         fail("BTstack is at %s, expected %s" % (head, BTSTACK_COMMIT))
     return btstack
@@ -210,30 +218,46 @@ def sync_port_sdkconfig(port_dir):
     A reused build tree has a generated `sdkconfig`; a fresh clone has only
     `sdkconfig.defaults`, which ESP-IDF uses to create it. Patch whichever is
     present so the first CI build gets the same limit as a cached build.
+
+    The file is written only when a value actually changes. `sdkconfig` is a
+    configure dependency, so rewriting it with identical bytes would make
+    ESP-IDF regenerate its configuration and recompile the tree on every
+    variant.
     """
     path = port_dir / "sdkconfig"
     if path.is_file():
         lines = path.read_text().splitlines()
         found = False
+        changed = False
         for i, line in enumerate(lines):
             for key in (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL + "_EFF"):
                 if line.startswith(key + "="):
                     found = True
-                    lines[i] = "%s=%d" % (key, PORT_SDKCONFIG_ACL_LINKS)
+                    value = "%s=%d" % (key, PORT_SDKCONFIG_ACL_LINKS)
+                    if line != value:
+                        lines[i] = value
+                        changed = True
         if not found:
             fail("%s has no %s line; the port config changed" % (path, PORT_SDKCONFIG_ACL))
-        path.write_text("\n".join(lines) + "\n")
-        log("set %s=%d in %s" % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS, path))
+        if changed:
+            path.write_text("\n".join(lines) + "\n")
+            log("set %s=%d in %s" % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS, path))
+        else:
+            log("%s already sets %s=%d"
+                % (path, PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS))
         return
     defaults = port_dir / "sdkconfig.defaults"
     if not defaults.is_file():
         fail("missing %s and %s" % (path, defaults))
     lines = [line for line in defaults.read_text().splitlines()
              if not line.startswith(PORT_SDKCONFIG_ACL + "=")]
-    lines.append("%s=%d" % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS))
+    value = "%s=%d" % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS)
+    if value in lines:
+        log("%s already sets %s" % (defaults, value))
+        return
+    lines.append(value)
     defaults.write_text("\n".join(lines) + "\n")
-    log("set %s=%d in %s (fresh clone)"
-        % (PORT_SDKCONFIG_ACL, PORT_SDKCONFIG_ACL_LINKS, defaults))
+    log("set %s in %s (fresh clone)" % (value, defaults))
 
 
 def verify_port_sdkconfig(build_dir):
@@ -270,8 +294,20 @@ def sync_source(btstack, work, out):
     target_cmake = btstack / "port" / "esp32" / "main" / "CMakeLists.txt"
     if not source_cmake.is_file():
         fail("missing %s" % source_cmake)
-    shutil.copyfile(source_cmake, target_cmake)
-    log("replaced port/esp32/main/CMakeLists.txt with integration/main-CMakeLists.txt")
+    # Copy only on a real change: a new mtime makes CMake re-run the project
+    # configure and the bootloader's ExternalProject, which costs ~20 s even
+    # when nothing else changed.
+    wanted = source_cmake.read_text(encoding="utf-8")
+    try:
+        current = target_cmake.read_text(encoding="utf-8")
+    except OSError:
+        current = None
+    if current != wanted:
+        shutil.copyfile(source_cmake, target_cmake)
+        log("replaced port/esp32/main/CMakeLists.txt with integration/main-CMakeLists.txt")
+    else:
+        log("port/esp32/main/CMakeLists.txt already matches "
+            "integration/main-CMakeLists.txt")
     return destination
 
 
@@ -345,15 +381,56 @@ def build_argv(build_dir, version):
 
 
 def build_dir_name(variant="both"):
-    """Build-directory name for *variant*; `both` keeps the original name."""
+    """Build-directory name for *variant*.
+
+    Every variant shares one directory now; the variant is selected by the
+    generated header (see `write_variant_header`).
+    """
     if variant not in fwpackage.VARIANTS:
         raise SystemExit("unknown variant %r; expected one of: %s"
                          % (variant, ", ".join(fwpackage.VARIANTS)))
-    return VARIANT_BUILD_DIRS[variant]
+    return BUILD_DIR
 
 
 def build_dir_for(work, variant="both"):
     return Path(work) / build_dir_name(variant)
+
+
+def variant_header_text(variant):
+    """Contents of the generated header that selects *variant*.
+
+    The defines are the ones `fwpackage.variant_defines` records in
+    build-info.json, rewritten from `-DNAME=VALUE` into `#define` lines so the
+    application component can include them without touching EXTRA_CFLAGS.
+    """
+    defines = fwpackage.variant_defines(variant)
+    lines = [
+        "/* Generated by tools/firmware/build.py. Do not edit. */",
+        "/* Variant: %s */" % variant,
+    ]
+    for define in defines:
+        name, _, value = define[2:].partition("=")
+        lines.append("#define %s %s" % (name, value) if value
+                     else "#define %s" % name)
+    return "\n".join(lines) + "\n"
+
+
+def write_variant_header(build_dir, variant):
+    """Write the variant header into the build tree; True when it changed.
+
+    Rewriting it only on a real change keeps ninja from recompiling the
+    application when the same variant is built twice.
+    """
+    path = Path(build_dir) / VARIANT_HEADER
+    text = variant_header_text(variant)
+    try:
+        if path.read_text(encoding="utf-8") == text:
+            return False
+    except OSError:
+        pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return True
 
 
 def size_report_name(variant):
@@ -408,23 +485,6 @@ def check_size_budget(port_dir, build_dir, env, variant, app_bin):
         fail("the %s build is over its size budget; update %s only with a "
              "deliberate review" % (variant, budget_path))
     return report_path
-
-
-def build_env(variant="both", base_env=None):
-    """Environment for the build, with the variant's compile-time defines.
-
-    The defines go through EXTRA_CFLAGS, the ESP-IDF mechanism the run sheets
-    already use; src/wmr_config.h is never edited. `both` adds nothing and
-    leaves any existing EXTRA_CFLAGS alone, so the default build is unchanged.
-    The value is appended so it wins over a conflicting define already in the
-    environment.
-    """
-    env = dict(os.environ if base_env is None else base_env)
-    defines = fwpackage.variant_defines(variant)
-    if defines:
-        existing = env.get("EXTRA_CFLAGS", "").strip()
-        env["EXTRA_CFLAGS"] = " ".join([existing] + defines).strip()
-    return env
 
 
 def copy_flasher_pages(out, source_dir=None):
@@ -586,7 +646,7 @@ def main():
     sync_port_sdkconfig(port_dir)
     disable_port_ctkd(btstack)
     build_dir = build_dir_for(work, args.variant)
-    env = build_env(args.variant, os.environ)
+    env = dict(os.environ)
     env["EXAMPLE"] = "wmr_bridge"
     defines = fwpackage.variant_defines(args.variant)
     if defines:
@@ -594,6 +654,12 @@ def main():
     else:
         log("variant flags: none (source defaults: hands=0, name=%s)"
             % fwpackage.BLE_NAMES["both"])
+    if write_variant_header(build_dir, args.variant):
+        log("wrote %s for the %s variant" % (Path(build_dir) / VARIANT_HEADER,
+                                             args.variant))
+    else:
+        log("%s already selects the %s variant"
+            % (Path(build_dir) / VARIANT_HEADER, args.variant))
     idf_ver = idf_version(port_dir, env)
     log("using %s" % idf_ver)
     run(build_argv(build_dir, version), cwd=port_dir, env=env)
