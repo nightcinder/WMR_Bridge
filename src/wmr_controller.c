@@ -46,6 +46,7 @@
 #include "wmr_cfgmgr.h"
 #include "wmr_controller.h"
 #include "wmr_controller_driver.h"
+#include "wmr_decode.h"
 #include "wmr_discovery.h"
 #include "wmr_levers.h"
 #include "wmr_linkdiag.h"
@@ -68,6 +69,7 @@ typedef struct {
     bool        connected;
     bool        descriptor_available;
     bool        psvr2_wake_pending;   /* wake timer armed for this hand */
+    uint32_t    idle_power_off_ms;    /* idle power-off time; 0 = no cooldown running */
     unsigned long reports;
     unsigned long other_reports;   /* neither input nor config reports: not forwarded */
 } controller_t;
@@ -93,6 +95,17 @@ static controller_t controllers[WMR_NUM_CONTROLLERS] = {
 static uint8_t descriptor_storage[WMR_CFG_HID_DESCRIPTOR_STORAGE];
 static wmr_report_sink_t report_sink;
 static bool stack_ready;
+
+/* Inbound reconnects and outgoing connects are refused for a while after an idle
+ * power-off, so a controller that is still shutting down cannot bounce the link back up.
+ * The subtraction is wrap-safe for the one-minute window. */
+static bool idle_reconnect_blocked(controller_t *c){
+    if (!c->idle_power_off_ms) return false;
+    if (btstack_run_loop_get_time_ms() - c->idle_power_off_ms <
+        WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS) return true;
+    c->idle_power_off_ms = 0;
+    return false;
+}
 
 /* True from the start of a connection attempt (outgoing or accepted
  * incoming) until its HID descriptor arrives or it fails. Only one attempt
@@ -1274,6 +1287,11 @@ static wmr_connect_result_t connect_hand_impl(unsigned hand){
         WMR_LOGW("pair", "%s has no address; put it in pairing mode and press d", c->name);
         return WMR_CONNECT_NO_ADDRESS;
     }
+    if (idle_reconnect_blocked(c)){
+        WMR_LOGW("pair", "%s is in its idle power-off cooldown; not reconnecting yet",
+                 c->name);
+        return WMR_CONNECT_BUSY;
+    }
     switch (wmr_controller_connect_gate(c->cid != 0, c->disconnecting)){
         case WMR_CONNECT_GATE_ACK:
             /* CONNECT is also the companion's reconnect button. A hand whose HID channel
@@ -1344,6 +1362,17 @@ wmr_disconnect_result_t wmr_controller_disconnect(unsigned hand){
     c->disconnecting = true;
     hid_host_disconnect(c->cid);
     return WMR_DISCONNECT_OK;
+}
+
+void wmr_controller_idle_power_off(unsigned hand){
+    if (hand >= WMR_NUM_CONTROLLERS) return;
+    controller_t *c = &controllers[hand];
+    c->idle_power_off_ms = btstack_run_loop_get_time_ms();
+    WMR_LOGI("pair", "%s idle; disconnecting so it powers off, reconnects declined for %u ms",
+             c->name, (unsigned) WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS);
+    if (c->cid) c->disconnecting = true;
+    if (c->handle != HCI_CON_HANDLE_INVALID) gap_disconnect(c->handle);
+    else if (c->cid) hid_host_disconnect(c->cid);
 }
 
 wmr_bond_reset_result_t wmr_controller_forget_bond(unsigned hand){
@@ -2035,6 +2064,12 @@ void wmr_controller_on_hci_event(uint8_t *packet, uint16_t size){
             hci_con_handle_t handle = hci_event_connection_complete_get_connection_handle(packet);
             hci_role_t role = HCI_ROLE_INVALID;
             controller_t *c = controller_for_address(address);
+            if (status == ERROR_CODE_SUCCESS && c && idle_reconnect_blocked(c)){
+                WMR_LOGW("pair", "%s reconnected during its idle power-off cooldown; "
+                         "dropping the link", c->name);
+                gap_disconnect(handle);
+                break;
+            }
             if (status == ERROR_CODE_SUCCESS){
                 role = gap_get_role(handle);
                 if (c){
@@ -2227,6 +2262,13 @@ static void handle_incoming_connection(const uint8_t *packet){
 #endif
 
     controller_t *c = controller_for_address(address);
+    if (c && idle_reconnect_blocked(c)){
+        WMR_LOGW("pair", "%s HID reconnect during its idle power-off cooldown; declining",
+                 c->name);
+        hid_host_decline_connection(cid);
+        if (handle != HCI_CON_HANDLE_INVALID) gap_disconnect(handle);
+        return;
+    }
     if (c && !WMR_BRIDGE_HAND_ENABLED((unsigned) (c - controllers))){
         /* A known address of the excluded hand (for example stored by an earlier
          * both-hands build) is treated exactly like a device that is not a controller. */
@@ -2304,6 +2346,13 @@ static void handle_report(const uint8_t *packet){
         }
         c->other_reports++;
         return;
+    }
+    /* The idle policy only applies to the WMR config protocol. Decode the 0x01 report and
+     * let the config manager refresh its inactivity timer / wake a sleeping hand. */
+    if (driver->serves_config_block){
+        wmr_controller_state_t state;
+        if (wmr_decode_frame(report, length, &state))
+            wmr_cfgmgr_on_activity((unsigned) (c - controllers), &state);
     }
     c->reports++;
     /* Hand EVERY report over before any logging. The report buffer is only

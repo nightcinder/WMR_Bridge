@@ -71,6 +71,15 @@ static void start_read(unsigned hand){
     host_advance_ms(1000);                  /* CFG_START_DELAY_MS */
 }
 
+static wmr_controller_state_t state_with_gyro(float x, float y, float z){
+    wmr_controller_state_t state;
+    memset(&state, 0, sizeof(state));
+    state.gyro[0] = x;
+    state.gyro[1] = y;
+    state.gyro[2] = z;
+    return state;
+}
+
 static void test_full_read(void){
     printf("cfgmgr: full read, READY cache and enable commands\n");
     setup(WMR_HAND_LEFT);
@@ -192,6 +201,109 @@ static void test_keepalive(void){
     host_advance_ms(WMR_CFG_KEEPALIVE_MS * 4);
     CHECK(host_hid.calls == closed);
     CHECK(wmr_cfgmgr_get(WMR_HAND_LEFT, &blob, &total) == WMR_CFG_READY);
+}
+
+static void test_activity_predicate(void){
+    printf("cfgmgr: activity thresholds cover buttons, axes and gyro motion\n");
+    wmr_controller_state_t state;
+    memset(&state, 0, sizeof(state));
+    CHECK(!wmr_cfgmgr_state_is_active(NULL));
+    CHECK(!wmr_cfgmgr_state_is_active(&state));
+
+    state.home = true;
+    CHECK(wmr_cfgmgr_state_is_active(&state));
+    state.home = false;
+
+    state.trigger = 0.04f;
+    CHECK(!wmr_cfgmgr_state_is_active(&state));
+    state.trigger = 0.06f;
+    CHECK(wmr_cfgmgr_state_is_active(&state));
+    state.trigger = 0.0f;
+
+    state.thumbstick_x = -0.11f;
+    CHECK(wmr_cfgmgr_state_is_active(&state));
+    state.thumbstick_x = 0.09f;
+    CHECK(!wmr_cfgmgr_state_is_active(&state));
+
+    state = state_with_gyro(0.05f, 0.05f, 0.05f);
+    CHECK(!wmr_cfgmgr_state_is_active(&state));      /* sum 0.15 is not above */
+    state = state_with_gyro(0.05f, 0.05f, 0.06f);
+    CHECK(wmr_cfgmgr_state_is_active(&state));
+    state = state_with_gyro(0.0f, -0.09f, 0.0f);
+    CHECK(wmr_cfgmgr_state_is_active(&state));
+}
+
+static void test_idle_sleep_and_wake(void){
+    printf("cfgmgr: idle sleep pauses 0x06 and activity wakes it\n");
+    CHECK(WMR_CFG_IDLE_SLEEP_MS > 0);
+    CHECK(WMR_CFG_IDLE_POWEROFF_MS >= WMR_CFG_IDLE_SLEEP_MS);
+    setup(WMR_HAND_LEFT);
+    complete_read(WMR_HAND_LEFT);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+
+    wmr_controller_state_t active = state_with_gyro(0.5f, 0.0f, 0.0f);
+    wmr_cfgmgr_on_activity(WMR_HAND_LEFT, &active);
+    const unsigned active_calls = host_hid.calls;
+
+    /* The pair still goes out while the hand is active. */
+    host_advance_ms(WMR_CFG_KEEPALIVE_MS);
+    host_advance_ms(WMR_CFG_SPACING_MS * 2);
+    CHECK(host_hid.calls > active_calls);
+
+    /* Cross the sleep threshold; the next keep-alive tick must not send anything. */
+    host_advance_ms(WMR_CFG_IDLE_SLEEP_MS);
+    const unsigned at_sleep = host_hid.calls;
+    host_advance_ms(WMR_CFG_KEEPALIVE_MS * 2);
+    CHECK(host_hid.calls == at_sleep);
+
+    /* A quiet 0x01 report (below every threshold) does not wake it. */
+    wmr_controller_state_t quiet = state_with_gyro(0.01f, 0.01f, 0.01f);
+    wmr_cfgmgr_on_activity(WMR_HAND_LEFT, &quiet);
+    host_advance_ms(WMR_CFG_SPACING_MS * 2);
+    CHECK(host_hid.calls == at_sleep);
+
+    /* Activity wakes it with the enable pair, one spacing apart, and the keep-alive
+     * cadence resumes afterwards. */
+    wmr_cfgmgr_on_activity(WMR_HAND_LEFT, &active);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    CHECK(host_hid.calls == at_sleep + 1);
+    CHECK(host_hid.last_report[0] == 0x03 && host_hid.last_report[1] == 0x01);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    CHECK(host_hid.calls == at_sleep + 2);
+    CHECK(host_hid.last_report[0] == 0x03 && host_hid.last_report[1] == 0x02);
+    host_advance_ms(WMR_CFG_KEEPALIVE_MS);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    CHECK(host_hid.calls == at_sleep + 3);
+    CHECK(host_hid.last_report[0] == 0x03 && host_hid.last_report[1] == 0x01);
+}
+
+static void test_idle_poweroff(void){
+    printf("cfgmgr: idle power-off disconnects and stops the keep-alive\n");
+    CHECK(WMR_CFG_IDLE_POWEROFF_MS > 0);
+    setup(WMR_HAND_RIGHT);
+    complete_read(WMR_HAND_RIGHT);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+    host_advance_ms(WMR_CFG_SPACING_MS);
+
+    wmr_controller_state_t active = state_with_gyro(0.5f, 0.0f, 0.0f);
+    wmr_cfgmgr_on_activity(WMR_HAND_RIGHT, &active);
+
+    /* Sleep first, then the remaining power-off interval. */
+    host_advance_ms(WMR_CFG_IDLE_SLEEP_MS);
+    const unsigned at_sleep = host_hid.calls;
+    host_advance_ms(WMR_CFG_IDLE_POWEROFF_MS - WMR_CFG_IDLE_SLEEP_MS - 1);
+    CHECK(host.disconnect_calls[WMR_HAND_RIGHT] == 0);
+    CHECK(host_hid.calls == at_sleep);
+    host_advance_ms(1);
+    CHECK(host.disconnect_calls[WMR_HAND_RIGHT] == 1);
+    CHECK(host_hid.calls == at_sleep);
+
+    /* A report still in flight after the disconnect does not wake it. */
+    wmr_cfgmgr_on_activity(WMR_HAND_RIGHT, &active);
+    host_advance_ms(WMR_CFG_KEEPALIVE_MS * 2);
+    CHECK(host_hid.calls == at_sleep);
+    CHECK(host.disconnect_calls[WMR_HAND_RIGHT] == 1);
 }
 
 static void test_disconnect_mid_read(void){
@@ -338,6 +450,9 @@ static void test_external_blob(void){
 int main(void){
     test_full_read();
     test_keepalive();
+    test_activity_predicate();
+    test_idle_sleep_and_wake();
+    test_idle_poweroff();
     test_disconnect_mid_read();
     test_timeouts();
     test_bad_responses_ignored();
