@@ -27,7 +27,7 @@ New to the Pi? Read the simple-English beginner guide:
 
 ```bash
 cd pi
-python3 -m unittest discover -s tests -v          # 174 host tests
+python3 -m unittest discover -s tests -v          # 189 host tests
 python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 
 # in a second terminal
@@ -112,7 +112,8 @@ the probe do not send one.
 | `wmr_bridge/protocol.py` | FF11 fragments, FF12 records, FF14 batches (C-compatible) |
 | `wmr_bridge/decode.py` | Bit-exact Python port of `src/wmr_decode.c` and `wmr_decoded.c` |
 | `wmr_bridge/bluez.py` | hidraw discovery and report normalisation |
-| `wmr_bridge/bridge.py` | sequence numbers, stream fan-out, JSON control protocol |
+| `wmr_bridge/bridge.py` | sequence numbers, stream fan-out, JSON control protocol, bridge identity |
+| `wmr_bridge/discovery.py` | UDP `WMR_DISCOVER_V1` responder |
 | `wmr_bridge/ws.py` | dependency-free RFC 6455 server/client |
 | `wmr_bridge/inputs.py` | live hidraw manager and capture replay |
 | `wmr_bridge/server.py` | asyncio server wrapper |

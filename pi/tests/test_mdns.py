@@ -32,7 +32,12 @@ def _which(avahi: str | None = None, resolvectl: str | None = None):
 
 class AbsentTests(unittest.TestCase):
     def test_no_publisher_logs_once_and_keeps_running(self) -> None:
-        advertiser = MdnsAdvertiser(port=8765, hands=["LEFT", "RIGHT"], which=_which())
+        advertiser = MdnsAdvertiser(
+            port=8765,
+            hands=["LEFT", "RIGHT"],
+            bridge_id="wmr-pi-abc123",
+            which=_which(),
+        )
         with self.assertLogs(LOG, level="INFO") as caught:
             self.assertFalse(advertiser.start())
         self.assertEqual(len(caught.records), 1)
@@ -52,6 +57,7 @@ class AvahiTests(unittest.TestCase):
         advertiser = MdnsAdvertiser(
             port=8765,
             hands=["LEFT"],
+            bridge_id="wmr-pi-abc123",
             hostname="wmr-pi",
             which=_which(avahi="/usr/bin/avahi-publish-service"),
             popen=popen,
@@ -64,6 +70,7 @@ class AvahiTests(unittest.TestCase):
         self.assertIn("wmr-pi", command)
         self.assertIn(SERVICE_TYPE, command)
         self.assertIn("8765", command)
+        self.assertIn("id=wmr-pi-abc123", command)
         self.assertIn("hands=LEFT", command)
         self.assertIn("path=/wmr", command)
         self.assertEqual(kwargs["stdout"], mock.ANY)
@@ -81,6 +88,7 @@ class AvahiTests(unittest.TestCase):
         advertiser = MdnsAdvertiser(
             port=8765,
             hands=["LEFT", "RIGHT"],
+            bridge_id="wmr-pi-abc123",
             which=_which(avahi="/usr/bin/avahi-publish-service"),
             popen=mock.Mock(side_effect=OSError("missing binary")),
         )
@@ -96,6 +104,7 @@ class ResolvedTests(unittest.TestCase):
             advertiser = MdnsAdvertiser(
                 port=9000,
                 hands=["RIGHT"],
+                bridge_id="wmr-pi-abc123",
                 hostname="wmr-pi",
                 dnssd_dir=dnssd_dir,
                 which=_which(resolvectl="/usr/bin/resolvectl"),
@@ -108,6 +117,7 @@ class ResolvedTests(unittest.TestCase):
             self.assertIn("Name=wmr-pi", text)
             self.assertIn(f"Type={SERVICE_TYPE}", text)
             self.assertIn("Port=9000", text)
+            self.assertIn("id=wmr-pi-abc123", text)
             self.assertIn("hands=RIGHT", text)
             self.assertIn("systemd-resolved", caught.output[0])
 
@@ -120,6 +130,7 @@ class ResolvedTests(unittest.TestCase):
             advertiser = MdnsAdvertiser(
                 port=9000,
                 hands=["LEFT", "RIGHT"],
+                bridge_id="wmr-pi-abc123",
                 dnssd_dir=Path(directory) / "absent",
                 which=_which(resolvectl="/usr/bin/resolvectl"),
             )

@@ -26,6 +26,7 @@ from .bluez import (
     discover_hidraw,
 )
 from .bridge import Bridge
+from .discovery import DISCOVERY_PORT, DiscoveryResponder
 from .inputs import HidrawManager, ReplaySource, read_capture
 from .mdns import MdnsAdvertiser
 from .server import BridgeServer
@@ -353,6 +354,7 @@ async def _run(args: argparse.Namespace) -> int:
     LOG.info("hand filter: %s", ", ".join(bridge.hand_filter))
 
     advertiser: MdnsAdvertiser | None = None
+    discovery: DiscoveryResponder | None = None
     replay: ReplaySource | None = None
     manager: HidrawManager | None = None
     pairer: BluezAutoPairer | None = None
@@ -361,8 +363,30 @@ async def _run(args: argparse.Namespace) -> int:
     replay_task: asyncio.Task[None] | None = None
     stop = asyncio.Event()
     try:
+        discovery = DiscoveryResponder(
+            bridge_id=bridge.bridge_id,
+            name=socket.gethostname(),
+            port=server.port,
+            hands=bridge.hand_filter,
+            auth_required=token is not None,
+            listen_host=args.bind,
+            listen_port=DISCOVERY_PORT,
+        )
+        try:
+            await discovery.start()
+        except OSError as exc:
+            LOG.info(
+                "UDP discovery skipped: cannot bind %s:%d: %s",
+                args.bind,
+                DISCOVERY_PORT,
+                exc,
+            )
+            discovery = None
+
         if args.advertise_mdns:
-            advertiser = MdnsAdvertiser(port=server.port, hands=bridge.hand_filter)
+            advertiser = MdnsAdvertiser(
+                port=server.port, hands=bridge.hand_filter, bridge_id=bridge.bridge_id
+            )
             advertiser.start()
 
         if args.replay:
@@ -457,6 +481,8 @@ async def _run(args: argparse.Namespace) -> int:
             await manager.close()
         if advertiser is not None:
             advertiser.close()
+        if discovery is not None:
+            await discovery.close()
         await server.close()
         LOG.info("stopped: %s", bridge.status())
     return 0

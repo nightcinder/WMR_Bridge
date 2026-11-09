@@ -12,12 +12,14 @@ of whether anybody is subscribed, matching the firmware's counter semantics.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import hmac
 import json
 import logging
 import socket
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from . import __version__
@@ -44,7 +46,31 @@ from . import ws as wsmod
 
 STREAMS = ("raw", "decoded", "batched")
 HAND_NAMES = ("LEFT", "RIGHT")
+MACHINE_ID_PATH = Path("/etc/machine-id")
 LOG = logging.getLogger(__name__)
+
+
+def default_bridge_id(
+    hostname: str | None = None, machine_id_path: Path = MACHINE_ID_PATH
+) -> str:
+    """Derive a stable, human-readable identity for this bridge.
+
+    The hostname label makes the id recognisable on a discovery list; the digest
+    of ``/etc/machine-id`` keeps two identically named hosts apart and survives
+    daemon restarts. When ``/etc/machine-id`` is unavailable the hostname is the
+    digest input, so the id is still stable across restarts on that host.
+    """
+
+    host = hostname or socket.gethostname()
+    slug = "".join(ch if ch.isalnum() else "-" for ch in host.lower())
+    label = "-".join(part for part in slug.split("-") if part)[:32].strip("-")
+    label = label or "wmr-bridge"
+    try:
+        seed = machine_id_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        seed = ""
+    digest = hashlib.sha256((seed or host).encode("utf-8")).hexdigest()[:10]
+    return f"{label}-{digest}"
 
 
 @dataclass
@@ -241,6 +267,7 @@ class Bridge:
         auth_timeout_s: float = 5.0,
         allowed_hands: tuple[int, ...] | list[int] = (0, 1),
         calibration: bool | CalibrationCache = True,
+        bridge_id: str | None = None,
     ) -> None:
         if not 1 <= batch_max <= BATCH_MAX_COUNT:
             raise ValueError(f"batch_max must be 1..{BATCH_MAX_COUNT}")
@@ -250,6 +277,7 @@ class Bridge:
         if not hands or not hands <= {0, 1}:
             raise ValueError("allowed_hands must be a non-empty subset of (0, 1)")
         self.allowed_hands = tuple(hand for hand in (0, 1) if hand in hands)
+        self.bridge_id = bridge_id or default_bridge_id()
         self.token = token
         self.queue_size = max(1, queue_size)
         self.batch_max = batch_max
@@ -385,6 +413,7 @@ class Bridge:
             "protocol": 1,
             "transport": "wifi",
             "device": "wmr-pi",
+            "bridge_id": self.bridge_id,
             "version": __version__,
             "handFilter": self.hand_filter,
             "hostname": socket.gethostname(),
