@@ -15,7 +15,8 @@ This file records what each release contains; hardware evidence stays in
   controllers could close the door even though the Pi had no LE bond; it now
   exempts only bonds proven to be the controllers (WMR name or Classic HID
   UUID). A dual-mode phone's LE bond carries a `Class` and a public address and
-  still counts as the phone bond, so the door closes after it bonds.
+  still counts as the phone bond, so the door closes after it bonds; any other
+  unproven bond (for example a bonded headset) closes it too.
   `wmr-bridge pair [--seconds SECONDS]` opens a
   manual BLE pairing window on the running service (`--close` ends it), so a
   user no longer has to restart the service inside the 180-second boot window.

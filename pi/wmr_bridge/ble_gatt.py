@@ -1549,6 +1549,7 @@ class BluezGattPeripheral:
         self._advertising_dirty = False
         self._advertised_tier = self.app.advertising_tier
         self._pairable_applied: bool | None = None
+        self._pairable_reason = "not started"
 
     @property
     def started(self) -> bool:
@@ -1558,6 +1559,22 @@ class BluezGattPeripheral:
         """True while the adapter is pairable."""
 
         return self.app.pairing_open
+
+    def manual_pairing_window_open(self) -> bool:
+        """True while a manually opened window is holding the adapter pairable.
+
+        Separate from :meth:`pairing_window_open`, which includes the stored-bond
+        rule: with no bond stored the adapter stays pairable after the manual
+        window closes.
+        """
+
+        deadline = self._manual_deadline
+        return deadline is not None and self._clock() < deadline
+
+    def pairable_reason(self) -> str:
+        """Reason for the last computed pairability decision."""
+
+        return self._pairable_reason
 
     async def start(self) -> None:
         if self._started:
@@ -1712,6 +1729,7 @@ class BluezGattPeripheral:
         if not self._started:
             return
         pairable, reason = await self._pairing_decision()
+        self._pairable_reason = reason
         # Compare against what was last written to the adapter, not the FF13
         # shadow: that shadow starts False, which is also a valid computed
         # value, and skipping the write would leave Adapter1.Pairable stale.

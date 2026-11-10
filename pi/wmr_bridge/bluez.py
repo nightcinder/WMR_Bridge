@@ -967,7 +967,9 @@ class BluezAutoPairer:
             scan_seconds,
             ", ".join(HAND_NAMES[hand] for hand in sorted(scan_hands)),
         )
-        LOG.info("auto-pair: Adapter1.Pairable -> on for the controller scan")
+        LOG.info(
+            "auto-pair: requesting Adapter1.Pairable on for the controller scan"
+        )
         discovered = None
         try:
             discovered = self._scan_and_pair(scan_hands, scan_seconds)

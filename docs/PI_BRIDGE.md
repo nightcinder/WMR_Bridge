@@ -582,7 +582,8 @@ The adapter is pairable for 180 seconds after boot (`--ble-pairing-window`),
 then only while no LE bond is stored; a bonded phone reconnects without
 pairability. Bonds proven to be the controllers (WMR name or Classic HID UUID)
 never count as an LE bond, even though a dual-mode phone's LE bond carries a
-`Class` and a public address. `wmr-bridge pair` opens a manual window on the running
+`Class` and a public address. Any other bond counts as the phone's, so a bonded
+headset closes the adapter until `wmr-bridge pair` opens a window. `wmr-bridge pair` opens a manual window on the running
 service for 180 seconds by default (`wmr-bridge pair --seconds 60`), and
 `wmr-bridge pair --close` ends it. `--ble-continuous-pairing` keeps the adapter
 pairable while BLE is active, matching the ESP32, and is opt-in. A

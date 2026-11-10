@@ -619,7 +619,11 @@ class PairCommandTests(unittest.IsolatedAsyncioTestCase):
 
         async def handler(action: str, seconds: float | None) -> dict:
             self.calls.append((action, seconds))
-            return {"open": action == "open", "seconds": seconds}
+            return {
+                "open": action == "open",
+                "manual": action == "open",
+                "seconds": seconds,
+            }
 
         self.bridge = Bridge(token="secret")
         self.bridge.pairing_handler = handler
@@ -654,7 +658,7 @@ class PairCommandTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_pair_reports_a_window_that_did_not_open(self) -> None:
         async def refused(action: str, seconds: float | None) -> dict:
-            return {"open": False, "seconds": seconds}
+            return {"open": False, "manual": True, "seconds": seconds}
 
         bridge = Bridge(token="secret")
         bridge.pairing_handler = refused
@@ -671,12 +675,53 @@ class PairCommandTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await server.close()
 
-    async def test_pair_close_reports_a_still_pairable_adapter(self) -> None:
-        async def still_open(action: str, seconds: float | None) -> dict:
-            return {"open": True, "seconds": seconds}
+    async def test_pair_close_succeeds_while_the_stored_bond_rule_stays_pairable(
+        self,
+    ) -> None:
+        async def no_bond(action: str, seconds: float | None) -> dict:
+            # A successful close on a fresh Pi: no bond is stored, so the
+            # adapter remains pairable even though the manual window ended.
+            return {
+                "open": True,
+                "manual": False,
+                "reason": "no LE bond stored",
+                "seconds": None,
+            }
 
         bridge = Bridge(token="secret")
-        bridge.pairing_handler = still_open
+        bridge.pairing_handler = no_bond
+        server = BridgeServer(bridge, host="127.0.0.1", port=0)
+        await server.start()
+        try:
+            args = _build_parser().parse_args(
+                [
+                    "pair",
+                    "--close",
+                    "--port",
+                    str(server.port),
+                    "--token",
+                    "secret",
+                ]
+            )
+            with redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(await _pair_window(args), 0)
+            self.assertIn("manual BLE pairing window closed", out.getvalue())
+            self.assertIn("still pairable", out.getvalue())
+            self.assertIn("no LE bond stored", out.getvalue())
+        finally:
+            await server.close()
+
+    async def test_pair_close_reports_a_window_that_stayed_manual(self) -> None:
+        async def still_manual(action: str, seconds: float | None) -> dict:
+            return {
+                "open": True,
+                "manual": True,
+                "reason": "manual window, 180 s left",
+                "seconds": None,
+            }
+
+        bridge = Bridge(token="secret")
+        bridge.pairing_handler = still_manual
         server = BridgeServer(bridge, host="127.0.0.1", port=0)
         await server.start()
         try:
@@ -692,7 +737,7 @@ class PairCommandTests(unittest.IsolatedAsyncioTestCase):
             )
             with redirect_stdout(io.StringIO()) as out:
                 self.assertEqual(await _pair_window(args), 1)
-            self.assertIn("still reports a pairable adapter", out.getvalue())
+            self.assertIn("still reports a manual pairing window", out.getvalue())
         finally:
             await server.close()
 

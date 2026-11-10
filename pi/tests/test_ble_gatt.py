@@ -1077,6 +1077,32 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await peripheral.close()
 
+    async def test_manual_window_state_is_separate_from_overall_pairability(
+        self,
+    ) -> None:
+        backend = FakeBackend()
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=0.0,
+        )
+        await peripheral.start()
+        try:
+            self.assertTrue(peripheral.pairing_window_open())
+            self.assertFalse(peripheral.manual_pairing_window_open())
+            await peripheral.open_pairing_window(60)
+            self.assertTrue(peripheral.manual_pairing_window_open())
+            await peripheral.close_pairing_window()
+            self.assertFalse(peripheral.manual_pairing_window_open())
+            # A fresh Pi has no bond, so the stored-bond rule keeps it pairable
+            # after the manual window ends.
+            self.assertTrue(peripheral.pairing_window_open())
+            self.assertEqual(peripheral.pairable_reason(), "no LE bond stored")
+        finally:
+            await peripheral.close()
+
     async def test_an_le_bond_closes_pairability_after_boot(self) -> None:
         backend = FakeBackend(le_bond=True)
         peripheral = BluezGattPeripheral(

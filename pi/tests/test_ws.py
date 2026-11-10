@@ -352,7 +352,11 @@ class PairingControlTests(unittest.IsolatedAsyncioTestCase):
 
         async def handler(action: str, seconds: float | None) -> dict:
             self.calls.append((action, seconds))
-            return {"open": action == "open", "seconds": seconds}
+            return {
+                "open": action == "open",
+                "manual": action == "open",
+                "seconds": seconds,
+            }
 
         self.bridge.pairing_handler = handler
         self.server = BridgeServer(self.bridge, host="127.0.0.1", port=0)
@@ -374,10 +378,16 @@ class PairingControlTests(unittest.IsolatedAsyncioTestCase):
         client, _hello = await self.connect()
         await client.send_json({"type": "pairing", "action": "open", "seconds": 60})
         reply = await asyncio.wait_for(client.recv_json(), 2)
-        self.assertEqual(reply, {"type": "pairing", "open": True, "seconds": 60.0})
+        self.assertEqual(
+            reply,
+            {"type": "pairing", "open": True, "manual": True, "seconds": 60.0},
+        )
         await client.send_json({"type": "pairing", "action": "close"})
         reply = await asyncio.wait_for(client.recv_json(), 2)
-        self.assertEqual(reply, {"type": "pairing", "open": False, "seconds": None})
+        self.assertEqual(
+            reply,
+            {"type": "pairing", "open": False, "manual": False, "seconds": None},
+        )
         self.assertEqual(self.calls, [("open", 60.0), ("close", None)])
 
     async def test_bad_pairing_requests_are_rejected(self) -> None:

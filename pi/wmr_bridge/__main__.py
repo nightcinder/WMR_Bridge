@@ -123,15 +123,33 @@ async def _pair_window(args: argparse.Namespace) -> int:
             print(f"unexpected reply from wmr-bridge: {reply.get('type')!r}")
             return 1
         opened = reply.get("open") is True
+        manual = reply.get("manual") is True
         if args.close:
-            if opened:
+            if manual:
                 print(
-                    "the daemon still reports a pairable adapter; check "
+                    "the daemon still reports a manual pairing window; check "
                     "'journalctl -u wmr-bridge'"
                 )
                 return 1
-            print("manual BLE pairing window closed; the stored-bond rule now applies.")
+            if opened:
+                reason = reply.get("reason")
+                detail = f" ({reason})" if isinstance(reason, str) and reason else ""
+                print(
+                    "manual BLE pairing window closed; the adapter is still "
+                    f"pairable{detail}."
+                )
+            else:
+                print(
+                    "manual BLE pairing window closed; the stored-bond rule "
+                    "now applies."
+                )
         else:
+            if not manual:
+                print(
+                    "the daemon did not open a manual pairing window; check "
+                    "'journalctl -u wmr-bridge'"
+                )
+                return 1
             if not opened:
                 print(
                     "the daemon could not make the adapter pairable; check "
@@ -713,6 +731,8 @@ async def _run(args: argparse.Namespace) -> int:
                     await ble.close_pairing_window()
                 return {
                     "open": ble.pairing_window_open(),
+                    "manual": ble.manual_pairing_window_open(),
+                    "reason": ble.pairable_reason(),
                     "seconds": None if seconds is None else seconds,
                 }
 
