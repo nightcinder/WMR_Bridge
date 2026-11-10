@@ -5,7 +5,13 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
-## Unreleased
+## 0.3.23 — 2026-11-10
+
+The Pi Just Works re-pair release on top of 0.3.22, shipping the fix that lets a
+phone re-pair over its stored bond. Firmware payloads are unchanged from 0.3.22:
+FF10–FF17 keep their payloads and companions at 0.2.2 or later continue to work.
+The Pi pairing path is host-tested only; the bench sheet carries the procedure
+for the hardware re-run.
 
 ### Raspberry Pi bridge
 
