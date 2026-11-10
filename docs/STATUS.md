@@ -1,12 +1,14 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-10 (current release 0.3.17: the Pi package in this tree is
-`0.3.17` and now starts its dbus-next GATT application on the dbus-next 0.2.3 /
-Python 3.13 stack, so the daemon advertises the FF10 GATT service over Bluetooth
-by default with per-client CCCD gating (ONY-1175). It keeps the 0.3.16 uplink
-order — Ethernet over 5 GHz over 2.4 GHz Wi-Fi via route metrics — plus
-`AF_NETLINK` in the systemd unit and token access for `wifi_probe.py`
-(ONY-1114, ONY-1115, ONY-1144). The ESP32 firmware is unchanged
+Last updated: 2026-11-10 (current release 0.3.18: the Pi package in this tree is
+`0.3.18` and exports the FF10 `org.bluez.GattService1` object, so BlueZ accepts
+`RegisterApplication` and the daemon advertises the FF10 GATT service over
+Bluetooth by default (ONY-1186). It also blocks a controller after the idle
+power-off until the reconnect cooldown expires, instead of reopening it seconds
+later (ONY-1185). It keeps the 0.3.17 dbus-next GATT start annotations and the
+0.3.16 uplink order — Ethernet over 5 GHz over 2.4 GHz Wi-Fi via route metrics —
+plus `AF_NETLINK` in the systemd unit and token access for `wifi_probe.py`
+(ONY-1175, ONY-1114, ONY-1115, ONY-1144). The ESP32 firmware is unchanged
 from 0.3.15, which re-sends the FF13 streaming-enable pair on reconnect and
 every 10 s so a connected controller stays awake (ONY-1062). The firmware's
 controller families are unchanged from
@@ -58,7 +60,7 @@ maintained at the project's single entry point:
 | Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (ONY-307, PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.11 image has not been run on hardware (internal bench runbook block C) |
 | BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (ONY-438, #88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.11 pairing and encryption run is not yet done (internal bench runbook block B) |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, not run on hardware |
-| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests only (304 tests + loopback replay), the real BlueZ auto-pair path has not been run on Pi hardware or with controllers; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
+| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests only (312 tests + loopback replay), the real BlueZ auto-pair path has not been run on Pi hardware or with controllers; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has not been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Console `v` read on the 0.2.4 hardware run (`0.2.4`, ESP-IDF v6.1); the live FF16 phone read on v0.3.11 is open (internal bench runbook block B) |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added by ONY-945 (v0.3.11) | Host tests and firmware build only, never run on a PSVR2 controller |
