@@ -586,8 +586,26 @@ pairing agent is registered with
 open, and unregistered again when the window closes, so a phone's LE bond is
 accepted as Just Works instead of being rejected for lack of an agent. The
 agent accepts every device BlueZ presents and exists only for that window; the
-adapter's pairable window is the gate, and the Classic auto-pairer uses
-bluetoothctl's own agent to keep bonding WMR controllers on the same adapter.
+adapter's pairable window is the gate. The Classic auto-pairer runs its own
+interactive `bluetoothctl` session to bond controllers on the same adapter.
+While the BLE window is open it tells that client to drop its own agent
+(`agent off`), so `pair` uses the bridge's Just Works agent for controllers
+too. BlueZ clears a client's default agent when the client exits, so the
+peripheral also re-requests default for its own agent after every scan
+(`BLE pairing agent reclaimed as the adapter default`). Without both steps, a
+phone pairing around a controller scan finds bluetoothctl's empty-capability
+agent or no default agent at all, and Android closes the pairing page. The
+agent and pairability also stay open for 10 seconds after the last agent
+request, so a stored bond does not release the agent while the phone is still
+discovering services and enabling the HID report.
+
+Pairing diagnostics are in the journal: `BLE pairing window open/closed`,
+`BLE pairing agent registered`/`claimed`/`reclaimed`, one line per agent
+callback (`BLE pairing: confirmation requested by <device>`), and
+`BLE pairing: BlueZ cancelled the pending request` when the exchange fails.
+A capture that opens the window and then has no `BLE pairing:` line means
+BlueZ never reached the agent; a `cancelled` line without a request line
+means the request never arrived.
 
 The GATT application also exposes the HID-over-GATT service (`0x1812`) on the
 same LE link: HID Information, the firmware's 91-byte Report Map, Protocol

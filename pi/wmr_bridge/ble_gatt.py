@@ -122,6 +122,11 @@ ADV_MAX_INTERVAL_MS = 1285
 # A newly flashed Pi is pairable for this long after BLE starts even when a
 # stale bond exists. After it, pairability follows the stored-bond state.
 DEFAULT_PAIRING_WINDOW_S = 180.0
+# Keep the agent and pairability open this long after the last Agent1 request.
+# BlueZ stores the bond before the phone finishes service discovery and enables
+# the HID report, so closing the window on the first bond check can release the
+# agent while the phone is still using it.
+PAIRING_AGENT_GRACE_S = 10.0
 PAIRING_REJECTED_HINT = (
     "pairing rejected by WMR Bridge: no BLE pairing window is open. Restart "
     "WMR Bridge with '--ble-pairing-window SECONDS' to open one, or remove "
@@ -247,14 +252,17 @@ class PairingAgentPolicy:
             self._on_request(device)
 
     def confirm(self, device: str) -> bool:
+        LOG.info("BLE pairing: confirmation requested by %s; accepting", device)
         self._note(device)
         return True
 
     def authorize(self, device: str) -> bool:
+        LOG.info("BLE pairing: authorization requested by %s; accepting", device)
         self._note(device)
         return True
 
     def authorize_service(self, device: str, uuid: str) -> bool:
+        LOG.info("BLE pairing: service %s requested by %s; accepting", uuid, device)
         self._note(device)
         return True
 
@@ -267,6 +275,8 @@ class GattBackend(Protocol):
     async def stop(self) -> None: ...
 
     async def set_pairable(self, pairable: bool) -> None: ...
+
+    async def reclaim_agent(self) -> None: ...
 
     async def has_le_bond(self) -> bool: ...
 
@@ -1093,29 +1103,45 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
 
         @method()
         def Release(self):
+            LOG.info("BLE pairing agent released by BlueZ")
             return None
 
         @method()
         def RequestPinCode(self, device: "o") -> "s":
             # NoInputNoOutput means BlueZ must not ask, but a peer can still
             # request legacy pairing; reject it instead of inventing a code.
+            LOG.warning(
+                "BLE pairing: %s asked for a PIN; rejecting (NoInputNoOutput)",
+                device,
+            )
             raise DBusError("org.bluez.Error.Rejected", PAIRING_REJECTED_HINT)
 
         @method()
         def DisplayPinCode(self, device: "o", pincode: "s"):
+            LOG.info("BLE pairing: PIN %s for %s (no display; ignoring)", pincode, device)
             return None
 
         @method()
         def RequestPasskey(self, device: "o") -> "u":
+            LOG.warning(
+                "BLE pairing: %s asked for a passkey; rejecting (NoInputNoOutput)",
+                device,
+            )
             raise DBusError("org.bluez.Error.Rejected", PAIRING_REJECTED_HINT)
 
         @method()
         def DisplayPasskey(self, device: "o", passkey: "u", entered: "q"):
+            LOG.info(
+                "BLE pairing: passkey %06d for %s (no display; ignoring)",
+                passkey,
+                device,
+            )
             return None
 
         @method()
         def RequestConfirmation(self, device: "o", passkey: "u"):
             if not self.policy.confirm(device):
+                LOG.warning("BLE pairing: confirmation refused for %s", device)
                 raise DBusError(
                     "org.bluez.Error.Rejected", "pairing confirmation refused"
                 )
@@ -1123,6 +1149,7 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         @method()
         def RequestAuthorization(self, device: "o"):
             if not self.policy.authorize(device):
+                LOG.warning("BLE pairing: authorization refused for %s", device)
                 raise DBusError(
                     "org.bluez.Error.Rejected", "pairing authorization refused"
                 )
@@ -1130,12 +1157,14 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         @method()
         def AuthorizeService(self, device: "o", uuid: "s"):
             if not self.policy.authorize_service(device, uuid):
+                LOG.warning("BLE pairing: service authorization refused for %s", device)
                 raise DBusError(
                     "org.bluez.Error.Rejected", "service authorization refused"
                 )
 
         @method()
         def Cancel(self):
+            LOG.warning("BLE pairing: BlueZ cancelled the pending request")
             return None
 
     return {
@@ -1199,6 +1228,7 @@ class DbusGattBackend:
         self._advertising_manager: Any = None
         self._agent_manager: Any = None
         self._agent_registered = False
+        self._agent_default = False
         self._exported: list[Any] = []
         self._characteristics: dict[str, Any] = {}
         self._variant: Any = None
@@ -1280,13 +1310,37 @@ class DbusGattBackend:
                     AGENT_PATH, "NoInputNoOutput"
                 )
                 self._agent_registered = True
+                LOG.info("BLE pairing agent registered (NoInputNoOutput)")
             # The Classic auto-pairer's bluetoothctl session may have claimed
             # default and dropped it; reclaim ours so a phone that bonds during
             # this window still has an agent to confirm it.
             await self._agent_manager.call_request_default_agent(AGENT_PATH)
-            LOG.info("BLE pairing agent registered (NoInputNoOutput)")
+            self._agent_default = True
+            LOG.info("BLE pairing agent claimed as the adapter default")
         except Exception as exc:
+            self._agent_default = False
             LOG.warning("could not register the BlueZ pairing agent: %s", exc)
+
+    async def reclaim_agent(self) -> None:
+        """Re-request default after another client dropped it.
+
+        The Classic auto-pairer's ``bluetoothctl`` client takes default when
+        the BLE pairing window is closed. If the window opens while that
+        session is still running, or an external ``bluetoothctl`` session
+        exits, BlueZ clears the default agent. Re-requesting default is cheap
+        and keeps the whole pairability window covered.
+        """
+
+        if self._agent_manager is None or not self._agent_registered:
+            return
+        try:
+            await self._agent_manager.call_request_default_agent(AGENT_PATH)
+        except Exception as exc:
+            self._agent_default = False
+            LOG.warning("could not reclaim the BLE pairing agent: %s", exc)
+            return
+        self._agent_default = True
+        LOG.info("BLE pairing agent reclaimed as the adapter default")
 
     async def _release_agent(self) -> None:
         """Drop the Just Works agent when the pairing window closes."""
@@ -1300,6 +1354,7 @@ class DbusGattBackend:
             LOG.debug("unregister agent: %s", exc)
         finally:
             self._agent_registered = False
+            self._agent_default = False
 
     def notify(self, uuid: str, value: bytes) -> None:
         characteristic = self._characteristics.get(uuid)
@@ -1322,6 +1377,7 @@ class DbusGattBackend:
         finally:
             if not pairable:
                 await self._release_agent()
+        LOG.info("BLE adapter pairable: %s", "yes" if pairable else "no")
 
     async def has_le_bond(self) -> bool:
         """True when BlueZ holds a bond for a device that is not a WMR controller.
@@ -1475,9 +1531,12 @@ class BluezGattPeripheral:
         self._started = False
         self._boot_deadline: float | None = None
         self._manual_deadline: float | None = None
+        self._bond_grace_deadline: float | None = None
         self._pairing_task: asyncio.Task[None] | None = None
         self._bond_task: asyncio.Task[None] | None = None
         self._advertising_task: asyncio.Task[None] | None = None
+        self._agent_task: asyncio.Task[None] | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._advertising_dirty = False
         self._advertised_tier = self.app.advertising_tier
         self._pairable_applied: bool | None = None
@@ -1494,6 +1553,7 @@ class BluezGattPeripheral:
     async def start(self) -> None:
         if self._started:
             return
+        self._loop = asyncio.get_running_loop()
         await self.backend.start(self.app)
         self.app.set_emitter(self.backend.notify)
         self.app.bridge.add_sink(self.app)
@@ -1577,15 +1637,51 @@ class BluezGattPeripheral:
 
         self._manual_deadline = None
         self._boot_deadline = None
+        self._bond_grace_deadline = None
         self._cancel_pairing_task()
         await self.refresh_pairing_state()
 
     def _on_pairing_request(self, _device: str) -> None:
         """Re-check for a stored LE bond shortly after BlueZ presents a device."""
 
+        # Keep the agent through the rest of the phone's exchange. The bond is
+        # stored before service discovery and the HID Report CCCD write, so a
+        # bond-triggered close must not release the agent immediately.
+        self._bond_grace_deadline = self._clock() + PAIRING_AGENT_GRACE_S
         if self._bond_task is not None and not self._bond_task.done():
             return
         self._bond_task = asyncio.create_task(self._refresh_after_bond())
+
+    async def reclaim_agent(self) -> None:
+        """Restore the Just Works agent after a controller scan took default."""
+
+        if not self._started or not self.app.pairing_open:
+            return
+        try:
+            await self.backend.reclaim_agent()
+        except Exception as exc:
+            LOG.warning("could not reclaim the BLE pairing agent: %s", exc)
+
+    def request_agent_reclaim(self) -> None:
+        """Thread-safe request from the Classic auto-pairer's worker thread.
+
+        A ``bluetoothctl`` scan that runs while the BLE window is closed takes
+        default with its own agent, and BlueZ drops that default when the
+        client exits. Scheduling the reclaim here (rather than in the pairer)
+        keeps the D-Bus work on the event loop that owns the bus connection.
+        """
+
+        loop = self._loop
+        if loop is None or not self._started or not self.app.pairing_open:
+            return
+        loop.call_soon_threadsafe(self._schedule_agent_reclaim)
+
+    def _schedule_agent_reclaim(self) -> None:
+        if not self._started or not self.app.pairing_open:
+            return
+        if self._agent_task is not None and not self._agent_task.done():
+            return
+        self._agent_task = asyncio.create_task(self.reclaim_agent())
 
     async def _refresh_after_bond(self) -> None:
         """Re-read bonds a few times; BlueZ stores the key after the agent call."""
@@ -1618,6 +1714,7 @@ class BluezGattPeripheral:
             return
         self._pairable_applied = pairable
         self.app.pairing_open = pairable
+        LOG.info("BLE pairing window %s", "open" if pairable else "closed")
 
     async def _should_be_pairable(self) -> bool:
         if self.continuous_pairing:
@@ -1626,6 +1723,11 @@ class BluezGattPeripheral:
         if self._manual_deadline is not None and now < self._manual_deadline:
             return True
         if self._boot_deadline is not None and now < self._boot_deadline:
+            return True
+        if (
+            self._bond_grace_deadline is not None
+            and now < self._bond_grace_deadline
+        ):
             return True
         try:
             return not await self.backend.has_le_bond()
@@ -1637,7 +1739,11 @@ class BluezGattPeripheral:
         now = self._clock()
         deadlines = [
             deadline
-            for deadline in (self._boot_deadline, self._manual_deadline)
+            for deadline in (
+                self._boot_deadline,
+                self._manual_deadline,
+                self._bond_grace_deadline,
+            )
             if deadline is not None and deadline > now
         ]
         return min(deadlines) if deadlines else None
@@ -1667,11 +1773,12 @@ class BluezGattPeripheral:
 
     def _cancel_tasks(self) -> None:
         self._cancel_pairing_task()
-        for task in (self._bond_task, self._advertising_task):
+        for task in (self._bond_task, self._advertising_task, self._agent_task):
             if task is not None:
                 task.cancel()
         self._bond_task = None
         self._advertising_task = None
+        self._agent_task = None
 
     async def close(self) -> None:
         if self._started:
@@ -1679,6 +1786,7 @@ class BluezGattPeripheral:
             self.app.bridge.remove_stream_listener(self.app.sync_hid_suppression)
             self.app.pairing_listener = None
             self._cancel_tasks()
+            self._bond_grace_deadline = None
             self.app.pairing_open = False
             try:
                 await self.backend.set_pairable(False)
@@ -1691,4 +1799,5 @@ class BluezGattPeripheral:
             self._started = False
         else:
             self._cancel_tasks()
+        self._loop = None
         await self.backend.stop()

@@ -38,6 +38,7 @@ from wmr_bridge.ble_gatt import (
     HID_REPORT_REFERENCE,
     HID_SERVICE_PATH,
     HID_SERVICE,
+    PAIRING_AGENT_GRACE_S,
     PAIRING_REJECTED_HINT,
     RESULT_INVALID_PARAM,
     RESULT_NOTHING_TO_DO,
@@ -89,6 +90,7 @@ class FakeBackend:
         self.pairable_calls: list[bool] = []
         self.le_bond = le_bond
         self.advertisement_refreshes = 0
+        self.agent_reclaims = 0
         self.started = False
         self.app: GattApplication | None = None
 
@@ -105,6 +107,9 @@ class FakeBackend:
 
     async def has_le_bond(self) -> bool:
         return self.le_bond
+
+    async def reclaim_agent(self) -> None:
+        self.agent_reclaims += 1
 
     async def refresh_advertisement(self) -> None:
         self.advertisement_refreshes += 1
@@ -359,6 +364,32 @@ class BackendAgentTests(unittest.IsolatedAsyncioTestCase):
         await backend.set_pairable(False)
         self.assertEqual(agent_manager.unregistered, [])
         self.assertFalse(adapter.pairable)
+
+    async def test_reclaim_without_a_registered_agent_does_nothing(self) -> None:
+        backend, _adapter, agent_manager = self._backend()
+        await backend.reclaim_agent()
+        self.assertEqual(agent_manager.defaults, [])
+
+    async def test_reclaim_requests_default_again_after_a_scan_took_it(self) -> None:
+        backend, _adapter, agent_manager = self._backend()
+        await backend.set_pairable(True)
+        agent_manager.defaults.clear()
+        await backend.reclaim_agent()
+        self.assertEqual(agent_manager.defaults, [AGENT_PATH])
+        self.assertEqual(len(agent_manager.registered), 1)
+        self.assertTrue(backend._agent_default)
+
+    async def test_a_reclaim_failure_is_logged_and_clears_the_default_flag(self) -> None:
+        backend, _adapter, agent_manager = self._backend()
+
+        async def fail(_path: str) -> None:
+            raise RuntimeError("no default agent permission")
+
+        agent_manager.call_request_default_agent = fail  # type: ignore[method-assign]
+        with self.assertLogs("wmr_bridge.ble_gatt", level="WARNING"):
+            await backend.set_pairable(True)
+            await backend.reclaim_agent()
+        self.assertFalse(backend._agent_default)
 
 
 class FlakyAdvertisingManager:
@@ -1029,6 +1060,83 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.backend.pairable_calls, [True])
         await self.peripheral.close()
         self.assertEqual(self.backend.pairable_calls, [True, False])
+
+    async def test_reclaim_agent_restores_default_while_the_window_is_open(self) -> None:
+        await self.peripheral.reclaim_agent()
+        self.assertEqual(self.backend.agent_reclaims, 1)
+
+    async def test_an_agent_request_keeps_the_window_open_for_a_grace_period(self) -> None:
+        backend = FakeBackend(le_bond=True)
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=0.0,
+        )
+        await peripheral.start()
+        try:
+            self.assertFalse(peripheral.app.pairing_open)
+            peripheral._on_pairing_request("/org/bluez/hci0/dev_AA")
+            await peripheral.refresh_pairing_state()
+            self.assertTrue(peripheral.app.pairing_open)
+            self.assertTrue(backend.pairable)
+            self.clock.advance(PAIRING_AGENT_GRACE_S + 0.1)
+            await peripheral.refresh_pairing_state()
+            self.assertFalse(peripheral.app.pairing_open)
+            self.assertFalse(backend.pairable)
+        finally:
+            await peripheral.close()
+
+    async def test_each_agent_request_extends_the_grace_period(self) -> None:
+        backend = FakeBackend(le_bond=True)
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=0.0,
+        )
+        await peripheral.start()
+        try:
+            peripheral._on_pairing_request("/org/bluez/hci0/dev_AA")
+            self.clock.advance(PAIRING_AGENT_GRACE_S - 1.0)
+            peripheral._on_pairing_request("/org/bluez/hci0/dev_AA")
+            self.clock.advance(2.0)
+            await peripheral.refresh_pairing_state()
+            self.assertTrue(peripheral.app.pairing_open)
+            self.clock.advance(PAIRING_AGENT_GRACE_S)
+            await peripheral.refresh_pairing_state()
+            self.assertFalse(peripheral.app.pairing_open)
+        finally:
+            await peripheral.close()
+
+    async def test_closing_the_window_clears_the_grace_period(self) -> None:
+        self.backend.le_bond = True
+        self.peripheral._on_pairing_request("/org/bluez/hci0/dev_AA")
+        await self.peripheral.close_pairing_window()
+        self.assertFalse(self.peripheral.app.pairing_open)
+
+    async def test_reclaim_agent_does_nothing_when_the_window_is_closed(self) -> None:
+        self.backend.le_bond = True
+        await self.peripheral.close_pairing_window()
+        self.assertFalse(self.peripheral.app.pairing_open)
+        await self.peripheral.reclaim_agent()
+        self.assertEqual(self.backend.agent_reclaims, 0)
+
+    async def test_a_threaded_reclaim_is_scheduled_on_the_event_loop(self) -> None:
+        self.peripheral.request_agent_reclaim()
+        for _ in range(3):
+            await asyncio.sleep(0)
+        self.assertEqual(self.backend.agent_reclaims, 1)
+
+    async def test_a_threaded_reclaim_is_ignored_after_the_window_closes(self) -> None:
+        self.backend.le_bond = True
+        await self.peripheral.close_pairing_window()
+        self.peripheral.request_agent_reclaim()
+        for _ in range(3):
+            await asyncio.sleep(0)
+        self.assertEqual(self.backend.agent_reclaims, 0)
 
     async def test_advertising_is_reregistered_when_the_tier_changes(self) -> None:
         self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
