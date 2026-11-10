@@ -117,6 +117,7 @@ sudo systemctl enable --now bluetooth
 sudo usermod -aG input "$USER"   # or run the bridge as a user in group input
 wmr-bridge --list                # confirm both controllers are visible
 wmr-bridge status                # adapter, bond and hidraw state when pairing fails
+wmr-bridge pair                  # open a 180 s BLE window when a phone will not pair
 
 # Pi on the LAN, phone connecting to it: a token is required.
 wmr-bridge --bind 0.0.0.0 --token-file /etc/wmr-bridge/token
@@ -153,7 +154,7 @@ Advertising uses two tiers:
 
 The advertisement sets `Discoverable` so BlueZ puts the LE General Discoverable flag (`0x06`) in the advertising data. The advertisement carries the gamepad appearance (`0x03C4`), the local name `WMR Bridge`, and the HID (`0x1812`) and FF10 service UUIDs.
 
-The adapter is pairable for 180 seconds after boot (`--ble-pairing-window`), then only while no LE bond is stored. A bonded phone reconnects without pairability. `--ble-continuous-pairing` keeps the adapter pairable while BLE is active. This mode matches ESP32 behavior and is opt-in. The daemon registers a `NoInputNoOutput` BlueZ pairing agent at `/org/wmr/bridge/agent` (`org.bluez.Agent1`) whenever the adapter is pairable. When the adapter is not pairable, BlueZ refuses pairing requests from unbonded phones. If a connecting peer requests legacy PIN or passkey authentication, the agent rejects the request. The rejection explains how to open a window or remove the old bond.
+The adapter is pairable for 180 seconds after boot (`--ble-pairing-window`), then only while no LE bond is stored. Bonds proven to be the WMR controllers (WMR name or Classic HID UUID) never count as an LE bond, even though a dual-mode phone's LE bond carries a `Class` and a public address. Any other bond counts as the phone's, so a bonded headset also closes the adapter until `wmr-bridge pair` is used. `wmr-bridge pair [--seconds SECONDS]` opens a manual window on the running service and `wmr-bridge pair --close` ends it. A bonded phone reconnects without pairability. `--ble-continuous-pairing` keeps the adapter pairable while BLE is active. This mode matches ESP32 behavior and is opt-in. The daemon registers a `NoInputNoOutput` BlueZ pairing agent at `/org/wmr/bridge/agent` (`org.bluez.Agent1`) whenever the adapter is pairable. When the adapter is not pairable, BlueZ refuses pairing requests from unbonded phones. If a connecting peer requests legacy PIN or passkey authentication, the agent rejects the request. The rejection explains how to open a window or remove the old bond. Each pairability change logs its reason and the new `Adapter1.Pairable` state.
 
 ### D-Bus GATT layout
 

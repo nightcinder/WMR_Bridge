@@ -263,6 +263,21 @@ and scanning, and whether each hand has a bond and a hidraw node. In the log,
 `auto-pair: scanning` is the heartbeat, `found`/`paired` shows a controller was
 heard, and `pairing <MAC> failed: ...` gives the BlueZ error.
 
+**A phone sees the bridge but will not pair.**
+Open a pairing window on the running service, then pair from the phone:
+
+```bash
+wmr-bridge pair
+```
+
+The window stays open for 180 seconds by default; `wmr-bridge pair --seconds 60`
+changes that, and `wmr-bridge pair --close` ends the manual window (pairability
+then follows the stored-bond rule). Each change prints
+its reason in the journal, for example
+`BLE pairing window open (manual window, 180 s left); Adapter1.Pairable -> on`.
+A stored LE bond from another phone closes the adapter after the window; remove
+that bond in `bluetoothctl` or open a new window.
+
 If the log says `auto-pair: Bluetooth adapter is not usable yet`, check that
 Bluetooth is running and not blocked. The service clears a boot-time soft
 block as root before start and keeps retrying, so no restart is needed once

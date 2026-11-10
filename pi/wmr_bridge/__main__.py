@@ -43,6 +43,7 @@ from .server import BridgeServer
 from .wifi import inspect_uplink, inspect_wifi, interface_ipv4, prefer_5ghz
 
 LOG = logging.getLogger("wmr_bridge")
+DEFAULT_PAIR_TOKEN_FILE = "/etc/wmr-bridge/token"
 
 
 def _idle_seconds(value: str) -> float:
@@ -67,6 +68,108 @@ def _validate_idle_timeouts(args: argparse.Namespace) -> None:
             "--idle-poweroff-timeout must be 0 (disabled) or at least "
             "--idle-sleep-timeout"
         )
+
+
+async def _pair_window(args: argparse.Namespace) -> int:
+    """Ask the running daemon to open or close its manual BLE window."""
+
+    from . import ws as wsmod
+
+    token = args.token or os.environ.get("WMR_BRIDGE_TOKEN")
+    token_file = args.token_file
+    if token is None and token_file is None and os.path.exists(DEFAULT_PAIR_TOKEN_FILE):
+        token_file = DEFAULT_PAIR_TOKEN_FILE
+    if token is None and token_file:
+        token = _read_token(
+            argparse.Namespace(token=None, token_file=token_file)
+        )
+    if not args.close and args.seconds <= 0:
+        print("--seconds must be greater than zero when opening a pairing window")
+        return 1
+    try:
+        client = await wsmod.connect(args.host, args.port, "/wmr", timeout=5)
+    except (OSError, asyncio.TimeoutError, wsmod.WebSocketError) as exc:
+        print(
+            f"wmr-bridge is not reachable at {args.host}:{args.port} ({exc}); "
+            "start the service or pass --host/--port"
+        )
+        return 1
+    try:
+        hello = await asyncio.wait_for(client.recv_json(), 5)
+        if hello.get("authRequired"):
+            if token is None:
+                print(
+                    "the running service requires a token; pass --token-file "
+                    f"(default {DEFAULT_PAIR_TOKEN_FILE})"
+                )
+                return 1
+            await client.send_json({"type": "auth", "token": token})
+            reply = await asyncio.wait_for(client.recv_json(), 5)
+            if reply.get("type") != "auth_ok":
+                print("authentication failed; check --token-file")
+                return 1
+        message: dict[str, Any] = {
+            "type": "pairing",
+            "action": "close" if args.close else "open",
+        }
+        if not args.close:
+            message["seconds"] = args.seconds
+        await client.send_json(message)
+        reply = await asyncio.wait_for(client.recv_json(), 5)
+        if reply.get("type") == "error":
+            print(f"could not change the pairing window: {reply.get('code')}")
+            return 1
+        if reply.get("type") != "pairing":
+            print(f"unexpected reply from wmr-bridge: {reply.get('type')!r}")
+            return 1
+        opened = reply.get("open") is True
+        manual = reply.get("manual") is True
+        if args.close:
+            if manual:
+                print(
+                    "the daemon still reports a manual pairing window; check "
+                    "'journalctl -u wmr-bridge'"
+                )
+                return 1
+            if opened:
+                reason = reply.get("reason")
+                detail = f" ({reason})" if isinstance(reason, str) and reason else ""
+                print(
+                    "manual BLE pairing window closed; the adapter is still "
+                    f"pairable{detail}."
+                )
+            else:
+                print(
+                    "manual BLE pairing window closed; the stored-bond rule "
+                    "now applies."
+                )
+        else:
+            if not manual:
+                print(
+                    "the daemon did not open a manual pairing window; check "
+                    "'journalctl -u wmr-bridge'"
+                )
+                return 1
+            if not opened:
+                print(
+                    "the daemon could not make the adapter pairable; check "
+                    "'journalctl -u wmr-bridge'"
+                )
+                return 1
+            print(
+                f"BLE pairing window open for {args.seconds:g} s; "
+                "pair your phone or controller now."
+            )
+        return 0
+    finally:
+        await client.close()
+
+
+def _pair_command(args: argparse.Namespace) -> int:
+    try:
+        return asyncio.run(_pair_window(args))
+    except KeyboardInterrupt:
+        return 130
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -236,9 +339,29 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         nargs="?",
-        choices=("status",),
-        metavar="{status}",
-        help="'status' is the same as --status",
+        choices=("status", "pair"),
+        metavar="{status,pair}",
+        help=(
+            "'status' is the same as --status; 'pair' opens the BLE pairing "
+            "window on the running service"
+        ),
+    )
+    parser.add_argument(
+        "--seconds",
+        type=_idle_seconds,
+        default=180.0,
+        metavar="SECONDS",
+        help="how long 'pair' keeps the BLE pairing window open (default 180)",
+    )
+    parser.add_argument(
+        "--close",
+        action="store_true",
+        help="with 'pair', close the window instead of opening it",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="control endpoint host for 'pair' (default 127.0.0.1)",
     )
     parser.add_argument(
         "--advertise-mdns",
@@ -599,6 +722,22 @@ async def _run(args: argparse.Namespace) -> int:
                 ", ".join(hosts()) or "no LAN address yet",
             )
 
+            async def _pairing_control(
+                action: str, seconds: float | None
+            ) -> dict[str, Any]:
+                if action == "open":
+                    await ble.open_pairing_window(seconds)
+                else:
+                    await ble.close_pairing_window()
+                return {
+                    "open": ble.pairing_window_open(),
+                    "manual": ble.manual_pairing_window_open(),
+                    "reason": ble.pairable_reason(),
+                    "seconds": None if seconds is None else seconds,
+                }
+
+            bridge.pairing_handler = _pairing_control
+
     advertiser: MdnsAdvertiser | None = None
     discovery: DiscoveryResponder | None = None
     replay: ReplaySource | None = None
@@ -783,6 +922,8 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_cli_args(argv, env_args=None if argv is None else "")
     if args.status or args.command == "status":
         return _print_status(wifi=inspect_wifi(), uplink=inspect_uplink())
+    if args.command == "pair":
+        return _pair_command(args)
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",

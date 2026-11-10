@@ -127,10 +127,13 @@ DEFAULT_PAIRING_WINDOW_S = 180.0
 # the HID report, so closing the window on the first bond check can release the
 # agent while the phone is still using it.
 PAIRING_AGENT_GRACE_S = 10.0
+# Classic HID profile UUID. A Device1 entry that lists it is a BR/EDR bond
+# (the WMR controllers), never an LE central's bond.
+CLASSIC_HID_UUID = "00001124-0000-1000-8000-00805f9b34fb"
 PAIRING_REJECTED_HINT = (
-    "pairing rejected by WMR Bridge: no BLE pairing window is open. Restart "
-    "WMR Bridge with '--ble-pairing-window SECONDS' to open one, or remove "
-    "the old bond in your phone's Bluetooth settings and restart the service"
+    "pairing rejected by WMR Bridge: no BLE pairing window is open. Run "
+    "'wmr-bridge pair' on the Pi to open one, or remove the old bond in your "
+    "phone's Bluetooth settings and restart the service"
 )
 
 
@@ -1384,8 +1387,11 @@ class DbusGattBackend:
 
         The Pi bonds the two Classic controllers on the same adapter, so a bare
         ``Paired`` count cannot decide whether the LE door should stay open.
-        Controller bonds are Public-address Peripherals (Class major 0x05) or
-        carry a WMR HID name; everything else is treated as the phone's LE bond.
+        Only a WMR controller name or the Classic HID UUID proves a bond is a
+        controller bond. ``Class`` cannot be used: BlueZ sets it for every
+        BR/EDR-capable device, so a dual-mode phone's LE bond carries both
+        ``Class`` and ``AddressType=public``. An unproven bond is treated as
+        the phone's LE bond, so the door closes rather than stays open.
         """
 
         bus = self._bus
@@ -1414,11 +1420,14 @@ class DbusGattBackend:
             )
             if name.strip().casefold() in WMR_NAMES:
                 continue
-            address_type = str(
-                _dbus_value(properties.get("AddressType")) or "public"
-            )
-            device_class = int(_dbus_value(properties.get("Class")) or 0)
-            if address_type == "public" and ((device_class >> 8) & 0x1F) == 0x05:
+            # A dual-mode phone's LE bond carries Class and AddressType=public
+            # too, so Class is not evidence of a Classic bond. Only the Classic
+            # HID profile proves this bond belongs to a controller; anything
+            # unproven closes the door.
+            uuids = _dbus_value(properties.get("UUIDs")) or []
+            if CLASSIC_HID_UUID in {
+                str(_dbus_value(uuid)).casefold() for uuid in uuids
+            }:
                 continue
             return True
         return False
@@ -1540,6 +1549,7 @@ class BluezGattPeripheral:
         self._advertising_dirty = False
         self._advertised_tier = self.app.advertising_tier
         self._pairable_applied: bool | None = None
+        self._pairable_reason = "not started"
 
     @property
     def started(self) -> bool:
@@ -1549,6 +1559,22 @@ class BluezGattPeripheral:
         """True while the adapter is pairable."""
 
         return self.app.pairing_open
+
+    def manual_pairing_window_open(self) -> bool:
+        """True while a manually opened window is holding the adapter pairable.
+
+        Separate from :meth:`pairing_window_open`, which includes the stored-bond
+        rule: with no bond stored the adapter stays pairable after the manual
+        window closes.
+        """
+
+        deadline = self._manual_deadline
+        return deadline is not None and self._clock() < deadline
+
+    def pairable_reason(self) -> str:
+        """Reason for the last computed pairability decision."""
+
+        return self._pairable_reason
 
     async def start(self) -> None:
         if self._started:
@@ -1627,6 +1653,7 @@ class BluezGattPeripheral:
         duration = self.pairing_window_s if seconds is None else max(0.0, seconds)
         if duration > 0:
             self._manual_deadline = self._clock() + duration
+            LOG.info("BLE pairing window opened manually for %g s", duration)
         else:
             self._manual_deadline = None
         await self.refresh_pairing_state()
@@ -1701,7 +1728,8 @@ class BluezGattPeripheral:
 
         if not self._started:
             return
-        pairable = await self._should_be_pairable()
+        pairable, reason = await self._pairing_decision()
+        self._pairable_reason = reason
         # Compare against what was last written to the adapter, not the FF13
         # shadow: that shadow starts False, which is also a valid computed
         # value, and skipping the write would leave Adapter1.Pairable stale.
@@ -1714,26 +1742,36 @@ class BluezGattPeripheral:
             return
         self._pairable_applied = pairable
         self.app.pairing_open = pairable
-        LOG.info("BLE pairing window %s", "open" if pairable else "closed")
+        LOG.info(
+            "BLE pairing window %s (%s); Adapter1.Pairable -> %s",
+            "open" if pairable else "closed",
+            reason,
+            "on" if pairable else "off",
+        )
 
-    async def _should_be_pairable(self) -> bool:
+    async def _pairing_decision(self) -> tuple[bool, str]:
+        """Return the pairable state and the reason it was chosen."""
+
         if self.continuous_pairing:
-            return True
+            return True, "continuous pairing enabled"
         now = self._clock()
         if self._manual_deadline is not None and now < self._manual_deadline:
-            return True
+            return True, f"manual window, {self._manual_deadline - now:.0f} s left"
         if self._boot_deadline is not None and now < self._boot_deadline:
-            return True
+            return True, f"boot window, {self._boot_deadline - now:.0f} s left"
         if (
             self._bond_grace_deadline is not None
             and now < self._bond_grace_deadline
         ):
-            return True
+            return True, "phone pairing in progress"
         try:
-            return not await self.backend.has_le_bond()
+            bonded = await self.backend.has_le_bond()
         except Exception as exc:
             LOG.warning("could not read the LE bond state: %s", exc)
-            return False
+            return False, "BlueZ bond list unreadable"
+        if bonded:
+            return False, "an LE bond is stored"
+        return True, "no LE bond stored"
 
     def _next_deadline(self) -> float | None:
         now = self._clock()
@@ -1791,6 +1829,10 @@ class BluezGattPeripheral:
             try:
                 await self.backend.set_pairable(False)
                 self._pairable_applied = False
+                LOG.info(
+                    "BLE pairing window closed (peripheral stopped); "
+                    "Adapter1.Pairable -> off"
+                )
             except Exception as exc:
                 LOG.debug("could not disable pairing: %s", exc)
             self.app.bridge.remove_sink(self.app)

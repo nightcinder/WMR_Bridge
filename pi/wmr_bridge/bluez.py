@@ -967,6 +967,9 @@ class BluezAutoPairer:
             scan_seconds,
             ", ".join(HAND_NAMES[hand] for hand in sorted(scan_hands)),
         )
+        LOG.info(
+            "auto-pair: requesting Adapter1.Pairable on for the controller scan"
+        )
         discovered = None
         try:
             discovered = self._scan_and_pair(scan_hands, scan_seconds)
@@ -1008,7 +1011,11 @@ class BluezAutoPairer:
 
         if self._pairing_window_open is not None and self._pairing_window_open():
             return
-        self._run("pairable", "off", timeout=10.0)
+        result = self._run("pairable", "off", timeout=10.0)
+        if result is not None and result.returncode == 0:
+            LOG.info(
+                "auto-pair: Adapter1.Pairable -> off after the controller scan"
+            )
 
     def _hand_connected(self, hand: int) -> bool:
         hands = getattr(self.bridge, "hands")

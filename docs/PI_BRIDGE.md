@@ -580,9 +580,14 @@ service (`0x1812`) before FF10, so Android classifies the bridge as a
 controller. The advertising name defaults to `WMR Bridge` (`--ble-name`).
 The adapter is pairable for 180 seconds after boot (`--ble-pairing-window`),
 then only while no LE bond is stored; a bonded phone reconnects without
-pairability. `--ble-continuous-pairing` keeps the adapter pairable while BLE
-is active, matching the ESP32, and is opt-in. A `NoInputNoOutput` BlueZ
-pairing agent is registered with
+pairability. Bonds proven to be the controllers (WMR name or Classic HID UUID)
+never count as an LE bond, even though a dual-mode phone's LE bond carries a
+`Class` and a public address. Any other bond counts as the phone's, so a bonded
+headset closes the adapter until `wmr-bridge pair` opens a window. `wmr-bridge pair` opens a manual window on the running
+service for 180 seconds by default (`wmr-bridge pair --seconds 60`), and
+`wmr-bridge pair --close` ends it. `--ble-continuous-pairing` keeps the adapter
+pairable while BLE is active, matching the ESP32, and is opt-in. A
+`NoInputNoOutput` BlueZ pairing agent is registered with
 `org.bluez.AgentManager1`, claimed as the default agent while that window is
 open, and unregistered again when the window closes, so a phone's LE bond is
 accepted as Just Works instead of being rejected for lack of an agent. The
@@ -600,10 +605,14 @@ agent and pairability also stay open for 10 seconds after the last agent
 request, so a stored bond does not release the agent while the phone is still
 discovering services and enabling the HID report.
 
-Pairing diagnostics are in the journal: `BLE pairing window open/closed`,
+Pairing diagnostics are in the journal: `BLE pairing window open/closed` with
+the reason and the new `Adapter1.Pairable` state (for example
+`BLE pairing window closed (an LE bond is stored); Adapter1.Pairable -> off`),
+`BLE pairing window opened manually for 180 s`,
 `BLE pairing agent registered`/`claimed`/`reclaimed`, one line per agent
 callback (`BLE pairing: confirmation requested by <device>`), and
 `BLE pairing: BlueZ cancelled the pending request` when the exchange fails.
+The Classic auto-pairer also logs when its scan leaves `Adapter1.Pairable` off.
 A capture that opens the window and then has no `BLE pairing:` line means
 BlueZ never reached the agent; a `cancelled` line without a request line
 means the request never arrived.
@@ -641,8 +650,9 @@ Per-client gating:
 - FF14 is capped at 50 Hz because the Pi shares `hci0` with the two Classic
   HID controller links.
 - Bonding is accepted only while the adapter is pairable: during the boot
-  window (`--ble-pairing-window`), with `--ble-continuous-pairing`, or while
-  no LE bond is stored.
+  window (`--ble-pairing-window`), for a manual window opened with
+  `wmr-bridge pair`, with `--ble-continuous-pairing`, or while no LE bond is
+  stored.
 
 Coexistence with TCP:
 
@@ -689,6 +699,7 @@ port can subscribe. With no token on loopback, only local clients can connect.
 | `{"type":"hello"}` | another `hello` |
 | `{"type":"auth","token":"..."}` | `auth_ok` or `auth_failed` |
 | `{"type":"calibration","hand":"LEFT"\|"RIGHT"\|0\|1,"offset":N}` | one tagged binary FF13 window (below) |
+| `{"type":"pairing","action":"open","seconds":N}` or `{"type":"pairing","action":"close"}` | `{"type":"pairing","open":true\|false,"seconds":N\|null}` |
 | `{"type":"close"}` | close frame, then disconnect |
 
 Rules:
@@ -702,6 +713,12 @@ Rules:
   FF12 on BLE. A calibration request is answered without changing the
   subscription. `hand` may be a name or an index; a hand outside `handFilter`
   or a malformed offset returns `bad_hand` or `bad_offset`.
+- A `pairing` message opens or closes the manual BLE pairing window that
+  `wmr-bridge pair` uses. `seconds` is 1..86400; when omitted while opening,
+  the configured `--ble-pairing-window` duration applies. It returns
+  `pairing_unavailable` when the daemon runs
+  with `--no-ble` (or the BLE peripheral failed to start), `bad_action` for an
+  unknown action, and `bad_seconds` for an invalid duration.
 - An unknown stream is `bad_stream`. Malformed JSON is `bad_json`. An unknown
   `type` is `unknown_type`.
 - Multiple clients are allowed (default: no explicit cap). Each has its own

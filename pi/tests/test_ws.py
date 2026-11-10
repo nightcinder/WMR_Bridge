@@ -345,5 +345,70 @@ class CalibrationForwardingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply, {"type": "error", "code": "calibration_unavailable"})
 
 
+class PairingControlTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self.bridge = Bridge()
+        self.calls: list[tuple[str, float | None]] = []
+
+        async def handler(action: str, seconds: float | None) -> dict:
+            self.calls.append((action, seconds))
+            return {
+                "open": action == "open",
+                "manual": action == "open",
+                "seconds": seconds,
+            }
+
+        self.bridge.pairing_handler = handler
+        self.server = BridgeServer(self.bridge, host="127.0.0.1", port=0)
+        await self.server.start()
+        self.clients: list[wsmod.WebSocket] = []
+
+    async def asyncTearDown(self) -> None:
+        for client in self.clients:
+            await client.close()
+        await self.server.close()
+
+    async def connect(self) -> tuple[wsmod.WebSocket, dict]:
+        client = await wsmod.connect("127.0.0.1", self.server.port, "/wmr", timeout=5)
+        self.clients.append(client)
+        hello = await asyncio.wait_for(client.recv_json(), 2)
+        return client, hello
+
+    async def test_open_and_close_reach_the_pairing_handler(self) -> None:
+        client, _hello = await self.connect()
+        await client.send_json({"type": "pairing", "action": "open", "seconds": 60})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(
+            reply,
+            {"type": "pairing", "open": True, "manual": True, "seconds": 60.0},
+        )
+        await client.send_json({"type": "pairing", "action": "close"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(
+            reply,
+            {"type": "pairing", "open": False, "manual": False, "seconds": None},
+        )
+        self.assertEqual(self.calls, [("open", 60.0), ("close", None)])
+
+    async def test_bad_pairing_requests_are_rejected(self) -> None:
+        client, _hello = await self.connect()
+        for message, code in (
+            ({"type": "pairing", "action": "toggle"}, "bad_action"),
+            ({"type": "pairing", "action": "open", "seconds": 0}, "bad_seconds"),
+            ({"type": "pairing", "action": "open", "seconds": "60"}, "bad_seconds"),
+        ):
+            await client.send_json(message)
+            reply = await asyncio.wait_for(client.recv_json(), 2)
+            self.assertEqual(reply, {"type": "error", "code": code})
+        self.assertEqual(self.calls, [])
+
+    async def test_no_peripheral_reports_pairing_unavailable(self) -> None:
+        self.bridge.pairing_handler = None
+        client, _hello = await self.connect()
+        await client.send_json({"type": "pairing", "action": "open"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "error", "code": "pairing_unavailable"})
+
+
 if __name__ == "__main__":
     unittest.main()
