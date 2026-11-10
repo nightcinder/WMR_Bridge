@@ -39,6 +39,8 @@ jobs:
         run: python3 tests/test_gatt_encryption.py
       - name: Run docs link checks
         run: python3 tests/test_docs_links.py
+      - name: Install the Pi BLE D-Bus test dependency
+        run: sudo apt-get update && sudo apt-get install -y python3-dbus-next
       - name: Run Linux/Pi host-bridge tests
         working-directory: pi
         run: python3 -m unittest discover -s tests -v
