@@ -5,10 +5,28 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
-## Unreleased
+## 0.3.18 — 2026-11-10
+
+The BLE GATT registration release on top of 0.3.17. BlueZ now registers the Pi
+bridge's GATT application: the daemon exports the FF10 service object beside its
+characteristics, so the service advertises over Bluetooth by default. The Pi
+also stops a controller reopening seconds after the idle power-off. Firmware
+payloads are unchanged from 0.3.17: FF10–FF17 keep their payloads and companions
+at 0.2.2 or later continue to work.
 
 ### Raspberry Pi bridge
 
+- **GATT service registration (ONY-1186).** dbus-next answers
+  `ObjectManager.GetManagedObjects` from the objects exported on the bus and
+  ignores a `GetManagedObjects` method on an exported interface. The peripheral
+  exported only characteristics and descriptors, so BlueZ saw no
+  `org.bluez.GattService1` and `RegisterApplication` failed with
+  `BLE GATT disabled: No valid service object found`; the adapter advertised
+  nothing (`ActiveInstances 0`). The daemon now exports the `GattService1`
+  object at `SERVICE_PATH`, so BlueZ registers the FF10 service and the daemon
+  advertises it by default. It no longer exports the `0x2902` CCC descriptor by
+  hand; BlueZ creates the CCC for a notify/indicate characteristic itself. Host
+  tests drive dbus-next's real `GetManagedObjects` over the exported tree.
 - **Idle power-off no longer bounces back (ONY-1185).** After the 15-minute
   idle disconnect the still-awake controller paged the Pi again 3 s later, and
   the hidraw monitor reopened it and reset its idle timer. The bridge now
