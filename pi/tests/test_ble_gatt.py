@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
 import unittest
@@ -11,6 +12,10 @@ from wmr_bridge.__main__ import _build_parser
 from wmr_bridge.ble_gatt import (
     AGENT_PATH,
     APP_PATH,
+    ADV_FAST_MAX_INTERVAL_MS,
+    ADV_FAST_MIN_INTERVAL_MS,
+    ADV_MAX_INTERVAL_MS,
+    ADV_MIN_INTERVAL_MS,
     CHARACTERISTICS,
     CHARACTERISTIC_BY_UUID,
     FF10_SERVICE,
@@ -21,6 +26,9 @@ from wmr_bridge.ble_gatt import (
     FF15_ECHO,
     FF16_VERSION,
     FF17_CONTROL,
+    GAMEPAD_APPEARANCE,
+    HID_SERVICE,
+    PAIRING_REJECTED_HINT,
     RESULT_INVALID_PARAM,
     RESULT_NOTHING_TO_DO,
     RESULT_NOT_CONNECTED,
@@ -54,10 +62,12 @@ class FakeClock:
 
 
 class FakeBackend:
-    def __init__(self, pairable: bool = False) -> None:
+    def __init__(self, pairable: bool = False, le_bond: bool = False) -> None:
         self.notifications: list[tuple[str, bytes]] = []
         self.pairable: bool | None = pairable
         self.pairable_calls: list[bool] = []
+        self.le_bond = le_bond
+        self.advertisement_refreshes = 0
         self.started = False
         self.app: GattApplication | None = None
 
@@ -71,6 +81,12 @@ class FakeBackend:
     async def set_pairable(self, pairable: bool) -> None:
         self.pairable = pairable
         self.pairable_calls.append(pairable)
+
+    async def has_le_bond(self) -> bool:
+        return self.le_bond
+
+    async def refresh_advertisement(self) -> None:
+        self.advertisement_refreshes += 1
 
     def notify(self, uuid: str, value: bytes) -> None:
         self.notifications.append((uuid, value))
@@ -111,28 +127,49 @@ class RegistrationTests(unittest.TestCase):
         self.assertNotIn("encrypt-read", ff16.flags)
         self.assertIn("encrypt-read", ff13.flags)
 
-    def test_advertisement_carries_the_bridge_id_prefix(self) -> None:
+    def test_advertisement_is_a_gamepad_and_carries_the_bridge_id_prefix(self) -> None:
         bridge = Bridge(bridge_id="wmr-pi-abc12345")
         data = _application(bridge=bridge).advertisement_data()
         self.assertTrue(data["discoverable"])
-        self.assertEqual(data["service_uuids"], [FF10_SERVICE])
+        self.assertEqual(data["appearance"], GAMEPAD_APPEARANCE)
+        self.assertEqual(data["service_uuids"], [HID_SERVICE, FF10_SERVICE])
         self.assertEqual(data["local_name"], "WMR Bridge")
         self.assertEqual(data["service_data"][FF10_SERVICE], b"WMB1wmr-pi-a")
-        self.assertEqual(data["min_interval_ms"], 1000)
-        self.assertEqual(data["max_interval_ms"], 1285)
+        self.assertEqual(data["min_interval_ms"], ADV_FAST_MIN_INTERVAL_MS)
+        self.assertEqual(data["max_interval_ms"], ADV_FAST_MAX_INTERVAL_MS)
+
+    def test_advertising_steps_down_when_a_controller_connects(self) -> None:
+        bridge = Bridge()
+        application = _application(bridge=bridge)
+        bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+        data = application.advertisement_data()
+        self.assertEqual(data["min_interval_ms"], ADV_MIN_INTERVAL_MS)
+        self.assertEqual(data["max_interval_ms"], ADV_MAX_INTERVAL_MS)
+        bridge.set_hand_connected(0, False)
+        data = application.advertisement_data()
+        self.assertEqual(data["min_interval_ms"], ADV_FAST_MIN_INTERVAL_MS)
+        self.assertEqual(data["max_interval_ms"], ADV_FAST_MAX_INTERVAL_MS)
 
 
 class PairingAgentTests(unittest.TestCase):
     """A phone bond must not be filtered out as a non-controller device."""
 
     def test_agent_accepts_a_phone_central_and_a_wmr_controller(self) -> None:
-        policy = PairingAgentPolicy()
+        seen: list[str] = []
+        policy = PairingAgentPolicy(on_request=seen.append)
         phone = "/org/bluez/hci0/dev_D4_3A_2C_11_22_33"
         controller = "/org/bluez/hci0/dev_98_B6_E9_44_55_66"
         for device in (phone, controller):
             self.assertTrue(policy.confirm(device))
             self.assertTrue(policy.authorize(device))
             self.assertTrue(policy.authorize_service(device, FF10_SERVICE))
+        self.assertEqual(seen, [phone, phone, phone, controller, controller, controller])
+
+    def test_rejection_hint_names_how_to_open_a_window(self) -> None:
+        self.assertIn("--ble-pairing-window", PAIRING_REJECTED_HINT)
+        self.assertIn("restart", PAIRING_REJECTED_HINT)
+        # No production path opens a window from the Companion app.
+        self.assertNotIn("Companion", PAIRING_REJECTED_HINT)
 
 
 class FakeAdapterInterface:
@@ -157,6 +194,72 @@ class FakeAgentManager:
 
     async def call_unregister_agent(self, path: str) -> None:
         self.unregistered.append(path)
+
+
+class FakeObjectManager:
+    def __init__(self, objects: dict) -> None:
+        self.objects = objects
+
+    async def call_get_managed_objects(self) -> dict:
+        return self.objects
+
+
+class FakeManagerObject:
+    def __init__(self, objects: dict) -> None:
+        self.objects = objects
+
+    def get_interface(self, _name: str) -> FakeObjectManager:
+        return FakeObjectManager(self.objects)
+
+
+class FakeBondBus:
+    def __init__(self, objects: dict | None = None) -> None:
+        self.objects = objects or {}
+
+    async def introspect(self, _service: str, _path: str) -> object:
+        return object()
+
+    def get_proxy_object(
+        self, _service: str, _path: str, _introspection: object
+    ) -> FakeManagerObject:
+        return FakeManagerObject(self.objects)
+
+
+def _bond(name: str, address_type: str, device_class: int) -> dict:
+    return {
+        "org.bluez.Device1": {
+            "Paired": True,
+            "Name": name,
+            "AddressType": address_type,
+            "Class": device_class,
+        }
+    }
+
+
+class BondDetectionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_controller_bond_does_not_count_as_an_le_bond(self) -> None:
+        backend = DbusGattBackend()
+        backend._bus = FakeBondBus(
+            {"/org/bluez/hci0/dev_AA": _bond("Motion Controller - Left", "public", 0x0508)}
+        )
+        self.assertFalse(await backend.has_le_bond())
+
+    async def test_a_phone_bond_counts_as_an_le_bond(self) -> None:
+        backend = DbusGattBackend()
+        backend._bus = FakeBondBus(
+            {"/org/bluez/hci0/dev_BB": _bond("Pixel 11 Pro", "random", 0x5A020C)}
+        )
+        self.assertTrue(await backend.has_le_bond())
+
+    async def test_an_unreadable_bond_list_fails_closed(self) -> None:
+        class BrokenBus:
+            async def introspect(self, *_args):
+                raise RuntimeError("no system bus")
+
+        backend = DbusGattBackend()
+        backend._bus = BrokenBus()
+        with self.assertLogs("wmr_bridge.ble_gatt", level="WARNING"):
+            self.assertTrue(await backend.has_le_bond())
 
 
 class BackendAgentTests(unittest.IsolatedAsyncioTestCase):
@@ -198,6 +301,44 @@ class BackendAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(adapter.pairable)
 
 
+class FlakyAdvertisingManager:
+    def __init__(self, failures: int) -> None:
+        self.failures = failures
+        self.attempts = 0
+        self.unregistrations = 0
+
+    async def call_unregister_advertisement(self, _path: str) -> None:
+        self.unregistrations += 1
+
+    async def call_register_advertisement(self, _path: str, _options: dict) -> None:
+        self.attempts += 1
+        if self.attempts <= self.failures:
+            raise RuntimeError("advertisement still registered")
+
+
+class AdvertisementRegistrationTests(unittest.IsolatedAsyncioTestCase):
+    def _backend(
+        self, failures: int
+    ) -> tuple[DbusGattBackend, FlakyAdvertisingManager]:
+        backend = DbusGattBackend()
+        manager = FlakyAdvertisingManager(failures)
+        backend._bus = object()
+        backend._advertising_manager = manager
+        return backend, manager
+
+    async def test_a_transient_register_failure_is_retried(self) -> None:
+        backend, manager = self._backend(failures=2)
+        await backend.refresh_advertisement()
+        self.assertEqual(manager.attempts, 3)
+        self.assertEqual(manager.unregistrations, 1)
+
+    async def test_a_persistent_register_failure_is_reported(self) -> None:
+        backend, manager = self._backend(failures=99)
+        with self.assertRaises(RuntimeError):
+            await backend.refresh_advertisement()
+        self.assertEqual(manager.attempts, 3)
+
+
 @unittest.skipUnless(HAS_DBUS_NEXT, "python3-dbus-next is not installed")
 class DbusNextInterfaceTests(unittest.TestCase):
     """Build the real dbus-next interfaces; a bad annotation fails at class creation."""
@@ -233,7 +374,8 @@ class DbusNextInterfaceTests(unittest.TestCase):
             self.assertEqual(methods["WriteValue"].out_args, [])
         self.assertEqual(advertisement.Type, "peripheral")
         self.assertTrue(advertisement.Discoverable)
-        self.assertEqual(advertisement.ServiceUUIDs, [FF10_SERVICE])
+        self.assertEqual(advertisement.Appearance, GAMEPAD_APPEARANCE)
+        self.assertEqual(advertisement.ServiceUUIDs, [HID_SERVICE, FF10_SERVICE])
         self.assertEqual(advertisement.LocalName, "WMR Bridge")
         self.assertEqual(advertisement.ServiceData[FF10_SERVICE].signature, "ay")
 
@@ -389,7 +531,11 @@ class MetadataTests(unittest.TestCase):
         self.assertTrue(args.ble)
         self.assertTrue(args.ble_fallback)
         self.assertEqual(args.ble_adapter, "hci0")
-        self.assertEqual(args.ble_pairing_window, 120.0)
+        self.assertEqual(args.ble_pairing_window, 180.0)
+        self.assertFalse(args.ble_continuous_pairing)
+        self.assertTrue(
+            parser.parse_args(["--ble-continuous-pairing"]).ble_continuous_pairing
+        )
 
 
 class FakeSubscriber:
@@ -571,15 +717,93 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(values), 1)
         self.assertEqual(values[0][17:19], bytes([0x09, RESULT_INVALID_PARAM]))
 
-    async def test_pairing_window_closes(self) -> None:
+    async def test_pairing_window_closes_when_an_le_bond_is_stored(self) -> None:
+        self.backend.le_bond = True
         self.assertTrue(self.app.pairing_open)
         self.assertEqual(self.backend.pairable, True)
         await self.peripheral.close_pairing_window()
         self.assertFalse(self.app.pairing_open)
         self.assertEqual(self.backend.pairable, False)
 
+    async def test_no_bond_keeps_the_adapter_pairable_after_boot(self) -> None:
+        self.clock.advance(121)
+        await self.peripheral.refresh_pairing_state()
+        self.assertTrue(self.app.pairing_open)
+        self.assertTrue(self.backend.pairable)
+
+    async def test_an_le_bond_closes_pairability_after_boot(self) -> None:
+        backend = FakeBackend(le_bond=True)
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=120.0,
+        )
+        await peripheral.start()
+        self.assertTrue(backend.pairable)
+        self.clock.advance(121)
+        await peripheral.refresh_pairing_state()
+        self.assertFalse(peripheral.app.pairing_open)
+        self.assertFalse(backend.pairable)
+        await peripheral.close()
+
+    async def test_a_stored_bond_is_applied_at_start_with_no_boot_window(self) -> None:
+        backend = FakeBackend(le_bond=True)
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=0.0,
+        )
+        await peripheral.start()
+        try:
+            self.assertFalse(peripheral.app.pairing_open)
+            self.assertEqual(backend.pairable_calls, [False])
+            self.assertFalse(backend.pairable)
+        finally:
+            await peripheral.close()
+
+    async def test_a_manual_window_reopens_with_a_stored_bond(self) -> None:
+        backend = FakeBackend(le_bond=True)
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=30.0,
+        )
+        await peripheral.start()
+        self.clock.advance(31)
+        await peripheral.refresh_pairing_state()
+        self.assertFalse(backend.pairable)
+        await peripheral.open_pairing_window(60)
+        self.assertTrue(backend.pairable)
+        self.clock.advance(61)
+        await peripheral.refresh_pairing_state()
+        self.assertFalse(backend.pairable)
+        await peripheral.close()
+
+    async def test_continuous_pairing_ignores_stored_bonds(self) -> None:
+        backend = FakeBackend(le_bond=True)
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=30.0,
+            continuous_pairing=True,
+        )
+        await peripheral.start()
+        self.clock.advance(31)
+        await peripheral.refresh_pairing_state()
+        self.assertTrue(peripheral.app.pairing_open)
+        self.assertTrue(backend.pairable)
+        await peripheral.close()
+
     async def test_pairing_window_closes_on_an_already_pairable_adapter(self) -> None:
-        backend = FakeBackend(pairable=True)
+        backend = FakeBackend(pairable=True, le_bond=True)
         peripheral = BluezGattPeripheral(
             Bridge(),
             backend=backend,
@@ -598,6 +822,47 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.backend.pairable_calls, [True])
         await self.peripheral.close()
         self.assertEqual(self.backend.pairable_calls, [True, False])
+
+    async def test_advertising_is_reregistered_when_the_tier_changes(self) -> None:
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+        await asyncio.sleep(0)
+        self.assertEqual(self.backend.advertisement_refreshes, 1)
+        self.bridge.set_hand_connected(0, False)
+        await asyncio.sleep(0)
+        self.assertEqual(self.backend.advertisement_refreshes, 2)
+
+    async def test_a_disconnect_during_a_tier_switch_is_not_lost(self) -> None:
+        class GatedBackend(FakeBackend):
+            gate: asyncio.Event
+
+            async def refresh_advertisement(self) -> None:
+                await self.gate.wait()
+                await super().refresh_advertisement()
+
+        gate = asyncio.Event()
+        backend = GatedBackend()
+        backend.gate = gate
+        bridge = Bridge()
+        peripheral = BluezGattPeripheral(
+            bridge,
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=120.0,
+        )
+        await peripheral.start()
+        try:
+            bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+            await asyncio.sleep(0)
+            # Disconnect while the fast->slow re-register is still in flight.
+            bridge.set_hand_connected(0, False)
+            gate.set()
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            self.assertEqual(backend.advertisement_refreshes, 2)
+            self.assertEqual(peripheral._advertised_tier, "fast")
+        finally:
+            await peripheral.close()
 
     async def test_ff16_is_read_without_a_bond(self) -> None:
         raw = self.app.read_value(FF16_VERSION)

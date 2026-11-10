@@ -27,7 +27,7 @@ New to the Pi? Read the simple-English beginner guide:
 
 ```bash
 cd pi
-python3 -m unittest discover -s tests -v          # 312 host tests
+python3 -m unittest discover -s tests -v          # 332 host tests
 python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 
 # in a second terminal
@@ -147,7 +147,9 @@ The daemon includes a `"wifi"` object in `hello` and `status`. The object has `i
 
 The daemon advertises the FF10 GATT service over BlueZ by default. Advertising is always on. Each client controls its own notifications through the CCCD (Client Characteristic Configuration Descriptor). A client with notifications enabled receives FF11, FF12, and FF14. A client with notifications off receives nothing. The bridge does not gate notifications per client.
 
-Slow advertising uses LEAdvertisement1 intervals of about 1000 to 1285 ms. You can also set this with `btmgmt`. The advertisement sets `Discoverable` so BlueZ puts the LE General Discoverable flag (`0x06`) in the advertising data, and it carries the local name `WMR Bridge` and the FF10 service UUID, matching what the ESP32 advertises.
+Advertising uses two tiers. With no Classic controller connected it runs at LEAdvertisement1 intervals of about 150 to 250 ms so a phone finds the bridge promptly. When the first controller connects it switches to about 1000 to 1285 ms, which leaves airtime for the two Classic HID links; you can also set that interval with `btmgmt`. The advertisement sets `Discoverable` so BlueZ puts the LE General Discoverable flag (`0x06`) in the advertising data, and it carries the gamepad appearance (`0x03C4`), the local name `WMR Bridge`, and the HID (`0x1812`) and FF10 service UUIDs, matching what the ESP32 advertises.
+
+The adapter is pairable for 180 seconds after boot (`--ble-pairing-window`), then only while no LE bond is stored; a bonded phone reconnects without pairability. `--ble-continuous-pairing` keeps the adapter pairable while BLE is active, the ESP32 behaviour, and is opt-in.
 
 Pass `--no-ble` to disable the BLE peripheral. `--ble-fallback` stays as a deprecated no-op alias and prints a deprecation warning. The peripheral needs `python3-dbus-next` and a free hci adapter. It has not been verified on hardware.
 

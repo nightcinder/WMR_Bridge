@@ -571,11 +571,17 @@ missing the daemon logs a warning and keeps serving TCP.
 
 The fallback registers the firmware's FF10 service (characteristics FF11 to
 FF17) with BlueZ through `org.bluez.GattManager1` and advertises it with
-`org.bluez.LEAdvertisingManager1`. Advertising uses a slow 1000–1285 ms
-interval so it leaves airtime for the two Classic HID links on the same
-radio. The advertising name defaults to `WMR Bridge` (`--ble-name`). The
-adapter stays pairable for a limited time (`--ble-pairing-window`, default
-120 seconds). A `NoInputNoOutput` BlueZ pairing agent is registered with
+`org.bluez.LEAdvertisingManager1`. Advertising uses two tiers: 150–250 ms
+while no Classic controller is connected, and 1000–1285 ms once one connects,
+which leaves airtime for the two Classic HID links on the same radio. The
+advertisement carries the gamepad appearance (`0x03C4`) and lists the HID
+service (`0x1812`) before FF10, so Android classifies the bridge as a
+controller. The advertising name defaults to `WMR Bridge` (`--ble-name`).
+The adapter is pairable for 180 seconds after boot (`--ble-pairing-window`),
+then only while no LE bond is stored; a bonded phone reconnects without
+pairability. `--ble-continuous-pairing` keeps the adapter pairable while BLE
+is active, matching the ESP32, and is opt-in. A `NoInputNoOutput` BlueZ
+pairing agent is registered with
 `org.bluez.AgentManager1`, claimed as the default agent while that window is
 open, and unregistered again when the window closes, so a phone's LE bond is
 accepted as Just Works instead of being rejected for lack of an agent. The
@@ -604,7 +610,9 @@ Per-client gating:
   nothing.
 - FF14 is capped at 50 Hz because the Pi shares `hci0` with the two Classic
   HID controller links.
-- Bonding is accepted only while the pairing window is open.
+- Bonding is accepted only while the adapter is pairable: during the boot
+  window (`--ble-pairing-window`), with `--ble-continuous-pairing`, or while
+  no LE bond is stored.
 
 Coexistence with TCP:
 
