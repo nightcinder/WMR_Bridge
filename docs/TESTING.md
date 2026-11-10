@@ -167,7 +167,8 @@ airtime is a cause; if not, it is not the only cause.
 ## Where the procedures live
 
 - Internal bench (latency-2, FF16/FF17/stick, ONY-446, HID, LED, Sitting R):
-  `docs/runs/sheets/bench.md`.
+  the removed internal-ESP32 bench sheet (ONY-1157; see git history). ESP32
+  pass/fail steps: `docs/runs/sheets/bench.md`.
 - Remaining protocol and robustness checks, plus close-out:
   `the removed robustness sheet (ONY-1157; see git history)`.
 - External tester tiers:

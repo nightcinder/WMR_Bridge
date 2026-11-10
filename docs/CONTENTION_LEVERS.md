@@ -4,7 +4,7 @@ ONY-428 investigation. Source of truth for the numbers: [`docs/PREDICTION.md`](P
 1 to 2.5, [`docs/STATUS.md`](STATUS.md) section 5, [`docs/DECODING.md`](DECODING.md)
 "Investigation notes", and the run sheets
 `the removed single-ESP32 levers sheet (ONY-1157; see git history)`,
-`docs/runs/sheets/bench.md`,
+`the removed internal-ESP32 bench sheet (ONY-1157; see git history)`,
 `docs/FLASHING.md`,
 `docs/PI_BRIDGE.md`.
 The 2026-10-22/23 contention results are in this file; the old

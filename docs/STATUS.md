@@ -152,7 +152,7 @@ registers controls. Details in `HID_GAMEPAD.md` §0.2.4-38 field run.
 ## Android verification campaign (ONY-439, 0.3.11 pass)
 
 Scope: phone + one ESP32 only. Sheet:
-`docs/runs/sheets/bench.md`.
+the removed internal-ESP32 bench sheet (ONY-1157; see git history).
 The 0.3.11 bench pass has four gate checks: FF16 on Companion `0.2.2`, ONY-446
 RIGHT reconnect, status LED colours, and the Android HID gamepad. All four are
 `not run`. The rows below are the 0.2.4 sitting. A row leaves `not run`
@@ -250,8 +250,8 @@ However:
 - Multi-bridge cannot deliver zero loss. RIGHT alone was about 10.8 % with one
   controller and one phone (user-reported). The best it can do on today's
   evidence is LEFT about 0.5 % / RIGHT about 10.8 %.
-- No two-bridge run has happened. The sitting and its fixed pass criteria are
-  in `docs/FLASHING.md`. LEFT at
+- No two-bridge run has happened. The sitting procedure is in the removed
+  multi-bridge sheet (ONY-1157; see git history). LEFT at
   most 3 % on its own bridge is the pass bar.
 - No Raspberry Pi Wi-Fi bridge hardware run has happened. The second supported
   target (`pi/`, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)) moves the phone link off
@@ -271,7 +271,7 @@ evidence.
 | Lever | Status | Result / prerequisite |
 |---|---|---|
 | V1 staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`) | Not run | Code on `main`. Needs the two V1 images and the A/B/A block at one fixed position |
-| RIGHT asymmetry, phases 1-2 | Not run | No reflash. Use `docs/runs/sheets/bench.md` section 6 with one controller powered at a time |
+| RIGHT asymmetry, phases 1-2 | Not run | No reflash. Power one controller at a time (see the removed single-ESP32 levers sheet, ONY-1157) |
 | DLE confirmation, current build | Not run on the current build; 2026-10-22 log shows 251/2120 accepted | `tx 251 octets / 2120 us, rx 251 octets / 2120 us`. Capture the line again on this build |
 | Longer BLE interval (30 ms request) | Not run | Existing `WMR_CFG_CONN_INTERVAL_MIN/MAX`. Phone must grant it and the granted value must be recorded |
 | Longer FF14 hold (2 intervals) | Not run | New `WMR_CFG_BATCH_HOLD_INTERVALS=2`. Default 1 leaves current behaviour unchanged |
