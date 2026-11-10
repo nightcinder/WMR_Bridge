@@ -149,11 +149,11 @@ The daemon advertises the FF10 GATT service and HID gamepad service over BlueZ b
 
 Advertising uses two tiers:
 - Idle tier (zero Classic controllers connected): intervals run from 150 to 250 ms. This fast rate lets a phone discover the bridge promptly.
-- Active tier (at least one Classic controller connected): intervals switch to 1000 to 1285 ms. The switch occurs on the first controller connect event, before its HID channel opens. This leaves airtime for the two Classic HID links on the same radio. You can also set that interval with `btmgmt`.
+- Active tier (at least one Classic controller connected): intervals switch to 1000 to 1285 ms. The switch occurs after a controller connects and opens its HID channel. This leaves airtime for the two Classic HID links on the same radio. You can also set that interval with `btmgmt`.
 
 The advertisement sets `Discoverable` so BlueZ puts the LE General Discoverable flag (`0x06`) in the advertising data. The advertisement carries the gamepad appearance (`0x03C4`), the local name `WMR Bridge`, and the HID (`0x1812`) and FF10 service UUIDs.
 
-The adapter is pairable for 180 seconds after boot (`--ble-pairing-window`), then only while no LE bond is stored. A bonded phone reconnects without pairability. `--ble-continuous-pairing` keeps the adapter pairable while BLE is active. This mode matches ESP32 behavior and is opt-in. While a pairing window is open, the daemon registers a `NoInputNoOutput` BlueZ pairing agent at `/org/wmr/bridge/agent` (`org.bluez.Agent1`). If an unbonded phone attempts pairing outside an open window, BlueZ rejects the request with an explanation of how to open a window.
+The adapter is pairable for 180 seconds after boot (`--ble-pairing-window`), then only while no LE bond is stored. A bonded phone reconnects without pairability. `--ble-continuous-pairing` keeps the adapter pairable while BLE is active. This mode matches ESP32 behavior and is opt-in. The daemon registers a `NoInputNoOutput` BlueZ pairing agent at `/org/wmr/bridge/agent` (`org.bluez.Agent1`) whenever the adapter is pairable. When the adapter is not pairable, BlueZ refuses pairing requests from unbonded phones. If a connecting peer requests legacy PIN or passkey authentication, the agent rejects the request. The rejection explains how to open a window or remove the old bond.
 
 ### D-Bus GATT layout
 
@@ -182,7 +182,7 @@ The bridge applies these rules to HID gamepad reports:
 
 ### BLE CLI flags
 
-- `--ble-pairing-window SECONDS`: sets the duration in seconds that a new LE bond is accepted after boot, or during a manual window. The default value is 180.0. The older 120 s default was replaced. A value of 0 disables the boot window.
+- `--ble-pairing-window SECONDS`: sets the duration in seconds that a new LE bond is accepted after boot. The default value is 180.0. The older 120 s default was replaced. A value of 0 disables the boot window.
 - `--ble-continuous-pairing`: keeps the adapter pairable whenever BLE is active. This mode matches ESP32 behavior (default off).
 - `--no-ble`: disables the BLE peripheral. `--ble-fallback` remains as a deprecated no-op alias.
 
