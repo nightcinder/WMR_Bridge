@@ -254,6 +254,11 @@ class GattApplication:
         tag = self.bridge.bridge_id.encode("ascii", "replace")[:8]
         return {
             "type": "peripheral",
+            # BlueZ only adds the LE General Discoverable flag to the
+            # advertisement when this is set. Without it the adapter still
+            # advertises FF10 (ActiveInstances 1) but a phone's pairing list
+            # filters the bridge out.
+            "discoverable": True,
             "service_uuids": [FF10_SERVICE],
             "local_name": self.name,
             "service_data": {FF10_SERVICE: b"WMB1" + tag},
@@ -654,6 +659,10 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         @dbus_property(access=PropertyAccess.READ)
         def Type(self) -> "s":
             return "peripheral"
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Discoverable(self) -> "b":
+            return bool(app.advertisement_data()["discoverable"])
 
         @dbus_property(access=PropertyAccess.READ)
         def ServiceUUIDs(self) -> "as":
