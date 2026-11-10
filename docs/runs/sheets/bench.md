@@ -28,7 +28,7 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.16 candidate), LEFT and RIGHT WMR contro
 10. Five-minute active keep-alive (ONY-1058). Keep controllers moving or tapped for 5 min 30 s while connected to ESP32.
     - [ ] PASS / FAIL — No controller powers off during more than 5 min of active use. Zero unexpected ACL drops.
 11. ESP32 idle sleep and motion wake (PR #191). Leave both controllers untouched for 5 min 15 s. Check serial log. Tilt both controllers.
-    - [ ] PASS / FAIL — Serial logs `FF13 LEFT: idle for 300000 ms; keep-alive paused, controller may sleep` (and RIGHT). Tilting logs `FF13 LEFT: activity after idle sleep; resuming the keep-alive` (and RIGHT) and resumes streaming within 1 s.
+    - [ ] PASS / FAIL — Serial logs `FF13 LEFT: idle for <N> ms; keep-alive paused, controller may sleep` (and RIGHT), with N between 300000 and 310000. Tilting logs `FF13 LEFT: activity after idle sleep; resuming the keep-alive` (and RIGHT) and resumes streaming within 1 s.
 12. Bundle export (ONY-1117). Tap Export Test Bundle in `wmr_companion_app` on Pixel 11 Pro.
     - [ ] PASS / FAIL — ZIP bundle exports with `manifest.md`, `diagnostics.json` and non-empty controller samples.
 

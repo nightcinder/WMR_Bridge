@@ -56,7 +56,7 @@ For a VR-grade dual-controller target, yes. For the current 3DoF viewer, no.
   return toward its alone level and RIGHT to lose the roughly eight points that
   appear when LEFT is also connected. RIGHT's own ~10.8 % is still there, so
   even two bridges may not reach a 3-5 % bar. That sitting has not run
-  (`docs/FLASHING.md`).
+  (the removed multi-bridge sheet (ONY-1157; see git history)).
 - The Pi/Wi-Fi bridge moves only the phone link. It can remove BLE airtime
   from the ESP32 radio, but it cannot remove the 9-11 % no-phone baseline, so
   it is not a single-ESP32 fix either.

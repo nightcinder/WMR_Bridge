@@ -5,7 +5,7 @@ ONY-428 investigation. Source of truth for the numbers: [`docs/PREDICTION.md`](P
 "Investigation notes", and the run sheets
 `the removed single-ESP32 levers sheet (ONY-1157; see git history)`,
 `the removed internal-ESP32 bench sheet (ONY-1157; see git history)`,
-`docs/FLASHING.md`,
+`the removed multi-bridge sheet (ONY-1157; see git history)`,
 `docs/PI_BRIDGE.md`.
 The 2026-10-22/23 contention results are in this file; the old
 `contention-2*.md` sheets were removed in ONY-983.
@@ -120,7 +120,7 @@ phone streaming, 30 s settle, `last5s_pct`.
 
 ## Architecture paths (the only things that can remove pair contention)
 
-1. Multi-bridge (`docs/FLASHING.md`): one ESP32 per controller.
+1. Multi-bridge (the removed multi-bridge sheet (ONY-1157; see git history)): one ESP32 per controller.
    Expected best case LEFT about 0.5 % / RIGHT about 10.8 %. Not run. Needs a second
    Classic-capable ESP32 (an S3 cannot substitute). Pass bar: LEFT at most 3 % on
    its own bridge.
