@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import unittest
 from pathlib import Path
@@ -22,8 +23,10 @@ from wmr_bridge.ble_gatt import (
     RESULT_INVALID_PARAM,
     RESULT_NOTHING_TO_DO,
     RESULT_NOT_CONNECTED,
+    SERVICE_PATH,
     BluezGattPeripheral,
     GattApplication,
+    build_dbus_interfaces,
     characteristic_path,
     descriptor_path,
 )
@@ -33,6 +36,7 @@ from wmr_bridge.protocol import Reassembler, parse_batch, unpack_record
 
 SAMPLES = Path(__file__).resolve().parents[2] / "samples" / "controller_frames.txt"
 SAMPLE_DATA = read_capture(SAMPLES)[0][1]
+HAS_DBUS_NEXT = importlib.util.find_spec("dbus_next") is not None
 
 
 class FakeClock:
@@ -131,6 +135,53 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(data["service_data"][FF10_SERVICE], b"WMB1wmr-pi-a")
         self.assertEqual(data["min_interval_ms"], 1000)
         self.assertEqual(data["max_interval_ms"], 1285)
+
+
+@unittest.skipUnless(HAS_DBUS_NEXT, "python3-dbus-next is not installed")
+class DbusNextInterfaceTests(unittest.TestCase):
+    """Build the real dbus-next interfaces; a bad annotation fails at class creation."""
+
+    def test_service_interfaces_build_on_the_installed_dbus_next(self) -> None:
+        interfaces = build_dbus_interfaces(_application())
+        application = interfaces["Application"]()
+        advertisement = interfaces["Advertisement"]()
+        self.assertEqual(
+            [method.name for method in application.introspect().methods],
+            ["GetManagedObjects"],
+        )
+        self.assertEqual(
+            application.introspect().methods[0].out_args[0].signature,
+            "a{oa{sa{sv}}}",
+        )
+        for spec in CHARACTERISTICS:
+            characteristic = interfaces["Characteristic"](spec)
+            self.assertEqual(characteristic.UUID, spec.uuid)
+            self.assertEqual(characteristic.Service, SERVICE_PATH)
+            self.assertEqual(characteristic.Flags, list(spec.flags))
+            methods = {
+                method.name: method for method in characteristic.introspect().methods
+            }
+            self.assertEqual(
+                set(methods), {"ReadValue", "WriteValue", "StartNotify", "StopNotify"}
+            )
+            # dbus-next rejects a "None" return annotation, so no out argument here.
+            self.assertEqual(methods["WriteValue"].out_args, [])
+            if spec.has_cccd:
+                descriptor = interfaces["Descriptor"](spec.uuid)
+                self.assertEqual(
+                    descriptor.UUID, "00002902-0000-1000-8000-00805f9b34fb"
+                )
+                self.assertEqual(
+                    descriptor.Characteristic, characteristic_path(spec.uuid)
+                )
+                self.assertEqual(
+                    {method.name for method in descriptor.introspect().methods},
+                    {"ReadValue", "WriteValue"},
+                )
+        self.assertEqual(advertisement.Type, "peripheral")
+        self.assertEqual(advertisement.ServiceUUIDs, [FF10_SERVICE])
+        self.assertEqual(advertisement.LocalName, "WMR Bridge")
+        self.assertEqual(advertisement.ServiceData[FF10_SERVICE].signature, "ay")
 
 
 class MetadataTests(unittest.TestCase):

@@ -599,6 +599,197 @@ def _address_tail(address: str) -> bytes:
         return b"\x00\x00\x00"
 
 
+def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
+    """Build the dbus-next service interfaces BlueZ will export for *app*.
+
+    dbus-next is imported lazily so the host suite and the daemon run without
+    ``python3-dbus-next``. The classes are returned instead of being defined
+    inside :meth:`DbusGattBackend.start` so a host test can build them against
+    the installed dbus-next without a live system bus.
+    """
+
+    try:
+        from dbus_next import Variant
+        from dbus_next.constants import PropertyAccess
+        from dbus_next.errors import DBusError
+        from dbus_next.service import ServiceInterface, dbus_property, method
+    except ImportError as exc:  # pragma: no cover - depends on the host
+        raise RuntimeError(
+            "BLE fallback needs python3-dbus-next (apt install python3-dbus-next)"
+        ) from exc
+
+    managed = app.managed_objects()
+
+    def variant(value: Any, signature: str) -> Any:
+        return Variant(signature, value)
+
+    class Application(ServiceInterface):
+        def __init__(self) -> None:
+            super().__init__("org.freedesktop.DBus.ObjectManager")
+
+        @method()
+        def GetManagedObjects(self) -> "a{oa{sa{sv}}}":
+            reply: dict[str, dict[str, dict[str, Any]]] = {}
+            for object_path, interfaces in managed.items():
+                reply[object_path] = {}
+                for name, properties in interfaces.items():
+                    converted: dict[str, Any] = {}
+                    for key, value in properties.items():
+                        if key == "UUID":
+                            converted[key] = variant(value, "s")
+                        elif key == "Service" or key == "Characteristic":
+                            converted[key] = variant(value, "o")
+                        elif key == "Primary":
+                            converted[key] = variant(value, "b")
+                        elif key == "Characteristics" or key == "Descriptors":
+                            converted[key] = variant(value, "ao")
+                        elif key == "Flags":
+                            converted[key] = variant(value, "as")
+                        else:
+                            converted[key] = variant(value, "s")
+                    reply[object_path][name] = converted
+            return reply
+
+    class Characteristic(ServiceInterface):
+        def __init__(self, spec: GattCharacteristicSpec) -> None:
+            super().__init__("org.bluez.GattCharacteristic1")
+            self.spec = spec
+            self.value = b""
+
+        @dbus_property(access=PropertyAccess.READ)
+        def UUID(self) -> "s":
+            return self.spec.uuid
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Service(self) -> "o":
+            return SERVICE_PATH
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Flags(self) -> "as":
+            return list(self.spec.flags)
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Descriptors(self) -> "ao":
+            if not self.spec.has_cccd:
+                return []
+            return [descriptor_path(self.spec.uuid)]
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Notifying(self) -> "b":
+            return app.is_notifying(self.spec.uuid)
+
+        @dbus_property(access=PropertyAccess.READ)
+        def MTU(self) -> "q":
+            return app.mtu
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Value(self) -> "ay":
+            return self.value
+
+        @method()
+        def ReadValue(self, options: "a{sv}") -> "ay":
+            self.value = app.read_value(self.spec.uuid, options)
+            return self.value
+
+        @method()
+        def WriteValue(self, value: "ay", options: "a{sv}"):
+            result = app.write_value(self.spec.uuid, bytes(value), options)
+            if result != RESULT_OK:
+                # BlueZ turns a D-Bus error into an ATT error, so a client
+                # sees a refused FF13 cursor/FF17 opcode as a failed write.
+                raise DBusError(
+                    "org.bluez.Error.Failed",
+                    f"FF10 write refused (result 0x{result:02x})",
+                )
+
+        @method()
+        def StartNotify(self):
+            app.start_notify(self.spec.uuid)
+            self.emit_properties_changed(
+                {"Notifying": variant(True, "b")}, []
+            )
+
+        @method()
+        def StopNotify(self):
+            app.stop_notify(self.spec.uuid)
+            self.emit_properties_changed(
+                {"Notifying": variant(False, "b")}, []
+            )
+
+    class Descriptor(ServiceInterface):
+        def __init__(self, uuid: str) -> None:
+            super().__init__("org.bluez.GattDescriptor1")
+            self.uuid = uuid
+
+        @dbus_property(access=PropertyAccess.READ)
+        def UUID(self) -> "s":
+            return CCCD
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Characteristic(self) -> "o":
+            return characteristic_path(self.uuid)
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Flags(self) -> "as":
+            return ["read", "write"]
+
+        @method()
+        def ReadValue(self, options: "a{sv}") -> "ay":
+            enabled = app.is_notifying(self.uuid)
+            return b"\x01\x00" if enabled else b"\x00\x00"
+
+        @method()
+        def WriteValue(self, value: "ay", options: "a{sv}"):
+            if len(value) >= 2 and value[0] & 0x01:
+                app.start_notify(self.uuid)
+            else:
+                app.stop_notify(self.uuid)
+
+    class Advertisement(ServiceInterface):
+        def __init__(self) -> None:
+            super().__init__("org.bluez.LEAdvertisement1")
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Type(self) -> "s":
+            return "peripheral"
+
+        @dbus_property(access=PropertyAccess.READ)
+        def ServiceUUIDs(self) -> "as":
+            return [FF10_SERVICE]
+
+        @dbus_property(access=PropertyAccess.READ)
+        def LocalName(self) -> "s":
+            return app.name
+
+        @dbus_property(access=PropertyAccess.READ)
+        def MinInterval(self) -> "u":
+            return app.advertisement_data()["min_interval_ms"]
+
+        @dbus_property(access=PropertyAccess.READ)
+        def MaxInterval(self) -> "u":
+            return app.advertisement_data()["max_interval_ms"]
+
+        @dbus_property(access=PropertyAccess.READ)
+        def ServiceData(self) -> "a{sv}":
+            data = app.advertisement_data()["service_data"][FF10_SERVICE]
+            return {FF10_SERVICE: variant(data, "ay")}
+
+        @dbus_property(access=PropertyAccess.READ)
+        def IncludeTxPower(self) -> "b":
+            return False
+
+        @method()
+        def Release(self):
+            return None
+
+    return {
+        "Application": Application,
+        "Characteristic": Characteristic,
+        "Descriptor": Descriptor,
+        "Advertisement": Advertisement,
+    }
+
+
 class DbusGattBackend:
     """``org.bluez.GattManager1`` / ``LEAdvertisingManager1`` implementation."""
 
@@ -616,11 +807,10 @@ class DbusGattBackend:
 
     async def start(self, app: GattApplication) -> None:
         try:
+            interfaces = build_dbus_interfaces(app)
             from dbus_next import Variant
             from dbus_next.aio import MessageBus
-            from dbus_next.constants import BusType, PropertyAccess
-            from dbus_next.errors import DBusError
-            from dbus_next.service import ServiceInterface, dbus_property, method
+            from dbus_next.constants import BusType
         except ImportError as exc:  # pragma: no cover - depends on the host
             raise RuntimeError(
                 "BLE fallback needs python3-dbus-next (apt install python3-dbus-next)"
@@ -644,182 +834,19 @@ class DbusGattBackend:
             self._bus = None
             raise RuntimeError(f"BlueZ adapter {self.adapter} is not available: {exc}") from exc
 
-        managed = app.managed_objects()
 
-        def variant(value: Any, signature: str) -> Any:
-            return Variant(signature, value)
-
-        class Application(ServiceInterface):
-            def __init__(self) -> None:
-                super().__init__("org.freedesktop.DBus.ObjectManager")
-
-            @method()
-            def GetManagedObjects(self) -> "a{oa{sa{sv}}}":
-                reply: dict[str, dict[str, dict[str, Any]]] = {}
-                for object_path, interfaces in managed.items():
-                    reply[object_path] = {}
-                    for name, properties in interfaces.items():
-                        converted: dict[str, Any] = {}
-                        for key, value in properties.items():
-                            if key == "UUID":
-                                converted[key] = variant(value, "s")
-                            elif key == "Service" or key == "Characteristic":
-                                converted[key] = variant(value, "o")
-                            elif key == "Primary":
-                                converted[key] = variant(value, "b")
-                            elif key == "Characteristics" or key == "Descriptors":
-                                converted[key] = variant(value, "ao")
-                            elif key == "Flags":
-                                converted[key] = variant(value, "as")
-                            else:
-                                converted[key] = variant(value, "s")
-                        reply[object_path][name] = converted
-                return reply
-
-        class Characteristic(ServiceInterface):
-            def __init__(self, spec: GattCharacteristicSpec) -> None:
-                super().__init__("org.bluez.GattCharacteristic1")
-                self.spec = spec
-                self.value = b""
-
-            @dbus_property(access=PropertyAccess.READ)
-            def UUID(self) -> "s":
-                return self.spec.uuid
-
-            @dbus_property(access=PropertyAccess.READ)
-            def Service(self) -> "o":
-                return SERVICE_PATH
-
-            @dbus_property(access=PropertyAccess.READ)
-            def Flags(self) -> "as":
-                return list(self.spec.flags)
-
-            @dbus_property(access=PropertyAccess.READ)
-            def Descriptors(self) -> "ao":
-                if not self.spec.has_cccd:
-                    return []
-                return [descriptor_path(self.spec.uuid)]
-
-            @dbus_property(access=PropertyAccess.READ)
-            def Notifying(self) -> "b":
-                return app.is_notifying(self.spec.uuid)
-
-            @dbus_property(access=PropertyAccess.READ)
-            def MTU(self) -> "q":
-                return app.mtu
-
-            @dbus_property(access=PropertyAccess.READ)
-            def Value(self) -> "ay":
-                return self.value
-
-            @method()
-            def ReadValue(self, options: "a{sv}") -> "ay":
-                self.value = app.read_value(self.spec.uuid, options)
-                return self.value
-
-            @method()
-            def WriteValue(self, value: "ay", options: "a{sv}") -> None:
-                result = app.write_value(self.spec.uuid, bytes(value), options)
-                if result != RESULT_OK:
-                    # BlueZ turns a D-Bus error into an ATT error, so a client
-                    # sees a refused FF13 cursor/FF17 opcode as a failed write.
-                    raise DBusError(
-                        "org.bluez.Error.Failed",
-                        f"FF10 write refused (result 0x{result:02x})",
-                    )
-
-            @method()
-            def StartNotify(self) -> None:
-                app.start_notify(self.spec.uuid)
-                self.emit_properties_changed(
-                    {"Notifying": variant(True, "b")}, []
-                )
-
-            @method()
-            def StopNotify(self) -> None:
-                app.stop_notify(self.spec.uuid)
-                self.emit_properties_changed(
-                    {"Notifying": variant(False, "b")}, []
-                )
-
-        class Descriptor(ServiceInterface):
-            def __init__(self, uuid: str) -> None:
-                super().__init__("org.bluez.GattDescriptor1")
-                self.uuid = uuid
-
-            @dbus_property(access=PropertyAccess.READ)
-            def UUID(self) -> "s":
-                return CCCD
-
-            @dbus_property(access=PropertyAccess.READ)
-            def Characteristic(self) -> "o":
-                return characteristic_path(self.uuid)
-
-            @dbus_property(access=PropertyAccess.READ)
-            def Flags(self) -> "as":
-                return ["read", "write"]
-
-            @method()
-            def ReadValue(self, options: "a{sv}") -> "ay":
-                enabled = app.is_notifying(self.uuid)
-                return b"\x01\x00" if enabled else b"\x00\x00"
-
-            @method()
-            def WriteValue(self, value: "ay", options: "a{sv}") -> None:
-                if len(value) >= 2 and value[0] & 0x01:
-                    app.start_notify(self.uuid)
-                else:
-                    app.stop_notify(self.uuid)
-
-        class Advertisement(ServiceInterface):
-            def __init__(self) -> None:
-                super().__init__("org.bluez.LEAdvertisement1")
-
-            @dbus_property(access=PropertyAccess.READ)
-            def Type(self) -> "s":
-                return "peripheral"
-
-            @dbus_property(access=PropertyAccess.READ)
-            def ServiceUUIDs(self) -> "as":
-                return [FF10_SERVICE]
-
-            @dbus_property(access=PropertyAccess.READ)
-            def LocalName(self) -> "s":
-                return app.name
-
-            @dbus_property(access=PropertyAccess.READ)
-            def MinInterval(self) -> "u":
-                return app.advertisement_data()["min_interval_ms"]
-
-            @dbus_property(access=PropertyAccess.READ)
-            def MaxInterval(self) -> "u":
-                return app.advertisement_data()["max_interval_ms"]
-
-            @dbus_property(access=PropertyAccess.READ)
-            def ServiceData(self) -> "a{sv}":
-                data = app.advertisement_data()["service_data"][FF10_SERVICE]
-                return {FF10_SERVICE: variant(data, "ay")}
-
-            @dbus_property(access=PropertyAccess.READ)
-            def IncludeTxPower(self) -> "b":
-                return False
-
-            @method()
-            def Release(self) -> None:
-                return None
-
-        self._application = Application()
-        self._advertisement = Advertisement()
+        self._application = interfaces["Application"]()
+        self._advertisement = interfaces["Advertisement"]()
         bus.export(APP_PATH, self._application)
         bus.export(ADVERTISEMENT_PATH, self._advertisement)
         self._exported.extend([APP_PATH, ADVERTISEMENT_PATH])
         for spec in CHARACTERISTICS:
-            characteristic = Characteristic(spec)
+            characteristic = interfaces["Characteristic"](spec)
             bus.export(characteristic_path(spec.uuid), characteristic)
             self._exported.append(characteristic_path(spec.uuid))
             self._characteristics[spec.uuid] = characteristic
             if spec.has_cccd:
-                descriptor = Descriptor(spec.uuid)
+                descriptor = interfaces["Descriptor"](spec.uuid)
                 bus.export(descriptor_path(spec.uuid), descriptor)
                 self._exported.append(descriptor_path(spec.uuid))
 
