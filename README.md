@@ -127,18 +127,21 @@ reuse it. The output in `dist/` includes the bootloader, partition table,
 application and merged factory images, plus a browser flasher page. The browser
 manifest writes the three separate images at offsets `0x1000`, `0x8000` and
 `0x10000`. It does not write NVS (`0x9000`-`0xFFFF`), so a reflash with
-"Erase device" unchecked keeps the stored pairings. `0.3.15` is the current
-release. Its firmware re-sends the FF13 streaming-enable pair on reconnect and
-every 10 s so a connected controller stays awake; the rest is the
-controller-family firmware on top of 0.3.5: one driver table per model, PSVR2
-FF12/FF14 decoding, and Nintendo Switch Joy-Con/Pro handshake and `0x30`
-decoding. Switch support
+"Erase device" unchecked keeps the stored pairings. `0.3.16` is the current
+release. It is the Pi uplink and BLE advertising release: the Pi host bridge
+advertises the FF10 GATT service by default with per-client CCCD gating, prefers
+an Ethernet uplink over 5 GHz and 2.4 GHz Wi-Fi using route metrics, adds
+`AF_NETLINK` to the systemd unit and documents token access for
+`wifi_probe.py`. The firmware is unchanged from 0.3.15, which re-sends the FF13
+streaming-enable pair on reconnect and every 10 s so a connected controller
+stays awake. The controller-family firmware on top of 0.3.5 remains: one driver
+table per model, PSVR2 FF12/FF14 decoding, and Nintendo Switch Joy-Con/Pro
+handshake and `0x30` decoding. Switch support
 is host-tested and firmware-build-tested only and has never run on a
 controller ([#145](https://github.com/nightcinder/WMR_Bridge/issues/145)).
-FF10–FF17 payloads are otherwise unchanged, so companions at 0.2.2 or later
-continue to work. The Raspberry Pi host bridge in the same release adds a 5 GHz
-preference, UDP discovery and an opt-in BLE GATT fallback; it forwards FF13
-calibration blobs but does not yet read calibration from controllers. Packaged releases are CI-built and
+FF10–FF17 payloads are unchanged, so companions at 0.2.2 or later continue to
+work. The Raspberry Pi host bridge forwards FF13 calibration blobs but does not
+yet read calibration from controllers. Packaged releases are CI-built and
 hardware-unverified. See [CHANGELOG.md](CHANGELOG.md) for the full notes. To
 install the current release without ESP-IDF, use the hosted browser installer at
 <https://nightcinder.github.io/WMR_Bridge/>, which serves all three variants,
@@ -305,7 +308,7 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 | --- | --- |
 | Firmware build (ESP-IDF v6.1, ESP32) | Passes, no warnings from this code |
 | Host unit tests of the protocol encoder, reassembler and queue (6129 checks) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
-| Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 249 tests) | Pass (host tests only; the real BlueZ pairing path has not been run on a Raspberry Pi or with real controllers) |
+| Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 301 tests) | Pass (host tests only; the real BlueZ pairing path has not been run on a Raspberry Pi or with real controllers) |
 | Flash and boot on a real ESP32 | Passes; advertises; stats print every 5 s; no debug spam |
 | One bench run, about 15 s, both controllers and a phone (log pasted by the user, not instrumented on the phone) | Both controllers connected on their own; ATT MTU went 23 to 517; about 174/s (LEFT) and 154/s (RIGHT); sent = received for both hands; 0 drops, 0 offline, 0 purged, 0 send errors; queue back to 0 after a startup peak of 11; counter accounting added up exactly |
 
