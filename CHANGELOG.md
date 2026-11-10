@@ -5,6 +5,50 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.20 — 2026-11-10
+
+The Pi BLE gamepad and pairing release on top of 0.3.19. The Pi bridge exposes
+the controllers as a standard BLE HID-over-GATT gamepad on the same LE link as
+FF10, advertises the gamepad appearance in two interval tiers, and limits
+pairability to a fresh adapter or the boot window unless continuous pairing is
+asked for. Firmware payloads are unchanged from 0.3.19: FF10–FF17 keep their
+payloads and companions at 0.2.2 or later continue to work. None of the Pi BLE
+work has run on hardware; the bench sheet carries the procedure.
+
+### Raspberry Pi bridge
+
+- **HID-over-GATT gamepad (ONY-1229).** The GATT application now exports the
+  HID service (`0x1812`) beside FF10: HID Information, the firmware's 91-byte
+  Report Map, Protocol Mode, HID Control Point and an encrypted input Report
+  (ID 1) with its Report Reference descriptor. `wmr_bridge/hid_gamepad.py`
+  ports the `src/wmr_hid.c` mapping and both sides are pinned to
+  `tests/vectors/hid_gamepad.txt`, so a HOGP host binds the controllers as a
+  gamepad with no app. No report is sent until a Classic controller is
+  connected and the phone enables the Report CCCD, and HID notifications pause
+  while a WebSocket client or an FF11/FF12/FF14 subscriber is active, with one
+  neutral report on the transition so a host never keeps a held input.
+- **Gamepad appearance, bond-aware pairability and two-tier advertising
+  (ONY-1228).** The advertisement now carries Appearance `0x03C4` (gamepad)
+  and lists `0x1812` before FF10, so Android classifies the bridge as a
+  controller. Advertising runs at 150–250 ms with no controller connected and
+  at 1000–1285 ms once one connects, which leaves airtime for the two Classic
+  HID links. The adapter is pairable only during the 180-second boot window
+  (`--ble-pairing-window`, previously 120 s) or while no LE bond is stored; a
+  bonded phone reconnects without pairability. `--ble-continuous-pairing`
+  keeps the adapter pairable while BLE is active, matching the ESP32, and is
+  opt-in.
+- **Just Works agent for a phone LE bond (ONY-1214).** The daemon registers a
+  `NoInputNoOutput` BlueZ agent (`/org/wmr/bridge/agent`) and claims it as the
+  default agent while the adapter is pairable, so BlueZ accepts a phone's LE
+  bond as Just Works instead of rejecting it for lack of an agent. When the
+  adapter is not pairable the agent is unregistered and BlueZ refuses unbonded
+  peers; a peer that asks for legacy PIN or passkey authentication gets a
+  rejection that names the pairing window and the old-bond remedy.
+- **BLE gamepad documentation (ONY-1230).** `docs/HID_GAMEPAD.md` gains the Pi
+  D-Bus GATT layout, advertising tiers, stream gating and pairing-rule
+  sections, and `pi/README.md` documents the HID service, the flags and the
+  pairing behaviour.
+
 ## 0.3.19 — 2026-11-10
 
 The BLE discoverable-advertisement release on top of 0.3.18. The Pi bridge now
