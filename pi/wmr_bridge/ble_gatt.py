@@ -63,6 +63,7 @@ FF17_CONTROL = "0000ff17-0000-1000-8000-00805f9b34fb"
 APP_PATH = "/org/wmr/bridge"
 SERVICE_PATH = f"{APP_PATH}/service/ff10"
 ADVERTISEMENT_PATH = f"{APP_PATH}/advertisement"
+AGENT_PATH = f"{APP_PATH}/agent"
 
 # Same opcodes and result codes as FF17 in docs/PROTOCOL.md.
 CTRL_DISCOVER = 0x01
@@ -123,6 +124,27 @@ def characteristic_path(uuid: str) -> str:
 
     short = uuid[4:8]
     return f"{SERVICE_PATH}/{short}"
+
+
+class PairingAgentPolicy:
+    """Decisions for ``org.bluez.Agent1`` requests on the peripheral adapter.
+
+    A phone bonding over LE is the normal case, not a controller special case:
+    before the agent existed, BlueZ had nobody to confirm the request and
+    Android reported "pairing rejected by WMR Bridge". The adapter's
+    ``Pairable`` flag already bounds when a new bond may be created, so the
+    agent accepts every device BlueZ presents, including the WMR controllers
+    that the Classic auto-pairer bonds on the same adapter.
+    """
+
+    def confirm(self, device: str) -> bool:
+        return True
+
+    def authorize(self, device: str) -> bool:
+        return True
+
+    def authorize_service(self, device: str, uuid: str) -> bool:
+        return True
 
 
 class GattBackend(Protocol):
@@ -693,10 +715,69 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         def Release(self):
             return None
 
+    class Agent(ServiceInterface):
+        """NoInputNoOutput agent for LE Just Works bonding from a phone."""
+
+        def __init__(self) -> None:
+            super().__init__("org.bluez.Agent1")
+            self.policy = PairingAgentPolicy()
+
+        @method()
+        def Release(self):
+            return None
+
+        @method()
+        def RequestPinCode(self, device: "o") -> "s":
+            # NoInputNoOutput means BlueZ must not ask, but a peer can still
+            # request legacy pairing; reject it instead of inventing a code.
+            raise DBusError(
+                "org.bluez.Error.Rejected", "WMR Bridge has no pairing input"
+            )
+
+        @method()
+        def DisplayPinCode(self, device: "o", pincode: "s"):
+            return None
+
+        @method()
+        def RequestPasskey(self, device: "o") -> "u":
+            raise DBusError(
+                "org.bluez.Error.Rejected", "WMR Bridge has no pairing input"
+            )
+
+        @method()
+        def DisplayPasskey(self, device: "o", passkey: "u", entered: "q"):
+            return None
+
+        @method()
+        def RequestConfirmation(self, device: "o", passkey: "u"):
+            if not self.policy.confirm(device):
+                raise DBusError(
+                    "org.bluez.Error.Rejected", "pairing confirmation refused"
+                )
+
+        @method()
+        def RequestAuthorization(self, device: "o"):
+            if not self.policy.authorize(device):
+                raise DBusError(
+                    "org.bluez.Error.Rejected", "pairing authorization refused"
+                )
+
+        @method()
+        def AuthorizeService(self, device: "o", uuid: "s"):
+            if not self.policy.authorize_service(device, uuid):
+                raise DBusError(
+                    "org.bluez.Error.Rejected", "service authorization refused"
+                )
+
+        @method()
+        def Cancel(self):
+            return None
+
     return {
         "Service": Service,
         "Characteristic": Characteristic,
         "Advertisement": Advertisement,
+        "Agent": Agent,
     }
 
 
@@ -734,6 +815,8 @@ class DbusGattBackend:
         self._adapter_interface: Any = None
         self._gatt_manager: Any = None
         self._advertising_manager: Any = None
+        self._agent_manager: Any = None
+        self._agent_registered = False
         self._exported: list[Any] = []
         self._characteristics: dict[str, Any] = {}
         self._variant: Any = None
@@ -771,8 +854,21 @@ class DbusGattBackend:
         self._advertisement = interfaces["Advertisement"]()
         bus.export(ADVERTISEMENT_PATH, self._advertisement)
         self._exported.append(ADVERTISEMENT_PATH)
+        bus.export(AGENT_PATH, interfaces["Agent"]())
+        self._exported.append(AGENT_PATH)
         self._characteristics, exported = export_gatt_application(bus, interfaces)
         self._exported.extend(exported)
+
+        try:
+            manager_introspection = await bus.introspect("org.bluez", "/org/bluez")
+            manager_object = bus.get_proxy_object(
+                "org.bluez", "/org/bluez", manager_introspection
+            )
+            self._agent_manager = manager_object.get_interface(
+                "org.bluez.AgentManager1"
+            )
+        except Exception as exc:
+            LOG.warning("BlueZ pairing agent unavailable: %s", exc)
 
         try:
             await self._gatt_manager.call_register_application(APP_PATH, {})
@@ -782,6 +878,46 @@ class DbusGattBackend:
         except Exception:
             await self.stop()
             raise
+
+    async def _claim_agent(self) -> None:
+        """Register the Just Works agent and make it the adapter default.
+
+        BlueZ rejects an incoming pair request when no default agent is set.
+        The agent is scoped to the bounded BLE pairing window: a permanent
+        Just Works default would let any nearby LE central bond while the
+        Classic auto-pairer leaves ``Adapter1.Pairable`` on for its own scan,
+        and a new bond grants encrypt-read on FF13/FF17. bluetoothctl in that
+        auto-pairer registers its own agent for the controllers.
+        """
+
+        if self._agent_manager is None:
+            return
+        try:
+            if not self._agent_registered:
+                await self._agent_manager.call_register_agent(
+                    AGENT_PATH, "NoInputNoOutput"
+                )
+                self._agent_registered = True
+            # The Classic auto-pairer's bluetoothctl session may have claimed
+            # default and dropped it; reclaim ours so a phone that bonds during
+            # this window still has an agent to confirm it.
+            await self._agent_manager.call_request_default_agent(AGENT_PATH)
+            LOG.info("BLE pairing agent registered (NoInputNoOutput)")
+        except Exception as exc:
+            LOG.warning("could not register the BlueZ pairing agent: %s", exc)
+
+    async def _release_agent(self) -> None:
+        """Drop the Just Works agent when the pairing window closes."""
+
+        if self._agent_manager is None or not self._agent_registered:
+            return
+        try:
+            await self._agent_manager.call_unregister_agent(AGENT_PATH)
+            LOG.info("BLE pairing agent released")
+        except Exception as exc:  # already gone is fine
+            LOG.debug("unregister agent: %s", exc)
+        finally:
+            self._agent_registered = False
 
     def notify(self, uuid: str, value: bytes) -> None:
         characteristic = self._characteristics.get(uuid)
@@ -795,12 +931,21 @@ class DbusGattBackend:
     async def set_pairable(self, pairable: bool) -> None:
         if self._adapter_interface is None:
             return
-        await self._adapter_interface.set_pairable(bool(pairable))
+        # The agent exists only for this window, so a stray LE bond cannot be
+        # completed Just Works while the adapter is otherwise left pairable.
+        if pairable:
+            await self._claim_agent()
+        try:
+            await self._adapter_interface.set_pairable(bool(pairable))
+        finally:
+            if not pairable:
+                await self._release_agent()
 
     async def stop(self) -> None:
         bus = self._bus
         if bus is None:
             return
+        await self._release_agent()
         if self._advertising_manager is not None:
             try:
                 await self._advertising_manager.call_unregister_advertisement(
@@ -824,6 +969,7 @@ class DbusGattBackend:
         self._adapter_interface = None
         self._gatt_manager = None
         self._advertising_manager = None
+        self._agent_manager = None
         bus.disconnect()
 
 
