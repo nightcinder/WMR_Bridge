@@ -575,7 +575,12 @@ FF17) with BlueZ through `org.bluez.GattManager1` and advertises it with
 interval so it leaves airtime for the two Classic HID links on the same
 radio. The advertising name defaults to `WMR Bridge` (`--ble-name`). The
 adapter stays pairable for a limited time (`--ble-pairing-window`, default
-120 seconds).
+120 seconds). A `NoInputNoOutput` BlueZ pairing agent is registered with
+`org.bluez.AgentManager1` and claimed as the default agent while that window
+is open, so a phone's LE bond is accepted as Just Works instead of being
+rejected for lack of an agent. The agent accepts every device BlueZ presents;
+the adapter's pairable window is the gate, and the Classic auto-pairer keeps
+bonding WMR controllers on the same adapter.
 
 Discovery and identity:
 

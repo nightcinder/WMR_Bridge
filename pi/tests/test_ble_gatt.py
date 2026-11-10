@@ -26,6 +26,7 @@ from wmr_bridge.ble_gatt import (
     SERVICE_PATH,
     BluezGattPeripheral,
     GattApplication,
+    PairingAgentPolicy,
     build_dbus_interfaces,
     characteristic_path,
     export_gatt_application,
@@ -117,6 +118,19 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(data["max_interval_ms"], 1285)
 
 
+class PairingAgentTests(unittest.TestCase):
+    """A phone bond must not be filtered out as a non-controller device."""
+
+    def test_agent_accepts_a_phone_central_and_a_wmr_controller(self) -> None:
+        policy = PairingAgentPolicy()
+        phone = "/org/bluez/hci0/dev_D4_3A_2C_11_22_33"
+        controller = "/org/bluez/hci0/dev_98_B6_E9_44_55_66"
+        for device in (phone, controller):
+            self.assertTrue(policy.confirm(device))
+            self.assertTrue(policy.authorize(device))
+            self.assertTrue(policy.authorize_service(device, FF10_SERVICE))
+
+
 @unittest.skipUnless(HAS_DBUS_NEXT, "python3-dbus-next is not installed")
 class DbusNextInterfaceTests(unittest.TestCase):
     """Build the real dbus-next interfaces; a bad annotation fails at class creation."""
@@ -155,6 +169,30 @@ class DbusNextInterfaceTests(unittest.TestCase):
         self.assertEqual(advertisement.ServiceUUIDs, [FF10_SERVICE])
         self.assertEqual(advertisement.LocalName, "WMR Bridge")
         self.assertEqual(advertisement.ServiceData[FF10_SERVICE].signature, "ay")
+
+    def test_agent_accepts_phone_and_controller_pairing(self) -> None:
+        agent = self.interfaces["Agent"]()
+        self.assertEqual(agent.introspect().name, "org.bluez.Agent1")
+        self.assertEqual(
+            {method.name for method in agent.introspect().methods},
+            {
+                "Release",
+                "RequestPinCode",
+                "DisplayPinCode",
+                "RequestPasskey",
+                "DisplayPasskey",
+                "RequestConfirmation",
+                "RequestAuthorization",
+                "AuthorizeService",
+                "Cancel",
+            },
+        )
+        phone = "/org/bluez/hci0/dev_D4_3A_2C_11_22_33"
+        controller = "/org/bluez/hci0/dev_98_B6_E9_44_55_66"
+        for device in (phone, controller):
+            self.assertIsNone(agent.RequestConfirmation(device, 0))
+            self.assertIsNone(agent.RequestAuthorization(device))
+            self.assertIsNone(agent.AuthorizeService(device, FF10_SERVICE))
 
 
 @unittest.skipUnless(HAS_DBUS_NEXT, "python3-dbus-next is not installed")
