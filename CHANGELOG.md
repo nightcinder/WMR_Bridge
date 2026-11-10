@@ -18,7 +18,11 @@ This file records what each release contains; hardware evidence stays in
   `/etc/bluetooth/main.conf` and restart `bluetooth.service`, which sends the
   repair to the default agent. This applies the ESP32 firmware's stale-bond
   lesson (ONY-441): a phone that forgot the bridge may pair again and replace
-  the old key instead of being refused. Every agent callback now logs one
+  the old key instead of being refused. The re-pair still needs a pairing
+  window open (the 180 s boot window, `wmr-bridge pair`, or
+  `--ble-continuous-pairing`): the agent is registered only while the adapter
+  is pairable, so a later re-pair without a window fails with no default agent.
+  Every agent callback now logs one
   `BLE pairing agent: method=... device=... result=...` journal line, and the
   BLE start logs the configured `BlueZ JustWorksRepairing = ...` policy. An
   explicit `always` value is left alone.
