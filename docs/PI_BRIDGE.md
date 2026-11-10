@@ -337,16 +337,16 @@ image date and kernel in the sitting record (section 5.1 of the run sheet).
 Build and verify the installable packages on any Linux host:
 
 ```bash
-pi/build_package.sh                 # dist/wmr-bridge-0.3.19.tar.gz + .sha256
-pi/build_deb.sh                     # dist/wmr-bridge_0.3.19_all.deb + .sha256
-pi/tools/verify_package.sh dist/wmr-bridge-0.3.19.tar.gz
-scp dist/wmr-bridge_0.3.19_all.deb pi@<pi>:~
-ssh pi@<pi> 'sudo apt install ./wmr-bridge_0.3.19_all.deb'
+pi/build_package.sh                 # dist/wmr-bridge-0.3.20.tar.gz + .sha256
+pi/build_deb.sh                     # dist/wmr-bridge_0.3.20_all.deb + .sha256
+pi/tools/verify_package.sh dist/wmr-bridge-0.3.20.tar.gz
+scp dist/wmr-bridge_0.3.20_all.deb pi@<pi>:~
+ssh pi@<pi> 'sudo apt install ./wmr-bridge_0.3.20_all.deb'
 ```
 
 The tarball alternative is
-`scp dist/wmr-bridge-0.3.19.tar.gz* pi@<pi>:~` then
-`ssh pi@<pi> 'tar -xzf wmr-bridge-0.3.19.tar.gz && sudo wmr-bridge-0.3.19/pi/install.sh'`.
+`scp dist/wmr-bridge-0.3.20.tar.gz* pi@<pi>:~` then
+`ssh pi@<pi> 'tar -xzf wmr-bridge-0.3.20.tar.gz && sudo wmr-bridge-0.3.20/pi/install.sh'`.
 Both carry `pi/` (daemon, probe, installer, systemd unit, udev rule,
 NetworkManager drop-in), `docs/PI_BRIDGE.md` and
 `samples/controller_frames.txt`, so they install without a git checkout. The
@@ -442,13 +442,13 @@ origin was allowed at startup with `--allow-origin <value>` (repeatable). This
 stops a web page on the LAN from opening a socket to the daemon. Origin matching
 is case-insensitive on the normalised value. `*` is not a wildcard.
 
-JSON examples below use the package version in this tree, `0.3.19`.
-`pi/wmr_bridge/__version__` reports `0.3.19`. The `v0.3.12` release shipped
+JSON examples below use the package version in this tree, `0.3.20`.
+`pi/wmr_bridge/__version__` reports `0.3.20`. The `v0.3.12` release shipped
 the `0.2.4` package, `v0.3.13` shipped the `0.3.13` package, `v0.3.14`
 shipped the `0.3.14` package, `v0.3.15` shipped the `0.3.15` package,
 `v0.3.16` shipped the `0.3.16` package, `v0.3.17` shipped the `0.3.17`
-package, `v0.3.18` shipped the `0.3.18` package, and `v0.3.19` ships this
-package.
+package, `v0.3.18` shipped the `0.3.18` package, `v0.3.19` shipped the
+`0.3.19` package, and `v0.3.20` ships this package.
 
 ```json
 {
@@ -457,7 +457,7 @@ package.
   "transport": "ethernet",
   "device": "wmr-pi",
   "bridge_id": "wmr-pi-0123456789",
-  "version": "0.3.19",
+  "version": "0.3.20",
   "handFilter": ["LEFT", "RIGHT"],
   "hostname": "wmr-pi",
   "authRequired": true,
@@ -527,7 +527,7 @@ Each bridge that hears it replies by unicast to the sender with one JSON object:
   "port": 8765,
   "path": "/wmr",
   "hands": ["LEFT", "RIGHT"],
-  "version": "0.3.19",
+  "version": "0.3.20",
   "authMode": "token",
   "nonce": "<nonce from the probe>"
 }
@@ -774,7 +774,7 @@ header-only window until an ingest layer fills the cache.
 ```json
 {
   "type": "status",
-  "version": "0.3.19",
+  "version": "0.3.20",
   "handFilter": ["LEFT", "RIGHT"],
   "uptimeS": 42.5,
   "hostTimeUs": 123456789,
@@ -1083,7 +1083,7 @@ INFO/WARNING:
 - No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check ...`.
 - Auto-pair: one `auto-pair: scanning ...` line per attempt (at most every 30 s while a hand is missing), then `found`, `pairing`, `paired`, `trusting`, `connecting`, and `connected` lines for the controller it hears. A failed attempt logs `pairing <MAC> failed: <BlueZ error>`. `wmr-bridge status` prints the same state without reading the journal.
 - Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
-- `hello.version` reports the package version (`0.3.19`; `0.1.0` before PR #78 merged).
+- `hello.version` reports the package version (`0.3.20`; `0.1.0` before PR #78 merged).
 
 ## Troubleshooting
 
