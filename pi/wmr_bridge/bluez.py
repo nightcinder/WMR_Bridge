@@ -644,6 +644,7 @@ def scan_and_pair(
     scan_seconds: float,
     should_pair: Callable[[BluezDevice], bool],
     *,
+    claim_agent: bool = True,
     settle_seconds: float = 1.0,
     pair_timeout: float = 20.0,
 ) -> list[BluezDevice] | None:
@@ -658,6 +659,14 @@ def scan_and_pair(
     rejects every pair attempt, which is the failure that made a real Pi never
     bond a controller. It also waits for each pair reply before quitting,
     because ``pair`` is asynchronous.
+
+    ``claim_agent`` false is used while the BLE fallback's pairing window is
+    open. The bridge's own ``NoInputNoOutput`` agent is the adapter default
+    then, and bluetoothctl's agent must not replace it: bluetoothctl's startup
+    agent has an empty capability, and BlueZ clears its default when the
+    client exits, so a phone pairing around the scan would see the wrong IO
+    capability or no agent at all. In that mode the client unregisters its own
+    agent (``agent off``) and ``pair`` uses the bridge's default agent.
 
     Returns ``None`` when the client cannot be started or the scan output
     reports a failure (no adapter, discovery refused, power failure). A client
@@ -709,22 +718,30 @@ def scan_and_pair(
 
     to_pair: list[BluezDevice] = []
     try:
-        # bluetoothctl's built-in agent is registered with an empty capability
-        # unless one is requested, and bluetoothd rejects that. Pairing then
-        # fails with org.bluez.Error.AuthenticationFailed and no bond is made.
-        # Register a NoInputNoOutput agent (Just Works) before touching the
-        # controller.
-        os.write(master_fd, b"agent NoInputNoOutput\n")
-        # RegisterAgent is asynchronous in bluetoothctl. Wait for its reply
-        # before default-agent, which would otherwise race it. bluetoothctl's
-        # own startup registration with an empty capability also prints
-        # "Failed to register agent", so only our success reply counts here.
-        agent_deadline = time.monotonic() + 2.0
-        while time.monotonic() < agent_deadline:
-            drain(0.05)
-            if "Agent registered" in output():
-                break
-        os.write(master_fd, b"default-agent\npairable on\nscan on\n")
+        if claim_agent:
+            # bluetoothctl's built-in agent is registered with an empty
+            # capability unless one is requested, and bluetoothd rejects that.
+            # Pairing then fails with org.bluez.Error.AuthenticationFailed and
+            # no bond is made. Register a NoInputNoOutput agent (Just Works)
+            # before touching the controller.
+            os.write(master_fd, b"agent NoInputNoOutput\n")
+            # RegisterAgent is asynchronous in bluetoothctl. Wait for its reply
+            # before default-agent, which would otherwise race it.
+            # bluetoothctl's own startup registration with an empty capability
+            # also prints "Failed to register agent", so only our success reply
+            # counts here.
+            agent_deadline = time.monotonic() + 2.0
+            while time.monotonic() < agent_deadline:
+                drain(0.05)
+                if "Agent registered" in output():
+                    break
+            os.write(master_fd, b"default-agent\n")
+        else:
+            # The bridge's agent is already the adapter default. Drop the
+            # client's startup agent so `pair` cannot select its empty
+            # capability instead.
+            os.write(master_fd, b"agent off\n")
+        os.write(master_fd, b"pairable on\nscan on\n")
         drain(scan_seconds)
         discovered = parse_devices(output())
         to_pair = [device for device in discovered if should_pair(device)]
@@ -790,6 +807,10 @@ class BluezAutoPairer:
     Matching controllers are then trusted and connected. Bursts that find
     nothing to do back off up to ``max_poll_interval``.
 
+    ``on_scan_end`` runs after every session, including a failed one. The BLE
+    peripheral uses it as a backstop to reclaim the default pairing agent if a
+    ``bluetoothctl`` session took it.
+
     While one controller is already connected, an inquiry would starve its ACL
     link on the Pi's shared radio, so scans for the missing hand are throttled:
     they repeat no faster than ``active_poll_interval`` and run for at most
@@ -814,6 +835,7 @@ class BluezAutoPairer:
         runner: Runner | None = None,
         session: Session | None = None,
         pairing_window_open: Callable[[], bool] | None = None,
+        on_scan_end: Callable[[], None] | None = None,
         which: Callable[[str], str | None] = shutil.which,
         rfkill_root: str = RFKILL_ROOT,
     ) -> None:
@@ -828,6 +850,7 @@ class BluezAutoPairer:
         self._runner = runner or _run_command
         self._session = session
         self._pairing_window_open = pairing_window_open
+        self._on_scan_end = on_scan_end
         self._which = which
         self._rfkill_root = rfkill_root
         self._task: asyncio.Task[None] | None = None
@@ -949,6 +972,12 @@ class BluezAutoPairer:
             discovered = self._scan_and_pair(scan_hands, scan_seconds)
         finally:
             self._settle_pairable()
+            # The scan's bluetoothctl client registered its own agent as the
+            # default and BlueZ drops that default when the client exits. Let
+            # the BLE peripheral reclaim its Just Works agent before a phone
+            # tries to bond.
+            if self._on_scan_end is not None:
+                self._on_scan_end()
         if discovered is None:
             LOG.warning(
                 "auto-pair: bluetoothctl could not scan; automatic controller "
@@ -1071,7 +1100,12 @@ class BluezAutoPairer:
         scan_seconds = self.scan_seconds if seconds is None else seconds
         if self._session is not None:
             return self._session(scan_seconds, should_pair)
-        return scan_and_pair(self.command, scan_seconds, should_pair)
+        claim_agent = not (
+            self._pairing_window_open is not None and self._pairing_window_open()
+        )
+        return scan_and_pair(
+            self.command, scan_seconds, should_pair, claim_agent=claim_agent
+        )
 
     def _info(self, address: str) -> BluezDevice | None:
         result = self._run("info", address, timeout=10.0)

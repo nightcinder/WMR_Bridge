@@ -341,6 +341,7 @@ class BluezAutoPairerTests(unittest.TestCase):
                     which=lambda _command: "/usr/bin/bluetoothctl", session=None,
                     scan_seconds: float = 1.0,
                     pairing_window_open=None,
+                    on_scan_end=None,
                     rfkill_root="/nonexistent/rfkill"):
         return BluezAutoPairer(
             bridge,
@@ -348,6 +349,7 @@ class BluezAutoPairerTests(unittest.TestCase):
             runner=runner,
             session=session or (lambda _seconds, _should_pair: []),
             pairing_window_open=pairing_window_open,
+            on_scan_end=on_scan_end,
             which=which,
             scan_seconds=scan_seconds,
             poll_interval=1.0,
@@ -587,6 +589,61 @@ class BluezAutoPairerTests(unittest.TestCase):
 
         self.assertEqual([call for call in calls if call[1] == "pairable"], [])
 
+    def test_scan_end_callback_runs_after_a_scan(self) -> None:
+        scans: list[bool] = []
+
+        def runner(args: list[str], timeout: float):
+            return _completed(args)
+
+        pairer = self.make_pairer(
+            _Bridge(),
+            runner,
+            session=lambda _seconds, _should_pair: [],
+            pairing_window_open=lambda: True,
+            on_scan_end=lambda: scans.append(True),
+        )
+        pairer._tick()
+
+        self.assertEqual(scans, [True])
+
+    def test_scan_end_callback_runs_when_the_scan_raises(self) -> None:
+        scans: list[bool] = []
+
+        def session(_seconds: float, _should_pair) -> list:
+            raise RuntimeError("scan failed")
+
+        pairer = self.make_pairer(
+            _Bridge(),
+            lambda args, _timeout: _completed(args),
+            session=session,
+            on_scan_end=lambda: scans.append(True),
+        )
+        with self.assertRaises(RuntimeError):
+            pairer._tick()
+
+        self.assertEqual(scans, [True])
+
+    def test_the_ble_window_keeps_the_bridge_agent_as_default(self) -> None:
+        pairer = BluezAutoPairer(
+            _Bridge(),
+            pairing_window_open=lambda: True,
+            which=lambda _command: "/usr/bin/bluetoothctl",
+            rfkill_root="/nonexistent/rfkill",
+        )
+        with mock.patch("wmr_bridge.bluez.scan_and_pair", return_value=[]) as scan:
+            pairer._scan_and_pair({0}, 1.0)
+        self.assertFalse(scan.call_args.kwargs["claim_agent"])
+
+    def test_without_a_ble_window_bluetoothctl_claims_its_own_agent(self) -> None:
+        pairer = BluezAutoPairer(
+            _Bridge(),
+            which=lambda _command: "/usr/bin/bluetoothctl",
+            rfkill_root="/nonexistent/rfkill",
+        )
+        with mock.patch("wmr_bridge.bluez.scan_and_pair", return_value=[]) as scan:
+            pairer._scan_and_pair({0}, 1.0)
+        self.assertTrue(scan.call_args.kwargs["claim_agent"])
+
     def test_pairable_is_cleared_when_a_scan_raises(self) -> None:
         calls: list[list[str]] = []
 
@@ -737,7 +794,7 @@ class ScanAndPairTests(unittest.TestCase):
             chunks.append(chunk)
         return b"".join(chunks).decode("utf-8", errors="replace")
 
-    def _run(self, script: bytes, should_pair=None):
+    def _run(self, script: bytes, should_pair=None, *, claim_agent: bool = True):
         master_fd, slave_fd = pty.openpty()
         keep_master_fd = os.dup(master_fd)
         commands_fd = os.dup(slave_fd)
@@ -773,6 +830,7 @@ class ScanAndPairTests(unittest.TestCase):
                     "bluetoothctl",
                     0.05,
                     should_pair or (lambda device: device.hand is not None),
+                    claim_agent=claim_agent,
                     settle_seconds=0.01,
                     pair_timeout=0.1,
                 )
@@ -808,6 +866,26 @@ class ScanAndPairTests(unittest.TestCase):
         self.assertLess(commands.index("scan on"), commands.index(f"pair {self.RIGHT}"))
         self.assertLess(commands.index(f"pair {self.RIGHT}"), commands.index("quit"))
         self.assertFalse(process.killed)
+
+    def test_existing_default_agent_is_left_in_place(self) -> None:
+        script = (
+            "Agent registered\n"
+            f"[NEW] Device {self.RIGHT} Motion controller - Right\n"
+            f"Attempting to pair with {self.RIGHT}\n"
+            "Pairing successful\n"
+        ).encode()
+
+        result, commands, _popen_calls, _process = self._run(
+            script, claim_agent=False
+        )
+
+        self.assertIsNotNone(result)
+        self.assertIn("agent off", commands)
+        self.assertNotIn("agent NoInputNoOutput", commands)
+        self.assertNotIn("default-agent", commands)
+        self.assertIn("pairable on", commands)
+        self.assertIn("scan on", commands)
+        self.assertIn(f"pair {self.RIGHT}", commands)
 
     def test_real_session_registers_agent_and_waits_for_the_pair_reply(self) -> None:
         left = "AA:BB:CC:DD:EE:00"

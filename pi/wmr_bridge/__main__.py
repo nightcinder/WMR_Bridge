@@ -679,6 +679,7 @@ async def _run(args: argparse.Namespace) -> int:
                     bridge,
                     allowed_hands=allowed_hands,
                     pairing_window_open=(ble.pairing_window_open if ble else None),
+                    on_scan_end=(ble.request_agent_reclaim if ble else None),
                 )
                 pairer.start()
                 LOG.info(
