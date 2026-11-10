@@ -5,6 +5,27 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.19 — 2026-11-10
+
+The BLE discoverable-advertisement release on top of 0.3.18. The Pi bridge now
+marks its LE advertisement discoverable, so BlueZ sets the LE General
+Discoverable flag and a phone lists the bridge in a Bluetooth scan. Firmware
+payloads are unchanged from 0.3.18: FF10–FF17 keep their payloads and companions
+at 0.2.2 or later continue to work.
+
+### Raspberry Pi bridge
+
+- **Discoverable BLE advertisement (ONY-1197).** BlueZ only adds the LE General
+  Discoverable flag (Flags AD type `0x01`, value `0x06`) to the advertising data
+  when the `LEAdvertisement1` object sets `Discoverable`. Without it the adapter
+  advertised FF10 and `ActiveInstances` reported 1, but a phone's Bluetooth scan
+  filtered the bridge out of the available-devices list. The daemon now sets
+  `Discoverable = True` and exposes the read-only `Discoverable` property on the
+  dbus-next advertisement interface, so the advertisement carries the flag
+  beside the local name `WMR Bridge` and the FF10 service UUID. Host tests assert
+  both. BLE advertising has not been verified on hardware; the three-state
+  jitter check is ONY-1070.
+
 ## 0.3.18 — 2026-11-10
 
 The BLE GATT registration release on top of 0.3.17. BlueZ now registers the Pi

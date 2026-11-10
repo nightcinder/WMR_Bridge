@@ -127,18 +127,20 @@ reuse it. The output in `dist/` includes the bootloader, partition table,
 application and merged factory images, plus a browser flasher page. The browser
 manifest writes the three separate images at offsets `0x1000`, `0x8000` and
 `0x10000`. It does not write NVS (`0x9000`-`0xFFFF`), so a reflash with
-"Erase device" unchecked keeps the stored pairings. `0.3.18` is the current
-release. It is the Pi BLE registration release: the daemon exports the FF10
-`org.bluez.GattService1` object BlueZ requires, so `RegisterApplication`
-succeeds and the Pi advertises the FF10 GATT service over Bluetooth by default
-(ONY-1186). It also blocks a controller after the idle power-off until the
-reconnect cooldown expires, instead of reopening it seconds later (ONY-1185).
-It keeps the 0.3.17 dbus-next GATT start annotations, FF10 advertised by default
+"Erase device" unchecked keeps the stored pairings. `0.3.19` is the current
+release. It is the Pi BLE discoverable-advertisement release: the daemon marks
+its `LEAdvertisement1` object discoverable, so BlueZ sets the LE General
+Discoverable flag (`0x06`) in the advertising data and a phone lists the bridge
+in a Bluetooth scan (ONY-1197). It keeps the 0.3.18 FF10
+`org.bluez.GattService1` export that makes `RegisterApplication` succeed
+(ONY-1186) and the idle power-off reconnect cooldown (ONY-1185), the 0.3.17
+dbus-next GATT start annotations, FF10 advertised by default
 with per-client CCCD gating, an Ethernet uplink over 5 GHz and 2.4 GHz Wi-Fi
 using route metrics, `AF_NETLINK` in the systemd unit and token access for
-`wifi_probe.py`. The firmware is unchanged from 0.3.15,
-which re-sends the FF13 streaming-enable pair on reconnect and every 10 s so a
-connected controller stays awake. The controller-family firmware on top of 0.3.5
+`wifi_probe.py`. The firmware last changed in 0.3.16, which added controller
+idle sleep and power-off (ONY-1128) on top of the 0.3.15 change that re-sends
+the FF13 streaming-enable pair on reconnect and every 10 s so a connected
+controller stays awake. The controller-family firmware on top of 0.3.5
 remains: one driver
 table per model, PSVR2 FF12/FF14 decoding, and Nintendo Switch Joy-Con/Pro
 handshake and `0x30` decoding. Switch support
