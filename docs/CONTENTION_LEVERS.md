@@ -3,10 +3,10 @@
 ONY-428 investigation. Source of truth for the numbers: [`docs/PREDICTION.md`](PREDICTION.md) sections
 1 to 2.5, [`docs/STATUS.md`](STATUS.md) section 5, [`docs/DECODING.md`](DECODING.md)
 "Investigation notes", and the run sheets
-[`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md),
-[`docs/runs/sheets/internal-esp32-wmr-bench.md`](runs/sheets/internal-esp32-wmr-bench.md),
-[`docs/runs/sheets/multi-bridge.md`](runs/sheets/multi-bridge.md),
-[`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md).
+`docs/runs/sheets/single-esp32-levers.md`,
+`docs/runs/sheets/internal-esp32-wmr-bench.md`,
+`docs/runs/sheets/multi-bridge.md`,
+`docs/runs/sheets/pi-bridge.md`.
 The 2026-10-22/23 contention results are in this file; the old
 `contention-2*.md` sheets were removed in ONY-983.
 

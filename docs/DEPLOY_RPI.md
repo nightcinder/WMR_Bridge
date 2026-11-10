@@ -29,7 +29,7 @@ config survive updates.
 - [ ] Replay smoke test passes with zero gaps.
 - [ ] Live `wifi_probe` shows both hands above 0 records/s and `dropped=0`.
 - [ ] Record the host metadata and P1-P14 results for
-      [`pi-bridge.md`](runs/sheets/pi-bridge.md) §5.
+      `pi-bridge.md` §5.
 
 The 3B+ is a Cortex-A53 at 1.4 GHz with 1 GB RAM and Bluetooth 4.2 Classic.
 Run only the bridge and probe during timing; keep 3B+ results separate from

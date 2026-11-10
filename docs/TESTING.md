@@ -167,9 +167,9 @@ airtime is a cause; if not, it is not the only cause.
 ## Where the procedures live
 
 - Internal bench (latency-2, FF16/FF17/stick, ONY-446, HID, LED, Sitting R):
-  [`runs/sheets/internal-esp32-wmr-bench.md`](runs/sheets/internal-esp32-wmr-bench.md).
+  `runs/sheets/internal-esp32-wmr-bench.md`.
 - Remaining protocol and robustness checks, plus close-out:
-  [`runs/sheets/robustness.md`](runs/sheets/robustness.md).
+  `runs/sheets/robustness.md`.
 - External tester tiers:
   [`runs/sheets/external-test-user.md`](runs/sheets/external-test-user.md).
 - Contention results: [`CONTENTION_LEVERS.md`](CONTENTION_LEVERS.md).

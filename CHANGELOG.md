@@ -262,7 +262,7 @@ Firmware and Pi artifacts remain CI-built and hardware-unverified.
   `latency/` as expected in `6dof_only` mode, and reports a pose file whose
   recorded hand repeats the preceding anchor frame. The fresh external bundle
   is recorded in
-  [`docs/runs/sheets/android-xr-6dof-20261107.md`](docs/runs/sheets/android-xr-6dof-20261107.md).
+  `docs/runs/sheets/android-xr-6dof-20261107.md`.
 
 ### Docs
 
@@ -595,7 +595,7 @@ their payloads, so companions at 0.2.2 or later continue to work. The phone
 link now requires LE Secure Connections with bonding, so earlier companions,
 which pair without bonding, cannot connect. Firmware artifacts are
 CI-built and hardware-unverified; the 0.3.0 bench sitting is
-[`docs/runs/sheets/internal-esp32-wmr-bench.md`](docs/runs/sheets/internal-esp32-wmr-bench.md).
+`docs/runs/sheets/internal-esp32-wmr-bench.md`.
 
 ### Phone link
 
@@ -636,7 +636,7 @@ CI-built and hardware-unverified; the 0.3.0 bench sitting is
 - **LEVERS runtime contention toggles (#86, ONY-430).** `l`, `v`, `t` and `q`
   switch the contention levers from the console without rebuilding. The bench
   image was rebuilt on post-ONY-446 master (#97); see
-  [`docs/runs/sheets/single-esp32-levers.md`](docs/runs/sheets/single-esp32-levers.md).
+  `docs/runs/sheets/single-esp32-levers.md`.
 - **CI always reports `Build firmware` (#93).** The workflow no longer has a
   paths filter, so the required check runs on every PR.
 - **GATT docs cross-checked against `wmr_bridge.gatt` (#94).**

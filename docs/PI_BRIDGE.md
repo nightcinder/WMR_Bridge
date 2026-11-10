@@ -4,7 +4,7 @@ Status: the second supported first-class target (ESP32-over-BLE is the default),
 host-tested in this repository but not yet run on a Raspberry Pi or with real
 controllers. Everything below is the design and the bench plan, not a hardware
 result. The bring-up run sheet for the first sitting is
-[`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md).
+`docs/runs/sheets/pi-bridge.md`.
 
 This document specifies a second bridge implementation for any Linux machine
 with Bluetooth Classic and a 5 GHz Wi-Fi adapter. A Raspberry Pi 4 or 5 is the
@@ -1039,7 +1039,7 @@ tester checklist and pinned image/package checksums are in
 
 Record host model, OS, BlueZ/kernel versions, Wi-Fi band/channel, controller
 addresses (or omit them), and the probe output in the bring-up run sheet
-[`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md). Until P1-P14 have
+`docs/runs/sheets/pi-bridge.md`. Until P1-P14 have
 been run, treat the Pi path as unverified.
 
 ## Daemon logs
@@ -1073,7 +1073,7 @@ INFO/WARNING:
 ## Future work
 
 - Hardware validation of P1-P14 using the bring-up run sheet
-  [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md).
+  `docs/runs/sheets/pi-bridge.md`.
 - Companion app Wi-Fi transport (`wmr_ws` and connect UI in `wmr-companion`).
 - Native TLS in the daemon itself (external termination is documented in
   [TLS termination](#tls-termination)).
