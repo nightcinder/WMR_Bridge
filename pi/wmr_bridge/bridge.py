@@ -346,6 +346,7 @@ class Bridge:
         self.sequence = [0, 0]
         self.subscribers: set[Subscriber] = set()
         self.sinks: list[FrameSink] = []
+        self._hand_listeners: list[Callable[[], None]] = []
         self.started_us = time.monotonic_ns() // 1000
         self.stats_dropped = 0
         self.stats_batches = 0
@@ -367,6 +368,18 @@ class Bridge:
     def remove_sink(self, sink: FrameSink) -> None:
         try:
             self.sinks.remove(sink)
+        except ValueError:
+            pass
+
+    def add_hand_listener(self, listener: Callable[[], None]) -> None:
+        """Watch controller connect/disconnect events (the BLE advert tier)."""
+
+        if listener not in self._hand_listeners:
+            self._hand_listeners.append(listener)
+
+    def remove_hand_listener(self, listener: Callable[[], None]) -> None:
+        try:
+            self._hand_listeners.remove(listener)
         except ValueError:
             pass
 
@@ -428,6 +441,7 @@ class Bridge:
         if not 0 <= hand < 2:
             return
         stats = self.hands[hand]
+        changed = stats.connected != connected
         if connected and not stats.connected:
             # docs/PROTOCOL.md documents the FF11 counters as reports received
             # on the current connection, so a reconnect starts a fresh count.
@@ -438,6 +452,12 @@ class Bridge:
         stats.connected = connected
         if address:
             stats.address = address
+        if changed:
+            for listener in tuple(self._hand_listeners):
+                try:
+                    listener()
+                except Exception:
+                    LOG.exception("hand listener failed")
 
     # ---- calibration -----------------------------------------------------
 

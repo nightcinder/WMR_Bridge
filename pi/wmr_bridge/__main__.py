@@ -141,11 +141,21 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--ble-pairing-window",
         type=float,
-        default=120.0,
+        default=180.0,
         metavar="SECONDS",
         help=(
-            "how long the BLE GATT peripheral stays pairable for a new bond "
-            "(default 120, 0 keeps the adapter non-pairable)"
+            "seconds after boot, and the duration of a manually opened window, "
+            "that a new BLE bond is accepted (default 180). After that the "
+            "adapter stays pairable only while no LE bond is stored; 0 disables "
+            "the boot window"
+        ),
+    )
+    parser.add_argument(
+        "--ble-continuous-pairing",
+        action="store_true",
+        help=(
+            "keep the BLE adapter pairable whenever BLE is active, like the "
+            "ESP32 (default off; any nearby LE central can then bond)"
         ),
     )
 
@@ -575,6 +585,7 @@ async def _run(args: argparse.Namespace) -> int:
             port=server.port,
             name=args.ble_name,
             pairing_window_s=args.ble_pairing_window,
+            continuous_pairing=args.ble_continuous_pairing,
         )
         try:
             await ble.start()

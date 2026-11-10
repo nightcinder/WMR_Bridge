@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
 from . import __version__
+from .bluez import WMR_NAMES
 from .bridge import Bridge
 from .protocol import (
     BATCH_HEADER_SIZE,
@@ -52,6 +53,7 @@ from .protocol import (
 LOG = logging.getLogger("wmr_bridge.ble_gatt")
 
 FF10_SERVICE = "0000ff10-0000-1000-8000-00805f9b34fb"
+HID_SERVICE = "00001812-0000-1000-8000-00805f9b34fb"
 FF11_RAW = "0000ff11-0000-1000-8000-00805f9b34fb"
 FF12_DECODED = "0000ff12-0000-1000-8000-00805f9b34fb"
 FF14_BATCHED = "0000ff14-0000-1000-8000-00805f9b34fb"
@@ -82,10 +84,24 @@ RESULT_INVALID_PARAM = 0x06
 
 DEFAULT_MTU = 23
 DEFAULT_BATCH_HZ = 50.0
+# Gamepad appearance (GAP 0x03C4): the icon Android shows for the LE entry.
+GAMEPAD_APPEARANCE = 0x03C4
+# Fast advertising while neither Classic HID link is up: there is no
+# controller traffic to protect, and a phone finds the bridge promptly.
+ADV_FAST_MIN_INTERVAL_MS = 150
+ADV_FAST_MAX_INTERVAL_MS = 250
 # Slow advertising leaves airtime for the two Classic HID links on the same
-# radio while keeping a phone able to find the bridge promptly.
+# radio once a controller connects (ONY-1112 Amendment 1).
 ADV_MIN_INTERVAL_MS = 1000
 ADV_MAX_INTERVAL_MS = 1285
+# A newly flashed Pi is pairable for this long after BLE starts even when a
+# stale bond exists. After it, pairability follows the stored-bond state.
+DEFAULT_PAIRING_WINDOW_S = 180.0
+PAIRING_REJECTED_HINT = (
+    "pairing rejected by WMR Bridge: no BLE pairing window is open. Run "
+    "'wmr-bridge --ble-pairing-window SECONDS' or open the pairing window "
+    "from the Companion app, then try again"
+)
 
 
 @dataclass(frozen=True)
@@ -135,15 +151,29 @@ class PairingAgentPolicy:
     ``Pairable`` flag already bounds when a new bond may be created, so the
     agent accepts every device BlueZ presents, including the WMR controllers
     that the Classic auto-pairer bonds on the same adapter.
+
+    ``on_request`` lets the peripheral re-read the stored bond state after a
+    pairing attempt; a successful phone bond then closes a boot-window
+    pairability instead of leaving the adapter open indefinitely.
     """
 
+    def __init__(self, on_request: Callable[[str], None] | None = None) -> None:
+        self._on_request = on_request
+
+    def _note(self, device: str) -> None:
+        if self._on_request is not None:
+            self._on_request(device)
+
     def confirm(self, device: str) -> bool:
+        self._note(device)
         return True
 
     def authorize(self, device: str) -> bool:
+        self._note(device)
         return True
 
     def authorize_service(self, device: str, uuid: str) -> bool:
+        self._note(device)
         return True
 
 
@@ -155,6 +185,10 @@ class GattBackend(Protocol):
     async def stop(self) -> None: ...
 
     async def set_pairable(self, pairable: bool) -> None: ...
+
+    async def has_le_bond(self) -> bool: ...
+
+    async def refresh_advertisement(self) -> None: ...
 
     def notify(self, uuid: str, value: bytes) -> None: ...
 
@@ -189,6 +223,7 @@ class GattApplication:
         self.fragment_capacity = max(13, fragment_capacity)
         self.control_handler = control_handler
         self.pairing_open = False
+        self.pairing_listener: Callable[[str], None] | None = None
         self._mtu = DEFAULT_MTU
         self._subscribed: set[str] = set()
         self._last_value: dict[str, bytes] = {}
@@ -264,16 +299,26 @@ class GattApplication:
     def ff13_value(self) -> bytes:
         return json.dumps(self.session_document(), separators=(",", ":")).encode("utf-8")
 
+    @property
+    def advertising_tier(self) -> str:
+        """``fast`` with no Classic controller link, ``slow`` once one is up."""
+
+        connected = any(stats.connected for stats in self.bridge.hands)
+        return "slow" if connected else "fast"
+
     def advertisement_data(self) -> dict[str, Any]:
         """Legacy advertising data; the bridge id is repeated as service data.
 
         A Pi's BLE address can be random, so a scanner cannot key on it. The
         first eight bytes are enough to match the advertisement with the
-        ``bridge_id`` read from FF16. The interval is deliberately slow so
-        advertising does not steal airtime from the Classic controller links.
+        ``bridge_id`` read from FF16. Advertising is fast while there is no
+        Classic controller link to protect and drops to the ONY-1112 slow
+        interval as soon as one connects. The gamepad appearance and the HID
+        service UUID make Android classify the bridge as a controller.
         """
 
         tag = self.bridge.bridge_id.encode("ascii", "replace")[:8]
+        slow = self.advertising_tier == "slow"
         return {
             "type": "peripheral",
             # BlueZ only adds the LE General Discoverable flag to the
@@ -281,13 +326,20 @@ class GattApplication:
             # advertises FF10 (ActiveInstances 1) but a phone's pairing list
             # filters the bridge out.
             "discoverable": True,
-            "service_uuids": [FF10_SERVICE],
+            "appearance": GAMEPAD_APPEARANCE,
+            "service_uuids": [HID_SERVICE, FF10_SERVICE],
             "local_name": self.name,
             "service_data": {FF10_SERVICE: b"WMB1" + tag},
             "include_tx_power": False,
-            "min_interval_ms": ADV_MIN_INTERVAL_MS,
-            "max_interval_ms": ADV_MAX_INTERVAL_MS,
+            "min_interval_ms": ADV_MIN_INTERVAL_MS if slow else ADV_FAST_MIN_INTERVAL_MS,
+            "max_interval_ms": ADV_MAX_INTERVAL_MS if slow else ADV_FAST_MAX_INTERVAL_MS,
         }
+
+    def note_pairing_request(self, device: str) -> None:
+        """Tell the peripheral that BlueZ presented a device for pairing."""
+
+        if self.pairing_listener is not None:
+            self.pairing_listener(device)
 
     # ---- read/write ------------------------------------------------------
 
@@ -556,6 +608,12 @@ class GattApplication:
         self._batch.clear()
 
 
+def _dbus_value(value: Any) -> Any:
+    """Unwrap a dbus-next Variant, tolerating plain values in tests."""
+
+    return getattr(value, "value", value)
+
+
 def _address_tail(address: str) -> bytes:
     """Last three MAC bytes, or zero when no address is known."""
 
@@ -687,8 +745,12 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
             return bool(app.advertisement_data()["discoverable"])
 
         @dbus_property(access=PropertyAccess.READ)
+        def Appearance(self) -> "q":
+            return GAMEPAD_APPEARANCE
+
+        @dbus_property(access=PropertyAccess.READ)
         def ServiceUUIDs(self) -> "as":
-            return [FF10_SERVICE]
+            return list(app.advertisement_data()["service_uuids"])
 
         @dbus_property(access=PropertyAccess.READ)
         def LocalName(self) -> "s":
@@ -720,7 +782,7 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
 
         def __init__(self) -> None:
             super().__init__("org.bluez.Agent1")
-            self.policy = PairingAgentPolicy()
+            self.policy = PairingAgentPolicy(on_request=app.note_pairing_request)
 
         @method()
         def Release(self):
@@ -730,9 +792,7 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         def RequestPinCode(self, device: "o") -> "s":
             # NoInputNoOutput means BlueZ must not ask, but a peer can still
             # request legacy pairing; reject it instead of inventing a code.
-            raise DBusError(
-                "org.bluez.Error.Rejected", "WMR Bridge has no pairing input"
-            )
+            raise DBusError("org.bluez.Error.Rejected", PAIRING_REJECTED_HINT)
 
         @method()
         def DisplayPinCode(self, device: "o", pincode: "s"):
@@ -740,9 +800,7 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
 
         @method()
         def RequestPasskey(self, device: "o") -> "u":
-            raise DBusError(
-                "org.bluez.Error.Rejected", "WMR Bridge has no pairing input"
-            )
+            raise DBusError("org.bluez.Error.Rejected", PAIRING_REJECTED_HINT)
 
         @method()
         def DisplayPasskey(self, device: "o", passkey: "u", entered: "q"):
@@ -941,6 +999,71 @@ class DbusGattBackend:
             if not pairable:
                 await self._release_agent()
 
+    async def has_le_bond(self) -> bool:
+        """True when BlueZ holds a bond for a device that is not a WMR controller.
+
+        The Pi bonds the two Classic controllers on the same adapter, so a bare
+        ``Paired`` count cannot decide whether the LE door should stay open.
+        Controller bonds are Public-address Peripherals (Class major 0x05) or
+        carry a WMR HID name; everything else is treated as the phone's LE bond.
+        """
+
+        bus = self._bus
+        if bus is None:
+            return False
+        try:
+            introspection = await bus.introspect("org.bluez", "/")
+            manager_object = bus.get_proxy_object("org.bluez", "/", introspection)
+            manager = manager_object.get_interface(
+                "org.freedesktop.DBus.ObjectManager"
+            )
+            objects = await manager.call_get_managed_objects()
+        except Exception as exc:
+            # Fail closed: without the bond list, only the boot/manual window
+            # may open pairability.
+            LOG.warning("could not read BlueZ bonds: %s", exc)
+            return True
+        for interfaces in objects.values():
+            properties = interfaces.get("org.bluez.Device1")
+            if not properties or not _dbus_value(properties.get("Paired")):
+                continue
+            name = str(
+                _dbus_value(properties.get("Name"))
+                or _dbus_value(properties.get("Alias"))
+                or ""
+            )
+            if name.strip().casefold() in WMR_NAMES:
+                continue
+            address_type = str(
+                _dbus_value(properties.get("AddressType")) or "public"
+            )
+            device_class = int(_dbus_value(properties.get("Class")) or 0)
+            if address_type == "public" and ((device_class >> 8) & 0x1F) == 0x05:
+                continue
+            return True
+        return False
+
+    async def refresh_advertisement(self) -> None:
+        """Re-register the advertisement so BlueZ re-reads its intervals.
+
+        BlueZ snapshots an ``LEAdvertisement1`` object when it is registered;
+        changing MinInterval/MaxInterval on the exported object afterwards does
+        not reach the controller. A brief unregister/register applies the new
+        two-tier interval.
+        """
+
+        if self._advertising_manager is None or self._bus is None:
+            return
+        try:
+            await self._advertising_manager.call_unregister_advertisement(
+                ADVERTISEMENT_PATH
+            )
+        except Exception as exc:  # already gone is fine
+            LOG.debug("unregister advertisement for interval change: %s", exc)
+        await self._advertising_manager.call_register_advertisement(
+            ADVERTISEMENT_PATH, {}
+        )
+
     async def stop(self) -> None:
         bus = self._bus
         if bus is None:
@@ -974,7 +1097,13 @@ class DbusGattBackend:
 
 
 class BluezGattPeripheral:
-    """Attach a BlueZ GATT application to a :class:`Bridge`."""
+    """Attach a BlueZ GATT application to a :class:`Bridge`.
+
+    Pairability follows the ONY-1226 verdict: the adapter is pairable while it
+    has no LE bond, for ``pairing_window_s`` after boot, or while a manual
+    window is open. ``continuous_pairing`` is the opt-in ESP32-style mode that
+    keeps the adapter pairable regardless of stored bonds.
+    """
 
     def __init__(
         self,
@@ -986,7 +1115,8 @@ class BluezGattPeripheral:
         port: int = 8765,
         path: str = "/wmr",
         name: str = "WMR Bridge",
-        pairing_window_s: float = 120.0,
+        pairing_window_s: float = DEFAULT_PAIRING_WINDOW_S,
+        continuous_pairing: bool = False,
         batch_hz: float = DEFAULT_BATCH_HZ,
         fragment_capacity: int = DEFAULT_FRAGMENT_CAPACITY,
         control_handler: Callable[[int, int | None], int] | None = None,
@@ -1006,15 +1136,23 @@ class BluezGattPeripheral:
         )
         self.backend = backend or DbusGattBackend(adapter)
         self.pairing_window_s = max(0.0, pairing_window_s)
+        self.continuous_pairing = continuous_pairing
+        self._clock = clock
         self._started = False
+        self._boot_deadline: float | None = None
+        self._manual_deadline: float | None = None
         self._pairing_task: asyncio.Task[None] | None = None
+        self._bond_task: asyncio.Task[None] | None = None
+        self._advertising_task: asyncio.Task[None] | None = None
+        self._advertised_tier = self.app.advertising_tier
 
     @property
     def started(self) -> bool:
         return self._started
 
     def pairing_window_open(self) -> bool:
-        """True while the bounded bonding window is open."""
+        """True while the adapter is pairable."""
+
         return self.app.pairing_open
 
     async def start(self) -> None:
@@ -1023,62 +1161,167 @@ class BluezGattPeripheral:
         await self.backend.start(self.app)
         self.app.set_emitter(self.backend.notify)
         self.app.bridge.add_sink(self.app)
+        self.app.bridge.add_hand_listener(self._on_hand_state_changed)
+        self.app.pairing_listener = self._on_pairing_request
         self._started = True
-        if self.pairing_window_s > 0:
-            await self.open_pairing_window()
-        else:
-            await self.close_pairing_window()
+        self._boot_deadline = (
+            self._clock() + self.pairing_window_s
+            if self.pairing_window_s > 0
+            else None
+        )
+        self._advertised_tier = self.app.advertising_tier
+        await self.refresh_pairing_state()
+        self._schedule_pairing_refresh()
         LOG.info(
             "BLE fallback advertising FF10 as %s (bridge_id %s)",
             self.app.name,
             self.app.bridge.bridge_id,
         )
 
-    async def open_pairing_window(self) -> None:
-        self.app.pairing_open = True
-        try:
-            await self.backend.set_pairable(True)
-        except Exception as exc:
-            LOG.warning("could not make the adapter pairable: %s", exc)
-        self._cancel_pairing_task()
-        if self.pairing_window_s > 0:
-            self._pairing_task = asyncio.create_task(
-                self._close_pairing_after(self.pairing_window_s)
-            )
+    # ---- advertising interval -------------------------------------------
 
-    async def _close_pairing_after(self, seconds: float) -> None:
+    def _on_hand_state_changed(self) -> None:
+        if self._advertising_task is not None and not self._advertising_task.done():
+            return
+        self._advertising_task = asyncio.create_task(self.refresh_advertising())
+
+    async def refresh_advertising(self) -> None:
+        """Re-register the advertisement when the controller tier changed."""
+
+        tier = self.app.advertising_tier
+        if tier == self._advertised_tier:
+            return
+        try:
+            await self.backend.refresh_advertisement()
+        except Exception as exc:
+            LOG.warning("could not apply the %s advertising tier: %s", tier, exc)
+            return
+        self._advertised_tier = tier
+        LOG.info("BLE advertising interval: %s tier", tier)
+
+    # ---- pairability -----------------------------------------------------
+
+    async def open_pairing_window(self, seconds: float | None = None) -> None:
+        """Open a manual pairing window, independent of stored bonds."""
+
+        duration = self.pairing_window_s if seconds is None else max(0.0, seconds)
+        if duration > 0:
+            self._manual_deadline = self._clock() + duration
+        else:
+            self._manual_deadline = None
+        await self.refresh_pairing_state()
+        self._schedule_pairing_refresh()
+
+    async def close_pairing_window(self) -> None:
+        """End the manual/boot windows; pairability then follows the bond rule."""
+
+        self._manual_deadline = None
+        self._boot_deadline = None
+        self._cancel_pairing_task()
+        await self.refresh_pairing_state()
+
+    def _on_pairing_request(self, _device: str) -> None:
+        """Re-check for a stored LE bond shortly after BlueZ presents a device."""
+
+        if self._bond_task is not None and not self._bond_task.done():
+            return
+        self._bond_task = asyncio.create_task(self._refresh_after_bond())
+
+    async def _refresh_after_bond(self) -> None:
+        """Re-read bonds a few times; BlueZ stores the key after the agent call."""
+
+        try:
+            for delay in (1.0, 2.0, 7.0):
+                await asyncio.sleep(delay)
+                await self.refresh_pairing_state()
+                if not self.app.pairing_open:
+                    break
+        except asyncio.CancelledError:
+            raise
+        self._schedule_pairing_refresh()
+
+    async def refresh_pairing_state(self) -> None:
+        """Apply the stored-bond and deadline rules to Adapter1.Pairable."""
+
+        if not self._started:
+            return
+        pairable = await self._should_be_pairable()
+        if pairable == self.app.pairing_open:
+            return
+        self.app.pairing_open = pairable
+        try:
+            await self.backend.set_pairable(pairable)
+        except Exception as exc:
+            LOG.warning("could not set adapter pairability to %s: %s", pairable, exc)
+
+    async def _should_be_pairable(self) -> bool:
+        if self.continuous_pairing:
+            return True
+        now = self._clock()
+        if self._manual_deadline is not None and now < self._manual_deadline:
+            return True
+        if self._boot_deadline is not None and now < self._boot_deadline:
+            return True
+        try:
+            return not await self.backend.has_le_bond()
+        except Exception as exc:
+            LOG.warning("could not read the LE bond state: %s", exc)
+            return False
+
+    def _next_deadline(self) -> float | None:
+        now = self._clock()
+        deadlines = [
+            deadline
+            for deadline in (self._boot_deadline, self._manual_deadline)
+            if deadline is not None and deadline > now
+        ]
+        return min(deadlines) if deadlines else None
+
+    def _schedule_pairing_refresh(self) -> None:
+        self._cancel_pairing_task()
+        deadline = self._next_deadline()
+        if deadline is None:
+            return
+        self._pairing_task = asyncio.create_task(
+            self._refresh_pairing_after(max(0.001, deadline - self._clock()))
+        )
+
+    async def _refresh_pairing_after(self, seconds: float) -> None:
         try:
             await asyncio.sleep(seconds)
         except asyncio.CancelledError:
             raise
-        # This task is finishing; do not cancel it from close_pairing_window.
         self._pairing_task = None
-        await self.close_pairing_window()
-
-    async def close_pairing_window(self) -> None:
-        self.app.pairing_open = False
-        self._cancel_pairing_task()
-        # Adapter1.Pairable is shared with the Classic auto-pairer on hci0, but
-        # it is the only switch that gates a new bond. Leaving it as it was (or
-        # True) would keep the BLE door open after the window, so the fallback
-        # always clears it; the Classic pairer sets it again for its own scan.
-        try:
-            await self.backend.set_pairable(False)
-        except Exception as exc:
-            LOG.debug("could not disable pairing: %s", exc)
+        await self.refresh_pairing_state()
+        self._schedule_pairing_refresh()
 
     def _cancel_pairing_task(self) -> None:
         if self._pairing_task is not None:
             self._pairing_task.cancel()
             self._pairing_task = None
 
+    def _cancel_tasks(self) -> None:
+        self._cancel_pairing_task()
+        for task in (self._bond_task, self._advertising_task):
+            if task is not None:
+                task.cancel()
+        self._bond_task = None
+        self._advertising_task = None
+
     async def close(self) -> None:
         if self._started:
-            await self.close_pairing_window()
+            self.app.bridge.remove_hand_listener(self._on_hand_state_changed)
+            self.app.pairing_listener = None
+            self._cancel_tasks()
+            self.app.pairing_open = False
+            try:
+                await self.backend.set_pairable(False)
+            except Exception as exc:
+                LOG.debug("could not disable pairing: %s", exc)
             self.app.bridge.remove_sink(self.app)
             self.app.set_emitter(lambda _uuid, _value: None)
             self.app.stop_notify(FF14_BATCHED)
             self._started = False
         else:
-            self._cancel_pairing_task()
+            self._cancel_tasks()
         await self.backend.stop()
