@@ -9,6 +9,7 @@ from pathlib import Path
 
 from wmr_bridge.__main__ import _build_parser
 from wmr_bridge.ble_gatt import (
+    AGENT_PATH,
     APP_PATH,
     CHARACTERISTICS,
     CHARACTERISTIC_BY_UUID,
@@ -25,6 +26,7 @@ from wmr_bridge.ble_gatt import (
     RESULT_NOT_CONNECTED,
     SERVICE_PATH,
     BluezGattPeripheral,
+    DbusGattBackend,
     GattApplication,
     PairingAgentPolicy,
     build_dbus_interfaces,
@@ -55,6 +57,7 @@ class FakeBackend:
     def __init__(self, pairable: bool = False) -> None:
         self.notifications: list[tuple[str, bytes]] = []
         self.pairable: bool | None = pairable
+        self.pairable_calls: list[bool] = []
         self.started = False
         self.app: GattApplication | None = None
 
@@ -67,6 +70,7 @@ class FakeBackend:
 
     async def set_pairable(self, pairable: bool) -> None:
         self.pairable = pairable
+        self.pairable_calls.append(pairable)
 
     def notify(self, uuid: str, value: bytes) -> None:
         self.notifications.append((uuid, value))
@@ -129,6 +133,69 @@ class PairingAgentTests(unittest.TestCase):
             self.assertTrue(policy.confirm(device))
             self.assertTrue(policy.authorize(device))
             self.assertTrue(policy.authorize_service(device, FF10_SERVICE))
+
+
+class FakeAdapterInterface:
+    def __init__(self) -> None:
+        self.pairable: bool | None = None
+
+    async def set_pairable(self, pairable: bool) -> None:
+        self.pairable = pairable
+
+
+class FakeAgentManager:
+    def __init__(self) -> None:
+        self.registered: list[tuple[str, str]] = []
+        self.defaults: list[str] = []
+        self.unregistered: list[str] = []
+
+    async def call_register_agent(self, path: str, capability: str) -> None:
+        self.registered.append((path, capability))
+
+    async def call_request_default_agent(self, path: str) -> None:
+        self.defaults.append(path)
+
+    async def call_unregister_agent(self, path: str) -> None:
+        self.unregistered.append(path)
+
+
+class BackendAgentTests(unittest.IsolatedAsyncioTestCase):
+    """The Just Works agent lives only while the BLE pairing window is open."""
+
+    def _backend(self) -> tuple[DbusGattBackend, FakeAdapterInterface, FakeAgentManager]:
+        backend = DbusGattBackend()
+        adapter = FakeAdapterInterface()
+        agent_manager = FakeAgentManager()
+        backend._adapter_interface = adapter
+        backend._agent_manager = agent_manager
+        return backend, adapter, agent_manager
+
+    async def test_window_registers_default_and_close_unregisters(self) -> None:
+        backend, adapter, agent_manager = self._backend()
+        self.assertFalse(backend._agent_registered)
+        await backend.set_pairable(True)
+        self.assertEqual(agent_manager.registered, [(AGENT_PATH, "NoInputNoOutput")])
+        self.assertEqual(agent_manager.defaults, [AGENT_PATH])
+        self.assertTrue(adapter.pairable)
+        self.assertTrue(backend._agent_registered)
+
+        await backend.set_pairable(False)
+        self.assertEqual(agent_manager.unregistered, [AGENT_PATH])
+        self.assertFalse(adapter.pairable)
+        self.assertFalse(backend._agent_registered)
+
+    async def test_reopening_the_window_reclaims_default_without_reregistering(self) -> None:
+        backend, _adapter, agent_manager = self._backend()
+        await backend.set_pairable(True)
+        await backend.set_pairable(True)
+        self.assertEqual(len(agent_manager.registered), 1)
+        self.assertEqual(agent_manager.defaults, [AGENT_PATH, AGENT_PATH])
+
+    async def test_closing_without_an_open_window_leaves_the_agent_alone(self) -> None:
+        backend, adapter, agent_manager = self._backend()
+        await backend.set_pairable(False)
+        self.assertEqual(agent_manager.unregistered, [])
+        self.assertFalse(adapter.pairable)
 
 
 @unittest.skipUnless(HAS_DBUS_NEXT, "python3-dbus-next is not installed")
@@ -526,6 +593,11 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(peripheral.app.pairing_open)
         self.assertFalse(backend.pairable)
         await peripheral.close()
+
+    async def test_pairing_window_is_released_when_the_peripheral_closes(self) -> None:
+        self.assertEqual(self.backend.pairable_calls, [True])
+        await self.peripheral.close()
+        self.assertEqual(self.backend.pairable_calls, [True, False])
 
     async def test_ff16_is_read_without_a_bond(self) -> None:
         raw = self.app.read_value(FF16_VERSION)

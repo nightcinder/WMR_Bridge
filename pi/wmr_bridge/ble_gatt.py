@@ -869,7 +869,6 @@ class DbusGattBackend:
             )
         except Exception as exc:
             LOG.warning("BlueZ pairing agent unavailable: %s", exc)
-        await self._register_agent()
 
         try:
             await self._gatt_manager.call_register_application(APP_PATH, {})
@@ -880,24 +879,45 @@ class DbusGattBackend:
             await self.stop()
             raise
 
-    async def _register_agent(self) -> None:
-        """Register the Just Works agent Android needs for LE bonding.
+    async def _claim_agent(self) -> None:
+        """Register the Just Works agent and make it the adapter default.
 
         BlueZ rejects an incoming pair request when no default agent is set.
-        bluetoothctl in the Classic auto-pairer registers its own agent and
-        that agent disappears when the session exits, so opening the window
-        claims default again.
+        The agent is scoped to the bounded BLE pairing window: a permanent
+        Just Works default would let any nearby LE central bond while the
+        Classic auto-pairer leaves ``Adapter1.Pairable`` on for its own scan,
+        and a new bond grants encrypt-read on FF13/FF17. bluetoothctl in that
+        auto-pairer registers its own agent for the controllers.
         """
 
         if self._agent_manager is None:
             return
         try:
-            await self._agent_manager.call_register_agent(AGENT_PATH, "NoInputNoOutput")
-            self._agent_registered = True
+            if not self._agent_registered:
+                await self._agent_manager.call_register_agent(
+                    AGENT_PATH, "NoInputNoOutput"
+                )
+                self._agent_registered = True
+            # The Classic auto-pairer's bluetoothctl session may have claimed
+            # default and dropped it; reclaim ours so a phone that bonds during
+            # this window still has an agent to confirm it.
             await self._agent_manager.call_request_default_agent(AGENT_PATH)
             LOG.info("BLE pairing agent registered (NoInputNoOutput)")
         except Exception as exc:
             LOG.warning("could not register the BlueZ pairing agent: %s", exc)
+
+    async def _release_agent(self) -> None:
+        """Drop the Just Works agent when the pairing window closes."""
+
+        if self._agent_manager is None or not self._agent_registered:
+            return
+        try:
+            await self._agent_manager.call_unregister_agent(AGENT_PATH)
+            LOG.info("BLE pairing agent released")
+        except Exception as exc:  # already gone is fine
+            LOG.debug("unregister agent: %s", exc)
+        finally:
+            self._agent_registered = False
 
     def notify(self, uuid: str, value: bytes) -> None:
         characteristic = self._characteristics.get(uuid)
@@ -911,26 +931,21 @@ class DbusGattBackend:
     async def set_pairable(self, pairable: bool) -> None:
         if self._adapter_interface is None:
             return
-        await self._adapter_interface.set_pairable(bool(pairable))
-        if pairable and self._agent_registered and self._agent_manager is not None:
-            # The Classic auto-pairer's bluetoothctl session registers its own
-            # default agent and drops it on exit; reclaim ours so a phone that
-            # bonds during this window still has an agent to confirm it.
-            try:
-                await self._agent_manager.call_request_default_agent(AGENT_PATH)
-            except Exception as exc:
-                LOG.debug("could not make the pairing agent default: %s", exc)
+        # The agent exists only for this window, so a stray LE bond cannot be
+        # completed Just Works while the adapter is otherwise left pairable.
+        if pairable:
+            await self._claim_agent()
+        try:
+            await self._adapter_interface.set_pairable(bool(pairable))
+        finally:
+            if not pairable:
+                await self._release_agent()
 
     async def stop(self) -> None:
         bus = self._bus
         if bus is None:
             return
-        if self._agent_manager is not None and self._agent_registered:
-            try:
-                await self._agent_manager.call_unregister_agent(AGENT_PATH)
-            except Exception as exc:  # already gone is fine
-                LOG.debug("unregister agent: %s", exc)
-            self._agent_registered = False
+        await self._release_agent()
         if self._advertising_manager is not None:
             try:
                 await self._advertising_manager.call_unregister_advertisement(
