@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -137,12 +138,13 @@ def ensure_just_works_repairing(
         return False
 
     updated = set_just_works_repairing(text, value)
-    mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(updated)
-        os.chmod(tmp, mode)
+        if path.exists():
+            # Keep the distribution's permission bits (normally 0644).
+            shutil.copymode(path, tmp)
         os.replace(tmp, path)
     except BaseException:
         try:
