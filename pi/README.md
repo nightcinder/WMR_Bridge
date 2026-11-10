@@ -151,6 +151,8 @@ Advertising uses two tiers. With no Classic controller connected it runs at LEAd
 
 The adapter is pairable for 180 seconds after boot (`--ble-pairing-window`), then only while no LE bond is stored; a bonded phone reconnects without pairability. `--ble-continuous-pairing` keeps the adapter pairable while BLE is active, the ESP32 behaviour, and is opt-in.
 
+The same LE link exposes the HID-over-GATT gamepad service (`0x1812`): HID Information, the 91-byte Report Map, Protocol Mode, HID Control Point and an encrypted input Report (ID 1). The 9-byte report is the firmware's `src/wmr_hid.c` mapping, pinned by `tests/vectors/hid_gamepad.txt`, so Android binds the controllers as a gamepad without an app. No report is sent before a Classic controller connects or before the phone enables the Report CCCD. When a WebSocket client or an FF11/FF12/FF14 subscriber is active, HID notifications pause and one neutral report releases any held input; they resume with the next sample when the stream path clears.
+
 Pass `--no-ble` to disable the BLE peripheral. `--ble-fallback` stays as a deprecated no-op alias and prints a deprecation warning. The peripheral needs `python3-dbus-next` and a free hci adapter. It has not been verified on hardware.
 
 ## Files
@@ -159,6 +161,7 @@ Pass `--no-ble` to disable the BLE peripheral. `--ble-fallback` stays as a depre
 | --- | --- |
 | `wmr_bridge/protocol.py` | FF11 fragments, FF12 records, FF14 batches (C-compatible) |
 | `wmr_bridge/decode.py` | Bit-exact Python port of `src/wmr_decode.c` and `wmr_decoded.c` |
+| `wmr_bridge/hid_gamepad.py` | HID Report Map and 9-byte gamepad report, ported from `src/wmr_hid.c` |
 | `wmr_bridge/bluez.py` | hidraw discovery and report normalisation |
 | `wmr_bridge/bridge.py` | sequence numbers, stream fan-out, JSON control protocol, bridge identity |
 | `wmr_bridge/discovery.py` | UDP `WMR_DISCOVER_V1` responder |
