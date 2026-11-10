@@ -58,7 +58,7 @@ this block.
 ## 4. Block B — FF16, FF17, stick
 
 **FF16:** read the app Debug screen and console `v`; repeat after reconnect with
-`none` and `FF14`. Pass: `firmware 0.3.16`, `FF11+` through `FF17+`, console matches `build-info.json`, string stable. Fail: `n/a`, `malformed`, different version or stream-dependent string.
+`none` and `FF14`. Pass: `firmware 0.3.16 or later (or the PR #191 build hash)`, `FF11+` through `FF17+`, console matches `build-info.json`, string stable. Fail: `n/a`, `malformed`, older version, unrecognized build hash, or stream-dependent string.
 
 **FF17:** both hands awake, FF14. `0x02` CONNECT, `0x03` DISCONNECT, `0x05`
 FORGET_BOND, `0x04` FORGET_ADDRS. ATT `0x84` = NOT_CONNECTED, `0x81` = BUSY.
