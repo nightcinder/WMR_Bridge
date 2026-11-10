@@ -25,6 +25,9 @@ LOG = logging.getLogger(__name__)
 
 IDLE_SLEEP_TIMEOUT = 300.0
 IDLE_POWEROFF_TIMEOUT = 900.0
+# Mirrors WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS: after the ACL is dropped, refuse
+# the controller's page-in until its own shutdown timer has run out.
+IDLE_RECONNECT_COOLDOWN = 60.0
 
 
 def read_capture(path: str | os.PathLike[str]) -> list[tuple[str, bytes]]:
@@ -145,7 +148,9 @@ class HidrawManager:
         keep_alive_interval: float = KEEP_ALIVE_INTERVAL,
         idle_sleep_timeout: float = IDLE_SLEEP_TIMEOUT,
         idle_poweroff_timeout: float = IDLE_POWEROFF_TIMEOUT,
+        idle_reconnect_cooldown: float = IDLE_RECONNECT_COOLDOWN,
         poweroff: Callable[[str], bool] | None = None,
+        reconnect_guard: Callable[[str, bool], bool] | None = None,
         disconnect_command: str = "bluetoothctl",
     ) -> None:
         self.bridge = bridge
@@ -158,8 +163,12 @@ class HidrawManager:
         self.keep_alive_interval = max(1.0, keep_alive_interval)
         self.idle_sleep_timeout = max(0.0, idle_sleep_timeout)
         self.idle_poweroff_timeout = max(0.0, idle_poweroff_timeout)
+        self.idle_reconnect_cooldown = max(0.0, idle_reconnect_cooldown)
         self.disconnect_command = disconnect_command
         self._poweroff = poweroff
+        self._reconnect_guard = reconnect_guard
+        self._powered_off_until_us: dict[int, int] = {}
+        self._poweroff_address: dict[int, str] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
         self._readers: dict[str, HidrawReader] = {}
         self._hand_of: dict[str, int] = {}
@@ -191,6 +200,11 @@ class HidrawManager:
                     pass
         self._task = None
         self._keep_alive_task = None
+        # Do not leave a controller blocked in BlueZ after a clean shutdown.
+        for address in list(self._poweroff_address.values()):
+            await self._guard(address, False)
+        self._poweroff_address.clear()
+        self._powered_off_until_us.clear()
         for path in list(self._readers):
             self._close(path)
 
@@ -224,6 +238,10 @@ class HidrawManager:
             return False
         if hand not in self.allowed_hands:
             return False
+        if hand in self._powered_off_until_us:
+            # The link is being dropped to power the controller off. Refuse its
+            # page-in until the cooldown ends, even if BlueZ let it through.
+            return False
         other = self._path_of_hand.get(hand)
         if other is not None and other != path:
             LOG.warning(
@@ -246,6 +264,8 @@ class HidrawManager:
         self._address_of_hand[hand] = device.uniq
         self._asleep.discard(hand)
         self._powered_off.discard(hand)
+        self._powered_off_until_us.pop(hand, None)
+        self._poweroff_address.pop(hand, None)
         self._warned_no_address.discard(hand)
         self.bridge.set_hand_connected(hand, True, device.uniq)
         self._no_controllers_warned = False
@@ -263,17 +283,19 @@ class HidrawManager:
             return
         hand = self._hand_of.pop(path, None)
         if hand is not None:
-            assert self._loop is not None
-            try:
-                self._loop.remove_reader(reader.fd)
-            except (OSError, ValueError):
-                pass
+            if self._loop is not None:
+                try:
+                    self._loop.remove_reader(reader.fd)
+                except (OSError, ValueError):
+                    pass
             if self._path_of_hand.get(hand) == path:
                 del self._path_of_hand[hand]
                 self._address_of_hand.pop(hand, None)
-                self._asleep.discard(hand)
-                self._powered_off.discard(hand)
-                self._warned_no_address.discard(hand)
+                # A power-off latch and its cooldown outlive the hidraw node;
+                # the reconnect guard and the deadline in _idle_tick own them.
+                if hand not in self._powered_off:
+                    self._asleep.discard(hand)
+                    self._warned_no_address.discard(hand)
                 self.bridge.set_hand_connected(hand, False)
         reader.close()
         if hand is None:
@@ -318,6 +340,10 @@ class HidrawManager:
     def _note_activity(self, hand: int, reader: HidrawReader) -> None:
         """Resume streaming immediately when an idle controller moves."""
 
+        if hand in self._powered_off_until_us:
+            # A report already in flight must not undo the power-off latch; the
+            # controller's page-in is refused until the cooldown ends.
+            return
         if hand not in self._asleep and hand not in self._powered_off:
             return
         self._asleep.discard(hand)
@@ -331,8 +357,42 @@ class HidrawManager:
     def _now_us(self) -> int:
         return time.monotonic_ns() // 1000
 
+    async def _guard(self, address: str, blocked: bool) -> bool:
+        """Block or unblock the controller in BlueZ; tolerate a missing client."""
+
+        if self._reconnect_guard is None or not address:
+            return False
+        try:
+            return bool(
+                await asyncio.to_thread(self._reconnect_guard, address, blocked)
+            )
+        except Exception:  # a guard failure must not stop the idle policy
+            LOG.exception(
+                "reconnect guard %s %s failed",
+                "block" if blocked else "unblock",
+                address,
+            )
+            return False
+
     async def _idle_tick(self, now_us: int) -> None:
         """Apply the two-stage idle policy to every open controller."""
+
+        # Lift the post-power-off reconnect guard once the controller has had
+        # time to shut down. This runs even when no hidraw node is open.
+        for hand, until in list(self._powered_off_until_us.items()):
+            if now_us < until:
+                continue
+            address = self._poweroff_address.pop(hand, "")
+            self._powered_off_until_us.pop(hand, None)
+            self._powered_off.discard(hand)
+            self._asleep.discard(hand)
+            self._warned_no_address.discard(hand)
+            LOG.info(
+                "%s power-off cooldown elapsed: reconnects allowed",
+                "LEFT" if hand == 0 else "RIGHT",
+            )
+            if address:
+                await self._guard(address, False)
 
         for path, reader in list(self._readers.items()):
             hand = self._hand_of.get(path)
@@ -368,6 +428,16 @@ class HidrawManager:
                     address,
                 )
                 self._asleep.add(hand)
+                # Refuse the hand immediately, then block the page-in before
+                # dropping the ACL: a controller that is still awake
+                # reconnects within seconds of the disconnect.
+                guarded = self.idle_reconnect_cooldown > 0
+                if guarded:
+                    self._powered_off_until_us[hand] = now_us + int(
+                        self.idle_reconnect_cooldown * 1_000_000
+                    )
+                    self._poweroff_address[hand] = address
+                blocked = guarded and await self._guard(address, True)
                 activity_before = stats.last_activity_us
                 powered_off = False
                 try:
@@ -381,13 +451,17 @@ class HidrawManager:
                         )
                 except Exception:  # a failed power-off must be retried, not fatal
                     LOG.exception("%s power-off attempt raised; will retry", label)
-                if self._hand_of.get(path) != hand:
-                    continue
+                # A successful block already drops the ACL (BlueZ's
+                # device_block calls disconnect_all), so the link is down even
+                # when the explicit disconnect then reports NotConnected.
+                powered_off = powered_off or blocked
                 if powered_off:
                     # Latch only after the ACL actually dropped. A failure
                     # leaves the hand eligible so the next tick retries.
                     self._powered_off.add(hand)
                     self._asleep.add(hand)
+                    if self._readers.get(path) is reader:
+                        self._close(path)
                     if stats.last_activity_us != activity_before:
                         LOG.info(
                             "%s activity arrived while its ACL was "
@@ -395,6 +469,11 @@ class HidrawManager:
                             label,
                         )
                 else:
+                    # No power-off, so do not leave the hand refused or blocked.
+                    self._powered_off_until_us.pop(hand, None)
+                    self._poweroff_address.pop(hand, None)
+                    if blocked:
+                        await self._guard(address, False)
                     LOG.warning(
                         "%s power-off disconnect failed; will retry", label
                     )

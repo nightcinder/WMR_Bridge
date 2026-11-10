@@ -1035,7 +1035,7 @@ tester checklist and pinned image/package checksums are in
 | P10 | 8 h soak | no memory growth, no fd leak, no queue drops at idle |
 | P11 | Auto-pair from unpaired | start with both controllers unpaired; put one in pairing mode; unattended pair/trust/connect within 60 s; repeat for the other hand; with `--no-auto-pair` the bridge does not pair and pairing stays with the operator |
 | P12 | TCP-to-BLE failover and jitter | transition time under 2.5 s, inter-frame delivery pause under 3 s, sequence numbers continue, clean upgrade back to TCP when Wi-Fi recovers |
-| P13 | Controller idle sleep and power-off | 0x06 keep-alive pauses at 300 s ± 5 s; motion wakes controller in under 1.0 s; power-off disconnect at 900 s ± 5 s |
+| P13 | Controller idle sleep and power-off | 0x06 keep-alive pauses at 300 s ± 5 s; motion wakes controller in under 1.0 s; the BlueZ block drops the ACL at 900 s ± 5 s; the controller stays disconnected for the 60 s cooldown, then a button press reconnects it |
 | P14 | Uplink priority and Sitting P gates | `eth0` route metric 100 preferred over 5 GHz Wi-Fi metric 200; `rttMs.p50` < 15 ms, gaps 0, missing share <= 3.0 %, non-null `serverStatus` with `dropped == 0` |
 
 Record host model, OS, BlueZ/kernel versions, Wi-Fi band/channel, controller
