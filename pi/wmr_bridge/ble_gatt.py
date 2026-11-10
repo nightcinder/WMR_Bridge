@@ -961,7 +961,11 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
 
         @dbus_property(access=PropertyAccess.READ)
         def Service(self) -> "o":
-            return self.spec.service
+            # GattCharacteristic1.Service is the object path of the service,
+            # not its UUID. The spec keeps the UUID for grouping.
+            if self.spec.service == HID_SERVICE:
+                return HID_SERVICE_PATH
+            return SERVICE_PATH
 
         @dbus_property(access=PropertyAccess.READ)
         def Flags(self) -> "as":

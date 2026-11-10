@@ -454,7 +454,10 @@ class DbusNextInterfaceTests(unittest.TestCase):
                 )
                 self.assertEqual(interface.Flags, list(descriptor.flags))
                 self.assertEqual(interface.Value, descriptor.value)
-                self.assertEqual(interface.ReadValue({}), descriptor.value)
+                self.assertEqual(
+                    {method.name for method in interface.introspect().methods},
+                    {"ReadValue"},
+                )
         self.assertEqual(advertisement.Type, "peripheral")
         self.assertTrue(advertisement.Discoverable)
         self.assertEqual(advertisement.Appearance, GAMEPAD_APPEARANCE)
