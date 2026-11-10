@@ -127,14 +127,17 @@ reuse it. The output in `dist/` includes the bootloader, partition table,
 application and merged factory images, plus a browser flasher page. The browser
 manifest writes the three separate images at offsets `0x1000`, `0x8000` and
 `0x10000`. It does not write NVS (`0x9000`-`0xFFFF`), so a reflash with
-"Erase device" unchecked keeps the stored pairings. `0.3.16` is the current
-release. It is the Pi uplink and BLE advertising release: the Pi host bridge
-advertises the FF10 GATT service by default with per-client CCCD gating, prefers
-an Ethernet uplink over 5 GHz and 2.4 GHz Wi-Fi using route metrics, adds
-`AF_NETLINK` to the systemd unit and documents token access for
-`wifi_probe.py`. The firmware is unchanged from 0.3.15, which re-sends the FF13
-streaming-enable pair on reconnect and every 10 s so a connected controller
-stays awake. The controller-family firmware on top of 0.3.5 remains: one driver
+"Erase device" unchecked keeps the stored pairings. `0.3.17` is the current
+release. It is the BLE GATT start fix release: the Pi host bridge builds its
+dbus-next GATT interfaces with annotations dbus-next 0.2.3 on Python 3.13
+accepts, so the daemon starts the GATT application and advertises the FF10
+service over Bluetooth by default (ONY-1175). Everything else is 0.3.16: FF10
+advertised by default with per-client CCCD gating, an Ethernet uplink over
+5 GHz and 2.4 GHz Wi-Fi using route metrics, `AF_NETLINK` in the systemd unit
+and token access for `wifi_probe.py`. The firmware is unchanged from 0.3.15,
+which re-sends the FF13 streaming-enable pair on reconnect and every 10 s so a
+connected controller stays awake. The controller-family firmware on top of 0.3.5
+remains: one driver
 table per model, PSVR2 FF12/FF14 decoding, and Nintendo Switch Joy-Con/Pro
 handshake and `0x30` decoding. Switch support
 is host-tested and firmware-build-tested only and has never run on a
