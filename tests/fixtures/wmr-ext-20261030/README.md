@@ -7,6 +7,8 @@ It is not a real tester export.
   (`sessionA-0` for the LEFT capture, `sessionB-0` for the RIGHT capture) and
   repeated 12 times so the still phase clears `analyze_capture.py`'s ten-frame
   minimum. The sample's real hand is unknown; the header hand is synthetic.
-- `manifest.md`, `diagnostics.json` and the pose file follow the shapes the
-  companion app writes (`test_bundle.dart`). Values are made up.
+- `manifest.md`, `diagnostics.json`, `device_environment.json` and the pose
+  file follow the shapes the companion app writes (`test_bundle.dart`,
+  `device_environment.dart`). Values are made up. The manifest's speed-gate
+  table stands in for the guided bench's per-cell verdicts.
 - The tests zip this directory; do not add generated output here.

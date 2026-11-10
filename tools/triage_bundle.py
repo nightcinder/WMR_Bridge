@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Triage a WMR external test bundle (`wmr-ext-*.zip`) from the companion app.
 
-Unpacks the zip, reads `manifest.md` and `diagnostics.json`, dispatches every
-capture under `captures/` to `tools/analyze_capture.py`, and prints one report:
-app, firmware, MTU and stream facts, per-hand rates and loss, sequence gaps,
-the 6DoF pose-file inventory, and every missing or inconsistent file.
+Unpacks the zip, reads `manifest.md`, `diagnostics.json` and (when the
+companion exported one) `device_environment.json`, dispatches every capture
+under `captures/` to `tools/analyze_capture.py`, and prints one report: app,
+firmware, MTU and stream facts, per-hand rates and loss, sequence gaps, the
+USB/display fingerprint the host reported, per-cell speed-gate verdicts, the
+6DoF pose-file inventory, and every missing or inconsistent file.
 
 A bundle without a manifest, without diagnostics, or without any capture or
 pose file exits nonzero and names the problem. Everything else is reported and
@@ -32,6 +34,47 @@ POSE_NAME = re.compile(
     r"^pose_capture_([A-Za-z0-9]+)_(left|right)_(.+?)(?:_run(\d+))?\.json$")
 # The guided bench timer stops at 15 s; accept the boundary with tolerance.
 minimumRunSeconds = 14
+
+DEVICE_ENVIRONMENT_FILE = "device_environment.json"
+DEVICE_ENVIRONMENT_FORMAT = "wmr-device-environment/1"
+
+# Vendors the companion already recognizes. Any other vendor ID is a new
+# fingerprint, not a failure: it is reported so it can be added to the table.
+USB_VENDOR_NAMES = {
+    0x35CA: "VITURE",
+    0x3318: "XREAL",
+}
+
+# Base USB class codes from the USB-IF class-code table. An unlisted code is
+# still reported verbatim.
+USB_CLASS_NAMES = {
+    0x00: "per-interface",
+    0x01: "audio",
+    0x02: "CDC communications",
+    0x03: "HID",
+    0x05: "physical",
+    0x06: "image",
+    0x07: "printer",
+    0x08: "mass storage",
+    0x09: "hub",
+    0x0A: "CDC data",
+    0x0B: "smart card",
+    0x0D: "content security",
+    0x0E: "video",
+    0x0F: "personal healthcare",
+    0x10: "audio/video",
+    0x11: "billboard",
+    0x12: "USB type-C bridge",
+    0x13: "bulk display",
+    0xDC: "diagnostic",
+    0xE0: "wireless",
+    0xEF: "miscellaneous",
+    0xFE: "application specific",
+    0xFF: "vendor specific",
+}
+
+SPEED_GATE_KEYS = ("speed_gates", "pose_speed_gates", "speed-gates")
+SPEED_GATE_VERDICTS = ("pass", "warn", "fail", "skipped", "unknown")
 
 
 class BundleError(Exception):
@@ -119,6 +162,312 @@ def _number(value):
     if isinstance(value, (int, float)):
         return ("%.1f" % value) if isinstance(value, float) else str(value)
     return str(value)
+
+
+def _int_value(value):
+    """An integer from a JSON number or a hexadecimal ID string."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value.strip(), 16)
+        except ValueError:
+            return None
+    return None
+
+
+def _hex_id(value):
+    return "unknown" if value is None else "%04x" % value
+
+
+def _byte_hex(value):
+    return "??" if value is None else "%02x" % value
+
+
+def _usb_id_text(vendor, product):
+    return "%s:%s" % (_hex_id(vendor), _hex_id(product))
+
+
+def _usb_names(device):
+    """`(manufacturer product)` text for one USB device, without duplicates."""
+    parts = []
+    for key in ("manufacturer", "product"):
+        value = device.get(key)
+        if isinstance(value, str) and value.strip() and value.strip() not in parts:
+            parts.append(value.strip())
+    return " ".join(parts)
+
+
+def _device_environment_section(work, problems):
+    """USB, display and XR fingerprint from `device_environment.json`."""
+    path = os.path.join(work, DEVICE_ENVIRONMENT_FILE)
+    if not os.path.isfile(path):
+        problems.append("%s is missing from the bundle; no USB or display "
+                        "fingerprint was captured" % DEVICE_ENVIRONMENT_FILE)
+        return ["Device environment: not exported"]
+    try:
+        with open(path, "r") as fp:
+            data = json.load(fp)
+    except (OSError, ValueError) as exc:
+        problems.append("%s is unreadable: %s" % (DEVICE_ENVIRONMENT_FILE, exc))
+        return ["Device environment: unreadable"]
+    if not isinstance(data, dict):
+        problems.append("%s is not a JSON object" % DEVICE_ENVIRONMENT_FILE)
+        return ["Device environment: unreadable"]
+
+    status = str(data.get("status") or "ok")
+    lines = ["Device environment: %s, status %s, captured %s"
+             % (data.get("format", "unknown"), status,
+                data.get("captured_at", "unknown"))]
+    if status != "ok":
+        detail = data.get("detail") or data.get("reason")
+        problems.append("device environment probe %s%s"
+                        % (status, ": %s" % detail if detail else ""))
+
+    usb = data.get("usb") if isinstance(data.get("usb"), dict) else {}
+    devices = [device for device in usb.get("devices") or []
+               if isinstance(device, dict)]
+    available = usb.get("host_available") is True
+    lines.append("  USB: host %s, %d device(s)"
+                 % ("available" if available else "not available", len(devices)))
+    if not available:
+        problems.append("device environment: USB host is not available, so no "
+                        "VID/PID fingerprint was captured")
+    for device in devices:
+        vendor = _int_value(device.get("vendor_id"))
+        product = _int_value(device.get("product_id"))
+        usb_id = _usb_id_text(vendor, product)
+        vendor_name = USB_VENDOR_NAMES.get(vendor)
+        names = _usb_names(device)
+        lines.append("    %s  %s%s"
+                     % (usb_id, vendor_name or "unknown vendor",
+                        "  %s" % names if names else ""))
+        if vendor not in USB_VENDOR_NAMES:
+            problems.append(
+                "device environment: unrecognized USB device %s%s; add its "
+                "vendor ID to the glasses table once the model is known"
+                % (usb_id, " (%s)" % names if names else ""))
+        for interface in device.get("interfaces") or []:
+            if not isinstance(interface, dict):
+                continue
+            base = _int_value(interface.get("class"))
+            sub = _int_value(interface.get("subclass"))
+            protocol = _int_value(interface.get("protocol"))
+            lines.append("      interface %s/%s/%s %s"
+                         % (_byte_hex(base), _byte_hex(sub),
+                            _byte_hex(protocol),
+                            USB_CLASS_NAMES.get(base, "unknown class")))
+            if base not in USB_CLASS_NAMES:
+                problems.append(
+                    "device environment: unrecognized USB interface class %s "
+                    "on %s" % (_byte_hex(base), usb_id))
+
+    displays = data.get("displays")
+    declared = None
+    if isinstance(displays, dict):
+        declared = displays.get("external_count")
+        items = [item for item in displays.get("items") or []
+                 if isinstance(item, dict)]
+    else:
+        items = [item for item in displays or [] if isinstance(item, dict)]
+    external = [item for item in items
+                if item.get("external") is True or item.get("type") == "external"]
+    lines.append("  Displays: %d external of %d"
+                 % (len(external), len(items)))
+    if isinstance(declared, int) and declared != len(external):
+        problems.append("device environment: external_count %d disagrees with "
+                        "%d external display item(s)"
+                        % (declared, len(external)))
+    for item in items:
+        size = ""
+        if item.get("width") is not None and item.get("height") is not None:
+            size = " %sx%s" % (item["width"], item["height"])
+        refresh = item.get("refresh_rate_hz")
+        rate = " @ %s Hz" % _number(refresh) if refresh is not None else ""
+        lines.append("    display %s %s%s%s%s"
+                     % (item.get("id", "?"), item.get("type", "unknown"),
+                        size, rate,
+                        "  %s" % item["name"] if item.get("name") else ""))
+
+    features = [feature for feature in data.get("xr_features") or []
+                if isinstance(feature, dict)]
+    if features:
+        present = [str(feature.get("name", "unknown")) for feature in features
+                   if feature.get("present") is True]
+        absent = [str(feature.get("name", "unknown")) for feature in features
+                  if feature.get("present") is not True]
+        lines.append("  XR features: %d present, %d absent"
+                     % (len(present), len(absent)))
+        for name in present:
+            lines.append("    + %s" % name)
+        for name in absent:
+            lines.append("    - %s" % name)
+    return lines
+
+
+def _gate_verdict(value):
+    """`(verdict, detail)` from a manifest or diagnostics speed-gate value."""
+    if isinstance(value, bool):
+        return ("pass" if value else "fail"), ""
+    detail = ""
+    raw = value
+    if isinstance(value, dict):
+        for key in ("detail", "reason", "note", "speed", "speed_cm_s"):
+            if value.get(key) not in (None, ""):
+                detail = str(value[key])
+                break
+        raw = ""
+        for key in ("verdict", "status", "result", "passed", "pass"):
+            if key in value:
+                raw = value[key]
+                break
+    if isinstance(raw, bool):
+        return ("pass" if raw else "fail"), detail
+    text = str(raw).strip()
+    lowered = text.lower()
+    if "fail" in lowered or "out of band" in lowered or "out-of-band" in lowered:
+        verdict = "fail"
+    elif "warn" in lowered:
+        verdict = "warn"
+    elif "pass" in lowered or lowered in ("ok", "true"):
+        verdict = "pass"
+    elif "skip" in lowered or lowered in ("", "none", "-", "—", "unknown"):
+        verdict = "skipped"
+    else:
+        verdict = "unknown"
+    if not detail:
+        detail = re.sub(
+            r"^(passed|pass|warning|warn|failed|fail|skipped|skip|ok)\b"
+            r"[\s:,-]*", "", text, flags=re.IGNORECASE).strip()
+    return verdict, detail
+
+
+def _speed_gate_rows(manifest_text):
+    """Rows from any markdown table that has a Speed gate column."""
+    rows = []
+    header = None
+    for line in manifest_text.splitlines():
+        stripped = line.strip()
+        if not (stripped.startswith("|") and stripped.endswith("|")):
+            header = None
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if header is None:
+            header = [cell.lower() for cell in cells]
+            continue
+        if all(cell and set(cell) <= set("-: ") for cell in cells):
+            continue
+        gate_index = None
+        for index, name in enumerate(header):
+            if "speed" in name and "gate" in name:
+                gate_index = index
+                break
+        if gate_index is None or gate_index >= len(cells):
+            continue
+        values = dict(zip(header, cells))
+        cell = ""
+        for key in ("cell", "name", "file"):
+            if values.get(key) not in (None, "", "-", "—"):
+                cell = os.path.basename(values[key])
+                break
+        if not cell:
+            parts = [values[key] for key in ("hand", "segment", "run")
+                     if values.get(key) not in (None, "", "-", "—")]
+            cell = " ".join(parts) or "row %d" % (len(rows) + 1)
+        rows.append((cell, cells[gate_index]))
+    return rows
+
+
+def _speed_gate_bullets(manifest_text):
+    """`cell: value` bullets under a heading that names speed gates."""
+    rows = []
+    in_section = False
+    for line in manifest_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            heading = stripped.lstrip("#").strip().lower()
+            in_section = "speed" in heading and "gate" in heading
+            continue
+        if not in_section:
+            continue
+        match = re.match(r"^[-*]\s+([^:]+):\s*(.+)$", stripped)
+        if not match:
+            continue
+        cell = match.group(1).strip()
+        if re.match(r"speed[- ]gate\b", cell, re.IGNORECASE):
+            # The explicit `- Speed gate <cell>: value` form owns these.
+            continue
+        rows.append((cell, match.group(2)))
+    return rows
+
+
+def _speed_gate_entries(manifest_text, diagnostics):
+    """Cell -> `(verdict, detail)` from the manifest, then diagnostics.json."""
+    entries = {}
+
+    def add(cell, value):
+        cell = str(cell).strip()
+        if not cell or cell in entries:
+            return
+        verdict, detail = _gate_verdict(value)
+        entries[cell] = (verdict, detail)
+
+    for cell, value in _speed_gate_rows(manifest_text):
+        add(cell, value)
+    for cell, value in _speed_gate_bullets(manifest_text):
+        add(cell, value)
+    for line in manifest_text.splitlines():
+        match = re.match(r"^\s*-\s*speed[- ]gate\s*:\s*(.+)$", line,
+                         re.IGNORECASE)
+        if match:
+            add("", match.group(1))
+            continue
+        match = re.match(r"^\s*-\s*speed[- ]gate\s+(.+?)\s*:\s+(.+)$",
+                         line, re.IGNORECASE)
+        if match:
+            add(match.group(1), match.group(2))
+    for key in SPEED_GATE_KEYS:
+        value = diagnostics.get(key)
+        if isinstance(value, dict):
+            for cell, raw in value.items():
+                add(cell, raw)
+        elif isinstance(value, list):
+            for index, raw in enumerate(value, 1):
+                if not isinstance(raw, dict):
+                    continue
+                cell = None
+                for name in ("cell", "id", "name", "segment", "file"):
+                    if raw.get(name) not in (None, ""):
+                        cell = os.path.basename(str(raw[name]))
+                        break
+                add(cell or "cell %d" % index, raw)
+    return entries
+
+
+def _speed_gate_section(manifest_text, diagnostics, problems):
+    """One line per cell plus a verdict summary; warn and fail are problems."""
+    entries = _speed_gate_entries(manifest_text, diagnostics)
+    if not entries:
+        return ["Speed gates: not recorded"]
+    counts = {verdict: 0 for verdict in SPEED_GATE_VERDICTS}
+    for verdict, _detail in entries.values():
+        counts[verdict] = counts.get(verdict, 0) + 1
+    lines = ["Speed gates: %d cell(s), %d pass, %d warn, %d fail, %d skipped, "
+             "%d unknown"
+             % (len(entries), counts["pass"], counts["warn"], counts["fail"],
+                counts["skipped"], counts["unknown"])]
+    for cell, (verdict, detail) in entries.items():
+        lines.append("  %s: %s%s"
+                     % (cell, verdict, " — %s" % detail if detail else ""))
+        if verdict in ("warn", "fail"):
+            problems.append("speed gate %s: %s%s"
+                            % (cell, verdict,
+                               " — %s" % detail if detail else ""))
+    return lines
 
 
 def _hand_streams(stream):
@@ -369,7 +718,8 @@ def triage(zip_path):
                 raise BundleError("diagnostics.json is missing from the bundle")
 
             with open(manifest_path, "r") as fp:
-                meta = parse_manifest(fp.read())
+                manifest_text = fp.read()
+            meta = parse_manifest(manifest_text)
             if not meta:
                 raise BundleError("manifest.md has no '- key: value' lines")
             diagnostics = _load_diagnostics(diagnostics_path)
@@ -399,6 +749,7 @@ def triage(zip_path):
             lines.append("Device: %s / %s"
                          % (device.get("phone", "unknown"),
                             device.get("android", "unknown")))
+            lines.extend(_device_environment_section(work, problems))
             if meta:
                 lines.append("Manifest: %d field(s), date %s"
                              % (len(meta), meta.get("Date", "unknown")))
@@ -456,6 +807,9 @@ def triage(zip_path):
 
             lines.append("")
             lines.extend(_pose_section(work, diagnostics, problems))
+            lines.append("")
+            lines.extend(_speed_gate_section(
+                manifest_text, diagnostics, problems))
 
             if not os.path.isfile(os.path.join(work, "README.md")):
                 problems.append("README.md is missing from the bundle")

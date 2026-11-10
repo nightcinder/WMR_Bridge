@@ -39,6 +39,15 @@ continue to work.
 - **Service hardening (ONY-1114).** `AF_NETLINK` is added to
   `RestrictAddressFamilies` in the systemd unit.
 
+### Host tools
+
+- **Triage USB and speed-gate facts (ONY-1139).** `tools/triage_bundle.py`
+  reads the companion's `device_environment.json` and prints each USB
+  device's VID:PID, interface class triples and displays, flagging an
+  unrecognized vendor ID or interface class. It also reports per-cell guided
+  bench speed-gate verdicts from the bundle manifest, with `warn` and `fail`
+  cells repeated under Problems.
+
 ### Verification
 
 - Host C tests, the Pi unittest suite and the ESP-IDF build run in CI before
@@ -586,7 +595,7 @@ their payloads, so companions at 0.2.2 or later continue to work. The phone
 link now requires LE Secure Connections with bonding, so earlier companions,
 which pair without bonding, cannot connect. Firmware artifacts are
 CI-built and hardware-unverified; the 0.3.0 bench sitting is
-[`docs/runs/sheets/ony-439-android-verification.md`](docs/runs/sheets/ony-439-android-verification.md).
+[`docs/runs/sheets/internal-esp32-wmr-bench.md`](docs/runs/sheets/internal-esp32-wmr-bench.md).
 
 ### Phone link
 
