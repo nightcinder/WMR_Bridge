@@ -1,0 +1,44 @@
+{
+  "format": "wmr-device-environment/1",
+  "captured_at": "2026-10-30T12:00:04.000Z",
+  "status": "ok",
+  "usb": {
+    "host_available": true,
+    "devices": [
+      {
+        "vendor_id": 13770,
+        "product_id": 258,
+        "device_name": "/dev/bus/usb/001/002",
+        "manufacturer": "VITURE",
+        "product": "VITURE XR Glasses",
+        "interfaces": [
+          {
+            "class": 3,
+            "subclass": 0,
+            "protocol": 0
+          }
+        ]
+      }
+    ]
+  },
+  "displays": {
+    "external_count": 1,
+    "items": [
+      {
+        "id": 2,
+        "type": "external",
+        "external": true,
+        "name": "XREAL Air",
+        "width": 1920,
+        "height": 1080,
+        "refresh_rate_hz": 60.0
+      }
+    ]
+  },
+  "xr_features": [
+    {
+      "name": "XR_KHR_android_create_instance",
+      "present": true
+    }
+  ]
+}

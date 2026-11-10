@@ -141,7 +141,14 @@ class FixtureReportTest(unittest.TestCase):
             "stream raw: LEFT 99.8 Hz, loss 0.4%, RIGHT 99.6 Hz, loss 1.1%",
             "captures/left-20261030-120000.txt  hand LEFT  mtu 247",
             "12 frames over 0.06 s (170.0 Hz), 0 sequence gaps",
+            "Device environment: wmr-device-environment/1, status ok",
+            "35ca:0102  VITURE  VITURE VITURE XR Glasses",
+            "interface 03/00/00 HID",
+            "display 2 external 1920x1080 @ 60.0 Hz  XREAL Air",
+            "XR features: 1 present, 0 absent",
             "pose_capture_androidXr_left_still.json  androidXr/left/still",
+            "Speed gates: 1 cell(s), 1 pass, 0 warn, 0 fail, 0 skipped, 0 unknown",
+            "pose_capture_androidXr_left_still.json: pass",
             "Problems: none",
         ):
             self.assertIn(expected, out)
@@ -315,6 +322,124 @@ class FailingBundleTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertNotIn("shorter than 14 s", out)
         self.assertIn("Problems: none", out)
+
+
+class EnvironmentAndSpeedGateTest(unittest.TestCase):
+    """USB/display fingerprints and per-cell speed-gate verdicts."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="wmr-triage-test-")
+        self.addCleanup(self._tmp.cleanup)
+
+    def bundle(self, edit=None, extra=None, drop=()):
+        return build_bundle(
+            os.path.join(self._tmp.name, "wmr-ext-20261030.zip"),
+            drop=drop, edit=edit, extra=extra)
+
+    @staticmethod
+    def edit_environment(mutate):
+        def edit(rel, data):
+            if rel != "device_environment.json":
+                return data
+            document = json.loads(data)
+            mutate(document)
+            return json.dumps(document).encode()
+
+        return edit
+
+    def test_unknown_usb_device_and_interface_class_are_flagged(self):
+        def add_unknown(document):
+            document["usb"]["devices"].append({
+                "vendor_id": 0x1234,
+                "product_id": 0x5678,
+                "product": "Mystery Glasses",
+                "interfaces": [
+                    {"class": 0x7F, "subclass": 1, "protocol": 2},
+                ],
+            })
+
+        code, out, err = run_main(
+            self.bundle(edit=self.edit_environment(add_unknown)))
+        self.assertEqual(code, 0, err)
+        self.assertIn("1234:5678  unknown vendor  Mystery Glasses", out)
+        self.assertIn("interface 7f/01/02 unknown class", out)
+        self.assertIn("unrecognized USB device 1234:5678", out)
+        self.assertIn("unrecognized USB interface class 7f", out)
+
+    def test_failed_probe_status_is_reported(self):
+        def fail_probe(document):
+            document["status"] = "failed"
+            document["reason"] = "probeFailed"
+            document["detail"] = "deviceEnvironment channel missing"
+
+        code, out, err = run_main(
+            self.bundle(edit=self.edit_environment(fail_probe)))
+        self.assertEqual(code, 0, err)
+        self.assertIn("status failed", out)
+        self.assertIn(
+            "device environment probe failed: deviceEnvironment channel missing",
+            out)
+
+    def test_external_display_count_mismatch_is_reported(self):
+        def mismatch(document):
+            document["displays"]["external_count"] = 2
+
+        code, out, _err = run_main(
+            self.bundle(edit=self.edit_environment(mismatch)))
+        self.assertEqual(code, 0)
+        self.assertIn("Displays: 1 external of 1", out)
+        self.assertIn("external_count 2 disagrees with 1", out)
+
+    def test_missing_device_environment_is_a_problem_not_a_failure(self):
+        code, out, _err = run_main(
+            self.bundle(drop=("device_environment.json",)))
+        self.assertEqual(code, 0)
+        self.assertIn("Device environment: not exported", out)
+        self.assertIn("device_environment.json is missing", out)
+
+    def test_failed_speed_gate_is_a_problem(self):
+        def fail_gate(rel, data):
+            if rel != "manifest.md":
+                return data
+            return data.replace(b"pass (1.2 cm/s, 98% in band)",
+                                b"fail (62.0 cm/s, 12% in band)")
+
+        code, out, _err = run_main(self.bundle(edit=fail_gate))
+        self.assertEqual(code, 0)
+        self.assertIn(
+            "Speed gates: 1 cell(s), 0 pass, 0 warn, 1 fail", out)
+        self.assertIn("pose_capture_androidXr_left_still.json: fail", out)
+        self.assertIn("speed gate pose_capture_androidXr_left_still.json: "
+                      "fail", out)
+
+    def test_diagnostics_speed_gates_are_read(self):
+        def add_gates(rel, data):
+            if rel != "diagnostics.json":
+                return data
+            document = json.loads(data)
+            document["speed_gates"] = {
+                "left:still:1": {
+                    "verdict": "warn",
+                    "detail": "2.4 cm/s above the still band",
+                },
+            }
+            return json.dumps(document).encode()
+
+        code, out, _err = run_main(self.bundle(edit=add_gates))
+        self.assertEqual(code, 0)
+        self.assertIn("left:still:1: warn — 2.4 cm/s above the still band",
+                      out)
+        self.assertIn("speed gate left:still:1: warn", out)
+
+    def test_speed_gate_bullets_are_read(self):
+        entries = triage_bundle._speed_gate_entries(
+            "## Speed gates\n\n"
+            "- slow_walk: pass (31.0 cm/s)\n"
+            "- still: fail (4.0 cm/s)\n",
+            {})
+        self.assertEqual(entries["slow_walk"][0], "pass")
+        self.assertEqual(entries["still"][0], "fail")
+        self.assertIn("4.0 cm/s", entries["still"][1])
 
 
 class SixRunPoseTest(unittest.TestCase):

@@ -11,3 +11,9 @@
 - Firmware SHA: 0123abc
 - Bench mode: 3dof_only
 - Tracking runtime: androidXr
+
+## Speed gates
+
+| File | Hand | Segment | Run | Speed gate |
+|---|---|---|---:|---|
+| pose_capture_androidXr_left_still.json | left | still | 1 | pass (1.2 cm/s, 98% in band) |
