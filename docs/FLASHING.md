@@ -202,8 +202,8 @@ labels.
 
 The installer is live at <https://nightcinder.github.io/WMR_Bridge/>, serving
 the latest tagged release's images (all three variants). The same workflow
-copies `pi.html` and the release `install.sh` beside the images. The `v0.3.18`
-tag publishes the 0.3.18 images to that page.
+copies `pi.html` and the release `install.sh` beside the images. The `v0.3.19`
+tag publishes the 0.3.19 images to that page.
 
 `.github/workflows/firmware.yml` deploys `dist/` to GitHub Pages on a `v*`
 tag. This keeps the manifest and the images same-origin, which the browser

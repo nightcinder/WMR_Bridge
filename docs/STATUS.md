@@ -1,14 +1,15 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-10 (current release 0.3.18: the Pi package in this tree is
-`0.3.18` and exports the FF10 `org.bluez.GattService1` object, so BlueZ accepts
-`RegisterApplication` and the daemon advertises the FF10 GATT service over
-Bluetooth by default (ONY-1186). It also blocks a controller after the idle
-power-off until the reconnect cooldown expires, instead of reopening it seconds
-later (ONY-1185). It keeps the 0.3.17 dbus-next GATT start annotations and the
-0.3.16 uplink order — Ethernet over 5 GHz over 2.4 GHz Wi-Fi via route metrics —
-plus `AF_NETLINK` in the systemd unit and token access for `wifi_probe.py`
-(ONY-1175, ONY-1114, ONY-1115, ONY-1144). The ESP32 firmware is unchanged
+Last updated: 2026-11-10 (current release 0.3.19: the Pi package in this tree is
+`0.3.19` and marks its `LEAdvertisement1` object discoverable, so BlueZ adds the
+LE General Discoverable flag (`0x06`) to the advertising data and a phone lists
+the bridge in a Bluetooth scan (ONY-1197). It keeps the 0.3.18 FF10
+`org.bluez.GattService1` export that makes `RegisterApplication` succeed
+(ONY-1186) and the idle power-off reconnect cooldown (ONY-1185), the 0.3.17
+dbus-next GATT start annotations and the 0.3.16 uplink order — Ethernet over
+5 GHz over 2.4 GHz Wi-Fi via route metrics — plus `AF_NETLINK` in the systemd
+unit and token access for `wifi_probe.py` (ONY-1114, ONY-1115, ONY-1144). The
+ESP32 firmware is unchanged
 from 0.3.15, which re-sends the FF13 streaming-enable pair on reconnect and
 every 10 s so a connected controller stays awake (ONY-1062). The firmware's
 controller families are unchanged from
