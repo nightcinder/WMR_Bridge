@@ -10,11 +10,13 @@ This file records what each release contains; hardware evidence stays in
 ### Raspberry Pi bridge
 
 - **A phone can pair after the boot window (ONY-1249).** The adapter is now
-  pairable whenever BlueZ holds only Classic bonds. The stored-bond check
-  treated any non-peripheral major class as an LE central, so two bonded WMR
+  pairable whenever BlueZ holds no phone bond. The stored-bond check treated
+  any non-peripheral major class as an LE central, so two bonded WMR
   controllers could close the door even though the Pi had no LE bond; it now
-  ignores every BR/EDR bond (non-zero Class or the Classic HID UUID) and only
-  an LE bond closes pairability. `wmr-bridge pair [--seconds SECONDS]` opens a
+  exempts only bonds proven to be the controllers (WMR name or Classic HID
+  UUID). A dual-mode phone's LE bond carries a `Class` and a public address and
+  still counts as the phone bond, so the door closes after it bonds.
+  `wmr-bridge pair [--seconds SECONDS]` opens a
   manual BLE pairing window on the running service (`--close` ends it), so a
   user no longer has to restart the service inside the 180-second boot window.
   Pairability changes now log the reason and the new state, for example

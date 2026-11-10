@@ -309,6 +309,10 @@ class BondDetectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await backend.has_le_bond())
 
     async def test_classic_only_bonds_leave_the_le_door_open(self) -> None:
+        keyboard = _bond("Pi Keyboard", "public", 0x2540)
+        keyboard["org.bluez.Device1"]["UUIDs"] = [
+            "00001124-0000-1000-8000-00805f9b34fb"
+        ]
         backend = DbusGattBackend()
         backend._bus = FakeBondBus(
             {
@@ -318,9 +322,9 @@ class BondDetectionTests(unittest.IsolatedAsyncioTestCase):
                 "/org/bluez/hci0/dev_BB": _bond(
                     "Motion Controller - Right", "public", 0x0540
                 ),
-                # A Classic (BR/EDR) bond with a non-peripheral major class:
-                # the old 0x05-only check counted this as an LE central.
-                "/org/bluez/hci0/dev_CC": _bond("Pi Headset", "public", 0x2404),
+                # A Classic keyboard bond: non-peripheral major class, proven
+                # Classic by the HID profile UUID rather than by its Class.
+                "/org/bluez/hci0/dev_CC": keyboard,
             }
         )
         self.assertFalse(await backend.has_le_bond())
@@ -338,6 +342,16 @@ class BondDetectionTests(unittest.IsolatedAsyncioTestCase):
         backend = DbusGattBackend()
         backend._bus = FakeBondBus(
             {"/org/bluez/hci0/dev_BB": _bond("Pixel 11 Pro", "random", 0x5A020C)}
+        )
+        self.assertTrue(await backend.has_le_bond())
+
+    async def test_a_public_dual_mode_phone_bond_is_an_le_bond(self) -> None:
+        # The Pixel's LE identity address is its BR/EDR address, so BlueZ
+        # reports AddressType=public and a Class from an earlier inquiry. That
+        # is still the phone's LE bond, not a Classic controller bond.
+        backend = DbusGattBackend()
+        backend._bus = FakeBondBus(
+            {"/org/bluez/hci0/dev_B0": _bond("Pixel 11 Pro", "public", 0x5A020C)}
         )
         self.assertTrue(await backend.has_le_bond())
 

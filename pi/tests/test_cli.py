@@ -652,6 +652,50 @@ class PairCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("manual BLE pairing window closed", out.getvalue())
         self.assertEqual(self.calls[-1], ("close", None))
 
+    async def test_pair_reports_a_window_that_did_not_open(self) -> None:
+        async def refused(action: str, seconds: float | None) -> dict:
+            return {"open": False, "seconds": seconds}
+
+        bridge = Bridge(token="secret")
+        bridge.pairing_handler = refused
+        server = BridgeServer(bridge, host="127.0.0.1", port=0)
+        await server.start()
+        try:
+            args = _build_parser().parse_args(
+                ["pair", "--port", str(server.port), "--token", "secret"]
+            )
+            with redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(await _pair_window(args), 1)
+            self.assertIn("could not make the adapter pairable", out.getvalue())
+            self.assertNotIn("window open", out.getvalue())
+        finally:
+            await server.close()
+
+    async def test_pair_close_reports_a_still_pairable_adapter(self) -> None:
+        async def still_open(action: str, seconds: float | None) -> dict:
+            return {"open": True, "seconds": seconds}
+
+        bridge = Bridge(token="secret")
+        bridge.pairing_handler = still_open
+        server = BridgeServer(bridge, host="127.0.0.1", port=0)
+        await server.start()
+        try:
+            args = _build_parser().parse_args(
+                [
+                    "pair",
+                    "--close",
+                    "--port",
+                    str(server.port),
+                    "--token",
+                    "secret",
+                ]
+            )
+            with redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(await _pair_window(args), 1)
+            self.assertIn("still reports a pairable adapter", out.getvalue())
+        finally:
+            await server.close()
+
     async def test_pair_without_the_token_explains_how_to_pass_it(self) -> None:
         args = _build_parser().parse_args(
             ["pair", "--port", str(self.server.port)]

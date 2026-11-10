@@ -119,9 +119,25 @@ async def _pair_window(args: argparse.Namespace) -> int:
         if reply.get("type") == "error":
             print(f"could not change the pairing window: {reply.get('code')}")
             return 1
+        if reply.get("type") != "pairing":
+            print(f"unexpected reply from wmr-bridge: {reply.get('type')!r}")
+            return 1
+        opened = reply.get("open") is True
         if args.close:
+            if opened:
+                print(
+                    "the daemon still reports a pairable adapter; check "
+                    "'journalctl -u wmr-bridge'"
+                )
+                return 1
             print("manual BLE pairing window closed; the stored-bond rule now applies.")
         else:
+            if not opened:
+                print(
+                    "the daemon could not make the adapter pairable; check "
+                    "'journalctl -u wmr-bridge'"
+                )
+                return 1
             print(
                 f"BLE pairing window open for {args.seconds:g} s; "
                 "pair your phone or controller now."

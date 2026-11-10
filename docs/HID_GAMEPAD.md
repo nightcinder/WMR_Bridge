@@ -530,7 +530,7 @@ The bridge gates HID reports to protect input integrity and avoid duplicate inpu
 ### Pairing rules and CLI flags
 
 The adapter stays pairable only under specific conditions:
-- The adapter is pairable when BlueZ holds no LE bond. Classic (BR/EDR) bonds, including the two WMR controllers, do not count as an LE bond.
+- The adapter is pairable when BlueZ holds no LE bond. Bonds proven to be the two WMR controllers (WMR name or Classic HID UUID) do not count as an LE bond, even though a dual-mode phone's LE bond can also carry a `Class` and a public address.
 - The adapter is pairable during the boot window of 180 seconds (`--ble-pairing-window`, default 180 seconds). The default value is 180 seconds, not 120 seconds.
 - `wmr-bridge pair [--seconds SECONDS]` opens a manual window on the running service (default 180 seconds); `wmr-bridge pair --close` closes it.
 - A bonded central reconnects without adapter pairability.

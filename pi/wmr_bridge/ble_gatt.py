@@ -1387,9 +1387,11 @@ class DbusGattBackend:
 
         The Pi bonds the two Classic controllers on the same adapter, so a bare
         ``Paired`` count cannot decide whether the LE door should stay open.
-        Any BR/EDR (Classic) bond carries a non-zero ``Class``; LE single-mode
-        devices do not. A Classic HID UUID or a WMR name is also accepted as a
-        controller bond. Everything else is treated as the phone's LE bond.
+        Only a WMR controller name or the Classic HID UUID proves a bond is a
+        controller bond. ``Class`` cannot be used: BlueZ sets it for every
+        BR/EDR-capable device, so a dual-mode phone's LE bond carries both
+        ``Class`` and ``AddressType=public``. An unproven bond is treated as
+        the phone's LE bond, so the door closes rather than stays open.
         """
 
         bus = self._bus
@@ -1418,18 +1420,10 @@ class DbusGattBackend:
             )
             if name.strip().casefold() in WMR_NAMES:
                 continue
-            address_type = str(
-                _dbus_value(properties.get("AddressType")) or "public"
-            )
-            device_class = int(_dbus_value(properties.get("Class")) or 0)
-            # Class is a BR/EDR (Classic) property. Any Classic bond — the two
-            # WMR controllers, a headset, a keyboard — is not an LE bond, so it
-            # must not close the phone's pairing door. The previous check only
-            # recognised the peripheral major class (0x05), so a Classic bond
-            # with another major class left the adapter unpairable with only
-            # controllers stored.
-            if address_type == "public" and device_class:
-                continue
+            # A dual-mode phone's LE bond carries Class and AddressType=public
+            # too, so Class is not evidence of a Classic bond. Only the Classic
+            # HID profile proves this bond belongs to a controller; anything
+            # unproven closes the door.
             uuids = _dbus_value(properties.get("UUIDs")) or []
             if CLASSIC_HID_UUID in {
                 str(_dbus_value(uuid)).casefold() for uuid in uuids
