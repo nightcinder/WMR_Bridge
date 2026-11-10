@@ -37,6 +37,16 @@ from typing import Any, Callable, Protocol
 from . import __version__
 from .bluez import WMR_NAMES
 from .bridge import Bridge
+from .decode import record_from_frame
+from .hid_gamepad import (
+    NEUTRAL_REPORT,
+    REPORT_ID,
+    REPORT_MAP as HID_REPORT_MAP_VALUE,
+    HandInput,
+    HidHistory,
+    build_report,
+    clamp,
+)
 from .protocol import (
     BATCH_HEADER_SIZE,
     BATCH_MAX_COUNT,
@@ -54,6 +64,12 @@ LOG = logging.getLogger("wmr_bridge.ble_gatt")
 
 FF10_SERVICE = "0000ff10-0000-1000-8000-00805f9b34fb"
 HID_SERVICE = "00001812-0000-1000-8000-00805f9b34fb"
+HID_INFORMATION = "00002a4a-0000-1000-8000-00805f9b34fb"
+HID_REPORT_MAP = "00002a4b-0000-1000-8000-00805f9b34fb"
+HID_CONTROL_POINT = "00002a4c-0000-1000-8000-00805f9b34fb"
+HID_REPORT = "00002a4d-0000-1000-8000-00805f9b34fb"
+HID_PROTOCOL_MODE = "00002a4e-0000-1000-8000-00805f9b34fb"
+HID_REPORT_REFERENCE = "00002908-0000-1000-8000-00805f9b34fb"
 FF11_RAW = "0000ff11-0000-1000-8000-00805f9b34fb"
 FF12_DECODED = "0000ff12-0000-1000-8000-00805f9b34fb"
 FF14_BATCHED = "0000ff14-0000-1000-8000-00805f9b34fb"
@@ -64,6 +80,7 @@ FF17_CONTROL = "0000ff17-0000-1000-8000-00805f9b34fb"
 
 APP_PATH = "/org/wmr/bridge"
 SERVICE_PATH = f"{APP_PATH}/service/ff10"
+HID_SERVICE_PATH = f"{APP_PATH}/service/1812"
 ADVERTISEMENT_PATH = f"{APP_PATH}/advertisement"
 AGENT_PATH = f"{APP_PATH}/agent"
 
@@ -84,6 +101,14 @@ RESULT_INVALID_PARAM = 0x06
 
 DEFAULT_MTU = 23
 DEFAULT_BATCH_HZ = 50.0
+# HID Information: bcdHID 1.11, country code 0, Normally Connectable. The
+# firmware's hids_device_init() uses the same value.
+HID_INFORMATION_VALUE = bytes((0x11, 0x01, 0x00, 0x02))
+HID_PROTOCOL_REPORT = 0x01
+# At most one HID input report per interval; samples in between are coalesced.
+HID_MIN_INTERVAL_S = 0.010
+# A hand with no sample for this long is released, matching WMR_HID_STALE_MS.
+HID_STALE_S = 0.250
 # Gamepad appearance (GAP 0x03C4): the icon Android shows for the LE entry.
 GAMEPAD_APPEARANCE = 0x03C4
 # Fast advertising while neither Classic HID link is up: there is no
@@ -105,11 +130,22 @@ PAIRING_REJECTED_HINT = (
 
 
 @dataclass(frozen=True)
-class GattCharacteristicSpec:
-    """One FF10 value attribute and the security/notification flags it needs."""
+class GattDescriptorSpec:
+    """One descriptor under a characteristic (the HID Report Reference)."""
 
     uuid: str
     flags: tuple[str, ...]
+    value: bytes
+
+
+@dataclass(frozen=True)
+class GattCharacteristicSpec:
+    """One FF10/HID value attribute and the security/notification flags it needs."""
+
+    uuid: str
+    flags: tuple[str, ...]
+    service: str = FF10_SERVICE
+    descriptors: tuple[GattDescriptorSpec, ...] = ()
 
 
 # Order mirrors wmr_bridge.gatt: FF11, FF12, FF14, FF15, FF13, FF16, FF17.
@@ -134,12 +170,58 @@ CHARACTERISTICS = (
 
 CHARACTERISTIC_BY_UUID = {spec.uuid: spec for spec in CHARACTERISTICS}
 
+# HOGP (0x1812). Report Map and the input report are byte for byte the
+# firmware's src/wmr_hid.c; every value is encrypted because Android binds a
+# HID device only over a bonded link. The Report Reference descriptor (0x2908)
+# is exported because BlueZ only synthesises the CCCD: without it a HOGP host
+# cannot tell which report id the characteristic carries. BlueZ creates the
+# Report CCCD itself.
+HID_CHARACTERISTICS = (
+    GattCharacteristicSpec(HID_INFORMATION, ("read", "encrypt-read"), HID_SERVICE),
+    GattCharacteristicSpec(HID_REPORT_MAP, ("read", "encrypt-read"), HID_SERVICE),
+    GattCharacteristicSpec(
+        HID_CONTROL_POINT, ("write-without-response", "encrypt-write"), HID_SERVICE
+    ),
+    GattCharacteristicSpec(
+        HID_REPORT,
+        ("read", "notify", "encrypt-read", "encrypt-write"),
+        HID_SERVICE,
+        (
+            GattDescriptorSpec(
+                HID_REPORT_REFERENCE,
+                ("read",),
+                bytes((REPORT_ID, 0x01)),  # input report, id 1
+            ),
+        ),
+    ),
+    GattCharacteristicSpec(
+        HID_PROTOCOL_MODE,
+        ("read", "write", "encrypt-read", "encrypt-write"),
+        HID_SERVICE,
+    ),
+)
+
+HID_CHARACTERISTIC_BY_UUID = {spec.uuid: spec for spec in HID_CHARACTERISTICS}
+
 
 def characteristic_path(uuid: str) -> str:
     """Stable object path for one FF10 characteristic."""
 
     short = uuid[4:8]
     return f"{SERVICE_PATH}/{short}"
+
+
+def hid_characteristic_path(uuid: str) -> str:
+    """Stable object path for one HID-over-GATT characteristic."""
+
+    short = uuid[4:8]
+    return f"{HID_SERVICE_PATH}/{short}"
+
+
+def descriptor_path(characteristic: str, uuid: str) -> str:
+    """Stable object path for a descriptor under *characteristic*."""
+
+    return f"{characteristic}/{uuid[4:8]}"
 
 
 class PairingAgentPolicy:
@@ -224,6 +306,13 @@ class GattApplication:
         self.control_handler = control_handler
         self.pairing_open = False
         self.pairing_listener: Callable[[str], None] | None = None
+        self.hid_suppressed = False
+        self.hid_protocol_mode = HID_PROTOCOL_REPORT
+        self._hid_hands = [HandInput(), HandInput()]
+        self._hid_history = HidHistory()
+        self._hid_last_sample = [float("-inf"), float("-inf")]
+        self._hid_last_report: bytes | None = None
+        self._hid_last_send = float("-inf")
         self._mtu = DEFAULT_MTU
         self._subscribed: set[str] = set()
         self._last_value: dict[str, bytes] = {}
@@ -244,10 +333,28 @@ class GattApplication:
         return CHARACTERISTICS
 
     @property
-    def needs_decoded(self) -> bool:
-        """Decode only while a central watches FF12/FF14; FF11 is raw."""
+    def hid_characteristics(self) -> tuple[GattCharacteristicSpec, ...]:
+        return HID_CHARACTERISTICS
 
-        return FF12_DECODED in self._subscribed or FF14_BATCHED in self._subscribed
+    @property
+    def hid_enabled(self) -> bool:
+        """True once the phone enables the input report's CCCD."""
+
+        return HID_REPORT in self._subscribed
+
+    @property
+    def hid_report(self) -> bytes:
+        return self._hid_last_report or NEUTRAL_REPORT
+
+    @property
+    def needs_decoded(self) -> bool:
+        """Decode while a central watches FF12/FF14 or the HID gamepad."""
+
+        return (
+            HID_REPORT in self._subscribed
+            or FF12_DECODED in self._subscribed
+            or FF14_BATCHED in self._subscribed
+        )
 
     @property
     def subscribed(self) -> frozenset[str]:
@@ -384,6 +491,19 @@ class GattApplication:
 
     def read_value(self, uuid: str, options: dict[str, Any] | None = None) -> bytes:
         self._note_mtu(options)
+        if uuid == HID_INFORMATION:
+            return HID_INFORMATION_VALUE
+        if uuid == HID_REPORT_MAP:
+            offset = self._option(options, "offset", 0)
+            if not isinstance(offset, int) or offset < 0:
+                return b""
+            return HID_REPORT_MAP_VALUE[offset:]
+        if uuid == HID_REPORT:
+            return self.hid_report
+        if uuid == HID_PROTOCOL_MODE:
+            return bytes((self.hid_protocol_mode,))
+        if uuid == HID_CONTROL_POINT:
+            return b""
         if uuid == FF11_RAW:
             return self.ff11_status()
         if uuid == FF16_VERSION:
@@ -406,6 +526,15 @@ class GattApplication:
         """Handle an ATT write; returns an FF17 result code (0 is OK)."""
 
         self._note_mtu(options)
+        if uuid == HID_CONTROL_POINT:
+            # 0 suspends the reports, 1 exits suspend. Nothing else to do: the
+            # Pi only sends input reports, and the next sample resumes them.
+            return RESULT_OK if value in (b"\x00", b"\x01") else RESULT_INVALID_PARAM
+        if uuid == HID_PROTOCOL_MODE:
+            if value not in (b"\x00", b"\x01"):
+                return RESULT_INVALID_PARAM
+            self.hid_protocol_mode = value[0]
+            return RESULT_OK
         if uuid == FF15_ECHO:
             return self._echo(value)
         if uuid == FF13_CONFIG:
@@ -521,6 +650,7 @@ class GattApplication:
         if self.is_notifying(FF11_RAW):
             for fragment in encode_raw_messages(frame, self.fragment_size):
                 self._notify(FF11_RAW, fragment)
+        self._deliver_hid(frame, record)
         if record is None:
             return
         packed = pack_record(record)
@@ -535,6 +665,123 @@ class GattApplication:
             else:
                 self.dropped_records += 1
 
+    # ---- HID-over-GATT ---------------------------------------------------
+
+    def _hid_stream_active(self) -> bool:
+        """True while TCP or an FF11/FF12/FF14 CCCD already carries the stream."""
+
+        return self.bridge.stream_client_active or any(
+            uuid in self._subscribed for uuid in (FF11_RAW, FF12_DECODED, FF14_BATCHED)
+        )
+
+    def _hid_hand_connected(self) -> bool:
+        return any(hand.connected for hand in self._hid_hands)
+
+    def sync_hid_suppression(self) -> None:
+        """Pause HID reports while another transport carries the stream.
+
+        The phone must not get the same input twice on the same link. One
+        neutral report is emitted on the transition so a button or stick held
+        at the switch is released on the host.
+        """
+
+        suppressed = self._hid_stream_active()
+        if suppressed == self.hid_suppressed:
+            return
+        self.hid_suppressed = suppressed
+        if suppressed:
+            self._emit_hid_neutral()
+        else:
+            # Resume with the next sample rather than a half-updated report.
+            self._hid_last_send = float("-inf")
+
+    def note_hand_state(self) -> None:
+        """Mirror controller connect/disconnect into the HID hands."""
+
+        changed = False
+        for hand, stats in enumerate(self.bridge.hands):
+            state = self._hid_hands[hand]
+            if stats.connected:
+                if not state.connected:
+                    state.connected = True
+                    changed = True
+            elif state.connected:
+                self._hid_hands[hand] = HandInput()
+                self._hid_last_sample[hand] = float("-inf")
+                changed = True
+        if changed and not self._hid_hand_connected():
+            self._emit_hid_neutral()
+
+    def _expire_hid_hands(self, now: float) -> bool:
+        expired = False
+        for hand, state in enumerate(self._hid_hands):
+            if not state.connected:
+                continue
+            if now - self._hid_last_sample[hand] <= HID_STALE_S:
+                continue
+            self._hid_hands[hand] = HandInput()
+            self._hid_last_sample[hand] = float("-inf")
+            expired = True
+        return expired
+
+    def _deliver_hid(self, frame: Frame, record: DecodedRecord | None) -> None:
+        if not 0 <= frame.hand < 2:
+            return
+        now = self._clock()
+        if self._expire_hid_hands(now) and not self._hid_hand_connected():
+            self._emit_hid_neutral()
+        if not self.bridge.hands[frame.hand].connected:
+            if self._hid_hands[frame.hand].connected:
+                self._hid_hands[frame.hand] = HandInput()
+                self._hid_last_sample[frame.hand] = float("-inf")
+                if not self._hid_hand_connected():
+                    self._emit_hid_neutral()
+            return
+        if record is None:
+            record = record_from_frame(frame)
+        if record is None:
+            return
+        hand = self._hid_hands[frame.hand]
+        hand.connected = True
+        hand.buttons = record.buttons
+        hand.stick = (
+            clamp(record.stick[0] / 32767.0, -1.0, 1.0),
+            clamp(record.stick[1] / 32767.0, -1.0, 1.0),
+        )
+        hand.trigger = record.trigger
+        hand.trackpad = (
+            clamp(record.trackpad[0] / 32767.0, -1.0, 1.0),
+            clamp(record.trackpad[1] / 32767.0, -1.0, 1.0),
+        )
+        self._hid_last_sample[frame.hand] = now
+        self.sync_hid_suppression()
+        if self.hid_suppressed:
+            return
+        self._flush_hid(now)
+
+    def _flush_hid(self, now: float) -> None:
+        if not self.hid_enabled or not self._hid_hand_connected():
+            return
+        if now - self._hid_last_send < HID_MIN_INTERVAL_S:
+            return
+        report = build_report(
+            self._hid_hands[0], self._hid_hands[1], history=self._hid_history
+        )
+        if report == self._hid_last_report:
+            return
+        self._hid_last_send = now
+        self._hid_last_report = report
+        self._notify(HID_REPORT, report)
+
+    def _emit_hid_neutral(self) -> None:
+        """Release held inputs once, even while the stream suppresses HID."""
+
+        if not self.hid_enabled or self._hid_last_report in (None, NEUTRAL_REPORT):
+            return
+        self._hid_last_report = NEUTRAL_REPORT
+        self._hid_last_send = self._clock()
+        self._notify(HID_REPORT, NEUTRAL_REPORT)
+
     def _notify(self, uuid: str, value: bytes) -> None:
         if uuid not in self._subscribed:
             return
@@ -545,14 +792,28 @@ class GattApplication:
             LOG.exception("BLE notification for %s failed", uuid)
 
     def start_notify(self, uuid: str) -> None:
-        if uuid not in CHARACTERISTIC_BY_UUID:
+        if uuid not in CHARACTERISTIC_BY_UUID and uuid not in HID_CHARACTERISTIC_BY_UUID:
             return
         self._subscribed.add(uuid)
+        if uuid == HID_REPORT:
+            # Firmware wmr_hid_reset(): forget the trigger history and send a
+            # neutral report so the host starts from a known state.
+            self._hid_history = HidHistory()
+            self._hid_last_report = None
+            self._hid_last_send = float("-inf")
+            self.sync_hid_suppression()
+            if not self.hid_suppressed and self._hid_hand_connected():
+                self._hid_last_report = NEUTRAL_REPORT
+                self._notify(HID_REPORT, NEUTRAL_REPORT)
+        elif uuid in (FF11_RAW, FF12_DECODED, FF14_BATCHED):
+            self.sync_hid_suppression()
 
     def stop_notify(self, uuid: str) -> None:
         self._subscribed.discard(uuid)
         if uuid == FF14_BATCHED:
             self._discard_batch()
+        elif uuid == HID_REPORT or uuid in (FF11_RAW, FF12_DECODED, FF14_BATCHED):
+            self.sync_hid_suppression()
 
     def _queue_batch(self, packed: bytes) -> None:
         self._batch.append(packed)
@@ -672,6 +933,22 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         def Characteristics(self) -> "ao":
             return [characteristic_path(spec.uuid) for spec in CHARACTERISTICS]
 
+    class HidService(ServiceInterface):
+        def __init__(self) -> None:
+            super().__init__("org.bluez.GattService1")
+
+        @dbus_property(access=PropertyAccess.READ)
+        def UUID(self) -> "s":
+            return HID_SERVICE
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Primary(self) -> "b":
+            return True
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Characteristics(self) -> "ao":
+            return [hid_characteristic_path(spec.uuid) for spec in HID_CHARACTERISTICS]
+
     class Characteristic(ServiceInterface):
         def __init__(self, spec: GattCharacteristicSpec) -> None:
             super().__init__("org.bluez.GattCharacteristic1")
@@ -684,6 +961,10 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
 
         @dbus_property(access=PropertyAccess.READ)
         def Service(self) -> "o":
+            # GattCharacteristic1.Service is the object path of the service,
+            # not its UUID. The spec keeps the UUID for grouping.
+            if self.spec.service == HID_SERVICE:
+                return HID_SERVICE_PATH
             return SERVICE_PATH
 
         @dbus_property(access=PropertyAccess.READ)
@@ -731,6 +1012,32 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
             self.emit_properties_changed(
                 {"Notifying": variant(False, "b")}, []
             )
+
+    class Descriptor(ServiceInterface):
+        def __init__(self, spec: GattDescriptorSpec, characteristic: str) -> None:
+            super().__init__("org.bluez.GattDescriptor1")
+            self.spec = spec
+            self.characteristic = characteristic
+
+        @dbus_property(access=PropertyAccess.READ)
+        def UUID(self) -> "s":
+            return self.spec.uuid
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Characteristic(self) -> "o":
+            return self.characteristic
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Flags(self) -> "as":
+            return list(self.spec.flags)
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Value(self) -> "ay":
+            return self.spec.value
+
+        @method()
+        def ReadValue(self, options: "a{sv}") -> "ay":
+            return self.spec.value
 
     class Advertisement(ServiceInterface):
         def __init__(self) -> None:
@@ -833,7 +1140,9 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
 
     return {
         "Service": Service,
+        "HidService": HidService,
         "Characteristic": Characteristic,
+        "Descriptor": Descriptor,
         "Advertisement": Advertisement,
         "Agent": Agent,
     }
@@ -842,13 +1151,14 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
 def export_gatt_application(
     bus: Any, interfaces: dict[str, type[Any]]
 ) -> tuple[dict[str, Any], list[str]]:
-    """Export the FF10 service and characteristics for ``GetManagedObjects``.
+    """Export the FF10 and HID-over-GATT services for ``GetManagedObjects``.
 
     Returns the characteristic interfaces by UUID (for notifications) and the
     exported object paths (for ``unexport``). dbus-next derives the
-    ``GetManagedObjects`` reply from these exports, so the service object must
+    ``GetManagedObjects`` reply from these exports, so the service objects must
     be exported too or BlueZ answers ``RegisterApplication`` with "No valid
-    service object found".
+    service object found". BlueZ creates the CCCD for a notify characteristic,
+    so the app exports only the HID Report Reference descriptor.
     """
 
     bus.export(SERVICE_PATH, interfaces["Service"]())
@@ -860,6 +1170,20 @@ def export_gatt_application(
         bus.export(path, characteristic)
         exported.append(path)
         characteristics[spec.uuid] = characteristic
+
+    bus.export(HID_SERVICE_PATH, interfaces["HidService"]())
+    exported.append(HID_SERVICE_PATH)
+    for spec in HID_CHARACTERISTICS:
+        path = hid_characteristic_path(spec.uuid)
+        characteristic = interfaces["Characteristic"](spec)
+        bus.export(path, characteristic)
+        exported.append(path)
+        characteristics[spec.uuid] = characteristic
+        for descriptor in spec.descriptors:
+            descriptor_obj = interfaces["Descriptor"](descriptor, path)
+            descriptor_obj_path = descriptor_path(path, descriptor.uuid)
+            bus.export(descriptor_obj_path, descriptor_obj)
+            exported.append(descriptor_obj_path)
     return characteristics, exported
 
 
@@ -1174,6 +1498,7 @@ class BluezGattPeripheral:
         self.app.set_emitter(self.backend.notify)
         self.app.bridge.add_sink(self.app)
         self.app.bridge.add_hand_listener(self._on_hand_state_changed)
+        self.app.bridge.add_stream_listener(self.app.sync_hid_suppression)
         self.app.pairing_listener = self._on_pairing_request
         self._started = True
         self._boot_deadline = (
@@ -1196,6 +1521,7 @@ class BluezGattPeripheral:
     # ---- advertising interval -------------------------------------------
 
     def _on_hand_state_changed(self) -> None:
+        self.app.note_hand_state()
         # Coalesce rather than drop: a connect/disconnect that lands while a
         # tier switch is in flight must still be applied afterwards.
         self._advertising_dirty = True
@@ -1350,6 +1676,7 @@ class BluezGattPeripheral:
     async def close(self) -> None:
         if self._started:
             self.app.bridge.remove_hand_listener(self._on_hand_state_changed)
+            self.app.bridge.remove_stream_listener(self.app.sync_hid_suppression)
             self.app.pairing_listener = None
             self._cancel_tasks()
             self.app.pairing_open = False

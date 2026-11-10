@@ -589,6 +589,17 @@ agent accepts every device BlueZ presents and exists only for that window; the
 adapter's pairable window is the gate, and the Classic auto-pairer uses
 bluetoothctl's own agent to keep bonding WMR controllers on the same adapter.
 
+The GATT application also exposes the HID-over-GATT service (`0x1812`) on the
+same LE link: HID Information, the firmware's 91-byte Report Map, Protocol
+Mode, HID Control Point, and an encrypted input Report with report ID 1 and a
+Report Reference descriptor. `wmr_bridge/hid_gamepad.py` ports the
+`src/wmr_hid.c` mapping and `tests/vectors/hid_gamepad.txt` keeps the 9-byte
+report byte-identical to the firmware. A HOGP host therefore binds the
+controllers as a gamepad with no app. The bridge sends no HID report until a
+Classic controller is connected and the phone enables the Report CCCD, and it
+pauses HID notifications whenever a WebSocket client or an FF11/FF12/FF14
+subscriber is active, emitting one neutral report on the transition.
+
 Discovery and identity:
 
 - `bridge_id` is the same value on BLE and on TCP. A client that learns it on

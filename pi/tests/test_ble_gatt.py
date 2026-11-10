@@ -27,6 +27,16 @@ from wmr_bridge.ble_gatt import (
     FF16_VERSION,
     FF17_CONTROL,
     GAMEPAD_APPEARANCE,
+    HID_CHARACTERISTICS,
+    HID_CHARACTERISTIC_BY_UUID,
+    HID_CONTROL_POINT,
+    HID_INFORMATION,
+    HID_INFORMATION_VALUE,
+    HID_PROTOCOL_MODE,
+    HID_REPORT,
+    HID_REPORT_MAP,
+    HID_REPORT_REFERENCE,
+    HID_SERVICE_PATH,
     HID_SERVICE,
     PAIRING_REJECTED_HINT,
     RESULT_INVALID_PARAM,
@@ -39,11 +49,22 @@ from wmr_bridge.ble_gatt import (
     PairingAgentPolicy,
     build_dbus_interfaces,
     characteristic_path,
+    descriptor_path,
     export_gatt_application,
+    hid_characteristic_path,
 )
 from wmr_bridge.bridge import Bridge
+from wmr_bridge.hid_gamepad import (
+    NEUTRAL_REPORT,
+    REPORT_ID,
+    REPORT_MAP,
+    REPORT_SIZE,
+    HandInput,
+    build_report,
+)
 from wmr_bridge.inputs import read_capture
-from wmr_bridge.protocol import Reassembler, parse_batch, unpack_record
+from wmr_bridge.decode import record_from_frame
+from wmr_bridge.protocol import Frame, Reassembler, parse_batch, unpack_record
 
 SAMPLES = Path(__file__).resolve().parents[2] / "samples" / "controller_frames.txt"
 SAMPLE_DATA = read_capture(SAMPLES)[0][1]
@@ -126,6 +147,45 @@ class RegistrationTests(unittest.TestCase):
         ff13 = CHARACTERISTIC_BY_UUID[FF13_CONFIG]
         self.assertNotIn("encrypt-read", ff16.flags)
         self.assertIn("encrypt-read", ff13.flags)
+
+    def test_hid_characteristics_cover_hogp_and_are_encrypted(self) -> None:
+        self.assertEqual(
+            {spec.uuid for spec in HID_CHARACTERISTICS},
+            {
+                HID_INFORMATION,
+                HID_REPORT_MAP,
+                HID_CONTROL_POINT,
+                HID_REPORT,
+                HID_PROTOCOL_MODE,
+            },
+        )
+        self.assertEqual(len(HID_CHARACTERISTIC_BY_UUID), len(HID_CHARACTERISTICS))
+        for spec in HID_CHARACTERISTICS:
+            self.assertEqual(spec.service, HID_SERVICE)
+            self.assertTrue(
+                any(flag.startswith("encrypt-") for flag in spec.flags), spec.uuid
+            )
+        report = HID_CHARACTERISTIC_BY_UUID[HID_REPORT]
+        self.assertIn("notify", report.flags)
+        self.assertEqual(len(report.descriptors), 1)
+        reference = report.descriptors[0]
+        self.assertEqual(reference.uuid, HID_REPORT_REFERENCE)
+        self.assertEqual(reference.value, bytes((REPORT_ID, 0x01)))
+
+    def test_hid_paths_are_unique_and_separate_from_ff10(self) -> None:
+        paths = [hid_characteristic_path(spec.uuid) for spec in HID_CHARACTERISTICS]
+        self.assertEqual(len(paths), len(set(paths)))
+        self.assertTrue(all(path.startswith(HID_SERVICE_PATH + "/") for path in paths))
+        self.assertFalse(set(paths) & {characteristic_path(spec.uuid) for spec in CHARACTERISTICS})
+        report_path = hid_characteristic_path(HID_REPORT)
+        self.assertEqual(
+            descriptor_path(report_path, HID_REPORT_REFERENCE),
+            f"{HID_SERVICE_PATH}/2a4d/2908",
+        )
+
+    def test_hid_information_matches_the_firmware(self) -> None:
+        self.assertEqual(HID_INFORMATION_VALUE, bytes((0x11, 0x01, 0x00, 0x02)))
+        self.assertEqual(len(REPORT_MAP), 91)
 
     def test_advertisement_is_a_gamepad_and_carries_the_bridge_id_prefix(self) -> None:
         bridge = Bridge(bridge_id="wmr-pi-abc12345")
@@ -358,6 +418,13 @@ class DbusNextInterfaceTests(unittest.TestCase):
             {prop.name for prop in service.introspect().properties},
             {"UUID", "Primary", "Characteristics"},
         )
+        hid_service = self.interfaces["HidService"]()
+        self.assertEqual(hid_service.UUID, HID_SERVICE)
+        self.assertTrue(hid_service.Primary)
+        self.assertEqual(
+            hid_service.Characteristics,
+            [hid_characteristic_path(spec.uuid) for spec in HID_CHARACTERISTICS],
+        )
         advertisement = self.interfaces["Advertisement"]()
         for spec in CHARACTERISTICS:
             characteristic = self.interfaces["Characteristic"](spec)
@@ -372,6 +439,25 @@ class DbusNextInterfaceTests(unittest.TestCase):
             )
             # dbus-next rejects a "None" return annotation, so no out argument here.
             self.assertEqual(methods["WriteValue"].out_args, [])
+        for spec in HID_CHARACTERISTICS:
+            characteristic = self.interfaces["Characteristic"](spec)
+            self.assertEqual(characteristic.UUID, spec.uuid)
+            self.assertEqual(characteristic.Service, HID_SERVICE_PATH)
+            self.assertEqual(characteristic.Flags, list(spec.flags))
+            for descriptor in spec.descriptors:
+                interface = self.interfaces["Descriptor"](
+                    descriptor, hid_characteristic_path(spec.uuid)
+                )
+                self.assertEqual(interface.UUID, descriptor.uuid)
+                self.assertEqual(
+                    interface.Characteristic, hid_characteristic_path(spec.uuid)
+                )
+                self.assertEqual(interface.Flags, list(descriptor.flags))
+                self.assertEqual(interface.Value, descriptor.value)
+                self.assertEqual(
+                    {method.name for method in interface.introspect().methods},
+                    {"ReadValue"},
+                )
         self.assertEqual(advertisement.Type, "peripheral")
         self.assertTrue(advertisement.Discoverable)
         self.assertEqual(advertisement.Appearance, GAMEPAD_APPEARANCE)
@@ -481,11 +567,37 @@ class ManagedObjectsTests(unittest.TestCase):
             self.assertEqual(properties["Service"].value, SERVICE_PATH)
             self.assertEqual(properties["Flags"].value, list(spec.flags))
 
-    def test_bluez_creates_the_cccd_so_the_app_exports_none(self) -> None:
+    def test_get_managed_objects_exposes_the_hid_service(self) -> None:
         objects = self._managed_objects()
+        service = objects[HID_SERVICE_PATH]["org.bluez.GattService1"]
+        self.assertEqual(service["UUID"].value, HID_SERVICE)
+        self.assertIs(service["Primary"].value, True)
         self.assertEqual(
-            [path for path in objects if "org.bluez.GattDescriptor1" in objects[path]],
-            [],
+            service["Characteristics"].value,
+            [hid_characteristic_path(spec.uuid) for spec in HID_CHARACTERISTICS],
+        )
+        for spec in HID_CHARACTERISTICS:
+            path = hid_characteristic_path(spec.uuid)
+            properties = objects[path]["org.bluez.GattCharacteristic1"]
+            self.assertEqual(properties["UUID"].value, spec.uuid)
+            self.assertEqual(properties["Service"].value, HID_SERVICE_PATH)
+            self.assertEqual(properties["Flags"].value, list(spec.flags))
+
+    def test_app_exports_the_report_reference_but_no_cccd(self) -> None:
+        objects = self._managed_objects()
+        descriptors = [
+            path for path in objects if "org.bluez.GattDescriptor1" in objects[path]
+        ]
+        report_path = hid_characteristic_path(HID_REPORT)
+        reference_path = descriptor_path(report_path, HID_REPORT_REFERENCE)
+        self.assertEqual(descriptors, [reference_path])
+        properties = objects[reference_path]["org.bluez.GattDescriptor1"]
+        self.assertEqual(properties["UUID"].value, HID_REPORT_REFERENCE)
+        self.assertEqual(properties["Characteristic"].value, report_path)
+        self.assertEqual(properties["Value"].value, bytes((REPORT_ID, 0x01)))
+        self.assertFalse(
+            any(path.endswith("/2902") for path in descriptors),
+            "BlueZ creates the CCCD itself",
         )
 
 
@@ -570,6 +682,101 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
     async def test_no_cccd_means_no_ble_airtime(self) -> None:
         self.bridge.ingest(0, SAMPLE_DATA)
         self.assertEqual(self.backend.notifications, [])
+
+    # ---- HID-over-GATT ------------------------------------------------
+
+    def _sample(self, buttons: int = 0) -> bytes:
+        data = bytearray(SAMPLE_DATA)
+        data[2] |= buttons
+        return bytes(data)
+
+    def _expected_hid_report(self, data: bytes) -> bytes:
+        record = record_from_frame(
+            Frame(hand=0, sequence=1, data=data, rx_time_us=0)
+        )
+        assert record is not None
+        hand = HandInput(
+            connected=True,
+            buttons=record.buttons,
+            stick=(record.stick[0] / 32767.0, record.stick[1] / 32767.0),
+            trigger=record.trigger,
+            trackpad=(record.trackpad[0] / 32767.0, record.trackpad[1] / 32767.0),
+        )
+        return build_report(hand, HandInput())
+
+    async def test_hid_needs_a_controller_and_the_report_cccd(self) -> None:
+        self.app.start_notify(HID_REPORT)
+        self.bridge.ingest(0, SAMPLE_DATA)
+        self.assertEqual(self.backend.values(HID_REPORT), [])
+
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+        self.bridge.ingest(0, SAMPLE_DATA)
+        values = self.backend.values(HID_REPORT)
+        self.assertEqual(len(values), 1)
+        self.assertEqual(len(values[0]), REPORT_SIZE)
+        self.assertEqual(values[0], self._expected_hid_report(SAMPLE_DATA))
+
+    async def test_tcp_stream_suppresses_hid_after_one_neutral_report(self) -> None:
+        pressed = self._sample(0x08)  # squeeze -> R1
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+        self.app.start_notify(HID_REPORT)
+        self.clock.advance(0.02)
+        self.bridge.ingest(0, pressed)
+        before = len(self.backend.values(HID_REPORT))
+        self.assertEqual(self.backend.values(HID_REPORT)[-1], self._expected_hid_report(pressed))
+
+        self.bridge.subscribers.add(FakeSubscriber())  # type: ignore[arg-type]
+        self.bridge._note_stream_state()
+        after = self.backend.values(HID_REPORT)
+        self.assertEqual(len(after), before + 1)
+        self.assertEqual(after[-1], NEUTRAL_REPORT)
+
+        # While TCP is active a new input must not reach the HID host.
+        self.clock.advance(0.02)
+        self.bridge.ingest(0, self._sample(0x02))
+        self.assertEqual(len(self.backend.values(HID_REPORT)), before + 1)
+
+        # Removing the TCP client resumes with the next sample.
+        self.bridge.subscribers.clear()
+        self.bridge._note_stream_state()
+        self.clock.advance(0.02)
+        self.bridge.ingest(0, self._sample(0x02))
+        self.assertGreater(len(self.backend.values(HID_REPORT)), before + 1)
+
+    async def test_ff11_cccd_suppresses_hid_until_released(self) -> None:
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+        self.app.start_notify(HID_REPORT)
+        self.clock.advance(0.02)
+        self.bridge.ingest(0, self._sample(0x08))
+        before = len(self.backend.values(HID_REPORT))
+
+        self.app.start_notify(FF11_RAW)
+        values = self.backend.values(HID_REPORT)
+        self.assertEqual(len(values), before + 1)
+        self.assertEqual(values[-1], NEUTRAL_REPORT)
+
+        self.clock.advance(0.02)
+        self.bridge.ingest(0, self._sample(0x02))
+        self.assertEqual(len(self.backend.values(HID_REPORT)), before + 1)
+
+        self.app.stop_notify(FF11_RAW)
+        self.clock.advance(0.02)
+        self.bridge.ingest(0, self._sample(0x02))
+        self.assertGreater(len(self.backend.values(HID_REPORT)), before + 1)
+
+    async def test_hid_reads_follow_hogp(self) -> None:
+        self.assertEqual(self.app.read_value(HID_INFORMATION), HID_INFORMATION_VALUE)
+        self.assertEqual(self.app.read_value(HID_REPORT_MAP), REPORT_MAP)
+        self.assertEqual(
+            self.app.read_value(HID_REPORT_MAP, {"offset": 22}), REPORT_MAP[22:]
+        )
+        self.assertEqual(self.app.read_value(HID_PROTOCOL_MODE), b"\x01")
+        self.assertEqual(self.app.write_value(HID_PROTOCOL_MODE, b"\x00"), 0)
+        self.assertEqual(self.app.read_value(HID_PROTOCOL_MODE), b"\x00")
+        self.assertEqual(self.app.write_value(HID_PROTOCOL_MODE, b"\x02"), RESULT_INVALID_PARAM)
+        self.assertEqual(self.app.write_value(HID_CONTROL_POINT, b"\x00"), 0)
+        self.assertEqual(self.app.write_value(HID_CONTROL_POINT, b"\x02"), RESULT_INVALID_PARAM)
+        self.assertEqual(self.app.read_value(HID_REPORT), NEUTRAL_REPORT)
 
     async def test_ff11_streams_raw_fragments_when_subscribed(self) -> None:
         self.app.start_notify(FF11_RAW)
