@@ -440,6 +440,10 @@ ms) blocks reconnects after a power-off.
 On the Pi bridge use `--idle-sleep-timeout` (default 300) and
 `--idle-poweroff-timeout` (default 900) in seconds. Pass them through
 `WMR_BRIDGE_ARGS` under systemd. 0 disables a stage.
+`--idle-reconnect-cooldown` (default 60 s) blocks the controller in BlueZ
+before the disconnect and refuses to reopen its hidraw node until the
+controller's own shutdown timer has run out; a button press after the cooldown
+reconnects normally. 0 disables the guard.
 
 ## Running the host tests
 

@@ -1004,6 +1004,12 @@ under systemd. Activity uses the same thresholds as the firmware. If a
 controller has no Bluetooth address, the bridge cannot power it off. It logs a
 warning and retries on the next tick.
 
+The Pi cooldown is `--idle-reconnect-cooldown` (seconds, default 60, 0
+disables it). Before the disconnect the bridge blocks the controller in BlueZ,
+so a page-in from a still-awake controller is refused, and the hidraw monitor
+refuses to reopen the hand for the same window. When the cooldown ends the
+bridge unblocks the device; a button press then reconnects normally.
+
 Configuration macros (ESP32):
 
 - `WMR_CFG_KEEPALIVE_MS` (default 10000): keep-alive interval. 0 disables the

@@ -561,6 +561,38 @@ def disconnect_device(
     return True
 
 
+def set_device_blocked(
+    address: str,
+    blocked: bool,
+    command: str = "bluetoothctl",
+    runner: Runner = _run_command,
+    timeout: float = 20.0,
+) -> bool:
+    """Tell BlueZ to refuse (``block``) or allow (``unblock``) incoming links.
+
+    Blocking a bonded device keeps a controller that is still shutting down
+    from paging the ACL back up during the idle power-off cooldown. The bond is
+    kept; ``unblock`` lets a later button press reconnect normally.
+    """
+
+    if not address:
+        return False
+    action = "block" if blocked else "unblock"
+    result = runner([command, action, address], timeout)
+    output = ""
+    if result is not None:
+        output = f"{result.stdout or ''}\n{result.stderr or ''}"
+    if result is None or result.returncode != 0 or "failed" in output.casefold():
+        LOG.warning(
+            "bluetoothctl %s %s failed; the reconnect guard is not applied",
+            action,
+            address,
+        )
+        return False
+    LOG.info("bluetoothctl %s %s", action, address)
+    return True
+
+
 def collect_status(
     command: str = "bluetoothctl",
     runner: Runner = _run_command,

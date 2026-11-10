@@ -26,7 +26,13 @@ from wmr_bridge.__main__ import (
     _validate_idle_timeouts,
     main,
 )
-from wmr_bridge.bluez import BluezAdapter, BluezDevice, BluezStatus, HidrawDevice
+from wmr_bridge.bluez import (
+    BluezAdapter,
+    BluezDevice,
+    BluezStatus,
+    HidrawDevice,
+    set_device_blocked,
+)
 
 SAMPLES = Path(__file__).resolve().parents[2] / "samples" / "controller_frames.txt"
 WIFI_INFO = {
@@ -490,13 +496,22 @@ class IdleTimeoutTests(unittest.TestCase):
         args = _build_parser().parse_args([])
         self.assertEqual(args.idle_sleep_timeout, 300.0)
         self.assertEqual(args.idle_poweroff_timeout, 900.0)
+        self.assertEqual(args.idle_reconnect_cooldown, 60.0)
 
     def test_flags_parse_seconds(self) -> None:
         args = _build_parser().parse_args(
-            ["--idle-sleep-timeout", "120", "--idle-poweroff-timeout", "600"]
+            [
+                "--idle-sleep-timeout",
+                "120",
+                "--idle-poweroff-timeout",
+                "600",
+                "--idle-reconnect-cooldown",
+                "30",
+            ]
         )
         self.assertEqual(args.idle_sleep_timeout, 120.0)
         self.assertEqual(args.idle_poweroff_timeout, 600.0)
+        self.assertEqual(args.idle_reconnect_cooldown, 30.0)
 
     def test_zero_disables_a_stage(self) -> None:
         args = _build_parser().parse_args(
@@ -510,6 +525,8 @@ class IdleTimeoutTests(unittest.TestCase):
             _build_parser().parse_args(["--idle-sleep-timeout", "-1"])
         with self.assertRaises(SystemExit):
             _build_parser().parse_args(["--idle-poweroff-timeout", "-1"])
+        with self.assertRaises(SystemExit):
+            _build_parser().parse_args(["--idle-reconnect-cooldown", "-1"])
 
     def test_poweroff_must_be_disabled_or_at_least_the_sleep_timeout(self) -> None:
         parser = _build_parser()
@@ -564,6 +581,8 @@ class IdleManagerWiringTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(captured["idle_sleep_timeout"], 60.0)
         self.assertEqual(captured["idle_poweroff_timeout"], 120.0)
+        self.assertEqual(captured["idle_reconnect_cooldown"], 60.0)
+        self.assertIs(captured["reconnect_guard"], set_device_blocked)
 
     async def test_run_rejects_poweroff_before_sleep(self) -> None:
         args = _build_parser().parse_args(

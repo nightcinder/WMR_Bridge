@@ -29,6 +29,7 @@ from wmr_bridge.bluez import (
     parse_devices,
     parse_info,
     scan_and_pair,
+    set_device_blocked,
 )
 from wmr_bridge.bridge import Bridge, report_is_active
 from wmr_bridge.inputs import HidrawManager
@@ -991,10 +992,34 @@ class DisconnectTests(unittest.TestCase):
 
         self.assertFalse(disconnect_device(self.ADDRESS, runner=runner))
 
+    def test_block_and_unblock_ask_bluetoothctl_to_guard_the_device(self) -> None:
+        calls: list[list[str]] = []
+
+        def runner(args: list[str], timeout: float):
+            calls.append(args)
+            return _completed(args)
+
+        self.assertTrue(set_device_blocked(self.ADDRESS, True, runner=runner))
+        self.assertTrue(set_device_blocked(self.ADDRESS, False, runner=runner))
+        self.assertEqual(
+            calls,
+            [
+                ["bluetoothctl", "block", self.ADDRESS],
+                ["bluetoothctl", "unblock", self.ADDRESS],
+            ],
+        )
+
+    def test_block_failure_and_missing_address_return_false(self) -> None:
+        def runner(args: list[str], timeout: float):
+            return _completed(args, "Failed to block\n", 1)
+
+        self.assertFalse(set_device_blocked(self.ADDRESS, True, runner=runner))
+        self.assertFalse(set_device_blocked("", True, runner=runner))
+
 
 class _FakeReader:
-    def __init__(self) -> None:
-        self.path = "/dev/hidraw0"
+    def __init__(self, path: str = "/dev/hidraw0", **_kwargs: object) -> None:
+        self.path = path
         self.fd = 42
         self.enables = 0
         self.keep_alives = 0
@@ -1003,6 +1028,9 @@ class _FakeReader:
         self.clock = 0.0
         self._last_enable: float | None = None
         self.reads: list[bytes] = []
+
+    def open(self) -> int:
+        return self.fd
 
     def send_enable(self) -> bool:
         self.enables += 1
@@ -1034,13 +1062,20 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
     START_US = 1_000_000
 
     def make_manager(self, *, sleep: float = 300.0, poweroff: float = 900.0,
-                     poweroff_cb=None):
+                     poweroff_cb=None, cooldown: float = 60.0,
+                     reconnect_guard=None):
         bridge = Bridge()
         manager = HidrawManager(
             bridge,
             idle_sleep_timeout=sleep,
             idle_poweroff_timeout=poweroff,
+            idle_reconnect_cooldown=cooldown,
             poweroff=poweroff_cb,
+            reconnect_guard=(
+                (lambda address, blocked: True)
+                if reconnect_guard is None
+                else reconnect_guard
+            ),
         )
         reader = _FakeReader()
         manager._readers[reader.path] = reader  # type: ignore[assignment]
@@ -1147,6 +1182,109 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn(0, manager._powered_off)
         self.assertIn(0, manager._asleep)
+
+    async def test_poweroff_blocks_reconnect_until_the_cooldown_ends(self) -> None:
+        guard_calls: list[tuple[str, bool]] = []
+
+        def guard(address: str, blocked: bool) -> bool:
+            guard_calls.append((address, blocked))
+            return True
+
+        manager, _bridge, reader = self.make_manager(
+            poweroff_cb=lambda address: True, reconnect_guard=guard
+        )
+
+        await manager._idle_tick(self.START_US + 900_000_000)
+
+        self.assertEqual(guard_calls, [(self.ADDRESS, True)])
+        self.assertIn(0, manager._powered_off)
+        self.assertEqual(
+            manager._powered_off_until_us[0], self.START_US + 960_000_000
+        )
+        self.assertNotIn(reader.path, manager._readers)
+
+        # BlueZ may still deliver a page-in; the manager refuses to open it,
+        # and a report already in flight cannot undo the latch.
+        manager.left_spec = reader.path
+        manager._device_for = lambda path: HidrawDevice(
+            path=path, name="", uniq=self.ADDRESS
+        )
+        self.assertFalse(manager._open(reader.path))
+        manager._note_activity(0, reader)  # type: ignore[arg-type]
+        self.assertIn(0, manager._powered_off)
+
+        await manager._idle_tick(self.START_US + 960_000_000)
+
+        self.assertEqual(
+            guard_calls, [(self.ADDRESS, True), (self.ADDRESS, False)]
+        )
+        self.assertNotIn(0, manager._powered_off)
+        self.assertNotIn(0, manager._powered_off_until_us)
+
+        class _Loop:
+            def add_reader(self, *_args: object) -> None:
+                pass
+
+        manager._loop = _Loop()  # type: ignore[assignment]
+        with mock.patch("wmr_bridge.inputs.HidrawReader", _FakeReader):
+            self.assertTrue(manager._open(reader.path))
+
+    async def test_failed_poweroff_lifts_the_block_and_retries(self) -> None:
+        guard_calls: list[tuple[str, bool]] = []
+        results = [False, True]
+
+        manager, _bridge, _reader = self.make_manager(
+            poweroff_cb=lambda address: results.pop(0),
+            reconnect_guard=(
+                lambda address, blocked: guard_calls.append((address, blocked))
+                or True
+            ),
+        )
+
+        await manager._idle_tick(self.START_US + 900_000_000)
+        self.assertEqual(
+            guard_calls, [(self.ADDRESS, True), (self.ADDRESS, False)]
+        )
+        self.assertNotIn(0, manager._powered_off)
+
+        await manager._idle_tick(self.START_US + 901_000_000)
+        self.assertEqual(
+            guard_calls,
+            [(self.ADDRESS, True), (self.ADDRESS, False), (self.ADDRESS, True)],
+        )
+        self.assertIn(0, manager._powered_off)
+
+    async def test_zero_cooldown_disables_the_reconnect_guard(self) -> None:
+        guard_calls: list[tuple[str, bool]] = []
+        manager, _bridge, _reader = self.make_manager(
+            poweroff_cb=lambda address: True,
+            cooldown=0.0,
+            reconnect_guard=(
+                lambda address, blocked: guard_calls.append((address, blocked))
+                or True
+            ),
+        )
+
+        await manager._idle_tick(self.START_US + 900_000_000)
+
+        self.assertEqual(guard_calls, [])
+        self.assertIn(0, manager._powered_off)
+        self.assertNotIn(0, manager._powered_off_until_us)
+
+    async def test_close_lifts_a_remaining_block(self) -> None:
+        guard_calls: list[tuple[str, bool]] = []
+        manager, _bridge, _reader = self.make_manager(
+            poweroff_cb=lambda address: True,
+            reconnect_guard=(
+                lambda address, blocked: guard_calls.append((address, blocked))
+                or True
+            ),
+        )
+
+        await manager._idle_tick(self.START_US + 900_000_000)
+        await manager.close()
+
+        self.assertEqual(guard_calls[-1], (self.ADDRESS, False))
 
     async def test_zero_timeouts_disable_both_stages(self) -> None:
         calls: list[str] = []

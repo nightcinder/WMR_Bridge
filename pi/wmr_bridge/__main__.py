@@ -26,11 +26,13 @@ from .bluez import (
     _run_command,
     collect_status,
     discover_hidraw,
+    set_device_blocked,
 )
 from .bridge import Bridge
 from .discovery import DISCOVERY_PORT, DiscoveryResponder
 from .inputs import (
     IDLE_POWEROFF_TIMEOUT,
+    IDLE_RECONNECT_COOLDOWN,
     IDLE_SLEEP_TIMEOUT,
     HidrawManager,
     ReplaySource,
@@ -178,6 +180,17 @@ def _build_parser() -> argparse.ArgumentParser:
             "disconnect an idle controller so it powers off (default "
             f"{IDLE_POWEROFF_TIMEOUT:g}, 0 disables; must be 0 or >= "
             "--idle-sleep-timeout)"
+        ),
+    )
+    hid.add_argument(
+        "--idle-reconnect-cooldown",
+        type=_idle_seconds,
+        default=IDLE_RECONNECT_COOLDOWN,
+        metavar="SECONDS",
+        help=(
+            "refuse the controller's page-in for this long after an idle power-off "
+            f"so it can finish shutting down (default {IDLE_RECONNECT_COOLDOWN:g}, "
+            "0 disables the guard)"
         ),
     )
     hid.add_argument(
@@ -638,14 +651,17 @@ async def _run(args: argparse.Namespace) -> int:
                 poll_interval=args.poll_interval,
                 idle_sleep_timeout=args.idle_sleep_timeout,
                 idle_poweroff_timeout=args.idle_poweroff_timeout,
+                idle_reconnect_cooldown=args.idle_reconnect_cooldown,
+                reconnect_guard=set_device_blocked,
             )
             manager.start()
             LOG.info("watching hidraw for WMR controllers (hand=%s)", args.hand)
             LOG.info(
-                "controller idle policy: sleep after %g s, power off after %g s "
-                "(0 disables)",
+                "controller idle policy: sleep after %g s, power off after %g s, "
+                "reconnect cooldown %g s (0 disables a stage)",
                 args.idle_sleep_timeout,
                 args.idle_poweroff_timeout,
+                args.idle_reconnect_cooldown,
             )
             if args.auto_pair:
                 pairer = BluezAutoPairer(
