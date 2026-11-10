@@ -59,7 +59,6 @@ FF15_ECHO = "0000ff15-0000-1000-8000-00805f9b34fb"
 FF13_CONFIG = "0000ff13-0000-1000-8000-00805f9b34fb"
 FF16_VERSION = "0000ff16-0000-1000-8000-00805f9b34fb"
 FF17_CONTROL = "0000ff17-0000-1000-8000-00805f9b34fb"
-CCCD = "00002902-0000-1000-8000-00805f9b34fb"
 
 APP_PATH = "/org/wmr/bridge"
 SERVICE_PATH = f"{APP_PATH}/service/ff10"
@@ -94,7 +93,6 @@ class GattCharacteristicSpec:
 
     uuid: str
     flags: tuple[str, ...]
-    has_cccd: bool = False
 
 
 # Order mirrors wmr_bridge.gatt: FF11, FF12, FF14, FF15, FF13, FF16, FF17.
@@ -102,36 +100,18 @@ class GattCharacteristicSpec:
 # encrypted write/read posture. FF13 is encrypt-read because it carries the
 # session token next to the calibration windows.
 CHARACTERISTICS = (
+    GattCharacteristicSpec(FF11_RAW, ("read", "notify", "encrypt-read", "encrypt-write")),
+    GattCharacteristicSpec(FF12_DECODED, ("notify", "encrypt-write")),
+    GattCharacteristicSpec(FF14_BATCHED, ("notify", "encrypt-write")),
     GattCharacteristicSpec(
-        FF11_RAW,
-        ("read", "notify", "encrypt-read", "encrypt-write"),
-        has_cccd=True,
+        FF15_ECHO, ("write-without-response", "notify", "encrypt-write")
     ),
     GattCharacteristicSpec(
-        FF12_DECODED,
-        ("notify", "encrypt-write"),
-        has_cccd=True,
-    ),
-    GattCharacteristicSpec(
-        FF14_BATCHED,
-        ("notify", "encrypt-write"),
-        has_cccd=True,
-    ),
-    GattCharacteristicSpec(
-        FF15_ECHO,
-        ("write-without-response", "notify", "encrypt-write"),
-        has_cccd=True,
-    ),
-    GattCharacteristicSpec(
-        FF13_CONFIG,
-        ("read", "write", "notify", "encrypt-read", "encrypt-write"),
-        has_cccd=True,
+        FF13_CONFIG, ("read", "write", "notify", "encrypt-read", "encrypt-write")
     ),
     GattCharacteristicSpec(FF16_VERSION, ("read",)),
     GattCharacteristicSpec(
-        FF17_CONTROL,
-        ("read", "write", "notify", "encrypt-read", "encrypt-write"),
-        has_cccd=True,
+        FF17_CONTROL, ("read", "write", "notify", "encrypt-read", "encrypt-write")
     ),
 )
 
@@ -143,10 +123,6 @@ def characteristic_path(uuid: str) -> str:
 
     short = uuid[4:8]
     return f"{SERVICE_PATH}/{short}"
-
-
-def descriptor_path(uuid: str) -> str:
-    return f"{characteristic_path(uuid)}/ccc"
 
 
 class GattBackend(Protocol):
@@ -222,40 +198,6 @@ class GattApplication:
 
     def is_notifying(self, uuid: str) -> bool:
         return uuid in self._subscribed
-
-    def managed_objects(self) -> dict[str, dict[str, dict[str, Any]]]:
-        """The ``GetManagedObjects`` reply, without any D-Bus types attached."""
-
-        objects: dict[str, dict[str, dict[str, Any]]] = {
-            APP_PATH: {"org.freedesktop.DBus.ObjectManager": {}}
-        }
-        paths: list[str] = []
-        for spec in CHARACTERISTICS:
-            value_path = characteristic_path(spec.uuid)
-            paths.append(value_path)
-            properties: dict[str, Any] = {
-                "UUID": spec.uuid,
-                "Service": SERVICE_PATH,
-                "Flags": list(spec.flags),
-            }
-            if spec.has_cccd:
-                properties["Descriptors"] = [descriptor_path(spec.uuid)]
-                objects[descriptor_path(spec.uuid)] = {
-                    "org.bluez.GattDescriptor1": {
-                        "UUID": CCCD,
-                        "Characteristic": value_path,
-                        "Flags": ["read", "write"],
-                    }
-                }
-            objects[value_path] = {"org.bluez.GattCharacteristic1": properties}
-        objects[SERVICE_PATH] = {
-            "org.bluez.GattService1": {
-                "UUID": FF10_SERVICE,
-                "Primary": True,
-                "Characteristics": paths,
-            }
-        }
-        return objects
 
     # ---- metadata --------------------------------------------------------
 
@@ -606,6 +548,14 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
     ``python3-dbus-next``. The classes are returned instead of being defined
     inside :meth:`DbusGattBackend.start` so a host test can build them against
     the installed dbus-next without a live system bus.
+
+    BlueZ discovers the tree with ``ObjectManager.GetManagedObjects`` on the
+    application root. dbus-next 0.2.3 answers that call itself from the
+    interfaces exported on the bus and ignores a ``GetManagedObjects`` method
+    defined on an exported interface, so every object BlueZ must see -- above
+    all the ``GattService1`` at :data:`SERVICE_PATH` -- has to be exported by
+    :func:`export_gatt_application`. BlueZ creates the CCC descriptor for a
+    notify/indicate characteristic itself, so the app exports none.
     """
 
     try:
@@ -618,37 +568,24 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
             "BLE fallback needs python3-dbus-next (apt install python3-dbus-next)"
         ) from exc
 
-    managed = app.managed_objects()
-
     def variant(value: Any, signature: str) -> Any:
         return Variant(signature, value)
 
-    class Application(ServiceInterface):
+    class Service(ServiceInterface):
         def __init__(self) -> None:
-            super().__init__("org.freedesktop.DBus.ObjectManager")
+            super().__init__("org.bluez.GattService1")
 
-        @method()
-        def GetManagedObjects(self) -> "a{oa{sa{sv}}}":
-            reply: dict[str, dict[str, dict[str, Any]]] = {}
-            for object_path, interfaces in managed.items():
-                reply[object_path] = {}
-                for name, properties in interfaces.items():
-                    converted: dict[str, Any] = {}
-                    for key, value in properties.items():
-                        if key == "UUID":
-                            converted[key] = variant(value, "s")
-                        elif key == "Service" or key == "Characteristic":
-                            converted[key] = variant(value, "o")
-                        elif key == "Primary":
-                            converted[key] = variant(value, "b")
-                        elif key == "Characteristics" or key == "Descriptors":
-                            converted[key] = variant(value, "ao")
-                        elif key == "Flags":
-                            converted[key] = variant(value, "as")
-                        else:
-                            converted[key] = variant(value, "s")
-                    reply[object_path][name] = converted
-            return reply
+        @dbus_property(access=PropertyAccess.READ)
+        def UUID(self) -> "s":
+            return FF10_SERVICE
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Primary(self) -> "b":
+            return True
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Characteristics(self) -> "ao":
+            return [characteristic_path(spec.uuid) for spec in CHARACTERISTICS]
 
     class Characteristic(ServiceInterface):
         def __init__(self, spec: GattCharacteristicSpec) -> None:
@@ -667,12 +604,6 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         @dbus_property(access=PropertyAccess.READ)
         def Flags(self) -> "as":
             return list(self.spec.flags)
-
-        @dbus_property(access=PropertyAccess.READ)
-        def Descriptors(self) -> "ao":
-            if not self.spec.has_cccd:
-                return []
-            return [descriptor_path(self.spec.uuid)]
 
         @dbus_property(access=PropertyAccess.READ)
         def Notifying(self) -> "b":
@@ -716,35 +647,6 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
                 {"Notifying": variant(False, "b")}, []
             )
 
-    class Descriptor(ServiceInterface):
-        def __init__(self, uuid: str) -> None:
-            super().__init__("org.bluez.GattDescriptor1")
-            self.uuid = uuid
-
-        @dbus_property(access=PropertyAccess.READ)
-        def UUID(self) -> "s":
-            return CCCD
-
-        @dbus_property(access=PropertyAccess.READ)
-        def Characteristic(self) -> "o":
-            return characteristic_path(self.uuid)
-
-        @dbus_property(access=PropertyAccess.READ)
-        def Flags(self) -> "as":
-            return ["read", "write"]
-
-        @method()
-        def ReadValue(self, options: "a{sv}") -> "ay":
-            enabled = app.is_notifying(self.uuid)
-            return b"\x01\x00" if enabled else b"\x00\x00"
-
-        @method()
-        def WriteValue(self, value: "ay", options: "a{sv}"):
-            if len(value) >= 2 and value[0] & 0x01:
-                app.start_notify(self.uuid)
-            else:
-                app.stop_notify(self.uuid)
-
     class Advertisement(ServiceInterface):
         def __init__(self) -> None:
             super().__init__("org.bluez.LEAdvertisement1")
@@ -783,11 +685,34 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
             return None
 
     return {
-        "Application": Application,
+        "Service": Service,
         "Characteristic": Characteristic,
-        "Descriptor": Descriptor,
         "Advertisement": Advertisement,
     }
+
+
+def export_gatt_application(
+    bus: Any, interfaces: dict[str, type[Any]]
+) -> tuple[dict[str, Any], list[str]]:
+    """Export the FF10 service and characteristics for ``GetManagedObjects``.
+
+    Returns the characteristic interfaces by UUID (for notifications) and the
+    exported object paths (for ``unexport``). dbus-next derives the
+    ``GetManagedObjects`` reply from these exports, so the service object must
+    be exported too or BlueZ answers ``RegisterApplication`` with "No valid
+    service object found".
+    """
+
+    bus.export(SERVICE_PATH, interfaces["Service"]())
+    exported = [SERVICE_PATH]
+    characteristics: dict[str, Any] = {}
+    for spec in CHARACTERISTICS:
+        path = characteristic_path(spec.uuid)
+        characteristic = interfaces["Characteristic"](spec)
+        bus.export(path, characteristic)
+        exported.append(path)
+        characteristics[spec.uuid] = characteristic
+    return characteristics, exported
 
 
 class DbusGattBackend:
@@ -796,7 +721,6 @@ class DbusGattBackend:
     def __init__(self, adapter: str = "hci0") -> None:
         self.adapter = adapter
         self._bus: Any = None
-        self._application: Any = None
         self._advertisement: Any = None
         self._adapter_interface: Any = None
         self._gatt_manager: Any = None
@@ -835,20 +759,11 @@ class DbusGattBackend:
             raise RuntimeError(f"BlueZ adapter {self.adapter} is not available: {exc}") from exc
 
 
-        self._application = interfaces["Application"]()
         self._advertisement = interfaces["Advertisement"]()
-        bus.export(APP_PATH, self._application)
         bus.export(ADVERTISEMENT_PATH, self._advertisement)
-        self._exported.extend([APP_PATH, ADVERTISEMENT_PATH])
-        for spec in CHARACTERISTICS:
-            characteristic = interfaces["Characteristic"](spec)
-            bus.export(characteristic_path(spec.uuid), characteristic)
-            self._exported.append(characteristic_path(spec.uuid))
-            self._characteristics[spec.uuid] = characteristic
-            if spec.has_cccd:
-                descriptor = interfaces["Descriptor"](spec.uuid)
-                bus.export(descriptor_path(spec.uuid), descriptor)
-                self._exported.append(descriptor_path(spec.uuid))
+        self._exported.append(ADVERTISEMENT_PATH)
+        self._characteristics, exported = export_gatt_application(bus, interfaces)
+        self._exported.extend(exported)
 
         try:
             await self._gatt_manager.call_register_application(APP_PATH, {})

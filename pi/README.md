@@ -27,7 +27,7 @@ New to the Pi? Read the simple-English beginner guide:
 
 ```bash
 cd pi
-python3 -m unittest discover -s tests -v          # 302 host tests
+python3 -m unittest discover -s tests -v          # 304 host tests
 python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 
 # in a second terminal
