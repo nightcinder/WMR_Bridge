@@ -225,7 +225,7 @@ Pass criteria for Sitting P gates:
 - Missing share per hand <= 3.0 % (or LEFT <= 1.0 % and RIGHT ~10-12 % for asymmetry localisation).
 - Sequence gaps == 0 on both hands.
 - Server dropped messages == 0 (non-null `serverStatus` with `serverStatus.dropped == 0`).
-- `wifi_probe.py` exits with code 0.
+- `wifi_probe.py` exits with code 0 (confirming the probe run completed).
 
 ## 4. Pass / refute
 

@@ -2,7 +2,7 @@
 
 Status: runbook, not a result. A check is `not run` until its figures are pasted back. This sheet replaces `ony-439-android-verification.md`.
 
-Firmware **v0.3.11**; app **Companion 0.3.19+24** (or later). Plan ONY-926.
+Firmware **v0.3.16** (or later build containing PR #191); app **Companion 0.3.19+24** (or later). Plan ONY-926.
 
 ## 0. Blocks
 
@@ -19,8 +19,8 @@ Firmware **v0.3.11**; app **Companion 0.3.19+24** (or later). Plan ONY-926.
 Order: install, then **B -> E -> C -> D -> G -> H** on one boot. Do **F** next on a fresh boot with one controller powered.
 
 ## 1. Install and record
-1. Install the **Both hands** `v0.3.11` image from the [installer](https://nightcinder.github.io/WMR_Bridge/) or the release.
-2. Confirm the boot banner, console `v` and Debug screen all say `0.3.11`, with all capability bits. If so, do not reflash.
+1. Install the **Both hands** `v0.3.16` image (or release build containing PR #191) from the [installer](https://nightcinder.github.io/WMR_Bridge/) or the release.
+2. Confirm the boot banner, console `v` and Debug screen report `0.3.16` or later (or the PR #191 build hash), with all capability bits. If so, do not reflash.
 3. Install the Companion APK from the `wmr-companion` `v0.3.19+24` release (or later).
 4. Record: firmware hash, `bridge_hands=`, app version, phone and Android, LED wiring (GPIO 4 or `declined`).
 
@@ -58,7 +58,7 @@ this block.
 ## 4. Block B — FF16, FF17, stick
 
 **FF16:** read the app Debug screen and console `v`; repeat after reconnect with
-`none` and `FF14`. Pass: `firmware 0.3.11`, `FF11+` through `FF17+`, console matches `build-info.json`, string stable. Fail: `n/a`, `malformed`, different version or stream-dependent string.
+`none` and `FF14`. Pass: `firmware 0.3.16` (or `0.3.11`+), `FF11+` through `FF17+`, console matches `build-info.json`, string stable. Fail: `n/a`, `malformed`, different version or stream-dependent string.
 
 **FF17:** both hands awake, FF14. `0x02` CONNECT, `0x03` DISCONNECT, `0x05`
 FORGET_BOND, `0x04` FORGET_ADDRS. ATT `0x84` = NOT_CONNECTED, `0x81` = BUSY.
@@ -163,7 +163,7 @@ Firmware PR #191 implements two-stage idle power management in `src/wmr_cfgmgr.c
 - `WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS` (default 60000 ms, 1 min): declines incoming reconnects to prevent a link bounce while the controller shuts down.
 
 Prerequisites:
-- ESP32 flashed with firmware containing PR #191.
+- ESP32 flashed with firmware containing PR #191 (v0.3.16 or later factory image `wmr-bridge-app.bin`, commit `dde230c`).
 - ESP32 connected over USB to monitor serial output:
 
   ```bash
@@ -191,14 +191,14 @@ Procedure:
 9. Leave RIGHT untouched until `T0 + 900 s` (15 minutes).
 10. At `T0 + 900 s` (up to `T0 + 910 s`), make sure that the serial monitor prints:
     `FF13 RIGHT: idle for <N> ms; disconnecting so the controller powers off`
-    `pair: RIGHT idle; disconnecting so it powers off, reconnects declined for 60000 ms`
+    `RIGHT idle; disconnecting so it powers off, reconnects declined for 60000 ms`
     where `<N>` is at least 900000.
 11. Make sure that the RIGHT controller turns off completely (ring LEDs extinguish).
 12. Test the 60-second reconnect cooldown: immediately press the Windows power button on RIGHT within the 60 s window.
 13. Make sure that the serial monitor prints:
-    `pair: RIGHT reconnected during its idle power-off cooldown; dropping the link`
+    `RIGHT reconnected during its idle power-off cooldown; dropping the link`
     or:
-    `pair: RIGHT is in its idle power-off cooldown; not reconnecting yet`
+    `RIGHT is in its idle power-off cooldown; not reconnecting yet`
     The reconnect must be declined.
 14. Wait for the 60 s cooldown to expire. Turn on RIGHT.
 15. Make sure that RIGHT reconnects and streams cleanly.
