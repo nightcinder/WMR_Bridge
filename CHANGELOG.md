@@ -12,11 +12,12 @@ This file records what each release contains; hardware evidence stays in
 - **Idle power-off no longer bounces back (ONY-1185).** After the 15-minute
   idle disconnect the still-awake controller paged the Pi again 3 s later, and
   the hidraw monitor reopened it and reset its idle timer. The bridge now
-  blocks the controller in BlueZ before the ACL drop and refuses to reopen its
-  hidraw node until `--idle-reconnect-cooldown` (default 60 s) expires, then
-  unblocks it so a button press reconnects normally. The previous latch was
-  cleared by the disconnect's own read error before it could take effect. The
-  ESP32 path already declines reconnects for
+  blocks the controller in BlueZ at the power-off timeout (the block drops the
+  ACL, and a racing `NotConnected` disconnect now counts as dropped) and
+  refuses to reopen its hidraw node until `--idle-reconnect-cooldown`
+  (default 60 s) expires, then unblocks it so a button press reconnects
+  normally. The previous latch was cleared by the disconnect's own read error
+  before it could take effect. The ESP32 path already declines reconnects for
   `WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS`; no firmware change was needed.
 
 ## 0.3.17 — 2026-11-10

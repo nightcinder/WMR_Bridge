@@ -551,7 +551,14 @@ def disconnect_device(
     output = ""
     if result is not None:
         output = f"{result.stdout or ''}\n{result.stderr or ''}"
-    if result is None or result.returncode != 0 or "failed" in output.casefold():
+    folded = output.casefold()
+    if "notconnected" in folded or "not connected" in folded:
+        # Blocking a device in BlueZ drops its ACL (device_block calls
+        # disconnect_all), so the explicit disconnect can lose that race. A
+        # link that is already down is the state we wanted.
+        LOG.info("bluetoothctl %s already disconnected", address)
+        return True
+    if result is None or result.returncode != 0 or "failed" in folded:
         LOG.warning(
             "bluetoothctl disconnect %s failed; the controller may stay connected",
             address,

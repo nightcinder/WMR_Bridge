@@ -451,6 +451,10 @@ class HidrawManager:
                         )
                 except Exception:  # a failed power-off must be retried, not fatal
                     LOG.exception("%s power-off attempt raised; will retry", label)
+                # A successful block already drops the ACL (BlueZ's
+                # device_block calls disconnect_all), so the link is down even
+                # when the explicit disconnect then reports NotConnected.
+                powered_off = powered_off or blocked
                 if powered_off:
                     # Latch only after the ACL actually dropped. A failure
                     # leaves the hand eligible so the next tick retries.

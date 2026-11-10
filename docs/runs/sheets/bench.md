@@ -17,7 +17,7 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.17 candidate), LEFT and RIGHT WMR contro
 6. Pi idle sleep and wake (PR #190, ONY-1058). Leave both controllers untouched for 35 s, then tilt LEFT.
    - [ ] PASS / FAIL — Journal logs keep-alive paused at about 30 s. Tilting wakes the stream within 1 s.
 7. Pi idle power-off and reconnect guard (PR #190, ONY-1185). Leave both controllers untouched for 95 s.
-   - [ ] PASS / FAIL — Journal logs ACL disconnect at about 90 s and both LED rings turn off. The expected trace is: `idle for <N> s: disconnecting ... to power it off`, `bluetoothctl block <addr>`, `bluetoothctl disconnected <addr>`, then no `LEFT/RIGHT connected` line for 60 s. After `power-off cooldown elapsed: reconnects allowed` and `bluetoothctl unblock <addr>`, press a button on LEFT; it reconnects and streams. Stop Pi `wmr-bridge` before Part B.
+   - [ ] PASS / FAIL — Journal logs the BlueZ block at about 90 s and both LED rings turn off. The expected trace is: `idle for <N> s: disconnecting ... to power it off`, `bluetoothctl block <addr>` (BlueZ drops the ACL with the block), then either `bluetoothctl disconnected <addr>` or `bluetoothctl <addr> already disconnected` depending on which drop wins, and no `LEFT/RIGHT connected` line for 60 s. After `power-off cooldown elapsed: reconnects allowed` and `bluetoothctl unblock <addr>`, press a button on LEFT; it reconnects and streams. Stop Pi `wmr-bridge` before Part B.
 
    The ONY-1064 log showed reports still arriving after the 5-minute keep-alive pause; do not treat that pause alone as evidence the controller is asleep. The ACL drop in item 7 is the power-off signal.
 

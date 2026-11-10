@@ -992,6 +992,14 @@ class DisconnectTests(unittest.TestCase):
 
         self.assertFalse(disconnect_device(self.ADDRESS, runner=runner))
 
+    def test_disconnect_treats_not_connected_as_already_dropped(self) -> None:
+        def runner(args: list[str], timeout: float):
+            return _completed(
+                args, "Failed to disconnect: org.bluez.Error.NotConnected\n", 0
+            )
+
+        self.assertTrue(disconnect_device(self.ADDRESS, runner=runner))
+
     def test_block_and_unblock_ask_bluetoothctl_to_guard_the_device(self) -> None:
         calls: list[list[str]] = []
 
@@ -1136,7 +1144,9 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
             calls.append(address)
             return results.pop(0) if results else True
 
-        manager, _bridge, reader = self.make_manager(poweroff_cb=poweroff)
+        manager, _bridge, reader = self.make_manager(
+            poweroff_cb=poweroff, cooldown=0.0
+        )
 
         await manager._idle_tick(self.START_US + 900_000_000)
         self.assertEqual(calls, [self.ADDRESS])
@@ -1237,21 +1247,46 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
             poweroff_cb=lambda address: results.pop(0),
             reconnect_guard=(
                 lambda address, blocked: guard_calls.append((address, blocked))
-                or True
+                or False
             ),
         )
 
         await manager._idle_tick(self.START_US + 900_000_000)
-        self.assertEqual(
-            guard_calls, [(self.ADDRESS, True), (self.ADDRESS, False)]
-        )
+        self.assertEqual(guard_calls, [(self.ADDRESS, True)])
         self.assertNotIn(0, manager._powered_off)
+        self.assertNotIn(0, manager._powered_off_until_us)
 
         await manager._idle_tick(self.START_US + 901_000_000)
         self.assertEqual(
-            guard_calls,
-            [(self.ADDRESS, True), (self.ADDRESS, False), (self.ADDRESS, True)],
+            guard_calls, [(self.ADDRESS, True), (self.ADDRESS, True)]
         )
+        self.assertIn(0, manager._powered_off)
+
+    async def test_successful_block_keeps_the_latch_when_disconnect_races_it(self) -> None:
+        """BlueZ's block drops the ACL, so a NotConnected disconnect is success."""
+
+        guard_calls: list[tuple[str, bool]] = []
+
+        def guard(address: str, blocked: bool) -> bool:
+            guard_calls.append((address, blocked))
+            return True
+
+        manager, _bridge, reader = self.make_manager(
+            poweroff_cb=lambda address: False, reconnect_guard=guard
+        )
+
+        await manager._idle_tick(self.START_US + 900_000_000)
+
+        self.assertEqual(guard_calls, [(self.ADDRESS, True)])
+        self.assertIn(0, manager._powered_off)
+        self.assertEqual(
+            manager._powered_off_until_us[0], self.START_US + 960_000_000
+        )
+        self.assertNotIn(reader.path, manager._readers)
+
+        await manager._idle_tick(self.START_US + 901_000_000)
+
+        self.assertEqual(guard_calls, [(self.ADDRESS, True)])
         self.assertIn(0, manager._powered_off)
 
     async def test_zero_cooldown_disables_the_reconnect_guard(self) -> None:
