@@ -9,8 +9,9 @@ the bridge in a Bluetooth scan (ONY-1197). It keeps the 0.3.18 FF10
 dbus-next GATT start annotations and the 0.3.16 uplink order — Ethernet over
 5 GHz over 2.4 GHz Wi-Fi via route metrics — plus `AF_NETLINK` in the systemd
 unit and token access for `wifi_probe.py` (ONY-1114, ONY-1115, ONY-1144). The
-ESP32 firmware is unchanged
-from 0.3.15, which re-sends the FF13 streaming-enable pair on reconnect and
+ESP32 firmware last changed
+in 0.3.16, which added controller idle sleep and power-off (ONY-1128) on top of
+the 0.3.15 change that re-sends the FF13 streaming-enable pair on reconnect and
 every 10 s so a connected controller stays awake (ONY-1062). The firmware's
 controller families are unchanged from
 0.3.14: one driver table per model with PSVR2 FF12/FF14 decoding and Nintendo

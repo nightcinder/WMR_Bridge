@@ -137,9 +137,10 @@ in a Bluetooth scan (ONY-1197). It keeps the 0.3.18 FF10
 dbus-next GATT start annotations, FF10 advertised by default
 with per-client CCCD gating, an Ethernet uplink over 5 GHz and 2.4 GHz Wi-Fi
 using route metrics, `AF_NETLINK` in the systemd unit and token access for
-`wifi_probe.py`. The firmware is unchanged from 0.3.15,
-which re-sends the FF13 streaming-enable pair on reconnect and every 10 s so a
-connected controller stays awake. The controller-family firmware on top of 0.3.5
+`wifi_probe.py`. The firmware last changed in 0.3.16, which added controller
+idle sleep and power-off (ONY-1128) on top of the 0.3.15 change that re-sends
+the FF13 streaming-enable pair on reconnect and every 10 s so a connected
+controller stays awake. The controller-family firmware on top of 0.3.5
 remains: one driver
 table per model, PSVR2 FF12/FF14 decoding, and Nintendo Switch Joy-Con/Pro
 handshake and `0x30` decoding. Switch support
