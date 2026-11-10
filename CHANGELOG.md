@@ -5,6 +5,32 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.21 — 2026-11-10
+
+The Pi LE pairing-agent release on top of 0.3.20, shipping the fix for a phone
+whose Bluetooth page closes after it asks for a pairing code. Firmware payloads
+are unchanged from 0.3.20: FF10–FF17 keep their payloads and companions at
+0.2.2 or later continue to work. The Pi pairing path is host-tested only; the
+bench sheet carries the procedure for the hardware re-run.
+
+### Raspberry Pi bridge
+
+- **Keep the LE pairing agent through a phone bond (ONY-1244).** BlueZ clears a
+  client's default agent when the Classic auto-pairer's `bluetoothctl` session
+  exits, so a phone pairing around a controller scan could find that
+  empty-capability agent or no default agent, and Android closed the pairing
+  page. The daemon now reclaims its `NoInputNoOutput` agent as the adapter
+  default after every controller scan and tells the auto-pairer to drop its own
+  agent (`agent off`) while the BLE window is open. Pairability and the agent
+  also stay open for 10 seconds after the last agent request, so a stored bond
+  does not release them while the phone is still discovering services and
+  enabling the HID report.
+- **Pairing journal lines.** The daemon logs `BLE pairing window open/closed`,
+  `BLE pairing agent registered`/`claimed`/`reclaimed`, one line per agent
+  callback (`BLE pairing: confirmation requested by <device>`), and
+  `BLE pairing: BlueZ cancelled the pending request` when the exchange fails.
+  `docs/PI_BRIDGE.md` explains how to read a capture.
+
 ## 0.3.20 — 2026-11-10
 
 The Pi BLE gamepad and pairing release on top of 0.3.19. The Pi bridge exposes

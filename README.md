@@ -127,9 +127,14 @@ reuse it. The output in `dist/` includes the bootloader, partition table,
 application and merged factory images, plus a browser flasher page. The browser
 manifest writes the three separate images at offsets `0x1000`, `0x8000` and
 `0x10000`. It does not write NVS (`0x9000`-`0xFFFF`), so a reflash with
-"Erase device" unchecked keeps the stored pairings. `0.3.20` is the current
-release. It is the Pi BLE gamepad and pairing release: the daemon exposes the
-controllers as a standard BLE HID-over-GATT gamepad on the same LE link as
+"Erase device" unchecked keeps the stored pairings. `0.3.21` is the current
+release. It is the Pi LE pairing-agent release on top of the 0.3.20 BLE
+gamepad release: the daemon keeps its Just Works agent claimed through a phone
+bond, reclaims it after every controller scan, and holds pairability and the
+agent open for 10 seconds after the last agent request, so Android no longer
+closes the pairing page mid-exchange (ONY-1244). It also logs every agent
+callback and pairing cancellation for the journal. The 0.3.20 release exposes
+the controllers as a standard BLE HID-over-GATT gamepad on the same LE link as
 FF10, advertises the gamepad appearance (`0x03C4`) in two interval tiers, and
 is pairable only during the 180-second boot window or while no LE bond is
 stored unless `--ble-continuous-pairing` is set (ONY-1214, ONY-1228,
@@ -317,7 +322,7 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 | --- | --- |
 | Firmware build (ESP-IDF v6.1, ESP32) | Passes, no warnings from this code |
 | Host unit tests of the protocol encoder, reassembler and queue (6129 checks) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
-| Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 346 tests) | Pass (host tests only; the real BlueZ pairing path has not been run on a Raspberry Pi or with real controllers) |
+| Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 361 tests) | Pass (host tests only; the real BlueZ pairing path has not been run on a Raspberry Pi or with real controllers) |
 | Flash and boot on a real ESP32 | Passes; advertises; stats print every 5 s; no debug spam |
 | One bench run, about 15 s, both controllers and a phone (log pasted by the user, not instrumented on the phone) | Both controllers connected on their own; ATT MTU went 23 to 517; about 174/s (LEFT) and 154/s (RIGHT); sent = received for both hands; 0 drops, 0 offline, 0 purged, 0 send errors; queue back to 0 after a startup peak of 11; counter accounting added up exactly |
 
