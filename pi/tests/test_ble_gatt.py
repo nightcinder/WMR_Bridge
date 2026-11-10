@@ -109,6 +109,7 @@ class RegistrationTests(unittest.TestCase):
     def test_advertisement_carries_the_bridge_id_prefix(self) -> None:
         bridge = Bridge(bridge_id="wmr-pi-abc12345")
         data = _application(bridge=bridge).advertisement_data()
+        self.assertTrue(data["discoverable"])
         self.assertEqual(data["service_uuids"], [FF10_SERVICE])
         self.assertEqual(data["local_name"], "WMR Bridge")
         self.assertEqual(data["service_data"][FF10_SERVICE], b"WMB1wmr-pi-a")
@@ -150,6 +151,7 @@ class DbusNextInterfaceTests(unittest.TestCase):
             # dbus-next rejects a "None" return annotation, so no out argument here.
             self.assertEqual(methods["WriteValue"].out_args, [])
         self.assertEqual(advertisement.Type, "peripheral")
+        self.assertTrue(advertisement.Discoverable)
         self.assertEqual(advertisement.ServiceUUIDs, [FF10_SERVICE])
         self.assertEqual(advertisement.LocalName, "WMR Bridge")
         self.assertEqual(advertisement.ServiceData[FF10_SERVICE].signature, "ay")

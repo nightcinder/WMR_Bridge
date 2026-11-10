@@ -147,7 +147,7 @@ The daemon includes a `"wifi"` object in `hello` and `status`. The object has `i
 
 The daemon advertises the FF10 GATT service over BlueZ by default. Advertising is always on. Each client controls its own notifications through the CCCD (Client Characteristic Configuration Descriptor). A client with notifications enabled receives FF11, FF12, and FF14. A client with notifications off receives nothing. The bridge does not gate notifications per client.
 
-Slow advertising uses LEAdvertisement1 intervals of about 1000 to 1285 ms. You can also set this with `btmgmt`.
+Slow advertising uses LEAdvertisement1 intervals of about 1000 to 1285 ms. You can also set this with `btmgmt`. The advertisement sets `Discoverable` so BlueZ puts the LE General Discoverable flag (`0x06`) in the advertising data, and it carries the local name `WMR Bridge` and the FF10 service UUID, matching what the ESP32 advertises.
 
 Pass `--no-ble` to disable the BLE peripheral. `--ble-fallback` stays as a deprecated no-op alias and prints a deprecation warning. The peripheral needs `python3-dbus-next` and a free hci adapter. It has not been verified on hardware.
 
