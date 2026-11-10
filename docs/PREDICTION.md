@@ -56,7 +56,7 @@ For a VR-grade dual-controller target, yes. For the current 3DoF viewer, no.
   return toward its alone level and RIGHT to lose the roughly eight points that
   appear when LEFT is also connected. RIGHT's own ~10.8 % is still there, so
   even two bridges may not reach a 3-5 % bar. That sitting has not run
-  (`runs/sheets/multi-bridge.md`).
+  (`docs/FLASHING.md`).
 - The Pi/Wi-Fi bridge moves only the phone link. It can remove BLE airtime
   from the ESP32 radio, but it cannot remove the 9-11 % no-phone baseline, so
   it is not a single-ESP32 fix either.
@@ -230,7 +230,7 @@ Status of each option:
 | FF14 batching (about 48 notifications/s instead of about 300/s) | No clear loss gain. The FF14 run sat inside the FF12 run-to-run spread, and LEFT rose through the session ([`STATUS.md`](STATUS.md)) |
 | Phone connected but no stream, then FF11/FF12/FF14 | Loss rises when the phone is present and more when it streams, but the no-phone baseline is already 9-11 %. BLE is a contributor, not the whole cause (recorded sessions, not all at one position) |
 | One controller alone versus both | LEFT about 0.5 % alone versus about 19 % both. RIGHT about 10.8 % alone versus about 19 % both. The pair adds contention, and RIGHT has a separate baseline loss |
-| Staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`, V1) | Code exists, run-ready. The run was never done (`runs/sheets/single-esp32-levers.md` section 2) |
+| Staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`, V1) | Code exists, run-ready. The run was never done (`the removed single-ESP32 levers sheet (ONY-1157; see git history)` section 2) |
 | BLE interval: request 30 ms instead of 7.5-15 ms | Not run. The request is already a compile-time knob. Prerequisite is the B1 image and the phone's granted interval |
 | FF14 hold: two connection intervals (`WMR_CFG_BATCH_HOLD_INTERVALS=2`) | Not run. Knob added in ONY-176. Default 1 keeps the current one-interval hold |
 | DLE confirmation on the current build | Not run on the current build. The 2026-10-22 log shows 251 octets / 2120 us accepted. Capture the line again on this image |
@@ -242,7 +242,7 @@ V1 and the BLE interval/hold images are compile-time builds. Right-asymmetry
 phases 1-2 need no flash. DLE is already logged and only needs a current-build
 capture. Core/priority and HCI buffers are ruled out by the diagnostics above.
 The run order, commands and per-lever pass rules are in
-`runs/sheets/single-esp32-levers.md`.
+`the removed single-ESP32 levers sheet (ONY-1157; see git history)`.
 The best measured configuration therefore remains unchanged: default both-hands
 FF14 at MTU 517, the granted 15 ms interval and a one-interval batch hold, with
 18-25 % dual-hand loss. No single-ESP32 variant has yet beaten it.
@@ -252,15 +252,15 @@ Not tested, and practical:
 - Physical separation / antenna geometry. Sitting R in the bench sheet swaps the
   controller between hand slots and positions, then swaps the board, to separate
   controller, position and antenna. Its phases 1-2 have not run, and they need
-  no reflash (`runs/sheets/internal-esp32-wmr-bench.md`,
-  `runs/sheets/single-esp32-levers.md`
+  no reflash (`docs/runs/sheets/bench.md`,
+  `the removed single-ESP32 levers sheet (ONY-1157; see git history)`
   section 3). This is the cheapest way to find out whether part of the loss is
   RF geometry rather than scheduling.
 - Data Length Extension and BLE airtime. The firmware now logs the data-length
   event. The 2026-10-22 log shows 251 octets / 2120 us accepted, so DLE is not
   the unknown it was. A current-build capture and the A/B of a 30 ms interval
   request and a two-interval FF14 hold have not run
-  (`runs/sheets/single-esp32-levers.md`
+  (`the removed single-ESP32 levers sheet (ONY-1157; see git history)`
   section 4).
 - BLE connection interval/priority variations. The bridge asks for 7.5-15 ms.
   The phone granted 15 ms with latency 1. A longer interval lowers the number of

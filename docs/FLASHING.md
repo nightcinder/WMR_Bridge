@@ -102,7 +102,7 @@ cannot fetch the manifest over `file://`.
 ## Two bridges (one hand each)
 
 `--variant left` and `--variant right` build the single-hand images described in
-docs/runs/sheets/multi-bridge.md. Use them when
+docs/FLASHING.md. Use them when
 one bridge carrying both controllers loses packets: put one controller on each
 board, so each bridge serves one hand and does not accept the other.
 

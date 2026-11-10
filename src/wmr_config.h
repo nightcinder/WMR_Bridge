@@ -55,7 +55,7 @@
  * only, 2 = RIGHT only. The excluded hand is ignored by discovery, refused by the outgoing
  * connect, declined on an incoming connection and never written to NVS. Compile-time so one
  * commit can build the REF and the two single-hand images; see
- * docs/runs/sheets/multi-bridge.md for the EXTRA_CFLAGS route. */
+ * docs/FLASHING.md for the EXTRA_CFLAGS route. */
 #ifndef WMR_CFG_BRIDGE_HANDS
 #define WMR_CFG_BRIDGE_HANDS              0
 #endif

@@ -6,7 +6,7 @@ the same reference parsers as the bridge, and prints throughput, per-hand
 sequence gaps, tick-based missing reports (matching ``src/wmr_devloss.c``) and
 echo RTT (``min``, ``p50``, ``p95``, ``max``). Useful before the companion app
 grows a Wi-Fi transport, and for completing the P5/P6 checks in
-``docs/runs/sheets/bench.md``.
+``docs/PI_BRIDGE.md``.
 
 Examples::
 

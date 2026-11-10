@@ -3,10 +3,10 @@
 ONY-428 investigation. Source of truth for the numbers: [`docs/PREDICTION.md`](PREDICTION.md) sections
 1 to 2.5, [`docs/STATUS.md`](STATUS.md) section 5, [`docs/DECODING.md`](DECODING.md)
 "Investigation notes", and the run sheets
-`docs/runs/sheets/single-esp32-levers.md`,
-`docs/runs/sheets/internal-esp32-wmr-bench.md`,
-`docs/runs/sheets/multi-bridge.md`,
-`docs/runs/sheets/pi-bridge.md`.
+`the removed single-ESP32 levers sheet (ONY-1157; see git history)`,
+`docs/runs/sheets/bench.md`,
+`docs/FLASHING.md`,
+`docs/PI_BRIDGE.md`.
 The 2026-10-22/23 contention results are in this file; the old
 `contention-2*.md` sheets were removed in ONY-983.
 
@@ -120,11 +120,11 @@ phone streaming, 30 s settle, `last5s_pct`.
 
 ## Architecture paths (the only things that can remove pair contention)
 
-1. Multi-bridge (`docs/runs/sheets/multi-bridge.md`): one ESP32 per controller.
+1. Multi-bridge (`docs/FLASHING.md`): one ESP32 per controller.
    Expected best case LEFT about 0.5 % / RIGHT about 10.8 %. Not run. Needs a second
    Classic-capable ESP32 (an S3 cannot substitute). Pass bar: LEFT at most 3 % on
    its own bridge.
-2. Pi / Wi-Fi host bridge (`docs/runs/sheets/pi-bridge.md`): moves the phone link
+2. Pi / Wi-Fi host bridge (`docs/PI_BRIDGE.md`): moves the phone link
    to 5 GHz Wi-Fi WebSocket, removing BLE airtime from the ESP32 radio. Cannot
    remove the 9 to 11 % no-phone baseline. Host-tests only, never run on Pi
    hardware.

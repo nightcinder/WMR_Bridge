@@ -7,7 +7,7 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.16 candidate), LEFT and RIGHT WMR contro
 1. Boot and uplink (PR #187, #188). Start `wmr-bridge` on Pi 3B+ with `--idle-sleep-timeout 30 --idle-poweroff-timeout 90`. Pair LEFT and RIGHT controllers. Run `wmr-bridge status`.
    - [ ] PASS / FAIL — Both controllers connected. Uplink matches the active interface (`eth0` metric 100 or `wlan0` 5 GHz metric 200). BlueZ advertises `WMR Bridge`.
 2. UDP discovery and Sitting P gates (ONY-1144, PR #193). Run `python3 pi/tools/wifi_probe.py --discover --assert-gates --duration 30 --json-out /tmp/pi_probe.json` while moving both controllers.
-   - [ ] PASS / FAIL — Command exits 0. UDP port 9877 discovered. RTT p50 under 15 ms. Missing share at most 3.0%. Zero gaps over 50 ms. Zero server drops.
+   - [ ] PASS / FAIL — Command exits 0. UDP port 9877 discovered. RTT p50 under 15 ms. Missing share at most 3.0% per hand. Zero sequence gaps. Server drops (`dropped`) are 0 (observed; not a gate).
 3. LAN auto-connect (ONY-1143). Open `wmr_companion_app` on Pixel 11 Pro on the same LAN.
    - [ ] PASS / FAIL — App auto-discovers Pi via UDP port 9877 and streams both hands over TCP at 150-180 reports/s per hand.
 4. TCP-to-BLE failover (ONY-1143, ONY-1070). Run `sudo ip link set wlan0 down` on Pi while streaming to Pixel 11 Pro.
@@ -28,9 +28,9 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.16 candidate), LEFT and RIGHT WMR contro
 10. Five-minute active keep-alive (ONY-1058). Keep controllers moving or tapped for 5 min 30 s while connected to ESP32.
     - [ ] PASS / FAIL — No controller powers off during more than 5 min of active use. Zero unexpected ACL drops.
 11. ESP32 idle sleep and motion wake (PR #191). Leave both controllers untouched for 5 min 15 s. Check serial log. Tilt both controllers.
-    - [ ] PASS / FAIL — Serial logs `idle sleep after 300 s (keep-alive paused)` for L and R. Tilting logs `woke from idle sleep` and resumes streaming within 1 s.
+    - [ ] PASS / FAIL — Serial logs `FF13 LEFT: idle for 300000 ms; keep-alive paused, controller may sleep` (and RIGHT). Tilting logs `FF13 LEFT: activity after idle sleep; resuming the keep-alive` (and RIGHT) and resumes streaming within 1 s.
 12. Bundle export (ONY-1117). Tap Export Test Bundle in `wmr_companion_app` on Pixel 11 Pro.
-    - [ ] PASS / FAIL — ZIP bundle exports with `session_summary.json` and non-empty controller samples.
+    - [ ] PASS / FAIL — ZIP bundle exports with `manifest.md`, `diagnostics.json` and non-empty controller samples.
 
 ## Optional expansions
 

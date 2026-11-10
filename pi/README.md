@@ -17,8 +17,8 @@ The host bridge:
 - carries them over a WebSocket on Wi-Fi instead of BLE GATT.
 
 The full design, wire protocol, security notes, setup steps and hardware test
-plan are in [`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md). The bring-up run sheet
-is `docs/runs/sheets/bench.md`.
+plan are in [`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md). The bring-up run sheet is `docs/runs/sheets/bench.md` (P1-P14 are in
+[`docs/PI_BRIDGE.md`](../docs/PI_BRIDGE.md)).
 
 New to the Pi? Read the simple-English beginner guide:
 [`docs/RPI_INSTALL_GUIDE.md`](../docs/RPI_INSTALL_GUIDE.md).
