@@ -1,14 +1,17 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-10 (current release 0.3.20: the Pi package in this tree is
-`0.3.20` and exposes the controllers as a standard BLE HID-over-GATT gamepad on
-the same LE link as FF10 (ONY-1229). The advertisement carries the gamepad
-appearance (`0x03C4`) and lists `0x1812` before FF10, advertising runs at
-150–250 ms with no controller connected and at 1000–1285 ms once one connects,
-and the adapter is pairable only during the 180-second boot window or while no
-LE bond is stored, with `--ble-continuous-pairing` as an opt-in (ONY-1228). The
-daemon also registers and claims a `NoInputNoOutput` BlueZ agent while the
-adapter is pairable, so a phone bonds Just Works (ONY-1214). It keeps the 0.3.19
+Last updated: 2026-11-10 (current release 0.3.21: the Pi package in this tree is
+`0.3.21` and keeps the BlueZ Just Works agent through a phone bond (ONY-1244).
+The daemon reclaims its agent as the adapter default after every controller
+scan, the Classic auto-pairer drops its own agent while the BLE window is open,
+and the agent and pairability stay open for 10 seconds after the last agent
+request, so a stored bond does not release them while Android is still
+discovering services and enabling the HID report. Every agent callback,
+pairability change and pairing cancellation is logged. It keeps the 0.3.20 BLE
+gamepad and pairing release: HID-over-GATT on `0x1812` beside FF10 with stream
+gating, the gamepad appearance `0x03C4` in two advertising tiers, and
+bond-aware pairability with `--ble-continuous-pairing` as an opt-in
+(ONY-1214/ONY-1228/ONY-1229). It keeps the 0.3.19
 discoverable advertisement flag (ONY-1197), the 0.3.18 FF10
 `org.bluez.GattService1` export that makes `RegisterApplication` succeed
 (ONY-1186) and the idle power-off reconnect cooldown (ONY-1185), the 0.3.17
@@ -69,7 +72,7 @@ maintained at the project's single entry point:
 | Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (ONY-307, PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.11 image has not been run on hardware (internal bench runbook block C) |
 | BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (ONY-438, #88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.11 pairing and encryption run is not yet done (internal bench runbook block B) |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, not run on hardware |
-| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests only (346 tests + loopback replay), the real BlueZ auto-pair path has not been run on Pi hardware or with controllers; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
+| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests only (361 tests + loopback replay), the real BlueZ auto-pair path has not been run on Pi hardware or with controllers; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has not been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Console `v` read on the 0.2.4 hardware run (`0.2.4`, ESP-IDF v6.1); the live FF16 phone read on v0.3.11 is open (internal bench runbook block B) |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added by ONY-945 (v0.3.11) | Host tests and firmware build only, never run on a PSVR2 controller |

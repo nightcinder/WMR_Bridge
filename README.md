@@ -127,9 +127,14 @@ reuse it. The output in `dist/` includes the bootloader, partition table,
 application and merged factory images, plus a browser flasher page. The browser
 manifest writes the three separate images at offsets `0x1000`, `0x8000` and
 `0x10000`. It does not write NVS (`0x9000`-`0xFFFF`), so a reflash with
-"Erase device" unchecked keeps the stored pairings. `0.3.20` is the current
-release. It is the Pi BLE gamepad and pairing release: the daemon exposes the
-controllers as a standard BLE HID-over-GATT gamepad on the same LE link as
+"Erase device" unchecked keeps the stored pairings. `0.3.21` is the current
+release. It is the Pi LE pairing-agent release on top of the 0.3.20 BLE
+gamepad release: the daemon keeps its Just Works agent claimed through a phone
+bond, reclaims it after every controller scan, and holds pairability and the
+agent open for 10 seconds after the last agent request, so Android no longer
+closes the pairing page mid-exchange (ONY-1244). It also logs every agent
+callback and pairing cancellation for the journal. The 0.3.20 release exposes
+the controllers as a standard BLE HID-over-GATT gamepad on the same LE link as
 FF10, advertises the gamepad appearance (`0x03C4`) in two interval tiers, and
 is pairable only during the 180-second boot window or while no LE bond is
 stored unless `--ble-continuous-pairing` is set (ONY-1214, ONY-1228,
