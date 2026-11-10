@@ -98,9 +98,9 @@ ADV_MAX_INTERVAL_MS = 1285
 # stale bond exists. After it, pairability follows the stored-bond state.
 DEFAULT_PAIRING_WINDOW_S = 180.0
 PAIRING_REJECTED_HINT = (
-    "pairing rejected by WMR Bridge: no BLE pairing window is open. Run "
-    "'wmr-bridge --ble-pairing-window SECONDS' or open the pairing window "
-    "from the Companion app, then try again"
+    "pairing rejected by WMR Bridge: no BLE pairing window is open. Restart "
+    "WMR Bridge with '--ble-pairing-window SECONDS' to open one, or remove "
+    "the old bond in your phone's Bluetooth settings and restart the service"
 )
 
 
@@ -1060,9 +1060,19 @@ class DbusGattBackend:
             )
         except Exception as exc:  # already gone is fine
             LOG.debug("unregister advertisement for interval change: %s", exc)
-        await self._advertising_manager.call_register_advertisement(
-            ADVERTISEMENT_PATH, {}
-        )
+        # Registration can race the unregister inside bluetoothd. Retry a few
+        # times instead of leaving the adapter with no advertisement at all.
+        error: Exception | None = None
+        for attempt in range(3):
+            try:
+                await self._advertising_manager.call_register_advertisement(
+                    ADVERTISEMENT_PATH, {}
+                )
+                return
+            except Exception as exc:
+                error = exc
+                await asyncio.sleep(0.2 * (attempt + 1))
+        raise RuntimeError("could not re-register the advertisement") from error
 
     async def stop(self) -> None:
         bus = self._bus
@@ -1144,7 +1154,9 @@ class BluezGattPeripheral:
         self._pairing_task: asyncio.Task[None] | None = None
         self._bond_task: asyncio.Task[None] | None = None
         self._advertising_task: asyncio.Task[None] | None = None
+        self._advertising_dirty = False
         self._advertised_tier = self.app.advertising_tier
+        self._pairable_applied: bool | None = None
 
     @property
     def started(self) -> bool:
@@ -1170,6 +1182,9 @@ class BluezGattPeripheral:
             else None
         )
         self._advertised_tier = self.app.advertising_tier
+        # A fresh start must write Adapter1.Pairable once even when the rule
+        # computes the same False value the FF13 shadow started with.
+        self._pairable_applied = None
         await self.refresh_pairing_state()
         self._schedule_pairing_refresh()
         LOG.info(
@@ -1181,23 +1196,42 @@ class BluezGattPeripheral:
     # ---- advertising interval -------------------------------------------
 
     def _on_hand_state_changed(self) -> None:
+        # Coalesce rather than drop: a connect/disconnect that lands while a
+        # tier switch is in flight must still be applied afterwards.
+        self._advertising_dirty = True
         if self._advertising_task is not None and not self._advertising_task.done():
             return
-        self._advertising_task = asyncio.create_task(self.refresh_advertising())
+        self._advertising_task = asyncio.create_task(self._drain_advertising())
+
+    async def _drain_advertising(self) -> None:
+        try:
+            while self._advertising_dirty:
+                self._advertising_dirty = False
+                await self.refresh_advertising()
+        finally:
+            self._advertising_task = None
 
     async def refresh_advertising(self) -> None:
-        """Re-register the advertisement when the controller tier changed."""
+        """Re-register until the advertisement matches the current tier.
 
-        tier = self.app.advertising_tier
-        if tier == self._advertised_tier:
-            return
-        try:
-            await self.backend.refresh_advertisement()
-        except Exception as exc:
-            LOG.warning("could not apply the %s advertising tier: %s", tier, exc)
-            return
-        self._advertised_tier = tier
-        LOG.info("BLE advertising interval: %s tier", tier)
+        The tier is re-read after every ``await`` so a connect/disconnect that
+        happens while BlueZ is re-registering is not left on the old interval.
+        """
+
+        while True:
+            tier = self.app.advertising_tier
+            if tier == self._advertised_tier:
+                return
+            try:
+                await self.backend.refresh_advertisement()
+            except Exception as exc:
+                LOG.warning("could not apply the %s advertising tier: %s", tier, exc)
+                # Unknown state: force the next hand event to re-register
+                # rather than trusting a shadow that may not match BlueZ.
+                self._advertised_tier = None
+                return
+            self._advertised_tier = tier
+            LOG.info("BLE advertising interval: %s tier", tier)
 
     # ---- pairability -----------------------------------------------------
 
@@ -1246,13 +1280,18 @@ class BluezGattPeripheral:
         if not self._started:
             return
         pairable = await self._should_be_pairable()
-        if pairable == self.app.pairing_open:
+        # Compare against what was last written to the adapter, not the FF13
+        # shadow: that shadow starts False, which is also a valid computed
+        # value, and skipping the write would leave Adapter1.Pairable stale.
+        if pairable == self._pairable_applied:
             return
-        self.app.pairing_open = pairable
         try:
             await self.backend.set_pairable(pairable)
         except Exception as exc:
             LOG.warning("could not set adapter pairability to %s: %s", pairable, exc)
+            return
+        self._pairable_applied = pairable
+        self.app.pairing_open = pairable
 
     async def _should_be_pairable(self) -> bool:
         if self.continuous_pairing:
@@ -1316,6 +1355,7 @@ class BluezGattPeripheral:
             self.app.pairing_open = False
             try:
                 await self.backend.set_pairable(False)
+                self._pairable_applied = False
             except Exception as exc:
                 LOG.debug("could not disable pairing: %s", exc)
             self.app.bridge.remove_sink(self.app)

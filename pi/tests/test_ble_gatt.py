@@ -167,7 +167,9 @@ class PairingAgentTests(unittest.TestCase):
 
     def test_rejection_hint_names_how_to_open_a_window(self) -> None:
         self.assertIn("--ble-pairing-window", PAIRING_REJECTED_HINT)
-        self.assertIn("Companion", PAIRING_REJECTED_HINT)
+        self.assertIn("restart", PAIRING_REJECTED_HINT)
+        # No production path opens a window from the Companion app.
+        self.assertNotIn("Companion", PAIRING_REJECTED_HINT)
 
 
 class FakeAdapterInterface:
@@ -297,6 +299,44 @@ class BackendAgentTests(unittest.IsolatedAsyncioTestCase):
         await backend.set_pairable(False)
         self.assertEqual(agent_manager.unregistered, [])
         self.assertFalse(adapter.pairable)
+
+
+class FlakyAdvertisingManager:
+    def __init__(self, failures: int) -> None:
+        self.failures = failures
+        self.attempts = 0
+        self.unregistrations = 0
+
+    async def call_unregister_advertisement(self, _path: str) -> None:
+        self.unregistrations += 1
+
+    async def call_register_advertisement(self, _path: str, _options: dict) -> None:
+        self.attempts += 1
+        if self.attempts <= self.failures:
+            raise RuntimeError("advertisement still registered")
+
+
+class AdvertisementRegistrationTests(unittest.IsolatedAsyncioTestCase):
+    def _backend(
+        self, failures: int
+    ) -> tuple[DbusGattBackend, FlakyAdvertisingManager]:
+        backend = DbusGattBackend()
+        manager = FlakyAdvertisingManager(failures)
+        backend._bus = object()
+        backend._advertising_manager = manager
+        return backend, manager
+
+    async def test_a_transient_register_failure_is_retried(self) -> None:
+        backend, manager = self._backend(failures=2)
+        await backend.refresh_advertisement()
+        self.assertEqual(manager.attempts, 3)
+        self.assertEqual(manager.unregistrations, 1)
+
+    async def test_a_persistent_register_failure_is_reported(self) -> None:
+        backend, manager = self._backend(failures=99)
+        with self.assertRaises(RuntimeError):
+            await backend.refresh_advertisement()
+        self.assertEqual(manager.attempts, 3)
 
 
 @unittest.skipUnless(HAS_DBUS_NEXT, "python3-dbus-next is not installed")
@@ -708,6 +748,23 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(backend.pairable)
         await peripheral.close()
 
+    async def test_a_stored_bond_is_applied_at_start_with_no_boot_window(self) -> None:
+        backend = FakeBackend(le_bond=True)
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=0.0,
+        )
+        await peripheral.start()
+        try:
+            self.assertFalse(peripheral.app.pairing_open)
+            self.assertEqual(backend.pairable_calls, [False])
+            self.assertFalse(backend.pairable)
+        finally:
+            await peripheral.close()
+
     async def test_a_manual_window_reopens_with_a_stored_bond(self) -> None:
         backend = FakeBackend(le_bond=True)
         peripheral = BluezGattPeripheral(
@@ -773,6 +830,39 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.bridge.set_hand_connected(0, False)
         await asyncio.sleep(0)
         self.assertEqual(self.backend.advertisement_refreshes, 2)
+
+    async def test_a_disconnect_during_a_tier_switch_is_not_lost(self) -> None:
+        class GatedBackend(FakeBackend):
+            gate: asyncio.Event
+
+            async def refresh_advertisement(self) -> None:
+                await self.gate.wait()
+                await super().refresh_advertisement()
+
+        gate = asyncio.Event()
+        backend = GatedBackend()
+        backend.gate = gate
+        bridge = Bridge()
+        peripheral = BluezGattPeripheral(
+            bridge,
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=120.0,
+        )
+        await peripheral.start()
+        try:
+            bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+            await asyncio.sleep(0)
+            # Disconnect while the fast->slow re-register is still in flight.
+            bridge.set_hand_connected(0, False)
+            gate.set()
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            self.assertEqual(backend.advertisement_refreshes, 2)
+            self.assertEqual(peripheral._advertised_tier, "fast")
+        finally:
+            await peripheral.close()
 
     async def test_ff16_is_read_without_a_bond(self) -> None:
         raw = self.app.read_value(FF16_VERSION)
