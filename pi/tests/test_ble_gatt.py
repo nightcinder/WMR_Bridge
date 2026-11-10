@@ -28,7 +28,7 @@ from wmr_bridge.ble_gatt import (
     GattApplication,
     build_dbus_interfaces,
     characteristic_path,
-    descriptor_path,
+    export_gatt_application,
 )
 from wmr_bridge.bridge import Bridge
 from wmr_bridge.inputs import read_capture
@@ -89,36 +89,15 @@ def _application(**overrides) -> GattApplication:
 
 
 class RegistrationTests(unittest.TestCase):
-    def test_ff10_service_exposes_ff11_through_ff17(self) -> None:
-        objects = _application().managed_objects()
-        self.assertIn("org.freedesktop.DBus.ObjectManager", objects[APP_PATH])
-        service = objects["/org/wmr/bridge/service/ff10"]["org.bluez.GattService1"]
-        self.assertEqual(service["UUID"], FF10_SERVICE)
-        self.assertTrue(service["Primary"])
-        expected = {characteristic_path(spec.uuid) for spec in CHARACTERISTICS}
-        self.assertEqual(set(service["Characteristics"]), expected)
-        self.assertEqual(set(service["Characteristics"]), set(expected))
-        exposed = {
-            properties["UUID"]
-            for path, interfaces in objects.items()
-            if "org.bluez.GattCharacteristic1" in interfaces
-            for properties in interfaces.values()
-        }
+    def test_ff10_characteristics_have_unique_paths(self) -> None:
+        paths = [characteristic_path(spec.uuid) for spec in CHARACTERISTICS]
+        self.assertEqual(len(paths), len(set(paths)))
+        self.assertEqual(len(CHARACTERISTIC_BY_UUID), len(CHARACTERISTICS))
+        self.assertTrue(all(path.startswith(SERVICE_PATH + "/") for path in paths))
         self.assertEqual(
-            exposed,
+            {spec.uuid for spec in CHARACTERISTICS},
             {FF11_RAW, FF12_DECODED, FF14_BATCHED, FF15_ECHO, FF13_CONFIG, FF16_VERSION, FF17_CONTROL},
         )
-        for spec in CHARACTERISTICS:
-            path = characteristic_path(spec.uuid)
-            properties = objects[path]["org.bluez.GattCharacteristic1"]
-            self.assertEqual(properties["Flags"], list(spec.flags))
-            if spec.has_cccd:
-                self.assertEqual(properties["Descriptors"], [descriptor_path(spec.uuid)])
-                descriptor = objects[descriptor_path(spec.uuid)]["org.bluez.GattDescriptor1"]
-                self.assertEqual(descriptor["Characteristic"], path)
-                self.assertEqual(descriptor["UUID"], "00002902-0000-1000-8000-00805f9b34fb")
-            else:
-                self.assertNotIn("Descriptors", properties)
 
     def test_ff16_is_plaintext_and_ff13_requires_encryption(self) -> None:
         application = _application(token="s3cret")
@@ -141,20 +120,24 @@ class RegistrationTests(unittest.TestCase):
 class DbusNextInterfaceTests(unittest.TestCase):
     """Build the real dbus-next interfaces; a bad annotation fails at class creation."""
 
+    def setUp(self) -> None:
+        self.interfaces = build_dbus_interfaces(_application())
+
     def test_service_interfaces_build_on_the_installed_dbus_next(self) -> None:
-        interfaces = build_dbus_interfaces(_application())
-        application = interfaces["Application"]()
-        advertisement = interfaces["Advertisement"]()
+        service = self.interfaces["Service"]()
+        self.assertEqual(service.UUID, FF10_SERVICE)
+        self.assertTrue(service.Primary)
         self.assertEqual(
-            [method.name for method in application.introspect().methods],
-            ["GetManagedObjects"],
+            service.Characteristics,
+            [characteristic_path(spec.uuid) for spec in CHARACTERISTICS],
         )
         self.assertEqual(
-            application.introspect().methods[0].out_args[0].signature,
-            "a{oa{sa{sv}}}",
+            {prop.name for prop in service.introspect().properties},
+            {"UUID", "Primary", "Characteristics"},
         )
+        advertisement = self.interfaces["Advertisement"]()
         for spec in CHARACTERISTICS:
-            characteristic = interfaces["Characteristic"](spec)
+            characteristic = self.interfaces["Characteristic"](spec)
             self.assertEqual(characteristic.UUID, spec.uuid)
             self.assertEqual(characteristic.Service, SERVICE_PATH)
             self.assertEqual(characteristic.Flags, list(spec.flags))
@@ -166,22 +149,95 @@ class DbusNextInterfaceTests(unittest.TestCase):
             )
             # dbus-next rejects a "None" return annotation, so no out argument here.
             self.assertEqual(methods["WriteValue"].out_args, [])
-            if spec.has_cccd:
-                descriptor = interfaces["Descriptor"](spec.uuid)
-                self.assertEqual(
-                    descriptor.UUID, "00002902-0000-1000-8000-00805f9b34fb"
-                )
-                self.assertEqual(
-                    descriptor.Characteristic, characteristic_path(spec.uuid)
-                )
-                self.assertEqual(
-                    {method.name for method in descriptor.introspect().methods},
-                    {"ReadValue", "WriteValue"},
-                )
         self.assertEqual(advertisement.Type, "peripheral")
         self.assertEqual(advertisement.ServiceUUIDs, [FF10_SERVICE])
         self.assertEqual(advertisement.LocalName, "WMR Bridge")
         self.assertEqual(advertisement.ServiceData[FF10_SERVICE].signature, "ay")
+
+
+@unittest.skipUnless(HAS_DBUS_NEXT, "python3-dbus-next is not installed")
+class ManagedObjectsTests(unittest.TestCase):
+    """Drive dbus-next's own ``GetManagedObjects`` over the exported FF10 tree.
+
+    BlueZ registers an application by calling ``GetManagedObjects`` on the app
+    root and rejecting the app unless the reply holds a ``GattService1``.
+    dbus-next 0.2.3 answers that call from the interfaces exported on the bus,
+    not from any method on the app object, so this exercises the same code a
+    live ``RegisterApplication`` does. A session bus is not guaranteed on the
+    host, so only the export registry and the reply handler are used.
+    """
+
+    def _managed_objects(self) -> dict:
+        from dbus_next import Message
+        from dbus_next.message_bus import BaseMessageBus
+
+        class OfflineBus:
+            """The slice of ``MessageBus`` that export and the handler touch."""
+
+            def __init__(self) -> None:
+                self._path_exports: dict = {}
+                self._name_owners: dict = {}
+                self._disconnected = True
+
+            def export(self, path, interface) -> None:
+                BaseMessageBus.export(self, path, interface)
+
+            def _emit_interface_added(self, path, interface) -> None:
+                pass
+
+            def send(self, message) -> None:
+                pass
+
+        class ReplySink:
+            def __init__(self) -> None:
+                self.messages: list = []
+
+            def __call__(self, message) -> None:
+                self.messages.append(message)
+
+            def send_error(self, error) -> None:
+                raise error
+
+        bus = OfflineBus()
+        interface_classes = build_dbus_interfaces(_application())
+        export_gatt_application(bus, interface_classes)
+        request = Message(
+            serial=1,
+            path=APP_PATH,
+            interface="org.freedesktop.DBus.ObjectManager",
+            member="GetManagedObjects",
+            signature="",
+        )
+        sink = ReplySink()
+        BaseMessageBus._default_get_managed_objects_handler(bus, request, sink)
+        self.assertEqual(len(sink.messages), 1)
+        self.assertEqual(sink.messages[0].signature, "a{oa{sa{sv}}}")
+        return sink.messages[0].body[0]
+
+    def test_get_managed_objects_exposes_the_gatt_service(self) -> None:
+        objects = self._managed_objects()
+        # BlueZ: "No valid service object found" until this entry exists.
+        service = objects[SERVICE_PATH]["org.bluez.GattService1"]
+        self.assertEqual(service["UUID"].value, FF10_SERVICE)
+        self.assertIs(service["Primary"].value, True)
+        self.assertEqual(
+            service["Characteristics"].value,
+            [characteristic_path(spec.uuid) for spec in CHARACTERISTICS],
+        )
+        for spec in CHARACTERISTICS:
+            properties = objects[characteristic_path(spec.uuid)][
+                "org.bluez.GattCharacteristic1"
+            ]
+            self.assertEqual(properties["UUID"].value, spec.uuid)
+            self.assertEqual(properties["Service"].value, SERVICE_PATH)
+            self.assertEqual(properties["Flags"].value, list(spec.flags))
+
+    def test_bluez_creates_the_cccd_so_the_app_exports_none(self) -> None:
+        objects = self._managed_objects()
+        self.assertEqual(
+            [path for path in objects if "org.bluez.GattDescriptor1" in objects[path]],
+            [],
+        )
 
 
 class MetadataTests(unittest.TestCase):
