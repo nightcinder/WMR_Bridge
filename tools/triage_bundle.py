@@ -395,8 +395,13 @@ def _speed_gate_bullets(manifest_text):
         if not in_section:
             continue
         match = re.match(r"^[-*]\s+([^:]+):\s*(.+)$", stripped)
-        if match:
-            rows.append((match.group(1).strip(), match.group(2)))
+        if not match:
+            continue
+        cell = match.group(1).strip()
+        if cell.lower().startswith("speed gate"):
+            # The explicit `- Speed gate <cell>: value` form owns these.
+            continue
+        rows.append((cell, match.group(2)))
     return rows
 
 
@@ -416,10 +421,15 @@ def _speed_gate_entries(manifest_text, diagnostics):
     for cell, value in _speed_gate_bullets(manifest_text):
         add(cell, value)
     for line in manifest_text.splitlines():
-        match = re.match(r"^\s*-\s*speed[- ]gate(?:\s+([^:]+))?\s*:\s*(.+)$",
+        match = re.match(r"^\s*-\s*speed[- ]gate\s*:\s*(.+)$", line,
+                         re.IGNORECASE)
+        if match:
+            add("", match.group(1))
+            continue
+        match = re.match(r"^\s*-\s*speed[- ]gate\s+(.+?)\s*:\s+(.+)$",
                          line, re.IGNORECASE)
         if match:
-            add(match.group(1) or "", match.group(2))
+            add(match.group(1), match.group(2))
     for key in SPEED_GATE_KEYS:
         value = diagnostics.get(key)
         if isinstance(value, dict):

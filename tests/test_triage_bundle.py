@@ -441,6 +441,15 @@ class EnvironmentAndSpeedGateTest(unittest.TestCase):
         self.assertEqual(entries["still"][0], "fail")
         self.assertIn("4.0 cm/s", entries["still"][1])
 
+    def test_explicit_speed_gate_bullet_is_read_once(self):
+        entries = triage_bundle._speed_gate_entries(
+            "## Speed gates\n\n"
+            "- Speed gate left:still:1: pass (1.9 cm/s, 97% in band)\n",
+            {})
+        self.assertEqual(list(entries), ["left:still:1"])
+        self.assertEqual(entries["left:still:1"][0], "pass")
+        self.assertIn("1.9 cm/s", entries["left:still:1"][1])
+
 
 class SixRunPoseTest(unittest.TestCase):
     """Option A: six runs, one per motion, alternating hands."""
