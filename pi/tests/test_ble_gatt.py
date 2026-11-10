@@ -231,9 +231,8 @@ class PairingAgentTests(unittest.TestCase):
         self.assertEqual(seen, [phone, phone, phone, controller, controller, controller])
 
     def test_rejection_hint_names_how_to_open_a_window(self) -> None:
-        self.assertIn("--ble-pairing-window", PAIRING_REJECTED_HINT)
-        self.assertIn("restart", PAIRING_REJECTED_HINT)
-        # No production path opens a window from the Companion app.
+        self.assertIn("wmr-bridge pair", PAIRING_REJECTED_HINT)
+        self.assertIn("remove the old bond", PAIRING_REJECTED_HINT)
         self.assertNotIn("Companion", PAIRING_REJECTED_HINT)
 
 
@@ -307,6 +306,32 @@ class BondDetectionTests(unittest.IsolatedAsyncioTestCase):
         backend._bus = FakeBondBus(
             {"/org/bluez/hci0/dev_AA": _bond("Motion Controller - Left", "public", 0x0508)}
         )
+        self.assertFalse(await backend.has_le_bond())
+
+    async def test_classic_only_bonds_leave_the_le_door_open(self) -> None:
+        backend = DbusGattBackend()
+        backend._bus = FakeBondBus(
+            {
+                "/org/bluez/hci0/dev_AA": _bond(
+                    "Motion Controller - Left", "public", 0x0508
+                ),
+                "/org/bluez/hci0/dev_BB": _bond(
+                    "Motion Controller - Right", "public", 0x0540
+                ),
+                # A Classic (BR/EDR) bond with a non-peripheral major class:
+                # the old 0x05-only check counted this as an LE central.
+                "/org/bluez/hci0/dev_CC": _bond("Pi Headset", "public", 0x2404),
+            }
+        )
+        self.assertFalse(await backend.has_le_bond())
+
+    async def test_classic_hid_uuid_without_a_class_is_not_an_le_bond(self) -> None:
+        entry = _bond("2C:4D:79:C8:C9:CC", "public", 0)
+        entry["org.bluez.Device1"]["UUIDs"] = [
+            "00001124-0000-1000-8000-00805f9b34fb"
+        ]
+        backend = DbusGattBackend()
+        backend._bus = FakeBondBus({"/org/bluez/hci0/dev_AA": entry})
         self.assertFalse(await backend.has_le_bond())
 
     async def test_a_phone_bond_counts_as_an_le_bond(self) -> None:
@@ -968,6 +993,75 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         await self.peripheral.refresh_pairing_state()
         self.assertTrue(self.app.pairing_open)
         self.assertTrue(self.backend.pairable)
+
+    async def test_classic_only_bonds_leave_the_adapter_pairable(self) -> None:
+        class ClassicOnlyBackend(FakeBackend):
+            async def has_le_bond(self) -> bool:
+                backend = DbusGattBackend()
+                backend._bus = FakeBondBus(
+                    {
+                        "/org/bluez/hci0/dev_AA": _bond(
+                            "Motion Controller - Left", "public", 0x0508
+                        ),
+                        "/org/bluez/hci0/dev_BB": _bond(
+                            "Motion Controller - Right", "public", 0x0540
+                        ),
+                    }
+                )
+                return await backend.has_le_bond()
+
+        backend = ClassicOnlyBackend()
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=0.0,
+        )
+        await peripheral.start()
+        try:
+            self.assertTrue(peripheral.app.pairing_open)
+            self.assertTrue(backend.pairable)
+        finally:
+            await peripheral.close()
+
+    async def test_pairability_change_logs_the_reason(self) -> None:
+        backend = FakeBackend(le_bond=True)
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=0.0,
+        )
+        with self.assertLogs("wmr_bridge.ble_gatt", level="INFO") as logs:
+            await peripheral.start()
+        output = "\n".join(logs.output)
+        self.assertIn("BLE pairing window closed", output)
+        self.assertIn("an LE bond is stored", output)
+        self.assertIn("Adapter1.Pairable -> off", output)
+        await peripheral.close()
+
+    async def test_manual_window_logs_its_reason_and_turns_bondable_on(self) -> None:
+        backend = FakeBackend(le_bond=True)
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            pairing_window_s=0.0,
+        )
+        await peripheral.start()
+        try:
+            with self.assertLogs("wmr_bridge.ble_gatt", level="INFO") as logs:
+                await peripheral.open_pairing_window(60)
+            output = "\n".join(logs.output)
+            self.assertIn("opened manually for 60 s", output)
+            self.assertIn("manual window", output)
+            self.assertIn("Adapter1.Pairable -> on", output)
+            self.assertTrue(backend.pairable)
+        finally:
+            await peripheral.close()
 
     async def test_an_le_bond_closes_pairability_after_boot(self) -> None:
         backend = FakeBackend(le_bond=True)

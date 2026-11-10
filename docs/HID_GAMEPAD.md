@@ -530,14 +530,17 @@ The bridge gates HID reports to protect input integrity and avoid duplicate inpu
 ### Pairing rules and CLI flags
 
 The adapter stays pairable only under specific conditions:
-- The adapter is pairable when BlueZ holds no non-controller LE bond.
+- The adapter is pairable when BlueZ holds no LE bond. Classic (BR/EDR) bonds, including the two WMR controllers, do not count as an LE bond.
 - The adapter is pairable during the boot window of 180 seconds (`--ble-pairing-window`, default 180 seconds). The default value is 180 seconds, not 120 seconds.
+- `wmr-bridge pair [--seconds SECONDS]` opens a manual window on the running service (default 180 seconds); `wmr-bridge pair --close` closes it.
 - A bonded central reconnects without adapter pairability.
 
 The daemon registers a `NoInputNoOutput` BlueZ agent at `/org/wmr/bridge/agent` (`org.bluez.Agent1`) whenever the adapter is pairable. The agent accepts incoming Just Works bonding requests. When the adapter is no longer pairable, the daemon unregisters the agent.
 
 When the adapter is not pairable, BlueZ refuses pairing requests from unbonded centrals. If a connecting peer requests legacy PIN or passkey authentication while the agent is registered, the agent rejects it with this message:
-`pairing rejected by WMR Bridge: no BLE pairing window is open. Restart WMR Bridge with '--ble-pairing-window SECONDS' to open one, or remove the old bond in your phone's Bluetooth settings and restart the service`
+`pairing rejected by WMR Bridge: no BLE pairing window is open. Run 'wmr-bridge pair' on the Pi to open one, or remove the old bond in your phone's Bluetooth settings and restart the service`
+
+Every pairability change writes a journal line naming the reason and the new state, for example `BLE pairing window closed (an LE bond is stored); Adapter1.Pairable -> off`.
 
 CLI flags control BLE behavior:
 - `--ble-pairing-window SECONDS`: sets the duration of the boot window in seconds. The default value is 180.0. A value of 0 disables the boot window.

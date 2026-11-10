@@ -20,7 +20,7 @@ import socket
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Awaitable, Callable, Protocol
 
 from . import __version__
 from .decode import ControllerState, decode_frame, record_from_state
@@ -338,6 +338,11 @@ class Bridge:
         self._network_lock = asyncio.Lock()
         self.token = token
         self.queue_size = max(1, queue_size)
+        # Set by the daemon when the BLE peripheral is up: opens or closes the
+        # manual pairing window for the CLI's `wmr-bridge pair` command.
+        self.pairing_handler: (
+            Callable[[str, float | None], Awaitable[dict[str, Any]]] | None
+        ) = None
         self.batch_max = batch_max
         self.batch_hold_s = batch_hold_ms / 1000.0
         self.fragment_capacity = max(13, fragment_capacity)
@@ -758,6 +763,39 @@ class Bridge:
                 return True
             window = self.calibration.window(hand, offset)
             await subscriber.websocket.send_binary(wsmod.pack_calibration_message(window))
+            return True
+
+        if kind == "pairing":
+            if not subscriber.authed:
+                await subscriber.send_json({"type": "error", "code": "auth_failed"})
+                return True
+            action = message.get("action")
+            if action not in ("open", "close"):
+                await subscriber.send_json({"type": "error", "code": "bad_action"})
+                return True
+            seconds = message.get("seconds")
+            if seconds is not None and (
+                not isinstance(seconds, (int, float))
+                or isinstance(seconds, bool)
+                or not 0 < seconds <= 86400
+            ):
+                await subscriber.send_json({"type": "error", "code": "bad_seconds"})
+                return True
+            handler = self.pairing_handler
+            if handler is None:
+                await subscriber.send_json(
+                    {"type": "error", "code": "pairing_unavailable"}
+                )
+                return True
+            try:
+                result = await handler(
+                    action, None if seconds is None else float(seconds)
+                )
+            except Exception:
+                LOG.exception("pairing control failed")
+                await subscriber.send_json({"type": "error", "code": "pairing_failed"})
+                return True
+            await subscriber.send_json({"type": "pairing", **result})
             return True
 
         if kind == "close":

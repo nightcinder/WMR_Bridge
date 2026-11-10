@@ -18,6 +18,7 @@ from wmr_bridge.__main__ import (
     _format_status,
     _is_loopback_bind,
     _local_addresses,
+    _pair_window,
     _parse_cli_args,
     _print_status,
     _read_token,
@@ -33,6 +34,8 @@ from wmr_bridge.bluez import (
     HidrawDevice,
     set_device_blocked,
 )
+from wmr_bridge.bridge import Bridge
+from wmr_bridge.server import BridgeServer
 
 SAMPLES = Path(__file__).resolve().parents[2] / "samples" / "controller_frames.txt"
 WIFI_INFO = {
@@ -345,6 +348,13 @@ class StatusTests(unittest.TestCase):
         self.assertIsNone(_build_parser().parse_args([]).command)
         self.assertTrue(_build_parser().parse_args(["--status"]).status)
 
+    def test_pair_command_parses(self) -> None:
+        args = _build_parser().parse_args(["pair", "--seconds", "30"])
+        self.assertEqual(args.command, "pair")
+        self.assertEqual(args.seconds, 30.0)
+        self.assertFalse(args.close)
+        self.assertTrue(_build_parser().parse_args(["pair", "--close"]).close)
+
     def test_prefer_5ghz_flags_parse(self) -> None:
         parser = _build_parser()
         defaults = parser.parse_args([])
@@ -601,6 +611,55 @@ class IdleManagerWiringTests(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaises(SystemExit):
             await _run(args)
+
+
+class PairCommandTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self.calls: list[tuple[str, float | None]] = []
+
+        async def handler(action: str, seconds: float | None) -> dict:
+            self.calls.append((action, seconds))
+            return {"open": action == "open", "seconds": seconds}
+
+        self.bridge = Bridge(token="secret")
+        self.bridge.pairing_handler = handler
+        self.server = BridgeServer(self.bridge, host="127.0.0.1", port=0)
+        await self.server.start()
+
+    async def asyncTearDown(self) -> None:
+        await self.server.close()
+
+    def _args(self, *extra: str):
+        return _build_parser().parse_args(
+            [
+                "pair",
+                "--port",
+                str(self.server.port),
+                "--token",
+                "secret",
+                *extra,
+            ]
+        )
+
+    async def test_pair_opens_and_closes_the_window(self) -> None:
+        with redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(await _pair_window(self._args("--seconds", "45")), 0)
+        self.assertIn("open for 45 s", out.getvalue())
+        self.assertEqual(self.calls, [("open", 45.0)])
+
+        with redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(await _pair_window(self._args("--close")), 0)
+        self.assertIn("manual BLE pairing window closed", out.getvalue())
+        self.assertEqual(self.calls[-1], ("close", None))
+
+    async def test_pair_without_the_token_explains_how_to_pass_it(self) -> None:
+        args = _build_parser().parse_args(
+            ["pair", "--port", str(self.server.port)]
+        )
+        with redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(await _pair_window(args), 1)
+        self.assertIn("--token-file", out.getvalue())
+        self.assertEqual(self.calls, [])
 
 
 class WifiStartupTests(unittest.TestCase):

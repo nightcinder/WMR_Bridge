@@ -5,6 +5,21 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## Unreleased
+
+### Raspberry Pi bridge
+
+- **A phone can pair after the boot window (ONY-1249).** The adapter is now
+  pairable whenever BlueZ holds only Classic bonds. The stored-bond check
+  treated any non-peripheral major class as an LE central, so two bonded WMR
+  controllers could close the door even though the Pi had no LE bond; it now
+  ignores every BR/EDR bond (non-zero Class or the Classic HID UUID) and only
+  an LE bond closes pairability. `wmr-bridge pair [--seconds SECONDS]` opens a
+  manual BLE pairing window on the running service (`--close` ends it), so a
+  user no longer has to restart the service inside the 180-second boot window.
+  Pairability changes now log the reason and the new state, for example
+  `BLE pairing window closed (an LE bond is stored); Adapter1.Pairable -> off`.
+
 ## 0.3.21 — 2026-11-10
 
 The Pi LE pairing-agent release on top of 0.3.20, shipping the fix for a phone
