@@ -1,19 +1,21 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-09 (current release 0.3.15: the ESP32 firmware re-sends
-the FF13 streaming-enable pair on reconnect and every 10 s so a connected
-controller stays awake (ONY-1062), and the Pi package in this tree is `0.3.15`
-with a 5 GHz Wi-Fi preference, UDP discovery, an opt-in BlueZ BLE GATT fallback
-and a WMR `0x06` keep-alive (ONY-1057, ONY-1063, ONY-1068, ONY-1069,
-ONY-1091–ONY-1093). The firmware's controller families are unchanged from
+Last updated: 2026-11-10 (current release 0.3.16: the Pi package in this tree is
+`0.3.16` and advertises the FF10 GATT service by default with per-client CCCD
+gating, prefers an Ethernet uplink over 5 GHz and 2.4 GHz Wi-Fi using route
+metrics, adds `AF_NETLINK` to the systemd unit and documents token access for
+`wifi_probe.py` (ONY-1114, ONY-1115, ONY-1144). The ESP32 firmware is unchanged
+from 0.3.15, which re-sends the FF13 streaming-enable pair on reconnect and
+every 10 s so a connected controller stays awake (ONY-1062). The firmware's
+controller families are unchanged from
 0.3.14: one driver table per model with PSVR2 FF12/FF14 decoding and Nintendo
 Switch Joy-Con/Pro handshake and `0x30` decoding; Switch and PSVR2 support remain
 host-tested and firmware-build-tested only and have never run on a controller,
 with the Switch hardware check tracked in GitHub #145. The Pi pairs controllers
 through BlueZ automatically (the `v0.3.12` release shipped `0.2.4`) and does not
 yet read FF13 calibration from controllers. FF10–FF17 payloads otherwise match
-0.3.14, so companions at 0.2.2 or later continue to work. The BLE fallback is
-opt-in, has not run on hardware and waits on ONY-1070. ESP32-over-BLE is
+0.3.15, so companions at 0.2.2 or later continue to work. BLE advertising has
+not run on hardware; the three-state jitter check is ONY-1070. ESP32-over-BLE is
 the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the
 second supported first-class target; Pi is host-tests-only until the Pi sitting
 runs, see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md) and

@@ -111,17 +111,17 @@ https://nightcinder.github.io/WMR_Bridge/pi.html.
 
 Tags before #104 (such as `v0.3.0`) carry firmware images only. Tags from
 #104 onward also publish `install.sh` and `wmr-bridge_<version>_all.deb`.
-`v0.3.15` publishes nine files: the three merged factory images
+`v0.3.16` publishes nine files: the three merged factory images
 (`wmr-bridge-factory.bin`, `-left`, `-right`), the three application images
 (`wmr-bridge-app.bin`, `-left`, `-right`), the `.deb`, `install.sh` and
-`SHA256SUMS`. `v0.3.14` and `v0.3.13` also published nine; `v0.3.12` published
-six (no application images). Earlier tags
+`SHA256SUMS`. `v0.3.15`, `v0.3.14` and `v0.3.13` also published nine;
+`v0.3.12` published six (no application images). Earlier tags
 such as `v0.3.11` attached the full build output: the factory, application,
 bootloader and partition-table images for all three variants, the three
 manifests, `build-info*.json`, `index.html`, the tarball and per-file `.sha256`
-checksums. The pinned list below is `v0.3.15`.
+checksums. The pinned list below is `v0.3.16`.
 
-Pinned 2026-11-09 assets:
+Pinned 2026-11-10 assets:
 
 | Asset | SHA-256 |
 |---|---|
@@ -151,14 +151,14 @@ sudo apt install ./dist/*.deb
 # latest
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 # pin package and tag
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.15/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.15 sudo -E bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.16/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.16 sudo -E bash
 ```
 
 **Standalone `.deb`:**
 
 ```bash
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.15/wmr-bridge_<version>_all.deb
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.15/SHA256SUMS
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.16/wmr-bridge_<version>_all.deb
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.16/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 sudo apt install ./wmr-bridge_<version>_all.deb
 ```
