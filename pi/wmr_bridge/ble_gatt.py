@@ -36,6 +36,8 @@ from typing import Any, Callable, Protocol
 
 from . import __version__
 from .bluez import WMR_NAMES
+from .bluez_conf import DEFAULT_MAIN_CONF as BLUEZ_MAIN_CONF
+from .bluez_conf import read_just_works_repairing
 from .bridge import Bridge
 from .decode import record_from_frame
 from .hid_gamepad import (
@@ -254,20 +256,58 @@ class PairingAgentPolicy:
         if self._on_request is not None:
             self._on_request(device)
 
-    def confirm(self, device: str) -> bool:
-        LOG.info("BLE pairing: confirmation requested by %s; accepting", device)
+    def _accept(self, method: str, device: str) -> bool:
         self._note(device)
+        LOG.info(
+            "BLE pairing agent: method=%s device=%s result=accepted",
+            method,
+            device,
+        )
         return True
+
+    def confirm(self, device: str) -> bool:
+        return self._accept("RequestConfirmation", device)
 
     def authorize(self, device: str) -> bool:
-        LOG.info("BLE pairing: authorization requested by %s; accepting", device)
-        self._note(device)
-        return True
+        return self._accept("RequestAuthorization", device)
 
     def authorize_service(self, device: str, uuid: str) -> bool:
-        LOG.info("BLE pairing: service %s requested by %s; accepting", uuid, device)
         self._note(device)
+        LOG.info(
+            "BLE pairing agent: method=AuthorizeService device=%s uuid=%s "
+            "result=accepted",
+            device,
+            uuid,
+        )
         return True
+
+
+def log_just_works_repairing(
+    path: str = str(BLUEZ_MAIN_CONF),
+) -> None:
+    """Explain whether BlueZ will send a Just Works re-pair to the agent.
+
+    Under the default ``never`` bluetoothd answers the kernel's confirm hint
+    ``0x01`` itself with a negative reply, so the phone fails with "Numeric
+    comparison failed" before ``RequestConfirmation``/``RequestAuthorization``
+    is called.  The Pi package sets ``confirm``; a source run can log this
+    warning and the next capture names the missing setting.
+    """
+
+    setting = read_just_works_repairing(path)
+    if setting in ("confirm", "always"):
+        LOG.info(
+            "BlueZ JustWorksRepairing = %s: a phone may re-pair over a stored bond",
+            setting,
+        )
+    else:
+        LOG.warning(
+            "BlueZ JustWorksRepairing = %s: BlueZ rejects a phone's Just Works "
+            "re-pair before the pairing agent; set JustWorksRepairing = confirm "
+            "in %s and restart bluetooth",
+            setting,
+            path,
+        )
 
 
 class GattBackend(Protocol):
@@ -1106,7 +1146,7 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
 
         @method()
         def Release(self):
-            LOG.info("BLE pairing agent released by BlueZ")
+            LOG.info("BLE pairing agent: method=Release result=released")
             return None
 
         @method()
@@ -1114,20 +1154,26 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
             # NoInputNoOutput means BlueZ must not ask, but a peer can still
             # request legacy pairing; reject it instead of inventing a code.
             LOG.warning(
-                "BLE pairing: %s asked for a PIN; rejecting (NoInputNoOutput)",
+                "BLE pairing agent: method=RequestPinCode device=%s result=rejected "
+                "(NoInputNoOutput)",
                 device,
             )
             raise DBusError("org.bluez.Error.Rejected", PAIRING_REJECTED_HINT)
 
         @method()
         def DisplayPinCode(self, device: "o", pincode: "s"):
-            LOG.info("BLE pairing: PIN %s for %s (no display; ignoring)", pincode, device)
+            LOG.info(
+                "BLE pairing agent: method=DisplayPinCode device=%s result=ignored "
+                "(no display)",
+                device,
+            )
             return None
 
         @method()
         def RequestPasskey(self, device: "o") -> "u":
             LOG.warning(
-                "BLE pairing: %s asked for a passkey; rejecting (NoInputNoOutput)",
+                "BLE pairing agent: method=RequestPasskey device=%s result=rejected "
+                "(NoInputNoOutput)",
                 device,
             )
             raise DBusError("org.bluez.Error.Rejected", PAIRING_REJECTED_HINT)
@@ -1135,8 +1181,8 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         @method()
         def DisplayPasskey(self, device: "o", passkey: "u", entered: "q"):
             LOG.info(
-                "BLE pairing: passkey %06d for %s (no display; ignoring)",
-                passkey,
+                "BLE pairing agent: method=DisplayPasskey device=%s result=ignored "
+                "(no display)",
                 device,
             )
             return None
@@ -1144,7 +1190,11 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         @method()
         def RequestConfirmation(self, device: "o", passkey: "u"):
             if not self.policy.confirm(device):
-                LOG.warning("BLE pairing: confirmation refused for %s", device)
+                LOG.warning(
+                    "BLE pairing agent: method=RequestConfirmation device=%s "
+                    "result=rejected",
+                    device,
+                )
                 raise DBusError(
                     "org.bluez.Error.Rejected", "pairing confirmation refused"
                 )
@@ -1152,7 +1202,11 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         @method()
         def RequestAuthorization(self, device: "o"):
             if not self.policy.authorize(device):
-                LOG.warning("BLE pairing: authorization refused for %s", device)
+                LOG.warning(
+                    "BLE pairing agent: method=RequestAuthorization device=%s "
+                    "result=rejected",
+                    device,
+                )
                 raise DBusError(
                     "org.bluez.Error.Rejected", "pairing authorization refused"
                 )
@@ -1160,14 +1214,21 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         @method()
         def AuthorizeService(self, device: "o", uuid: "s"):
             if not self.policy.authorize_service(device, uuid):
-                LOG.warning("BLE pairing: service authorization refused for %s", device)
+                LOG.warning(
+                    "BLE pairing agent: method=AuthorizeService device=%s "
+                    "uuid=%s result=rejected",
+                    device,
+                    uuid,
+                )
                 raise DBusError(
                     "org.bluez.Error.Rejected", "service authorization refused"
                 )
 
         @method()
         def Cancel(self):
-            LOG.warning("BLE pairing: BlueZ cancelled the pending request")
+            LOG.warning(
+                "BLE pairing agent: method=Cancel device=- result=cancelled"
+            )
             return None
 
     return {
@@ -1237,6 +1298,7 @@ class DbusGattBackend:
         self._variant: Any = None
 
     async def start(self, app: GattApplication) -> None:
+        log_just_works_repairing()
         try:
             interfaces = build_dbus_interfaces(app)
             from dbus_next import Variant

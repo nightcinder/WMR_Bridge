@@ -38,6 +38,11 @@ class PackagingTests(unittest.TestCase):
     def test_package_version_matches_root_version(self) -> None:
         self.assertEqual(VERSION, ROOT_VERSION)
 
+    def test_installer_applies_the_bluez_repair_policy(self) -> None:
+        installer = INSTALL_SH.read_text(encoding="utf-8")
+        self.assertIn("bluez_conf.py", installer)
+        self.assertIn("JustWorksRepairing", installer)
+
     def test_systemd_unit_and_env_example_support_wmr_bridge_args(self) -> None:
         unit_text = SERVICE_FILE.read_text(encoding="utf-8")
         self.assertIn("EnvironmentFile=-/etc/wmr-bridge/wmr-bridge.env", unit_text)

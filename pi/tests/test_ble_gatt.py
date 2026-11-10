@@ -230,6 +230,21 @@ class PairingAgentTests(unittest.TestCase):
             self.assertTrue(policy.authorize_service(device, FF10_SERVICE))
         self.assertEqual(seen, [phone, phone, phone, controller, controller, controller])
 
+    def test_just_works_confirm_hint_0x01_is_accepted(self) -> None:
+        # BlueZ maps the kernel's Just Works confirm hint 0x01 to
+        # RequestAuthorization when JustWorksRepairing = confirm. This is the
+        # callback that used to be answered with a negative reply by
+        # bluetoothd itself, before the agent was asked.
+        policy = PairingAgentPolicy()
+        device = "/org/bluez/hci0/dev_B0_9C_B2_CE_26_88"
+        with self.assertLogs("wmr_bridge.ble_gatt", level="INFO") as captured:
+            self.assertTrue(policy.authorize(device))
+        self.assertIn(
+            f"BLE pairing agent: method=RequestAuthorization device={device} "
+            "result=accepted",
+            "\n".join(captured.output),
+        )
+
     def test_rejection_hint_names_how_to_open_a_window(self) -> None:
         self.assertIn("wmr-bridge pair", PAIRING_REJECTED_HINT)
         self.assertIn("remove the old bond", PAIRING_REJECTED_HINT)

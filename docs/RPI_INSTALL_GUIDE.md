@@ -276,7 +276,12 @@ then follows the stored-bond rule). Each change prints
 its reason in the journal, for example
 `BLE pairing window open (manual window, 180 s left); Adapter1.Pairable -> on`.
 A stored LE bond from another phone closes the adapter after the window; remove
-that bond in `bluetoothctl` or open a new window.
+that bond in `bluetoothctl` or open a new window. With a window open, the phone
+that owns the stored bond may forget the bridge and pair again from its
+Bluetooth settings: the
+installer sets `JustWorksRepairing = confirm` so BlueZ asks the bridge's agent
+instead of rejecting the Just Works confirmation. If the journal shows
+`BlueZ JustWorksRepairing = never`, re-run the installer to apply that setting.
 
 If the log says `auto-pair: Bluetooth adapter is not usable yet`, check that
 Bluetooth is running and not blocked. The service clears a boot-time soft
