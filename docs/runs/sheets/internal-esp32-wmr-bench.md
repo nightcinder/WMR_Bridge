@@ -2,7 +2,7 @@
 
 Status: runbook, not a result. A check is `not run` until its figures are pasted back. This sheet replaces `ony-439-android-verification.md`.
 
-Firmware **v0.3.11**; app **Companion 0.3.18**. Plan ONY-926.
+Firmware **v0.3.16** (or later build containing PR #191); app **Companion 0.3.19+24** (or later). Plan ONY-926.
 
 ## 0. Blocks
 
@@ -13,13 +13,15 @@ Firmware **v0.3.11**; app **Companion 0.3.18**. Plan ONY-926.
 | D | ONY-441 HID gamepad | 0.3.11 recheck | 20 min |
 | E | GPIO 4 status LED | red / yellow / blue / green | 5 min |
 | F | Sitting R phases 1-2 | Does RIGHT's ~10.8 % follow controller, slot or position? | 45-60 min |
+| G | ONY-1058 / ONY-1064 idle sleep | PR #191 5 min sleep, 15 min power-off, 60 s cooldown | 25 min |
+| H | ONY-1070 BLE streaming | Pixel 11 Pro Companion app direct BLE streaming and link recovery | 15-20 min |
 
-Order: install, then **B -> E -> C -> D** on one boot. Do **F** next on a fresh boot with one controller powered.
+Order: install, then **B -> E -> C -> D -> G -> H** on one boot. Do **F** next on a fresh boot with one controller powered.
 
 ## 1. Install and record
-1. Install the **Both hands** `v0.3.11` image from the [installer](https://nightcinder.github.io/WMR_Bridge/) or the release.
-2. Confirm the boot banner, console `v` and Debug screen all say `0.3.11`, with all capability bits. If so, do not reflash.
-3. Install the Companion APK from the `wmr-companion` `v0.3.18` release.
+1. Install the **Both hands** `v0.3.16` image (or release build containing PR #191) from the [installer](https://nightcinder.github.io/WMR_Bridge/) or the release.
+2. Confirm the boot banner, console `v` and Debug screen report `0.3.16` or later (or the PR #191 build hash), with all capability bits. If so, do not reflash.
+3. Install the Companion APK from the `wmr-companion` `v0.3.19+24` release (or later).
 4. Record: firmware hash, `bridge_hands=`, app version, phone and Android, LED wiring (GPIO 4 or `declined`).
 
 A factory flash erases controller addresses and the phone bond. Pair both controllers again; forget an old 0.2.x `WMR Bridge` bond in Android first.
@@ -56,7 +58,7 @@ this block.
 ## 4. Block B — FF16, FF17, stick
 
 **FF16:** read the app Debug screen and console `v`; repeat after reconnect with
-`none` and `FF14`. Pass: `firmware 0.3.11`, `FF11+` through `FF17+`, console matches `build-info.json`, string stable. Fail: `n/a`, `malformed`, different version or stream-dependent string.
+`none` and `FF14`. Pass: `firmware 0.3.16 or later (or the PR #191 build hash)`, `FF11+` through `FF17+`, console matches `build-info.json`, string stable. Fail: `n/a`, `malformed`, older version, unrecognized build hash, or stream-dependent string.
 
 **FF17:** both hands awake, FF14. `0x02` CONNECT, `0x03` DISCONNECT, `0x05`
 FORGET_BOND, `0x04` FORGET_ADDRS. ATT `0x84` = NOT_CONNECTED, `0x81` = BUSY.
@@ -153,15 +155,92 @@ Only if phases 1-2 do not separate controller from position. Put physical RIGHT 
 
 Restore the normal both-hands image afterwards.
 
-## 8. Results and paste-back
+## 8. Block G: ONY-1058 and ONY-1064 controller idle sleep, power-off, and cooldown (PR #191)
+
+Firmware PR #191 implements two-stage idle power management in `src/wmr_cfgmgr.c` and `src/wmr_controller.c`:
+- `WMR_CFG_IDLE_SLEEP_MS` (default 300000 ms, 5 min): pauses the 0x06 keep-alive pair so the controller enters standby. The ACL link remains connected.
+- `WMR_CFG_IDLE_POWEROFF_MS` (default 900000 ms, 15 min): drops the Bluetooth ACL link so the controller powers off.
+- `WMR_CFG_IDLE_RECONNECT_COOLDOWN_MS` (default 60000 ms, 1 min): declines incoming reconnects to prevent a link bounce while the controller shuts down.
+
+Prerequisites:
+- ESP32 flashed with firmware containing PR #191 (v0.3.16 or later factory image `wmr-bridge-factory.bin`, commit `dde230c`).
+- ESP32 connected over USB to monitor serial output:
+
+  ```bash
+  idf.py -p COM5 monitor
+  ```
+
+  (or `/dev/ttyUSB0` on Linux).
+- Both WMR controllers paired and connected.
+- Pixel 11 Pro connected to `WMR Bridge` with `wmr_companion_app` and subscribed to FF14 `batched`.
+
+Procedure:
+
+1. Pair and stream both controllers. Keep the serial monitor open.
+2. Place both controllers untouched on their fixed desk marks at timestamp `T0`.
+3. Wait 300 s (5 minutes) without touching either controller.
+4. At `T0 + 300 s` (within one 10 s keep-alive tick, up to `T0 + 310 s`), make sure that the serial monitor prints:
+   `FF13 LEFT: idle for <N> ms; keep-alive paused, controller may sleep`
+   `FF13 RIGHT: idle for <N> ms; keep-alive paused, controller may sleep`
+   where `<N>` is the measured idle time in milliseconds and is at least 300000.
+5. Make sure that both controllers enter standby mode (LEDs dim or pulse slowly). The Bluetooth ACL link stays connected. On the Pixel 11 Pro, make sure that `wmr_companion_app` still reports connected.
+6. At `T0 + 400 s`, test the activity wake on LEFT: move the thumbstick or press the trigger.
+7. Make sure that the serial monitor prints:
+   `FF13 LEFT: activity after idle sleep; resuming the keep-alive`
+8. Make sure that LEFT resumes full streaming on the Pixel 11 Pro in under 1.0 s without an ACL reconnect.
+9. Leave RIGHT untouched until `T0 + 900 s` (15 minutes).
+10. At `T0 + 900 s` (up to `T0 + 910 s`), make sure that the serial monitor prints:
+    `FF13 RIGHT: idle for <N> ms; disconnecting so the controller powers off`
+    `RIGHT idle; disconnecting so it powers off, reconnects declined for 60000 ms`
+    where `<N>` is at least 900000.
+11. Make sure that the RIGHT controller turns off completely (ring LEDs extinguish).
+12. Test the 60-second reconnect cooldown: immediately press the Windows power button on RIGHT within the 60 s window.
+13. Make sure that the serial monitor prints:
+    `RIGHT reconnected during its idle power-off cooldown; dropping the link`
+    or:
+    `RIGHT is in its idle power-off cooldown; not reconnecting yet`
+    The reconnect must be declined.
+14. Wait for the 60 s cooldown to expire. Turn on RIGHT.
+15. Make sure that RIGHT reconnects and streams cleanly.
+
+Pass: keep-alive pauses at 300 s to 310 s (allowing up to one 10 s keep-alive tick). Motion wakes the controller in under 1.0 s. Power-off disconnect occurs at 900 s to 910 s. Reconnects during the 60 s cooldown are refused, and reconnect after 60 s succeeds cleanly.
+
+## 9. Block H: ONY-1070 BLE GATT two-controller streaming on Pixel 11 Pro
+
+The ESP32 bridge streams over BLE GATT directly. `wmr_companion_app` (0.3.19+24 or later) on the Pixel 11 Pro connects through its direct Bluetooth transport. This block verifies two-controller BLE GATT streaming and link recovery directly on the Pixel 11 Pro. If you evaluate automated composite TCP-to-BLE failover jitter, refer to `docs/runs/sheets/pi-bridge.md` §P12 with a library host.
+
+Prerequisites:
+- ESP32 running both-hands firmware and advertising `WMR Bridge`.
+- Both WMR controllers paired and streaming to the ESP32.
+- Pixel 11 Pro running `wmr_companion_app` (0.3.19+24 or later).
+
+Procedure:
+
+1. Open `wmr_companion_app` on the Pixel 11 Pro.
+2. In the Connect screen, select the Bluetooth transport mode.
+3. Tap Scan. Select the BLE device `WMR Bridge`.
+4. Tap Connect.
+5. Make sure that the status indicator shows connected.
+6. Open the Stream panel. Select the `batched` stream.
+7. Make sure that both controllers stream simultaneously at 150-180 reports/s per hand.
+8. Open the Latency panel. Measure the round-trip time and the frame arrival intervals.
+9. Power cycle the bridge or toggle Bluetooth on the phone to test link recovery.
+10. Make sure that the stream reconnects within 5 s and sequence numbers continue without error.
+11. Tap Export Test Bundle to save the session bundle on the phone.
+
+Pass: clean BLE GATT connection. Two-controller batched streaming at 150-180 reports/s per hand. RTT p50 < 45 ms. Clean stream recovery within 5 s.
+
+## 10. Results and paste-back
 
 | # | Block | Check | Result |
 |---|---|---|---|
 | 1-3 | B | FF16, FF17, stick | not run |
 | 4-6 | C-E | ONY-446, HID, LED | not run |
 | 7-8 | F | Sitting R phases 1-2, phase 3 | not run |
+| 9 | G | ONY-1058 / ONY-1064 idle sleep, power-off, cooldown | not run |
+| 10 | H | ONY-1070 BLE streaming on Pixel 11 Pro | not run |
 
-Paste: build header; per-run exports and `STREAM`; B status/ATT; C monitor lines; D control notes; E colours; F/F2 means and attribution; defects filed. A check with no figures is `not run`.
+Paste: build header; per-run exports and `STREAM`; B status/ATT; C monitor lines; D control notes; E colours; F/F2 means and attribution; G monitor timestamps and wake logs; H stream rates and bundle export; defects filed. A check with no figures is `not run`.
 
 ### FF13 evidence (0.2.4)
 
@@ -172,6 +251,6 @@ Paste: build header; per-run exports and `STREAM`; B status/ATT; C monitor lines
 
 Both are fused poses (`source=orientationOnly`); only the first is a rest take. Neither is labelled with the FF13 switch state (in-memory only), so no before/after pair and no 90° error. The owner's prose pair, RIGHT `83.5` / `42.7`, has no export or switch label, so neither figure is assigned. Needs two 60 s face-down, untouched takes, switch off then on.
 
-## 9. Not covered
+## 11. Not covered
 
 V1/interval/hold: owner-reported tested on ONY-980; definitions in [`single-esp32-levers.md`](single-esp32-levers.md). Two bridges: [`multi-bridge.md`](multi-bridge.md). Pi: [`pi-bridge.md`](pi-bridge.md). PSVR2/glasses: [`external-test-user.md`](external-test-user.md).

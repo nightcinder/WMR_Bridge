@@ -392,7 +392,7 @@ zero tick-based missing reports, zero server drops and zero decode errors. It
 also checks the installed unit, udev rule, power-save drop-in and `0640` token,
 then runs `prerm`/`postrm` for remove and purge. A pass means the packaging
 path is sound. It is not a Pi, BlueZ or radio result. The hardware checks
-remain P1-P11 in the run sheet.
+remain P1-P14 in the run sheet.
 
 ### Wi-Fi and firewall
 
@@ -1033,10 +1033,13 @@ tester checklist and pinned image/package checksums are in
 | P9 | Two clients | raw and batched clients both receive, independent queues |
 | P10 | 8 h soak | no memory growth, no fd leak, no queue drops at idle |
 | P11 | Auto-pair from unpaired | start with both controllers unpaired; put one in pairing mode; unattended pair/trust/connect within 60 s; repeat for the other hand; with `--no-auto-pair` the bridge does not pair and pairing stays with the operator |
+| P12 | TCP-to-BLE failover and jitter | transition time under 2.5 s, inter-frame delivery pause under 3 s, sequence numbers continue, clean upgrade back to TCP when Wi-Fi recovers |
+| P13 | Controller idle sleep and power-off | 0x06 keep-alive pauses at 300 s ± 5 s; motion wakes controller in under 1.0 s; power-off disconnect at 900 s ± 5 s |
+| P14 | Uplink priority and Sitting P gates | `eth0` route metric 100 preferred over 5 GHz Wi-Fi metric 200; `rttMs.p50` < 15 ms, gaps 0, missing share <= 3.0 %, non-null `serverStatus` with `dropped == 0` |
 
 Record host model, OS, BlueZ/kernel versions, Wi-Fi band/channel, controller
 addresses (or omit them), and the probe output in the bring-up run sheet
-[`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md). Until P1-P11 have
+[`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md). Until P1-P14 have
 been run, treat the Pi path as unverified.
 
 ## Daemon logs
@@ -1069,7 +1072,7 @@ INFO/WARNING:
 
 ## Future work
 
-- Hardware validation of P1-P11 using the bring-up run sheet
+- Hardware validation of P1-P14 using the bring-up run sheet
   [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md).
 - Companion app Wi-Fi transport (`wmr_ws` and connect UI in `wmr-companion`).
 - Native TLS in the daemon itself (external termination is documented in
