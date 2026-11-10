@@ -5,6 +5,33 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.17 — 2026-11-10
+
+The BLE GATT start fix release on top of 0.3.16. The Pi package now builds its
+dbus-next GATT service interfaces with the annotations dbus-next 0.2.3 on
+Python 3.13 accepts, so the daemon exports the GATT application and advertises
+the FF10 GATT service over Bluetooth by default. Firmware payloads are
+unchanged from 0.3.16: FF10–FF17 keep their payloads and companions at 0.2.2 or
+later continue to work.
+
+### Raspberry Pi bridge
+
+- **dbus-next GATT start annotations (ONY-1175).** dbus-next rejects a `None`
+  return annotation on a `@method()`; building the service interfaces raised
+  when the peripheral started, so the adapter never exported the GATT
+  application and the Pi advertised nothing over Bluetooth. The FF10, FF11,
+  FF12 and FF14 characteristics, the CCCD descriptor and the LEAdvertisement1
+  object now build and start under dbus-next 0.2.3 on Python 3.13. A host test
+  builds the real interfaces against the installed dbus-next and fails if an
+  annotation regresses.
+
+### Verification
+
+- Host C tests, the Pi unittest suite and the ESP-IDF build run in CI before
+  tagging. BLE advertising still waits on ONY-1070 in three states
+  (advertising only, connected-not-subscribed, notifying) with a pass bar of
+  0 gaps and at most 0.5 percent loss.
+
 ## 0.3.16 — 2026-11-09
 
 The Pi uplink and BLE advertising release on top of 0.3.15. The bridge now

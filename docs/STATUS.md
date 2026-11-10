@@ -1,10 +1,12 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-10 (current release 0.3.16: the Pi package in this tree is
-`0.3.16` and advertises the FF10 GATT service by default with per-client CCCD
-gating, prefers an Ethernet uplink over 5 GHz and 2.4 GHz Wi-Fi using route
-metrics, adds `AF_NETLINK` to the systemd unit and documents token access for
-`wifi_probe.py` (ONY-1114, ONY-1115, ONY-1144). The ESP32 firmware is unchanged
+Last updated: 2026-11-10 (current release 0.3.17: the Pi package in this tree is
+`0.3.17` and now starts its dbus-next GATT application on the dbus-next 0.2.3 /
+Python 3.13 stack, so the daemon advertises the FF10 GATT service over Bluetooth
+by default with per-client CCCD gating (ONY-1175). It keeps the 0.3.16 uplink
+order — Ethernet over 5 GHz over 2.4 GHz Wi-Fi via route metrics — plus
+`AF_NETLINK` in the systemd unit and token access for `wifi_probe.py`
+(ONY-1114, ONY-1115, ONY-1144). The ESP32 firmware is unchanged
 from 0.3.15, which re-sends the FF13 streaming-enable pair on reconnect and
 every 10 s so a connected controller stays awake (ONY-1062). The firmware's
 controller families are unchanged from
