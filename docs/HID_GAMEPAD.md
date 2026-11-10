@@ -488,6 +488,63 @@ The Companion app (`wmr-companion`) also provides an optional app-level HID game
 - When testing the firmware BLE HID gamepad, keep Companion app HID output (`HidOutputPanel` / `BluetoothHidDevice`) **disabled**.
 - **Bonding coupling:** Because `FF11`, `FF12`, and `FF14` are `READ/WRITE_ENCRYPTED` and the bridge requires a bonded LESC connection, unpairing or forgetting the bridge device in Android Bluetooth settings deletes the bond and immediately terminates encrypted GATT communication; re-pairing re-establishes the bond and automatically re-registers HOGP. The two services cannot be decoupled on the same bonded Android host.
 
+## Raspberry Pi BLE HID gamepad
+
+The Linux / Raspberry Pi bridge daemon (`pi/wmr_bridge`) exposes the controllers as a BLE HID-over-GATT gamepad over BlueZ. It shares the report format with the ESP32 firmware. Read the setup details in [`pi/README.md`](../pi/README.md).
+
+### D-Bus GATT layout
+
+The daemon registers the HID service (`0x1812`) and the vendor service (`FF10`) with `org.bluez.GattManager1` under the application path `/org/wmr/bridge`. Every characteristic uses encrypted permissions because Android binds a HOGP device only over a bonded link.
+
+| Object path | Interface | UUID | Flags | Content |
+|---|---|---|---|---|
+| `/org/wmr/bridge/service/1812` | `org.bluez.GattService1` | `0x1812` | (primary) | HID Service |
+| `/org/wmr/bridge/service/1812/2a4a` | `org.bluez.GattCharacteristic1` | `0x2A4A` | `read`, `encrypt-read` | HID Information (`0x11010002`: bcdHID 1.11, country 0, normally connectable) |
+| `/org/wmr/bridge/service/1812/2a4b` | `org.bluez.GattCharacteristic1` | `0x2A4B` | `read`, `encrypt-read` | Report Map (91 bytes, identical to `src/wmr_hid.c`) |
+| `/org/wmr/bridge/service/1812/2a4c` | `org.bluez.GattCharacteristic1` | `0x2A4C` | `write-without-response`, `encrypt-write` | HID Control Point (`0x00` suspend, `0x01` exit suspend) |
+| `/org/wmr/bridge/service/1812/2a4d` | `org.bluez.GattCharacteristic1` | `0x2A4D` | `read`, `notify`, `encrypt-read`, `encrypt-write` | Report (Input Report ID 1, 9 bytes) |
+| `/org/wmr/bridge/service/1812/2a4d/2908` | `org.bluez.GattDescriptor1` | `0x2908` | `read` | Report Reference descriptor (`0x0101`: Report ID 1, Input Report) |
+| `/org/wmr/bridge/service/1812/2a4e` | `org.bluez.GattCharacteristic1` | `0x2A4E` | `read`, `write`, `encrypt-read`, `encrypt-write` | Protocol Mode (`0x01` Report Protocol) |
+
+BlueZ generates the Report Client Characteristic Configuration Descriptor (`0x2902`) automatically.
+
+### Advertising and appearance
+
+The daemon advertises over BlueZ through `org.bluez.LEAdvertisingManager1`. Advertising stays active whenever the BLE peripheral runs.
+
+The advertisement sets `Discoverable` to `True`. BlueZ sets the LE General Discoverable flag (`0x06`) in the advertising data. The advertisement carries the gamepad appearance (`0x03C4`), the local name `WMR Bridge`, and the service UUID list `[0x1812, 0xFF10]`. It also carries the `bridge_id` prefix in service data under `0xFF10`.
+
+Advertising uses two interval tiers:
+- Idle tier (zero Classic controllers connected): intervals run from 150 to 250 ms. This fast rate lets a phone discover the bridge quickly.
+- Active tier (at least one Classic controller connected): intervals switch to 1000 to 1285 ms. The switch occurs on the first controller connect event before its HID channel opens. This slower rate preserves radio airtime for the two Classic Bluetooth HID links.
+
+### Stream gating and automatic suppression
+
+The bridge gates HID reports to protect input integrity and avoid duplicate input:
+- Zero controllers connected: the bridge sends no HID input reports.
+- Unsubscribed CCCD: the bridge sends no reports until the central enables notifications on the Report characteristic CCCD. When enabled with a connected controller, the bridge sends one neutral report.
+- Active stream suppression: HID notifications pause automatically when a client subscribes to a TCP or WebSocket stream. HID notifications also pause when a central subscribes to GATT notifications on `FF11`, `FF12`, or `FF14`.
+- Neutral report on transition: when suppression starts, the bridge sends one neutral report. The report clears all buttons, centers the hat switch, and sets axes to zero. The bridge also resets trigger hysteresis history. This releases any held input on the host.
+- Stream clearance: when all stream clients disconnect and all `FF11`, `FF12`, and `FF14` subscriptions stop, suppression ends. Reports resume on the next controller sample.
+
+### Pairing rules and CLI flags
+
+The adapter stays pairable only under specific conditions:
+- The adapter is pairable when BlueZ holds no non-controller LE bond.
+- The adapter is pairable during the boot window of 180 seconds (`--ble-pairing-window`, default 180 seconds). The default value is 180 seconds, not 120 seconds.
+- The adapter is pairable during a manual window opened from the CLI or Companion app.
+- A bonded central reconnects without adapter pairability.
+
+While a pairing window is open, the daemon registers a `NoInputNoOutput` BlueZ agent at `/org/wmr/bridge/agent` (`org.bluez.Agent1`). The agent accepts incoming Just Works bonding requests. When the window closes, the daemon unregisters the agent.
+
+If an unbonded central attempts pairing when no window is open, BlueZ rejects the request with this message:
+`pairing rejected by WMR Bridge: no BLE pairing window is open. Restart WMR Bridge with '--ble-pairing-window SECONDS' to open one, or remove the old bond in your phone's Bluetooth settings and restart the service`
+
+CLI flags control BLE behavior:
+- `--ble-pairing-window SECONDS`: sets the duration of the boot window and manual windows in seconds. The default value is 180.0. A value of 0 disables the boot window.
+- `--ble-continuous-pairing`: keeps the adapter pairable whenever BLE is active. This matches ESP32 behavior.
+- `--no-ble`: disables the BLE GATT peripheral.
+
 ## Known gaps
 
 - **Phone pass complete, three gaps.** The 2026-10-28 `0.2.4-38` run passes

@@ -143,17 +143,48 @@ The bridge picks the active uplink in this order: `eth0`, then `wlan0` on 5 GHz,
 
 The daemon includes a `"wifi"` object in `hello` and `status`. The object has `iface`, `connected`, `freqMhz`, `band`, `supports5Ghz`, `contentionWarning`, and `warning`. `contentionWarning` is true when the Pi is connected on 2.4 GHz. `wmr-bridge status` prints the band, 5 GHz support, and any warning.
 
-## BLE advertising
+## BLE advertising and HID gamepad
 
-The daemon advertises the FF10 GATT service over BlueZ by default. Advertising is always on. Each client controls its own notifications through the CCCD (Client Characteristic Configuration Descriptor). A client with notifications enabled receives FF11, FF12, and FF14. A client with notifications off receives nothing. The bridge does not gate notifications per client.
+The daemon advertises the FF10 GATT service and HID gamepad service over BlueZ by default. Advertising is always on. Each client controls its own notifications through the CCCD (Client Characteristic Configuration Descriptor). A client with notifications enabled receives FF11, FF12, and FF14. A client with notifications off receives nothing. The bridge does not gate notifications per client.
 
-Advertising uses two tiers. With no Classic controller connected it runs at LEAdvertisement1 intervals of about 150 to 250 ms so a phone finds the bridge promptly. When the first controller connects it switches to about 1000 to 1285 ms, which leaves airtime for the two Classic HID links; you can also set that interval with `btmgmt`. The advertisement sets `Discoverable` so BlueZ puts the LE General Discoverable flag (`0x06`) in the advertising data, and it carries the gamepad appearance (`0x03C4`), the local name `WMR Bridge`, and the HID (`0x1812`) and FF10 service UUIDs, matching what the ESP32 advertises.
+Advertising uses two tiers:
+- Idle tier (zero Classic controllers connected): intervals run from 150 to 250 ms. This fast rate lets a phone discover the bridge promptly.
+- Active tier (at least one Classic controller connected): intervals switch to 1000 to 1285 ms. The switch occurs on the first controller connect event, before its HID channel opens. This leaves airtime for the two Classic HID links on the same radio. You can also set that interval with `btmgmt`.
 
-The adapter is pairable for 180 seconds after boot (`--ble-pairing-window`), then only while no LE bond is stored; a bonded phone reconnects without pairability. `--ble-continuous-pairing` keeps the adapter pairable while BLE is active, the ESP32 behaviour, and is opt-in.
+The advertisement sets `Discoverable` so BlueZ puts the LE General Discoverable flag (`0x06`) in the advertising data. The advertisement carries the gamepad appearance (`0x03C4`), the local name `WMR Bridge`, and the HID (`0x1812`) and FF10 service UUIDs.
 
-The same LE link exposes the HID-over-GATT gamepad service (`0x1812`): HID Information, the 91-byte Report Map, Protocol Mode, HID Control Point and an encrypted input Report (ID 1). The 9-byte report is the firmware's `src/wmr_hid.c` mapping, pinned by `tests/vectors/hid_gamepad.txt`, so Android binds the controllers as a gamepad without an app. No report is sent before a Classic controller connects or before the phone enables the Report CCCD. When a WebSocket client or an FF11/FF12/FF14 subscriber is active, HID notifications pause and one neutral report releases any held input; they resume with the next sample when the stream path clears.
+The adapter is pairable for 180 seconds after boot (`--ble-pairing-window`), then only while no LE bond is stored. A bonded phone reconnects without pairability. `--ble-continuous-pairing` keeps the adapter pairable while BLE is active. This mode matches ESP32 behavior and is opt-in. While a pairing window is open, the daemon registers a `NoInputNoOutput` BlueZ pairing agent at `/org/wmr/bridge/agent` (`org.bluez.Agent1`). If an unbonded phone attempts pairing outside an open window, BlueZ rejects the request with an explanation of how to open a window.
 
-Pass `--no-ble` to disable the BLE peripheral. `--ble-fallback` stays as a deprecated no-op alias and prints a deprecation warning. The peripheral needs `python3-dbus-next` and a free hci adapter. It has not been verified on hardware.
+### D-Bus GATT layout
+
+The BLE peripheral exposes the GATT hierarchy through dbus-next under the application path `/org/wmr/bridge`:
+
+| Object path | Interface | UUID | Flags | Content |
+|---|---|---|---|---|
+| `/org/wmr/bridge/service/1812` | `org.bluez.GattService1` | `0x1812` | (primary) | HID Service |
+| `/org/wmr/bridge/service/1812/2a4a` | `org.bluez.GattCharacteristic1` | `0x2A4A` | `read`, `encrypt-read` | HID Information (`0x11010002`: bcdHID 1.11, country 0, normally connectable) |
+| `/org/wmr/bridge/service/1812/2a4b` | `org.bluez.GattCharacteristic1` | `0x2A4B` | `read`, `encrypt-read` | Report Map (91 bytes, identical to `src/wmr_hid.c`) |
+| `/org/wmr/bridge/service/1812/2a4c` | `org.bluez.GattCharacteristic1` | `0x2A4C` | `write-without-response`, `encrypt-write` | HID Control Point (`0x00` suspend, `0x01` exit suspend) |
+| `/org/wmr/bridge/service/1812/2a4d` | `org.bluez.GattCharacteristic1` | `0x2A4D` | `read`, `notify`, `encrypt-read`, `encrypt-write` | Report (Input Report ID 1, 9 bytes) |
+| `/org/wmr/bridge/service/1812/2a4d/2908` | `org.bluez.GattDescriptor1` | `0x2908` | `read` | Report Reference descriptor (`0x0101`: Report ID 1, Input Report) |
+| `/org/wmr/bridge/service/1812/2a4e` | `org.bluez.GattCharacteristic1` | `0x2A4E` | `read`, `write`, `encrypt-read`, `encrypt-write` | Protocol Mode (`0x01` Report Protocol) |
+
+All HID characteristics require encryption (`encrypt-read`, `encrypt-write`) because HOGP requires a bonded link. BlueZ creates the Report CCCD (`0x2902`) automatically. For report byte layouts and mapping rules, read [`docs/HID_GAMEPAD.md`](../docs/HID_GAMEPAD.md).
+
+### Stream gating and suppression
+
+The bridge applies these rules to HID gamepad reports:
+- The bridge sends no HID reports before a Classic controller connects.
+- The bridge sends no HID reports before the phone enables the Report CCCD. When enabled with a connected controller, the bridge emits one neutral report.
+- When a WebSocket client or an FF11/FF12/FF14 subscriber is active, HID notifications pause automatically.
+- On transitioning to suppressed, the bridge emits one neutral report to release any held buttons or deflections.
+- When stream clients disconnect and FF11/FF12/FF14 subscriptions stop, HID notifications resume with the next controller sample.
+
+### BLE CLI flags
+
+- `--ble-pairing-window SECONDS`: sets the duration in seconds that a new LE bond is accepted after boot, or during a manual window. The default value is 180.0. The older 120 s default was replaced. A value of 0 disables the boot window.
+- `--ble-continuous-pairing`: keeps the adapter pairable whenever BLE is active. This mode matches ESP32 behavior (default off).
+- `--no-ble`: disables the BLE peripheral. `--ble-fallback` remains as a deprecated no-op alias.
 
 ## Files
 
