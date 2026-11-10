@@ -75,6 +75,31 @@ enable_service() {
     fi
 }
 
+# BlueZ defaults JustWorksRepairing to "never", which makes bluetoothd answer a
+# phone's fresh Just Works pairing against a stored bond with a negative reply
+# before our NoInputNoOutput agent is asked ("Numeric comparison failed"). Point
+# the repair at the agent so a phone that forgot the bridge can pair again, as
+# the ESP32 does after PIN_OR_KEY_MISSING (ONY-441).
+configure_bluez() {
+    if [ "${WMR_SKIP_PRIVILEGED:-0}" = "1" ] || [ -n "${DESTDIR:-}" ]; then
+        return 0
+    fi
+    conf="${WMR_BLUETOOTH_MAIN_CONF:-/etc/bluetooth/main.conf}"
+    script="${DEST_PI:-}/wmr_bridge/bluez_conf.py"
+    [ -f "$script" ] || script="${SCRIPT_DIR}/wmr_bridge/bluez_conf.py"
+    if ! command -v python3 >/dev/null 2>&1 || [ ! -f "$script" ]; then
+        return 0
+    fi
+    if ! python3 "$script" "$conf"; then
+        echo "install.sh: could not enable BlueZ Just Works re-pairing (non-fatal)" >&2
+        return 0
+    fi
+    # bluetoothd reads main.conf once at startup.
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl restart bluetooth.service || true
+    fi
+}
+
 if [ -z "$SCRIPT_DIR" ]; then
     PINNED_VERSION="${WMR_BRIDGE_VERSION:-}"
     VERSION="$PINNED_VERSION"
@@ -270,6 +295,7 @@ if [ "$SKIP_PRIVILEGED" != "1" ]; then
     if command -v systemctl >/dev/null 2>&1; then
         systemctl daemon-reload || true
     fi
+    configure_bluez
 fi
 
 enable_service

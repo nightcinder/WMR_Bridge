@@ -108,8 +108,9 @@ class DebPackagingTests(unittest.TestCase):
             postinst = (control_dir / "postinst").read_text(encoding="utf-8")
             self.assertIn("input,bluetooth", postinst)
             self.assertIn("rfkill unblock bluetooth", postinst)
+            self.assertIn("bluez_conf.py", postinst)
             self.assertIn("systemctl enable bluetooth.service", postinst)
-            self.assertIn("systemctl start bluetooth.service", postinst)
+            self.assertIn("systemctl restart bluetooth.service", postinst)
             self.assertIn("--prefer-5ghz --no-reconnect", postinst)
             self.assertNotIn(".pyc", contents)
 

@@ -5,6 +5,24 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## Unreleased
+
+### Raspberry Pi bridge
+
+- **A phone can re-pair over its stored bond (ONY-1253).** BlueZ defaults
+  `JustWorksRepairing` to `never`, so when the adapter still held a bond for the
+  Pixel, bluetoothd answered the kernel's Just Works confirm hint `0x01` with a
+  negative reply before the bridge's `NoInputNoOutput` agent was asked; the
+  Pixel reported `Numeric comparison failed (0x0c)`. The installer and `.deb`
+  post-install script now set `[General] JustWorksRepairing = confirm` in
+  `/etc/bluetooth/main.conf` and restart `bluetooth.service`, which sends the
+  repair to the default agent. This applies the ESP32 firmware's stale-bond
+  lesson (ONY-441): a phone that forgot the bridge may pair again and replace
+  the old key instead of being refused. Every agent callback now logs one
+  `BLE pairing agent: method=... device=... result=...` journal line, and the
+  BLE start logs the configured `BlueZ JustWorksRepairing = ...` policy. An
+  explicit `always` value is left alone.
+
 ## 0.3.22 — 2026-11-10
 
 The Pi bondable-pairing release on top of 0.3.21, shipping the fix that keeps a

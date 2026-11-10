@@ -592,7 +592,16 @@ pairable while BLE is active, matching the ESP32, and is opt-in. A
 open, and unregistered again when the window closes, so a phone's LE bond is
 accepted as Just Works instead of being rejected for lack of an agent. The
 agent accepts every device BlueZ presents and exists only for that window; the
-adapter's pairable window is the gate. The Classic auto-pairer runs its own
+adapter's pairable window is the gate. `install.sh` and the `.deb` post-install
+script set BlueZ's `[General] JustWorksRepairing` to `confirm` and restart
+`bluetooth.service`. Without that, bluetoothd's default `never` answers the
+kernel's Just Works confirm hint `0x01` itself with a negative reply when the
+adapter still holds a bond for the phone, before any `Agent1` callback; the
+phone then shows `Numeric comparison failed`. `confirm` sends that repair to
+the bridge's default agent, which accepts and logs it. This is the lesson from
+the ESP32 firmware's stale-bond handling (ONY-441): a phone that forgot the
+bridge may pair again and replace the old key instead of being refused. An
+explicit `always` is left alone. The Classic auto-pairer runs its own
 interactive `bluetoothctl` session to bond controllers on the same adapter.
 While the BLE window is open it tells that client to drop its own agent
 (`agent off`), so `pair` uses the bridge's Just Works agent for controllers
@@ -609,13 +618,19 @@ Pairing diagnostics are in the journal: `BLE pairing window open/closed` with
 the reason and the new `Adapter1.Pairable` state (for example
 `BLE pairing window closed (an LE bond is stored); Adapter1.Pairable -> off`),
 `BLE pairing window opened manually for 180 s`,
-`BLE pairing agent registered`/`claimed`/`reclaimed`, one line per agent
-callback (`BLE pairing: confirmation requested by <device>`), and
-`BLE pairing: BlueZ cancelled the pending request` when the exchange fails.
+`BLE pairing agent registered`/`claimed`/`reclaimed`, the
+`BlueZ JustWorksRepairing = ...` policy line read from `main.conf` at BLE
+start, one line per agent
+callback with the method, device and result
+(`BLE pairing agent: method=RequestAuthorization device=<device> result=accepted`),
+and `BLE pairing agent: method=Cancel device=- result=cancelled` when the
+exchange fails. A callback that BlueZ rejected internally never reaches the
+agent, so a `JustWorksRepairing = never` warning explains a
+"Numeric comparison failed" capture with no callback line.
 The Classic auto-pairer also logs when its scan leaves `Adapter1.Pairable` off.
-A capture that opens the window and then has no `BLE pairing:` line means
-BlueZ never reached the agent; a `cancelled` line without a request line
-means the request never arrived.
+A capture that opens the window and then has no `BLE pairing agent:` line means
+BlueZ never reached the agent; a `cancelled` line without a request line means
+the request never arrived.
 
 The GATT application also exposes the HID-over-GATT service (`0x1812`) on the
 same LE link: HID Information, the firmware's 91-byte Report Map, Protocol
