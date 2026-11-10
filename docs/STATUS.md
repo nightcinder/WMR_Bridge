@@ -17,7 +17,7 @@ opt-in, has not run on hardware and waits on ONY-1070. ESP32-over-BLE is
 the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the
 second supported first-class target; Pi is host-tests-only until the Pi sitting
 runs, see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md) and
-[`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md)). Firmware and Pi
+`docs/PI_BRIDGE.md`). Firmware and Pi
 hardware runs remain unverified unless a run sheet proves otherwise.
 
 This document tracks firmware and host-bridge capabilities and empirical
@@ -31,7 +31,7 @@ maintained here:
   BlueZ Classic Bluetooth HID host forwarding the same `FF11`/`FF12`/`FF14`
   payloads over a 5 GHz Wi-Fi WebSocket (`wmr-wifi-v1`). Second supported
   target, but host-tests-only until the Pi sitting runs
-  ([`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md)).
+  (`docs/PI_BRIDGE.md`).
 
 The overall project status, milestones, roadmap, and companion Flutter app state
 (including 3D viewer, orientation fusion, and host latency tracking) are
@@ -51,21 +51,21 @@ maintained at the project's single entry point:
 | Controller discovery by name & NVS address persistence | Merged | Yes; D1–D11 checks passed |
 | Link diagnostics (`link:`, `role:`, `POLICY:`) | Merged | Yes; verified in contention-2 runs |
 | Firmware/Pi logging cleanup (single log format, human-readable pairing diagnostics, Pi hand/client logs) (ONY-313) | Merged (v0.2.1) | Host tests only; not run on hardware |
-| Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (ONY-307, PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.11 image has not been run on hardware ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block C) |
-| BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (ONY-438, #88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.11 pairing and encryption run is not yet done ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block B) |
+| Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (ONY-307, PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.11 image has not been run on hardware (internal bench runbook block C) |
+| BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (ONY-438, #88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.11 pairing and encryption run is not yet done (internal bench runbook block B) |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, not run on hardware |
-| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md)) | Merged (second supported target) | Host tests only (301 tests + loopback replay), the real BlueZ auto-pair path has not been run on Pi hardware or with controllers; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
+| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests only (301 tests + loopback replay), the real BlueZ auto-pair path has not been run on Pi hardware or with controllers; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has not been reported |
-| Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Console `v` read on the 0.2.4 hardware run (`0.2.4`, ESP-IDF v6.1); the live FF16 phone read on v0.3.11 is open ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block B) |
+| Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Console `v` read on the 0.2.4 hardware run (`0.2.4`, ESP-IDF v6.1); the live FF16 phone read on v0.3.11 is open (internal bench runbook block B) |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added by ONY-945 (v0.3.11) | Host tests and firmware build only, never run on a PSVR2 controller |
 | Switch Joy-Con/Pro controller support: discovery names, output report `0x01` subcommand handshake, SPI calibration packed into FF13, three-sample `0x30` decode into FF12/FF14 (ONY-946, [`docs/SWITCH.md`](SWITCH.md)) | Merged (v0.3.11) | Host tests (`tests/test_switch.c`) and firmware build only, never run on a Switch controller; hardware verification tracked in GitHub #145 |
-| Controller ACL that stalls after discovery: encrypt it from the bridge, then drop it after 4 s so the controller pages again (ONY-446, #92, [`docs/DISCOVERY.md`](DISCOVERY.md)) | Merged (v0.3.0) | Host-tested (`tests/test_linkwait.c`); field logs on 0.2.4 only, packaged v0.3.11 not run on hardware ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block C) |
-| Addressable status LED: red none, yellow LEFT, blue RIGHT, green both (#96) | Merged (v0.3.0) | Host-tested (`tests/test_status_led.c`); the GPIO 4 colour check has not run on hardware ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block E) |
+| Controller ACL that stalls after discovery: encrypt it from the bridge, then drop it after 4 s so the controller pages again (ONY-446, #92, [`docs/DISCOVERY.md`](DISCOVERY.md)) | Merged (v0.3.0) | Host-tested (`tests/test_linkwait.c`); field logs on 0.2.4 only, packaged v0.3.11 not run on hardware (internal bench runbook block C) |
+| Addressable status LED: red none, yellow LEFT, blue RIGHT, green both (#96) | Merged (v0.3.0) | Host-tested (`tests/test_status_led.c`); the GPIO 4 colour check has not run on hardware (internal bench runbook block E) |
 | Runtime contention toggles (`l`/`v`/`t`/`q` LEVERS commands, ONY-430, #86/#97, [`docs/CONTENTION_LEVERS.md`](CONTENTION_LEVERS.md)) | Merged (v0.3.0) | Host-tested (`tests/test_levers.c`); bench run still open |
 | Pi host-bridge packaging: `build_package.sh`, `verify_package.sh` and a no-hardware `dry_run.sh` (ONY-440, #87, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)) | Merged (v0.3.0) | Packaging tests and dry run pass; never run on Pi hardware |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: about 45–52 min dual-controller, about 58–65 min single-controller; not recommended for session VR |
-| BLE HID-over-GATT gamepad (ONY-441, merged for v0.3.0) | Implemented and passes the 2026-10-28 phone run on the pre-0.3.0 branch build `0.2.4-38-g4bcf01c`: it pairs, bonds, raises ATT MTU to 517, enables the HID Report CCCD (`hid=on`) and streams HID reports (about 68/s, `errors=0`) with both controllers connected; the phone reconnects to the bond after a bridge reboot without re-pairing. CTKD was the last blocker: `0.2.4-38` disables it, so Android keeps the LE HID transport and shows no second Classic entry | PASS (phone + mapping) on `0.2.4-38-g4bcf01c`: Pixel 11 Pro / Android 17; gamepad appears and controls register in the tester. Controller power-cycle after the reboot was not re-captured. The v0.3.11 recheck is open ([internal bench runbook](runs/sheets/internal-esp32-wmr-bench.md) block D). See [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
-| Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 Sitting R run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE. The 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers ([`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md)); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). ONY-23 (M7 latency-2) is closed: **Stay Flutter** under the ONY-1010 amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). The 2026-11-07 pair misses the Stay branch on RIGHT stalls (440 vs 698, 37 % apart) and lands in between: stay Flutter, gaps filed upstream. 2026-10-28 `d` = +3.7 ms (one unpaired run per client); 2026-11-07 `d` = -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms (rule in [latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md); figures in [`docs/runs/roundtrip/`](runs/roundtrip/README.md)) |
+| BLE HID-over-GATT gamepad (ONY-441, merged for v0.3.0) | Implemented and passes the 2026-10-28 phone run on the pre-0.3.0 branch build `0.2.4-38-g4bcf01c`: it pairs, bonds, raises ATT MTU to 517, enables the HID Report CCCD (`hid=on`) and streams HID reports (about 68/s, `errors=0`) with both controllers connected; the phone reconnects to the bond after a bridge reboot without re-pairing. CTKD was the last blocker: `0.2.4-38` disables it, so Android keeps the LE HID transport and shows no second Classic entry | PASS (phone + mapping) on `0.2.4-38-g4bcf01c`: Pixel 11 Pro / Android 17; gamepad appears and controls register in the tester. Controller power-cycle after the reboot was not re-captured. The v0.3.11 recheck is open (internal bench runbook block D). See [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
+| Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; ONY-176 Sitting R run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE. The 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). ONY-176 adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers (`the removed single-ESP32 levers sheet (ONY-1157; see git history)`); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). ONY-23 (M7 latency-2) is closed: **Stay Flutter** under the ONY-1010 amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). The 2026-11-07 pair misses the Stay branch on RIGHT stalls (440 vs 698, 37 % apart) and lands in between: stay Flutter, gaps filed upstream. 2026-10-28 `d` = +3.7 ms (one unpaired run per client); 2026-11-07 `d` = -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms (rule in [latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md); figures in [`docs/runs/roundtrip/`](runs/roundtrip/README.md)) |
 
 ## BLE HID gamepad (ONY-441)
 
@@ -152,22 +152,23 @@ registers controls. Details in `HID_GAMEPAD.md` §0.2.4-38 field run.
 ## Android verification campaign (ONY-439, 0.3.11 pass)
 
 Scope: phone + one ESP32 only. Sheet:
-[`docs/runs/sheets/internal-esp32-wmr-bench.md`](runs/sheets/internal-esp32-wmr-bench.md).
+the removed internal-ESP32 bench sheet (ONY-1157; see git history).
 The 0.3.11 bench pass has four gate checks: FF16 on Companion `0.2.2`, ONY-446
 RIGHT reconnect, status LED colours, and the Android HID gamepad. All four are
 `not run`. The rows below are the 0.2.4 sitting. A row leaves `not run`
-only when that check's figures arrive, from the bench sheet's §10 results and
-paste-back block. Rows that name a device and build do
+only when that check's figures arrive, from the removed internal-ESP32 bench
+sheet's results and paste-back block (ONY-1157; see git history). Rows that name a
+device and build do
 so because a run exists. `, ` means nothing has run yet.
 
 | Check | Result | Device / build | Where the procedure lives |
 |---|---|---|---|
-| FF16 live read | `partial`, app 0.2.1 had no FF16 display (wmr-companion #107); Companion 0.2.2 adds it and the 0.3.11 recheck is open. Console `v` settles the 0.2.4 build half (`0.2.4`, `ESP-IDF v6.1`); reconnect half not run | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | bench §4, §10 |
-| FF17 scan/connect | `partial`, status v2 captured from FF17 notifications: version 1, both hands `addr_source` 2 (NVS) with distinct tails, discovery idle / round 4, `flags` 0 on both (taken disconnected). DISCOVER `0x01` → `last_result` `0x03` NOTHING_TO_DO; `0x05 0x01` FORGET_BOND RIGHT → `last_result` `0x00` OK with RIGHT disconnected, which explains the earlier `05/06` as a >2-byte write and makes a `134` consistent with ATT `0x86`. Connected-state status, connect/disconnect, double disconnect, `0x7f` and step 6 as written (BUSY while RIGHT connected) unrun; RIGHT link key cleared, so it must be re-paired | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | bench §4, §10 |
-| Stick dead zone | `partial`, normalized rest `0.0000, 0.0000` both hands at dead zone 0.05, centres LEFT `-0.0227, 0.0090` / RIGHT `-0.1119, 0.0819`; three sittings: RIGHT stable at about `-0.112, +0.085` (real bias), LEFT moved `-0.030, -0.011` → `-0.008, +0.021` → `+0.017, +0.025`, still learning. Dead zone 0 set but saved settings read `learn true` after the switch was reported off (toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair; end stops, held offset and a confirmed learning-off run missing | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | bench §4, §10 |
+| FF16 live read | `partial`, app 0.2.1 had no FF16 display (wmr-companion #107); Companion 0.2.2 adds it and the 0.3.11 recheck is open. Console `v` settles the 0.2.4 build half (`0.2.4`, `ESP-IDF v6.1`); reconnect half not run | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | the removed internal-ESP32 bench sheet (ONY-1157; see git history) |
+| FF17 scan/connect | `partial`, status v2 captured from FF17 notifications: version 1, both hands `addr_source` 2 (NVS) with distinct tails, discovery idle / round 4, `flags` 0 on both (taken disconnected). DISCOVER `0x01` → `last_result` `0x03` NOTHING_TO_DO; `0x05 0x01` FORGET_BOND RIGHT → `last_result` `0x00` OK with RIGHT disconnected, which explains the earlier `05/06` as a >2-byte write and makes a `134` consistent with ATT `0x86`. Connected-state status, connect/disconnect, double disconnect, `0x7f` and step 6 as written (BUSY while RIGHT connected) unrun; RIGHT link key cleared, so it must be re-paired | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | the removed internal-ESP32 bench sheet (ONY-1157; see git history) |
+| Stick dead zone | `partial`, normalized rest `0.0000, 0.0000` both hands at dead zone 0.05, centres LEFT `-0.0227, 0.0090` / RIGHT `-0.1119, 0.0819`; three sittings: RIGHT stable at about `-0.112, +0.085` (real bias), LEFT moved `-0.030, -0.011` → `-0.008, +0.021` → `+0.017, +0.025`, still learning. Dead zone 0 set but saved settings read `learn true` after the switch was reported off (toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair; end stops, held offset and a confirmed learning-off run missing | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | the removed internal-ESP32 bench sheet (ONY-1157; see git history) |
 | Latency stream ladder | `partial`, one 120 s run per stream: p50 `none` 63.4 / 62.3, FF11 34.3, FF12 34.5, FF14 39.3 ms, 479/479 answered; one session, so no ladder verdict (`latency-2` §3.3) | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/runs/sheets/latency-2.md` §3–§5 |
 | App-vs-native probe decision | `pass`, ONY-23 closed: **Stay Flutter** under the ONY-1010 amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). The 2026-11-07 pair misses the Stay branch on RIGHT stalls (440 vs 698, 37 % apart) and lands in between: stay Flutter, gaps filed upstream. 2026-10-28 app 39.3 vs probe 35.6 ms (`d` = +3.7, one unpaired run per client); 2026-11-07 `d` = -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms, probe stalls 610/698 vs app 490/440 | Pixel 11 Pro, Android 17; 2026-11-07 builds in `docs/runs/roundtrip/README.md` | `wmr-companion` `docs/runs/sheets/latency-2.md` (rule); `docs/runs/roundtrip/README.md` (figures); ONY-1010 (amendment) |
-| FF13 calibration applied in fusion | `partial`, pose recordings: 6.6 s face-down rest LEFT `+0.00°`, RIGHT `−0.03°`; a 14.4 s hand-held take turned RIGHT `−25.3°`. Prose rest pair 83.5 / 42.7 unlabelled for off/on, no 90° error | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/PROTOCOL.md` "FF13 config block in the app"; bench §10 (FF13 evidence) |
+| FF13 calibration applied in fusion | `partial`, pose recordings: 6.6 s face-down rest LEFT `+0.00°`, RIGHT `−0.03°`; a 14.4 s hand-held take turned RIGHT `−25.3°`. Prose rest pair 83.5 / 42.7 unlabelled for off/on, no 90° error | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/PROTOCOL.md` "FF13 config block in the app"; the removed internal-ESP32 bench sheet (ONY-1157; see git history) |
 
 ONY-23 closed on 2026-11-07. The 2026-10-28 pair gave `d` = +3.7 ms (one
 unpaired run per client) and the 2026-11-07 session gave `d` = -16.3 ms at
@@ -250,13 +251,13 @@ However:
 - Multi-bridge cannot deliver zero loss. RIGHT alone was about 10.8 % with one
   controller and one phone (user-reported). The best it can do on today's
   evidence is LEFT about 0.5 % / RIGHT about 10.8 %.
-- No two-bridge run has happened. The sitting and its fixed pass criteria are
-  in [`docs/runs/sheets/multi-bridge.md`](runs/sheets/multi-bridge.md). LEFT at
+- No two-bridge run has happened. The sitting procedure is in the removed
+  multi-bridge sheet (ONY-1157; see git history). LEFT at
   most 3 % on its own bridge is the pass bar.
 - No Raspberry Pi Wi-Fi bridge hardware run has happened. The second supported
   target (`pi/`, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)) moves the phone link off
   2.4 GHz BLE onto 5 GHz Wi-Fi WebSocket. It is host-tests-only until Sitting P
-  in [`docs/runs/sheets/pi-bridge.md`](runs/sheets/pi-bridge.md) runs.
+  in `docs/PI_BRIDGE.md` runs.
   `pi/tools/wifi_probe.py` sends a UDP discovery probe, prints the `hello`
   `uplink` object, writes `--json-out`, and enforces the Sitting P criteria with
   `--assert-gates`; that is host-tested tooling, not a hardware result.
@@ -264,14 +265,14 @@ However:
 ## 5. Single-ESP32 Contention Levers (ONY-176)
 
 Follow-up to ONY-170. Run sheet:
-[`docs/runs/sheets/single-esp32-levers.md`](runs/sheets/single-esp32-levers.md).
+`the removed single-ESP32 levers sheet (ONY-1157; see git history)`.
 No lever here has a new hardware result. This table is the run-ready state, not
 evidence.
 
 | Lever | Status | Result / prerequisite |
 |---|---|---|
 | V1 staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`) | Not run | Code on `main`. Needs the two V1 images and the A/B/A block at one fixed position |
-| RIGHT asymmetry, phases 1-2 | Not run | No reflash. Use [`docs/runs/sheets/internal-esp32-wmr-bench.md`](runs/sheets/internal-esp32-wmr-bench.md) section 6 with one controller powered at a time |
+| RIGHT asymmetry, phases 1-2 | Not run | No reflash. Power one controller at a time (see the removed single-ESP32 levers sheet, ONY-1157) |
 | DLE confirmation, current build | Not run on the current build; 2026-10-22 log shows 251/2120 accepted | `tx 251 octets / 2120 us, rx 251 octets / 2120 us`. Capture the line again on this build |
 | Longer BLE interval (30 ms request) | Not run | Existing `WMR_CFG_CONN_INTERVAL_MIN/MAX`. Phone must grant it and the granted value must be recorded |
 | Longer FF14 hold (2 intervals) | Not run | New `WMR_CFG_BATCH_HOLD_INTERVALS=2`. Default 1 leaves current behaviour unchanged |

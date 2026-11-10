@@ -5,7 +5,7 @@
 # staged rootfs, creates the token, survives a reinstall without losing the
 # token or a locally edited wmr-bridge.env, serves batched FF14 records to the
 # packaged probe, and removes cleanly. This is the P2 pre-flight check in
-# docs/runs/sheets/pi-bridge.md.
+# docs/PI_BRIDGE.md.
 #
 #   pi/tools/dry_run.sh                    # build the .deb, then dry-run it
 #   pi/tools/dry_run.sh path/to/pkg.deb    # dry-run an existing .deb

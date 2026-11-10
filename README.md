@@ -13,8 +13,8 @@ The overall state, hardware results and roadmap are in its
 A second, supported Linux / Raspberry Pi host bridge is in [`pi/`](pi/README.md).
 It uses BlueZ for Classic Bluetooth and replaces BLE with a WebSocket on 5 GHz Wi-Fi,
 while sending the same FF11/FF12/FF14 payloads. See
-[docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) and the bring-up run sheet
-[docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). Both the ESP32-over-BLE
+[docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) (P1-P14) and the 12-step run sheet
+docs/runs/sheets/bench.md. Both the ESP32-over-BLE
 firmware (default) and the Pi-over-Wi-Fi daemon are supported first-class bridge
 targets. The Pi bridge is host-tests-only until the Pi sitting runs. The ESP32
 firmware has the bench runs recorded below.
@@ -269,7 +269,7 @@ mode and it pairs, trusts and connects. `python3 -m wmr_bridge --list` shows the
 hidraw nodes. Full setup, the wire protocol, security notes and the
 hardware test checklist are in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md). The
 first-sitting bring-up procedure is in
-[docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md). The `pi/` tree
+docs/runs/sheets/bench.md and P1-P14 are in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md). The `pi/` tree
 builds the installable package `wmr-bridge_<version>_all.deb` plus a piped
 `install.sh` that fetches and verifies the release `.deb`. The
 `wmr-pi-bridge-0.1.0.tar.gz` asset on the v0.1.0 GitHub release is the only old
@@ -341,8 +341,8 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
   ([docs/SWITCH.md](docs/SWITCH.md)).
 - Linux / Raspberry Pi Wi-Fi host bridge (`pi/`). Second supported target, but
   host-tests-only until the Pi sitting runs
-  ([docs/PI_BRIDGE.md](docs/PI_BRIDGE.md),
-  [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md)).
+  ([docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) P1-P14,
+  docs/runs/sheets/bench.md).
 - Known oddity, not investigated: each controller logs `SET_PROTOCOL handshake
   status=0x03`.
 
@@ -403,7 +403,7 @@ Open:
   ends FF10 support: see [docs/BLE_MIGRATION.md](docs/BLE_MIGRATION.md).
 - Hardware validation of the supported Linux/Raspberry Pi Wi-Fi host bridge
   (P1-P14 in [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) and
-  [docs/runs/sheets/pi-bridge.md](docs/runs/sheets/pi-bridge.md)). It is
+  docs/runs/sheets/bench.md). It is
   host-tested only.
 
 ## Configuration

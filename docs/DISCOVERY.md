@@ -256,7 +256,7 @@ a single-hand image does not keep inquiring for a hand it will not use.
 normally advertise `WMR Bridge L` / `WMR Bridge R`, keeping the prefix for
 clients that match on it. The GATT database, including its device-name value, is
 unchanged. The build route for the three images is in
-[runs/sheets/multi-bridge.md](runs/sheets/multi-bridge.md).
+docs/FLASHING.md.
 
 ## Forgetting addresses (`F`)
 
