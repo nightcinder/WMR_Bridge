@@ -398,7 +398,7 @@ def _speed_gate_bullets(manifest_text):
         if not match:
             continue
         cell = match.group(1).strip()
-        if cell.lower().startswith("speed gate"):
+        if re.match(r"speed[- ]gate\b", cell, re.IGNORECASE):
             # The explicit `- Speed gate <cell>: value` form owns these.
             continue
         rows.append((cell, match.group(2)))
