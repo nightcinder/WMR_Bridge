@@ -158,14 +158,17 @@ class PackagingTests(unittest.TestCase):
             [line for line in service.splitlines() if line.startswith("EnvironmentFile=")]
         )
         self.assertNotIn("upgrade.trigger ", service)
-        # Root runs only the root-owned installed copy, under a lock.
+        # Root runs only the root-owned installed copy, under a lock in a
+        # root-owned runtime directory (the state dir is writable by wmr).
         self.assertIn("User=root", service)
         self.assertIn("Type=oneshot", service)
+        self.assertIn("RuntimeDirectory=wmr-bridge-upgrade", service)
         self.assertIn(
-            "ExecStart=/usr/bin/flock -n /var/lib/wmr-bridge/upgrade.lock "
+            "ExecStart=/usr/bin/flock -n /run/wmr-bridge-upgrade/upgrade.lock "
             "/opt/wmr-bridge/pi/install.sh --upgrade",
             service,
         )
+        self.assertNotIn("/var/lib/wmr-bridge/upgrade.lock", service)
         self.assertIn("StartLimitIntervalSec=600", service)
         self.assertIn("StartLimitBurst=3", service)
 

@@ -10,6 +10,11 @@ StartLimitBurst=3
 [Service]
 Type=oneshot
 User=root
+# Root-owned lock directory. The state directory is writable by the service
+# user, and root's flock would follow a symlink planted at the lock name, so
+# the lock must live in a directory only root can create or rename. systemd
+# removes this runtime directory when the oneshot stops.
+RuntimeDirectory=wmr-bridge-upgrade
 # The trigger file is intentionally ignored as input. Remove it before running
 # so a failed upgrade cannot re-trigger itself and nothing written to it can
 # reach the installer.
@@ -21,6 +26,6 @@ Environment=WMR_BRIDGE_REPO= WMR_BRIDGE_RELEASE_BASE_URL= WMR_BRIDGE_TAG= WMR_BR
 # Run only the root-owned installed copy. --upgrade forces the signed release
 # fetch and exits 0 without reinstalling when the installed version is current
 # (no reinstall or downgrade). The lock makes overlapping runs fail closed.
-ExecStart=/usr/bin/flock -n /var/lib/wmr-bridge/upgrade.lock /opt/wmr-bridge/pi/install.sh --upgrade
+ExecStart=/usr/bin/flock -n /run/wmr-bridge-upgrade/upgrade.lock /opt/wmr-bridge/pi/install.sh --upgrade
 TimeoutStartSec=900
 Nice=10

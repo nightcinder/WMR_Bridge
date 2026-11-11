@@ -5,12 +5,18 @@ from __future__ import annotations
 import asyncio
 import base64
 import fcntl
+import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 from wmr_bridge import ws as wsmod
-from wmr_bridge.bridge import Bridge
+from wmr_bridge.bridge import (
+    UPGRADE_RATE_BURST,
+    UPGRADE_TRIGGER_TTL_S,
+    Bridge,
+)
 from wmr_bridge.protocol import (
     CALIBRATION_WINDOW_MAX,
     calibration_crc32,
@@ -418,7 +424,11 @@ class UpgradeControlTests(unittest.IsolatedAsyncioTestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.state_dir = Path(self.tmp.name)
-        self.bridge = Bridge(token="secret", upgrade_dir=self.state_dir)
+        self.bridge = Bridge(
+            token="secret",
+            upgrade_dir=self.state_dir,
+            upgrade_lock=self.state_dir / "upgrade.lock",
+        )
         self.server = BridgeServer(self.bridge, host="127.0.0.1", port=0)
         await self.server.start()
         self.clients: list[wsmod.WebSocket] = []
@@ -457,6 +467,43 @@ class UpgradeControlTests(unittest.IsolatedAsyncioTestCase):
         await client.send_json({"type": "upgrade"})
         reply = await asyncio.wait_for(client.recv_json(), 2)
         self.assertEqual(reply, {"type": "upgrade_status", "state": "busy"})
+
+    async def test_stale_trigger_is_not_busy_and_is_replaced(self) -> None:
+        self.bridge.upgrade_trigger.write_bytes(b"")
+        stale = time.time() - UPGRADE_TRIGGER_TTL_S - 1
+        os.utime(self.bridge.upgrade_trigger, (stale, stale))
+        self.assertFalse(self.bridge.upgrade_busy())
+        client, _hello = await self.connect()
+        await client.send_json({"type": "upgrade"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "upgrade_status", "state": "started"})
+        self.assertEqual(self.bridge.upgrade_trigger.read_bytes(), b"")
+        self.assertGreater(self.bridge.upgrade_trigger.stat().st_mtime, stale)
+
+    async def test_repeated_upgrades_stop_below_the_start_limit(self) -> None:
+        client, _hello = await self.connect()
+        for _ in range(UPGRADE_RATE_BURST):
+            await client.send_json({"type": "upgrade"})
+            reply = await asyncio.wait_for(client.recv_json(), 2)
+            self.assertEqual(reply, {"type": "upgrade_status", "state": "started"})
+            # systemd's ExecStartPre removes the trigger before the next request.
+            self.bridge.upgrade_trigger.unlink()
+        await client.send_json({"type": "upgrade"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "upgrade_status", "state": "busy"})
+        self.assertFalse(self.bridge.upgrade_trigger.exists())
+
+    def test_start_limit_budget_survives_a_daemon_restart(self) -> None:
+        for _ in range(UPGRADE_RATE_BURST):
+            self.assertEqual(self.bridge.request_upgrade(), "started")
+            self.bridge.upgrade_trigger.unlink()
+        restarted = Bridge(
+            token="secret",
+            upgrade_dir=self.state_dir,
+            upgrade_lock=self.state_dir / "upgrade.lock",
+        )
+        self.assertTrue(restarted.upgrade_rate_limited())
+        self.assertFalse(restarted.upgrade_busy())
 
     async def test_running_root_unit_reports_busy(self) -> None:
         lock = self.state_dir / "upgrade.lock"
