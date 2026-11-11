@@ -1055,16 +1055,13 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         @method()
         def StartNotify(self):
             app.start_notify(self.spec.uuid)
-            self.emit_properties_changed(
-                {"Notifying": variant(True, "b")}, []
-            )
+            # dbus-next wraps this in a Variant of the property signature.
+            self.emit_properties_changed({"Notifying": True}, [])
 
         @method()
         def StopNotify(self):
             app.stop_notify(self.spec.uuid)
-            self.emit_properties_changed(
-                {"Notifying": variant(False, "b")}, []
-            )
+            self.emit_properties_changed({"Notifying": False}, [])
 
     class Descriptor(ServiceInterface):
         def __init__(self, spec: GattDescriptorSpec, characteristic: str) -> None:
@@ -1295,13 +1292,11 @@ class DbusGattBackend:
         self._agent_default = False
         self._exported: list[Any] = []
         self._characteristics: dict[str, Any] = {}
-        self._variant: Any = None
 
     async def start(self, app: GattApplication) -> None:
         log_just_works_repairing()
         try:
             interfaces = build_dbus_interfaces(app)
-            from dbus_next import Variant
             from dbus_next.aio import MessageBus
             from dbus_next.constants import BusType
         except ImportError as exc:  # pragma: no cover - depends on the host
@@ -1309,7 +1304,6 @@ class DbusGattBackend:
                 "BLE fallback needs python3-dbus-next (apt install python3-dbus-next)"
             ) from exc
 
-        self._variant = Variant
         bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
         self._bus = bus
         adapter_path = f"/org/bluez/{self.adapter}"
@@ -1426,9 +1420,9 @@ class DbusGattBackend:
         if characteristic is None:
             return
         characteristic.value = bytes(value)
-        characteristic.emit_properties_changed(
-            {"Value": self._variant("ay", bytes(value))}, []
-        )
+        # dbus-next wraps this in a Variant of the property signature; wrapping
+        # here as well raised SignatureBodyMismatchError on every notification.
+        characteristic.emit_properties_changed({"Value": bytes(value)}, [])
 
     async def set_pairable(self, pairable: bool) -> None:
         if self._adapter_interface is None:
