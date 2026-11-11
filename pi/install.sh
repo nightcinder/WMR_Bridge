@@ -137,8 +137,8 @@ configure_bluez() {
     # bluetoothd reads main.conf once at startup, so a policy change needs a
     # restart. Stop the bridge first: a live GATT application, advertisement
     # and Classic scan racing that restart can wedge the Pi's combo controller
-    # (btmon shows HCI Reset answered by Hardware Error 0x00, and only a cold
-    # power cycle clears it).
+    # (btmon shows HCI Reset answered by Hardware Error 0x00) until the Pi is
+    # rebooted.
     if command -v systemctl >/dev/null 2>&1; then
         systemctl stop wmr-bridge.service || true
         systemctl restart bluetooth.service || true

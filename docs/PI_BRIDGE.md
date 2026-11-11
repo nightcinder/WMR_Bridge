@@ -1232,6 +1232,13 @@ whatever BlueZ paired, and assigns hands by HID name.
   not stall the controllers.
 - Wi-Fi power saving, channel congestion and roaming cause latency spikes.
   Measure RTT/jitter with `tools/wifi_probe.py` before drawing conclusions.
+- A loopback replay (`--replay`, client on `127.0.0.1`) measures encoding and
+  socket cost only; it bypasses both the Classic controller link and Wi-Fi. When
+  the phone reports FF14 loss, compare it with the daemon's 5 s
+  `left=up/R(D)` / `right=up/R(D)` counters and `dropped`. A per-hand rate near
+  the expected 150-180 reports/s with `dropped=0` means the bridge ingested and
+  enqueued the stream; the missing records were lost upstream on the controller
+  link or after the socket on Wi-Fi, not in the Pi's encoder or queue.
 - The bridge has no hardware timestamp from the Wi-Fi stack. `rx_time_us` is
   taken when the daemon reads the report. Do not interpret it as an arrival
   timestamp at the adapter.
@@ -1317,7 +1324,7 @@ INFO/WARNING:
 | Symptom | Check |
 | --- | --- |
 | `no /dev/hidraw nodes` | `systemctl status bluetooth`, `lsmod \| grep hidp`, controller paired/trusted/connected |
-| `bluetoothctl show` says `Powered: no`, `Pairable: no`, Class 0 | adapter firmware crashed or the UART attach failed; `btmon` showing `HCI Reset` answered by `Hardware Error` (0x10, code 0x00) is the crashed-controller signature. Power-cycle the Pi (a warm reboot may not clear it). On a Pi with `hciuart`, try `sudo systemctl restart hciuart` first; restarting only `bluetooth.service` does not reload the firmware |
+| `bluetoothctl show` says `Powered: no`, `Pairable: no`, Class 0 | adapter firmware crashed or the UART attach failed; `btmon` showing `HCI Reset` answered by `Hardware Error` (0x10, code 0x00) is the crashed-controller signature. Reboot the Pi; if the error survives the reboot, power-cycle the board. Restarting only `bluetooth.service` does not reload the firmware |
 | Phone will not re-pair after the upgrade; adapter `pairable=no` | a stored LE bond closes pairability (ONY-1226). Open a window with `wmr-bridge pair` (180 s), or remove the phone's stale bond with `bluetoothctl remove <MAC>`. v0.3.24 does not touch `/var/lib/bluetooth`; the upgrade scripts now leave bluetoothd alone when `JustWorksRepairing` is already set |
 | Wi-Fi auth fails with Bluetooth off | the shared token is only learned over the BLE FF13 encrypted read; the companion's manual Wi-Fi entry does not persist a token. Copy it from `/etc/wmr-bridge/token` (unchanged across upgrades) or read it over BLE |
 | Node exists but `--list` shows name `-` | custom controller name; use `--left/--right` with the MAC or path |

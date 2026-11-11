@@ -444,6 +444,8 @@ class BluezAutoPairerTests(unittest.TestCase):
         warnings = [line for line in logs.output if "adapter is not usable" in line]
         self.assertEqual(len(warnings), 1)
         self.assertIn("retrying", warnings[0])
+        self.assertIn("Hardware Error", warnings[0])
+        self.assertIn("reboot the Pi", warnings[0])
 
     def test_soft_blocked_adapter_is_unblocked_then_powered_on(self) -> None:
         calls: list[list[str]] = []

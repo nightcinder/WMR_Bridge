@@ -989,7 +989,8 @@ class BluezAutoPairer:
                 "instead of disabling automatic pairing (check 'rfkill list "
                 "bluetooth' and 'systemctl status bluetooth'; if btmon shows "
                 "an HCI Reset answered by 'Hardware Error' 0x00, the controller "
-                "firmware has crashed and only a cold power cycle clears it)"
+                "firmware has crashed; reboot the Pi, and cold power-cycle it "
+                "if the error survives the reboot)"
             )
             # The adapter may have reset or powered off under the scan; probe
             # it again on the next tick so pairing resumes when it recovers.
@@ -1087,7 +1088,11 @@ class BluezAutoPairer:
         hint = (
             "the adapter is still rfkill-blocked; run 'sudo rfkill unblock bluetooth'"
             if blocked
-            else "check 'systemctl status bluetooth'"
+            else (
+                "check 'systemctl status bluetooth'; if btmon shows an HCI Reset "
+                "answered by 'Hardware Error' 0x00, reboot the Pi to reload the "
+                "crashed controller firmware"
+            )
         )
         LOG.warning(
             "auto-pair: Bluetooth adapter is not usable yet (%s); retrying "

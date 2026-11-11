@@ -306,9 +306,9 @@ Both controllers should reconnect without re-pairing. An upgrade that does not
 change the BlueZ repair policy no longer restarts `bluetooth.service`, so a
 working adapter and its bonds stay live. If `bluetoothctl show` reports
 `Powered: no` and `btmon` logs `HCI Reset` answered by `Hardware Error` (0x10),
-the controller firmware crashed; power-cycle the Pi (a warm reboot may not clear
-it). A phone that lost its side of the bond re-pairs through
-`wmr-bridge pair` while the adapter is pairable.
+the controller firmware crashed; reboot the Pi, and power-cycle the board if the
+error survives the reboot. A phone that lost its side of the bond re-pairs
+through `wmr-bridge pair` while the adapter is pairable.
 
 ## 8. Troubleshooting
 

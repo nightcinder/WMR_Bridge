@@ -450,8 +450,9 @@ class StatusTests(unittest.TestCase):
         text = "\n".join(lines)
         self.assertIn("powered=no", lines[0])
         self.assertIn("Hardware Error", text)
+        self.assertIn("reboot the Pi", text)
         self.assertIn("power-cycle", text)
-        self.assertIn("hciuart", text)
+        self.assertIn("does not reload", text)
 
     def test_format_status_explains_that_a_stored_le_bond_closes_pairing(self) -> None:
         status = BluezStatus(

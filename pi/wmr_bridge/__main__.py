@@ -538,15 +538,15 @@ def _format_status(
         )
         if not adapter.powered:
             # btmon reports HCI Reset -> Hardware Error 0x00 for a crashed
-            # Broadcom/Cypress controller. No daemon command recovers that
-            # state; naming the cold power cycle stops the user from retrying
-            # a warm reboot that keeps the chip's internal state.
+            # Broadcom/Cypress controller. A reboot reinitialises the chip; a
+            # daemon restart does not reload its firmware. Field evidence on
+            # the Pi 3B+ shows `sudo reboot` clearing this state.
             lines.append(
                 "Adapter is not powered. If btmon or dmesg shows an HCI Reset "
                 "answered by 'Hardware Error' (0x10), the controller firmware "
-                "has crashed: power-cycle the Pi (a warm reboot may not clear "
-                "it). On a Pi with hciuart, try "
-                "'sudo systemctl restart hciuart' first."
+                "has crashed: reboot the Pi. If the error survives the reboot, "
+                "power-cycle the board. Restarting bluetooth.service does not "
+                "reload the controller firmware."
             )
         elif not adapter.pairable and any(
             device.paired and device.hand is None for device in status.devices
