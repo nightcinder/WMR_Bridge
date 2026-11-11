@@ -347,6 +347,86 @@ class DebPackagingTests(unittest.TestCase):
             token = root / "etc" / "wmr-bridge" / "token"
             self.assertEqual(stat.S_IMODE(token.stat().st_mode), 0o640)
 
+    def test_postinst_restarts_bluetooth_only_when_the_repair_policy_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "dist"
+            subprocess.run(
+                [str(BUILD), "--out", str(out)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            deb = out / f"wmr-bridge_{VERSION}_all.deb"
+            root = Path(tmp) / "rootfs"
+            control = Path(tmp) / "control"
+            subprocess.run(["dpkg-deb", "-x", str(deb), str(root)], check=True)
+            subprocess.run(["dpkg-deb", "-e", str(deb), str(control)], check=True)
+
+            main_conf = root / "etc" / "bluetooth" / "main.conf"
+            main_conf.parent.mkdir(parents=True)
+            main_conf.write_text(
+                "[General]\n# JustWorksRepairing = never\n", encoding="utf-8"
+            )
+
+            fake_bin = Path(tmp) / "bin"
+            fake_bin.mkdir()
+            calls = Path(tmp) / "calls.log"
+            for name, body in (
+                ("id", "exit 0"),
+                ("useradd", f'echo "useradd $*" >> "{calls}"'),
+                ("usermod", f'echo "usermod $*" >> "{calls}"'),
+                ("chown", "exit 0"),
+                ("udevadm", "exit 0"),
+                ("rfkill", "exit 0"),
+                ("nmcli", "exit 0"),
+                ("systemctl", f'echo "systemctl $*" >> "{calls}"'),
+            ):
+                shim = fake_bin / name
+                shim.write_text(f"#!/bin/sh\nset -eu\n{body}\n", encoding="utf-8")
+                shim.chmod(0o755)
+
+            systemd_run = Path(tmp) / "run-systemd"
+            systemd_run.mkdir()
+            env = {
+                **os.environ,
+                "DESTDIR": str(root),
+                "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}",
+                "WMR_SYSTEMD_RUN_DIR": str(systemd_run),
+            }
+            env.pop("WMR_SKIP_PRIVILEGED", None)
+
+            def configure() -> None:
+                proc = subprocess.run(
+                    ["sh", str(control / "postinst"), "configure"],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+
+            configure()
+            self.assertIn(
+                "JustWorksRepairing = confirm",
+                main_conf.read_text(encoding="utf-8"),
+            )
+
+            lines = calls.read_text(encoding="utf-8").splitlines()
+            stop = lines.index("systemctl stop wmr-bridge.service")
+            restart_bluetooth = lines.index("systemctl restart bluetooth.service")
+            restart_bridge = lines.index("systemctl restart wmr-bridge.service")
+            # A live GATT/advertising/scan client must not race bluetoothd.
+            self.assertLess(stop, restart_bluetooth)
+            self.assertLess(restart_bluetooth, restart_bridge)
+
+            calls.write_text("", encoding="utf-8")
+            configure()
+            second = calls.read_text(encoding="utf-8").splitlines()
+            # The policy is already set: an upgrade must leave the working
+            # adapter (and its bonds) alone instead of restarting bluetoothd.
+            self.assertNotIn("systemctl restart bluetooth.service", second)
+            self.assertIn("systemctl restart wmr-bridge.service", second)
+
 
 if __name__ == "__main__":
     unittest.main()

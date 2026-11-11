@@ -14,9 +14,12 @@ resting off-centre is not reported as active forever (ONY-1279), and its
 dbus-next GATT notifications no longer raise `SignatureBodyMismatchError`
 (ONY-1270). It keeps the 0.3.23 Just Works re-pair fix (ONY-1253): the installer
 and `.deb` post-install script set `JustWorksRepairing = confirm` in
-`/etc/bluetooth/main.conf` and restart `bluetooth.service`, so bluetoothd sends
-the kernel's Just Works confirm hint to the bridge agent instead of refusing it;
-the re-pair still needs an open pairing window (the 180 s boot window,
+`/etc/bluetooth/main.conf`, so bluetoothd sends the kernel's Just Works confirm
+hint to the bridge agent instead of refusing it; since ONY-1290 the scripts
+restart `bluetooth.service` only when that policy actually changes (and stop the
+bridge first), so an in-place upgrade no longer races a live GATT application
+and scan against a bluetoothd restart. The re-pair still needs an open pairing
+window (the 180 s boot window,
 `wmr-bridge pair`, or `--ble-continuous-pairing`). It keeps the 0.3.22
 bondable-pairing fix (ONY-1249): the adapter is
 pairable whenever BlueZ holds no phone bond; only bonds proven to be the

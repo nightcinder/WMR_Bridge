@@ -536,6 +536,26 @@ def _format_status(
             f"Bluetooth adapter {adapter.address}{name}: powered={_yes(adapter.powered)} "
             f"pairable={_yes(adapter.pairable)} discovering={_yes(adapter.discovering)}"
         )
+        if not adapter.powered:
+            # btmon reports HCI Reset -> Hardware Error 0x00 for a crashed
+            # Broadcom/Cypress controller. No daemon command recovers that
+            # state; naming the cold power cycle stops the user from retrying
+            # a warm reboot that keeps the chip's internal state.
+            lines.append(
+                "Adapter is not powered. If btmon or dmesg shows an HCI Reset "
+                "answered by 'Hardware Error' (0x10), the controller firmware "
+                "has crashed: power-cycle the Pi (a warm reboot may not clear "
+                "it). On a Pi with hciuart, try "
+                "'sudo systemctl restart hciuart' first."
+            )
+        elif not adapter.pairable and any(
+            device.paired and device.hand is None for device in status.devices
+        ):
+            lines.append(
+                "A stored LE bond keeps the adapter pairable=no; run "
+                "'wmr-bridge pair' to open a 180 s window, or remove the "
+                "phone's stale bond with 'bluetoothctl remove <MAC>'."
+            )
 
     missing = False
     for hand, label in ((0, "LEFT"), (1, "RIGHT")):

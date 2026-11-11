@@ -816,9 +816,11 @@ class BluezAutoPairer:
     they repeat no faster than ``active_poll_interval`` and run for at most
     ``active_scan_seconds``.
 
-    Without ``bluetoothctl`` or a working adapter the pairer logs one warning
-    and disables itself. ``HidrawManager`` keeps running in that case, so a
-    manually paired controller still works.
+    Without ``bluetoothctl`` the pairer logs one warning and disables itself.
+    An adapter that cannot power on or scan is retried with backoff, so pairing
+    resumes after an rfkill block, a bluetoothd restart or a controller reset
+    without restarting the daemon. ``HidrawManager`` keeps running when the
+    adapter is unusable, so a manually paired controller still works.
     """
 
     def __init__(
@@ -983,11 +985,15 @@ class BluezAutoPairer:
                 self._on_scan_end()
         if discovered is None:
             LOG.warning(
-                "auto-pair: bluetoothctl could not scan; automatic controller "
-                "pairing is off until restart (check 'rfkill list bluetooth' and "
-                "'systemctl status bluetooth', or pass --no-auto-pair to silence this)"
+                "auto-pair: bluetoothctl could not scan; retrying with backoff "
+                "instead of disabling automatic pairing (check 'rfkill list "
+                "bluetooth' and 'systemctl status bluetooth'; if btmon shows "
+                "an HCI Reset answered by 'Hardware Error' 0x00, the controller "
+                "firmware has crashed and only a cold power cycle clears it)"
             )
-            self._disabled = True
+            # The adapter may have reset or powered off under the scan; probe
+            # it again on the next tick so pairing resumes when it recovers.
+            self._adapter_ready = False
             return acted
         found = [
             device for device in discovered

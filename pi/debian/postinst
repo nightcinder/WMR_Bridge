@@ -8,6 +8,9 @@ set -e
 DESTDIR="${DESTDIR:-}"
 DESTDIR="${DESTDIR%/}"
 SKIP_PRIVILEGED="${WMR_SKIP_PRIVILEGED:-0}"
+# Staged runs and tests can point at a fake systemd run directory instead of
+# the real /run/systemd/system.
+SYSTEMD_RUN_DIR="${WMR_SYSTEMD_RUN_DIR:-/run/systemd/system}"
 ETC_DIR="${DESTDIR}/etc/wmr-bridge"
 TOKEN_FILE="${ETC_DIR}/token"
 
@@ -71,21 +74,36 @@ case "$1" in
             # (ONY-441).
             BLUEZ_CONF="${DESTDIR}/etc/bluetooth/main.conf"
             BLUEZ_TOOL="${DESTDIR}/opt/wmr-bridge/pi/wmr_bridge/bluez_conf.py"
+            BLUEZ_RESTART=0
             if command -v python3 >/dev/null 2>&1 && [ -f "$BLUEZ_TOOL" ]; then
-                python3 "$BLUEZ_TOOL" "$BLUEZ_CONF" ||
+                if python3 "$BLUEZ_TOOL" --check "$BLUEZ_CONF"; then
+                    echo "wmr-bridge: BlueZ Just Works re-pairing already configured; leaving bluetooth.service running"
+                elif python3 "$BLUEZ_TOOL" "$BLUEZ_CONF"; then
+                    BLUEZ_RESTART=1
+                else
                     echo "wmr-bridge: could not enable BlueZ Just Works re-pairing (non-fatal)" >&2
+                fi
             fi
             if command -v rfkill >/dev/null 2>&1; then
                 # Stock Pi OS ships Bluetooth soft-blocked; clear it before
                 # the unit's own ExecStartPre runs so bluetoothd powers on.
                 rfkill unblock bluetooth || true
             fi
-            if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+            if [ -d "$SYSTEMD_RUN_DIR" ] && command -v systemctl >/dev/null 2>&1; then
                 systemctl daemon-reload || true
                 systemctl enable bluetooth.service || true
-                # main.conf is read once at startup; restart also applies an
-                # upgrade's policy to a bluetoothd that is already running.
-                systemctl restart bluetooth.service || true
+                if [ "$BLUEZ_RESTART" = "1" ]; then
+                    # main.conf is read once at startup, so a policy change
+                    # needs a bluetoothd restart. Stop the bridge first: a live
+                    # GATT application, advertisement and Classic scan racing
+                    # that restart can wedge the Pi's combo controller (btmon
+                    # shows HCI Reset answered by Hardware Error 0x00, and only
+                    # a cold power cycle clears it). An upgrade that does not
+                    # change the policy leaves bluetoothd alone, so the bond and
+                    # the working adapter survive.
+                    systemctl stop wmr-bridge.service || true
+                    systemctl restart bluetooth.service || true
+                fi
                 systemctl enable wmr-bridge.service || true
                 systemctl restart wmr-bridge.service || true
                 # Path-activated, root-run self-upgrade requested by the

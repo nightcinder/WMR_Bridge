@@ -1798,11 +1798,17 @@ class BluezGattPeripheral:
             return
         self._pairable_applied = pairable
         self.app.pairing_open = pairable
+        hint = (
+            "; run 'wmr-bridge pair' to open a manual window"
+            if not pairable and reason == "an LE bond is stored"
+            else ""
+        )
         LOG.info(
-            "BLE pairing window %s (%s); Adapter1.Pairable -> %s",
+            "BLE pairing window %s (%s); Adapter1.Pairable -> %s%s",
             "open" if pairable else "closed",
             reason,
             "on" if pairable else "off",
+            hint,
         )
 
     async def _pairing_decision(self) -> tuple[bool, str]:

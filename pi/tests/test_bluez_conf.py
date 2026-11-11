@@ -114,6 +114,37 @@ class EnsureFileTests(unittest.TestCase):
             self.assertIn("JustWorksRepairing", proc.stdout)
             self.assertIn("JustWorksRepairing = confirm", path.read_text(encoding="utf-8"))
 
+    def test_the_cli_check_says_when_a_bluetooth_restart_is_needed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "main.conf"
+
+            # An absent main.conf has no policy to apply and needs no restart.
+            missing = subprocess.run(
+                [sys.executable, str(CONF_MODULE), "--check", str(path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(missing.returncode, 0, msg=missing.stderr)
+
+            path.write_text(STOCK, encoding="utf-8")
+            needs_rewrite = subprocess.run(
+                [sys.executable, str(CONF_MODULE), "--check", str(path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(needs_rewrite.returncode, 1)
+
+            ensure_just_works_repairing(path)
+            configured = subprocess.run(
+                [sys.executable, str(CONF_MODULE), "--check", str(path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(configured.returncode, 0, msg=configured.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

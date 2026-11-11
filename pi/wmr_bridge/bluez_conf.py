@@ -17,6 +17,13 @@ This module is stdlib-only and safe to import from the daemon or run as a
 script from the package maintainer scripts:
 
     python3 -m wmr_bridge.bluez_conf [/etc/bluetooth/main.conf]
+    python3 -m wmr_bridge.bluez_conf --check [/etc/bluetooth/main.conf]
+
+``--check`` exits 0 when the policy already permits re-pairing (or the file is
+absent, so there is nothing to apply) and 1 when ``main.conf`` needs rewriting.
+The maintainer scripts use it to avoid restarting ``bluetooth.service`` on an
+upgrade that does not change the policy: a bluetoothd restart while the bridge
+holds a GATT application and Classic scans can wedge the Pi's combo controller.
 """
 
 from __future__ import annotations
@@ -157,6 +164,13 @@ def ensure_just_works_repairing(
 
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
+    if args and args[0] == "--check":
+        path = Path(args[1]) if len(args) > 1 else DEFAULT_MAIN_CONF
+        if not path.exists():
+            # No BlueZ config on this host: there is nothing to rewrite and no
+            # bluetoothd to restart.
+            return 0
+        return 0 if read_just_works_repairing(path) in _ACCEPTED else 1
     path = Path(args[0]) if args else DEFAULT_MAIN_CONF
     if not path.exists():
         print(f"wmr-bridge: {path} not found; leaving BlueZ's default policy alone")
