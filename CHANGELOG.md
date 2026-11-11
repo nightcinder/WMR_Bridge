@@ -5,6 +5,67 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.24 — 2026-11-11
+
+The Pi app-triggered upgrade release on top of 0.3.23, shipping the root upgrade
+unit, the authenticated WebSocket `upgrade` command and minisign-signed release
+checksums. Firmware payloads are unchanged from 0.3.23: FF10–FF17 keep their
+payloads and companions at 0.2.2 or later continue to work. The Pi upgrade path
+is host-tested only; it has not run on Pi hardware.
+
+Pis on v0.3.19 or older — and any release before v0.3.24 — ship no upgrade unit
+and need one manual `sudo` install to get it. After that, a companion build that
+implements the trigger upgrades them from the app without `sudo`. The one-time
+command is
+`curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash`.
+
+### Raspberry Pi bridge
+
+- **App-triggered upgrade through a root systemd unit (ONY-1223).** The daemon
+  runs as `wmr` and cannot install packages, so it writes an empty
+  `/var/lib/wmr-bridge/upgrade.trigger` (mode 0600) when an authenticated
+  WebSocket client sends `{"type":"upgrade"}` and replies
+  `{"type":"upgrade_status","state":"started"|"busy"|"error"}`. The new
+  `wmr-bridge-upgrade.path` starts the root oneshot
+  `wmr-bridge-upgrade.service`, which deletes the trigger first, clears
+  `WMR_BRIDGE_REPO`, `WMR_BRIDGE_RELEASE_BASE_URL`, `WMR_BRIDGE_TAG` and
+  `WMR_BRIDGE_VERSION`, and runs the root-owned
+  `/opt/wmr-bridge/pi/install.sh --upgrade` under `flock`. A client therefore
+  cannot choose a URL, tag or version. `--upgrade` fetches the latest signed
+  release, compares it with the installed package (dpkg fallback) and exits 0
+  without reinstalling when already current. `hello` advertises
+  `upgradeCapable`, false on a tokenless bridge or with no writable state
+  directory; a tokenless bridge also refuses the command. The unit start limit
+  and a persisted trigger history answer `busy` before systemd would refuse a
+  start, and a trigger root never picked up expires after 120 seconds. The
+  `.deb` ships and enables both units.
+- **Minisign-signed release checksums (ONY-1276, ONY-1275).** The release job
+  installs `minisign` and signs `SHA256SUMS` into `SHA256SUMS.minisig` with the
+  repository secret, then verifies it against the pinned `pi/minisign.pub`
+  before publishing, so a missing or wrong secret fails the release. The
+  piped installer fetches `SHA256SUMS.minisig`, verifies the digest list
+  against the pinned key (trying each key so a rotation can ship both) and only
+  then verifies the `.deb` against `SHA256SUMS`. `minisign` is a package
+  dependency, and the installer installs it with `apt-get` if it is missing.
+  This is the first release carrying `SHA256SUMS.minisig`; its public key is
+  published in `pi/minisign.pub`.
+- **Controller activity against a per-hand baseline (ONY-1279).** Activity was
+  decided from absolute thresholds, so a controller resting off-centre or with
+  a static touch bit looked active on every frame and never reached idle sleep.
+  Each hand now keeps the previous report as its baseline and only a button
+  change or movement past the trigger, stick or gyro thresholds counts; the
+  baseline resets on connect and disconnect, and `status` reports `idleSleep`.
+- **dbus-next GATT property notifications (ONY-1270).** The GATT backend
+  pre-wrapped `Value` and `Notifying` in `Variant` while dbus-next's
+  `emit_properties_changed` wraps them again, so every notification raised
+  `SignatureBodyMismatchError`. Both properties are now passed plain, so the
+  FF10 notifications and the HID report actually emit.
+- **Version display and upgrade documentation (ONY-1225, ONY-1277).** The
+  companion, `docs/PI_BRIDGE.md` and `docs/RPI_INSTALL_GUIDE.md` now document
+  the displayed Pi version, `hello.upgradeCapable`, the authenticated upgrade
+  command, the one-time `sudo` bootstrap for older Pis, and minisign
+  verification and key rotation.
+
 ## 0.3.23 — 2026-11-10
 
 The Pi Just Works re-pair release on top of 0.3.22, shipping the fix that lets a
