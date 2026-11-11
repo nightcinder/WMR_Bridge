@@ -20,9 +20,28 @@
 #   WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_TAG=v<version> sh install.sh
 #   WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_RELEASE_BASE_URL=https://example/pkg sh install.sh
 #
+# The installed copy is also the root upgrade path for the daemon:
+#   /opt/wmr-bridge/pi/install.sh --upgrade
+# --upgrade forces the signed release fetch even from an installed tree, and
+# exits 0 without reinstalling when the installed version is already current.
+#
 # Test / packaging staging mode (no root required when WMR_SKIP_PRIVILEGED=1):
 #   DESTDIR=/tmp/stage WMR_SKIP_PRIVILEGED=1 ./pi/install.sh
 set -eu
+
+UPGRADE=0
+if [ "$#" -gt 1 ]; then
+    echo "usage: $0 [--upgrade]" >&2
+    exit 64
+fi
+case "${1:-}" in
+    "") ;;
+    --upgrade) UPGRADE=1 ;;
+    *)
+        echo "usage: $0 [--upgrade]" >&2
+        exit 64
+        ;;
+esac
 
 REPO="${WMR_BRIDGE_REPO:-nightcinder/WMR_Bridge}"
 
@@ -87,6 +106,8 @@ enable_service() {
         systemctl start bluetooth.service || true
         systemctl enable wmr-bridge.service || true
         systemctl restart wmr-bridge.service || true
+        systemctl enable wmr-bridge-upgrade.path || true
+        systemctl start wmr-bridge-upgrade.path || true
     fi
 }
 
@@ -115,7 +136,7 @@ configure_bluez() {
     fi
 }
 
-if [ -z "$SCRIPT_DIR" ]; then
+if [ -z "$SCRIPT_DIR" ] || [ "$UPGRADE" = "1" ]; then
     PINNED_VERSION="${WMR_BRIDGE_VERSION:-}"
     VERSION="$PINNED_VERSION"
 
@@ -138,6 +159,34 @@ if [ -z "$SCRIPT_DIR" ]; then
             BASE_URL="https://github.com/${REPO}/releases/download/${WMR_BRIDGE_TAG:-v${VERSION}}"
         else
             BASE_URL="https://github.com/${REPO}/releases/latest/download"
+        fi
+    fi
+
+    # The daemon-triggered upgrade must not reinstall or downgrade. Read the
+    # version from the installed files first (a checkout install may be newer
+    # than the last .deb dpkg knows), and fall back to the package database.
+    if [ "$UPGRADE" = "1" ]; then
+        command -v apt-get >/dev/null 2>&1 ||
+            die "the upgrade path needs apt-get"
+        command -v dpkg >/dev/null 2>&1 ||
+            die "the upgrade path needs dpkg"
+        INSTALLED_VERSION=""
+        if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/wmr_bridge/__init__.py" ] &&
+            command -v python3 >/dev/null 2>&1; then
+            INSTALLED_VERSION="$(
+                PYTHONPATH="$SCRIPT_DIR" python3 -c \
+                    'import wmr_bridge; print(wmr_bridge.__version__)' 2>/dev/null || true
+            )"
+        fi
+        if [ -z "$INSTALLED_VERSION" ] && command -v dpkg-query >/dev/null 2>&1; then
+            INSTALLED_VERSION="$(
+                dpkg-query -W -f='${Version}' wmr-bridge 2>/dev/null || true
+            )"
+        fi
+        if [ -n "$INSTALLED_VERSION" ] &&
+            dpkg --compare-versions "$VERSION" le "$INSTALLED_VERSION"; then
+            echo "install.sh: wmr-bridge ${INSTALLED_VERSION} is current (latest ${VERSION}); nothing to do"
+            exit 0
         fi
     fi
 
@@ -272,6 +321,8 @@ install -m 0644 "${SCRIPT_DIR}/wmr-bridge.in" "${DEST_PI}/wmr-bridge.in"
 install -m 0644 "${SCRIPT_DIR}/pyproject.toml" "${DEST_PI}/pyproject.toml"
 install -m 0644 "${SCRIPT_DIR}/README.md" "${DEST_PI}/README.md"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.service" "${DEST_PI}/systemd/wmr-bridge.service"
+install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade.path" "${DEST_PI}/systemd/wmr-bridge-upgrade.path"
+install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade.service" "${DEST_PI}/systemd/wmr-bridge-upgrade.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.env.example" "${DEST_PI}/systemd/wmr-bridge.env.example"
 install -m 0644 "${SCRIPT_DIR}/udev/99-wmr-bridge.rules" "${DEST_PI}/udev/99-wmr-bridge.rules"
 
@@ -290,6 +341,8 @@ fi
 
 install -m 0644 "${SCRIPT_DIR}/udev/99-wmr-bridge.rules" "${DEST_UDEV}/99-wmr-bridge.rules"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.service" "${DEST_SYSTEMD}/wmr-bridge.service"
+install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade.path" "${DEST_SYSTEMD}/wmr-bridge-upgrade.path"
+install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade.service" "${DEST_SYSTEMD}/wmr-bridge-upgrade.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.env.example" "${DEST_ETC}/wmr-bridge.env.example"
 install -m 0644 "${SCRIPT_DIR}/networkmanager/99-wmr-bridge-powersave.conf" \
     "${DEST_NETWORKMANAGER}/99-wmr-bridge-powersave.conf"

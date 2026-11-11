@@ -4,10 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import fcntl
+import os
+import tempfile
+import time
 import unittest
+from pathlib import Path
 
 from wmr_bridge import ws as wsmod
-from wmr_bridge.bridge import Bridge
+from wmr_bridge.bridge import (
+    UPGRADE_RATE_BURST,
+    UPGRADE_TRIGGER_TTL_S,
+    Bridge,
+)
 from wmr_bridge.protocol import (
     CALIBRATION_WINDOW_MAX,
     calibration_crc32,
@@ -408,6 +417,133 @@ class PairingControlTests(unittest.IsolatedAsyncioTestCase):
         await client.send_json({"type": "pairing", "action": "open"})
         reply = await asyncio.wait_for(client.recv_json(), 2)
         self.assertEqual(reply, {"type": "error", "code": "pairing_unavailable"})
+
+
+class UpgradeControlTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.state_dir = Path(self.tmp.name)
+        self.bridge = Bridge(
+            token="secret",
+            upgrade_dir=self.state_dir,
+            upgrade_lock=self.state_dir / "upgrade.lock",
+        )
+        self.server = BridgeServer(self.bridge, host="127.0.0.1", port=0)
+        await self.server.start()
+        self.clients: list[wsmod.WebSocket] = []
+
+    async def asyncTearDown(self) -> None:
+        for client in self.clients:
+            await client.close()
+        await self.server.close()
+
+    async def connect(self, authenticate: bool = True) -> tuple[wsmod.WebSocket, dict]:
+        client = await wsmod.connect("127.0.0.1", self.server.port, "/wmr", timeout=5)
+        self.clients.append(client)
+        hello = await asyncio.wait_for(client.recv_json(), 2)
+        if authenticate:
+            await client.send_json({"type": "auth", "token": "secret"})
+            auth = await asyncio.wait_for(client.recv_json(), 2)
+            self.assertEqual(auth, {"type": "auth_ok"})
+        return client, hello
+
+    async def test_hello_advertises_upgrade_capability(self) -> None:
+        _client, hello = await self.connect()
+        self.assertTrue(hello["upgradeCapable"])
+        self.assertFalse(self.bridge.upgrade_trigger.exists())
+
+    async def test_upgrade_writes_an_argument_free_trigger(self) -> None:
+        client, _hello = await self.connect()
+        await client.send_json({"type": "upgrade"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "upgrade_status", "state": "started"})
+        self.assertEqual(self.bridge.upgrade_trigger.read_bytes(), b"")
+        self.assertFalse((self.state_dir / ".upgrade.trigger.tmp").exists())
+
+    async def test_pending_trigger_reports_busy(self) -> None:
+        self.bridge.upgrade_trigger.write_bytes(b"")
+        client, _hello = await self.connect()
+        await client.send_json({"type": "upgrade"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "upgrade_status", "state": "busy"})
+
+    async def test_stale_trigger_is_not_busy_and_is_replaced(self) -> None:
+        self.bridge.upgrade_trigger.write_bytes(b"")
+        stale = time.time() - UPGRADE_TRIGGER_TTL_S - 1
+        os.utime(self.bridge.upgrade_trigger, (stale, stale))
+        self.assertFalse(self.bridge.upgrade_busy())
+        client, _hello = await self.connect()
+        await client.send_json({"type": "upgrade"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "upgrade_status", "state": "started"})
+        self.assertEqual(self.bridge.upgrade_trigger.read_bytes(), b"")
+        self.assertGreater(self.bridge.upgrade_trigger.stat().st_mtime, stale)
+
+    async def test_repeated_upgrades_stop_below_the_start_limit(self) -> None:
+        client, _hello = await self.connect()
+        for _ in range(UPGRADE_RATE_BURST):
+            await client.send_json({"type": "upgrade"})
+            reply = await asyncio.wait_for(client.recv_json(), 2)
+            self.assertEqual(reply, {"type": "upgrade_status", "state": "started"})
+            # systemd's ExecStartPre removes the trigger before the next request.
+            self.bridge.upgrade_trigger.unlink()
+        await client.send_json({"type": "upgrade"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "upgrade_status", "state": "busy"})
+        self.assertFalse(self.bridge.upgrade_trigger.exists())
+
+    def test_start_limit_budget_survives_a_daemon_restart(self) -> None:
+        for _ in range(UPGRADE_RATE_BURST):
+            self.assertEqual(self.bridge.request_upgrade(), "started")
+            self.bridge.upgrade_trigger.unlink()
+        restarted = Bridge(
+            token="secret",
+            upgrade_dir=self.state_dir,
+            upgrade_lock=self.state_dir / "upgrade.lock",
+        )
+        self.assertTrue(restarted.upgrade_rate_limited())
+        self.assertFalse(restarted.upgrade_busy())
+
+    async def test_running_root_unit_reports_busy(self) -> None:
+        lock = self.state_dir / "upgrade.lock"
+        with lock.open("w") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            client, _hello = await self.connect()
+            await client.send_json({"type": "upgrade"})
+            reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "upgrade_status", "state": "busy"})
+        self.assertFalse(self.bridge.upgrade_trigger.exists())
+
+    async def test_unauthenticated_upgrade_fails(self) -> None:
+        client, _hello = await self.connect(authenticate=False)
+        await client.send_json({"type": "upgrade"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "error", "code": "auth_failed"})
+        self.assertFalse(self.bridge.upgrade_trigger.exists())
+
+    async def test_tokenless_bridge_refuses_upgrade(self) -> None:
+        self.bridge.token = None
+        client, hello = await self.connect(authenticate=False)
+        self.assertFalse(hello["upgradeCapable"])
+        await client.send_json({"type": "upgrade"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(
+            reply,
+            {"type": "upgrade_status", "state": "error", "code": "auth_failed"},
+        )
+        self.assertFalse(self.bridge.upgrade_trigger.exists())
+
+    async def test_missing_state_directory_reports_unavailable(self) -> None:
+        self.bridge.upgrade_dir = self.state_dir / "missing"
+        client, hello = await self.connect()
+        self.assertFalse(hello["upgradeCapable"])
+        await client.send_json({"type": "upgrade"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(
+            reply,
+            {"type": "upgrade_status", "state": "error", "code": "unavailable"},
+        )
 
 
 if __name__ == "__main__":

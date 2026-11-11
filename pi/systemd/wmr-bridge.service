@@ -11,6 +11,9 @@ Group=wmr
 SupplementaryGroups=input bluetooth
 WorkingDirectory=/opt/wmr-bridge/pi
 EnvironmentFile=-/etc/wmr-bridge/wmr-bridge.env
+# /var/lib/wmr-bridge holds the upgrade trigger. StateDirectory makes it
+# writable by wmr despite ProtectSystem=strict below.
+StateDirectory=wmr-bridge
 # A stock Pi OS image soft-blocks Bluetooth via rfkill, and the service runs as
 # wmr, which cannot clear it. Run this as root (the "+" prefix) before start.
 # rfkill writes to /dev/rfkill, a character device, so it needs no extra

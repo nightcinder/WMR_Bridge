@@ -14,6 +14,8 @@ from pathlib import Path
 PI_DIR = Path(__file__).resolve().parents[1]
 INSTALL_SH = PI_DIR / "install.sh"
 SERVICE_FILE = PI_DIR / "systemd" / "wmr-bridge.service"
+UPGRADE_SERVICE_FILE = PI_DIR / "systemd" / "wmr-bridge-upgrade.service"
+UPGRADE_PATH_FILE = PI_DIR / "systemd" / "wmr-bridge-upgrade.path"
 ENV_EXAMPLE = PI_DIR / "systemd" / "wmr-bridge.env.example"
 UDEV_RULES = PI_DIR / "udev" / "99-wmr-bridge.rules"
 POWERSAVE_CONF = PI_DIR / "networkmanager" / "99-wmr-bridge-powersave.conf"
@@ -115,6 +117,8 @@ class PackagingTests(unittest.TestCase):
     def test_systemd_unit_and_env_example_support_wmr_bridge_args(self) -> None:
         unit_text = SERVICE_FILE.read_text(encoding="utf-8")
         self.assertIn("EnvironmentFile=-/etc/wmr-bridge/wmr-bridge.env", unit_text)
+        # The daemon writes the upgrade trigger here under ProtectSystem=strict.
+        self.assertIn("StateDirectory=wmr-bridge", unit_text)
         self.assertIn("$WMR_BRIDGE_ARGS", unit_text)
         self.assertIn("--advertise-mdns", unit_text)
         self.assertIn("User=wmr", unit_text)
@@ -137,6 +141,36 @@ class PackagingTests(unittest.TestCase):
         env_text = ENV_EXAMPLE.read_text(encoding="utf-8")
         self.assertIn("WMR_BRIDGE_ARGS", env_text)
         self.assertIn("--hand", env_text)
+
+    def test_upgrade_units_take_no_input_and_rate_limit(self) -> None:
+        service = UPGRADE_SERVICE_FILE.read_text(encoding="utf-8")
+        path = UPGRADE_PATH_FILE.read_text(encoding="utf-8")
+        # The trigger file is the only input; it carries no data.
+        self.assertIn("PathExists=/var/lib/wmr-bridge/upgrade.trigger", path)
+        self.assertIn("Unit=wmr-bridge-upgrade.service", path)
+        self.assertIn("ExecStartPre=/bin/rm -f /var/lib/wmr-bridge/upgrade.trigger", service)
+        self.assertIn(
+            "Environment=WMR_BRIDGE_REPO= WMR_BRIDGE_RELEASE_BASE_URL= "
+            "WMR_BRIDGE_TAG= WMR_BRIDGE_VERSION=",
+            service,
+        )
+        self.assertFalse(
+            [line for line in service.splitlines() if line.startswith("EnvironmentFile=")]
+        )
+        self.assertNotIn("upgrade.trigger ", service)
+        # Root runs only the root-owned installed copy, under a lock in a
+        # root-owned runtime directory (the state dir is writable by wmr).
+        self.assertIn("User=root", service)
+        self.assertIn("Type=oneshot", service)
+        self.assertIn("RuntimeDirectory=wmr-bridge-upgrade", service)
+        self.assertIn(
+            "ExecStart=/usr/bin/flock -n /run/wmr-bridge-upgrade/upgrade.lock "
+            "/opt/wmr-bridge/pi/install.sh --upgrade",
+            service,
+        )
+        self.assertNotIn("/var/lib/wmr-bridge/upgrade.lock", service)
+        self.assertIn("StartLimitIntervalSec=600", service)
+        self.assertIn("StartLimitBurst=3", service)
 
     def test_installer_stages_into_destdir_without_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -186,6 +220,17 @@ class PackagingTests(unittest.TestCase):
             self.assertTrue(installed_unit.is_file())
             self.assertEqual(installed_unit.read_text(encoding="utf-8"), SERVICE_FILE.read_text(encoding="utf-8"))
 
+            for name, source in (
+                ("wmr-bridge-upgrade.path", UPGRADE_PATH_FILE),
+                ("wmr-bridge-upgrade.service", UPGRADE_SERVICE_FILE),
+            ):
+                installed = destdir / "etc" / "systemd" / "system" / name
+                self.assertTrue(installed.is_file(), name)
+                self.assertEqual(installed.read_text(encoding="utf-8"), source.read_text(encoding="utf-8"))
+                staged = opt_pi / "systemd" / name
+                self.assertTrue(staged.is_file(), name)
+                self.assertEqual(staged.read_text(encoding="utf-8"), source.read_text(encoding="utf-8"))
+
             installed_powersave = destdir / "etc" / "NetworkManager" / "conf.d" / "99-wmr-bridge-powersave.conf"
             self.assertTrue(installed_powersave.is_file())
             self.assertEqual(
@@ -205,6 +250,48 @@ class PackagingTests(unittest.TestCase):
             self.assertGreaterEqual(len(token_value), 24)
             mode = stat.S_IMODE(token_file.stat().st_mode)
             self.assertEqual(mode, 0o640)
+
+    def test_upgrade_mode_does_not_reinstall_a_current_bridge(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            destdir = tmp_path / "rootfs"
+            stage_env = {
+                **os.environ,
+                "DESTDIR": str(destdir),
+                "WMR_SKIP_PRIVILEGED": "1",
+            }
+            staged = subprocess.run(
+                ["/bin/sh", str(INSTALL_SH)],
+                env=stage_env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(staged.returncode, 0, msg=staged.stderr)
+
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            calls = tmp_path / "calls.log"
+            _write_stub(bin_dir, "dpkg-query", f'echo "{VERSION}"')
+            _write_stub(bin_dir, "apt-get", f'echo "apt-get $*" >> "{calls}"')
+
+            installed_script = destdir / "opt" / "wmr-bridge" / "pi" / "install.sh"
+            env = {
+                **os.environ,
+                "WMR_BRIDGE_VERSION": VERSION,
+                "WMR_BRIDGE_RELEASE_BASE_URL": "file:///nonexistent",
+                "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
+            }
+            proc = subprocess.run(
+                ["/bin/sh", str(installed_script), "--upgrade"],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            self.assertIn("nothing to do", proc.stdout)
+            self.assertFalse(calls.exists(), msg=calls.read_text(encoding="utf-8") if calls.exists() else "")
 
     def test_installer_preserves_existing_token_and_env_and_invokes_system_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -265,6 +352,8 @@ class PackagingTests(unittest.TestCase):
             self.assertIn("systemctl start bluetooth.service", calls)
             self.assertIn("systemctl enable wmr-bridge.service", calls)
             self.assertIn("systemctl restart wmr-bridge.service", calls)
+            self.assertIn("systemctl enable wmr-bridge-upgrade.path", calls)
+            self.assertIn("systemctl start wmr-bridge-upgrade.path", calls)
 
 
     def test_installer_without_bluetooth_group_still_creates_user(self) -> None:
