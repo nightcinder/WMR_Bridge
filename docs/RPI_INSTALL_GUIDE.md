@@ -220,8 +220,10 @@ takes a manual host and port.
 ## Step 9: Upgrade later
 
 The companion app shows the Pi bridge version. It reads the version when it
-connects. It compares that version with the latest GitHub release. When there
-is a newer release, the app offers an upgrade button.
+connects and compares that version with the latest GitHub release. A companion
+build that implements the upgrade trigger offers an upgrade button when there
+is a newer release; a build without it shows the version and an update notice
+only.
 
 Check the version on the Pi at any time:
 
@@ -229,27 +231,29 @@ Check the version on the Pi at any time:
 wmr-bridge --version
 ```
 
-On a new install you do not type `sudo` for an app upgrade. The app sends an
-upgrade request to the bridge. The bridge writes an empty trigger file. A root
-systemd unit, `wmr-bridge-upgrade.service`, then does the upgrade. It downloads
-the latest release, checks the release signature and the SHA256SUMS file,
-installs the package, and restarts the service. The app reconnects when the
-service is back.
+On a new install you do not type `sudo` for an upgrade the app starts. In a
+companion build that supports the trigger, the app sends an upgrade request to
+the bridge. The bridge writes an empty trigger file. A root systemd unit,
+`wmr-bridge-upgrade.service`, then does the upgrade. It downloads the latest
+release, checks the release signature and the SHA256SUMS file, installs the
+package, and restarts the service. The app reconnects when the service is back.
 
 The bridge runs as the `wmr` user. It cannot install packages. It can only ask
 the root unit to do it, and it cannot choose a download URL, tag or version.
 
 **One-time sudo command on old installs.**
 Releases up to and including 0.3.23 do not have the upgrade unit. That includes
-0.3.19 and older. On those Pis the app says the bridge cannot upgrade itself.
-Run this once on the Pi:
+0.3.19 and older. On those Pis there is no app upgrade button. A companion
+build that supports the trigger says the bridge cannot upgrade itself and shows
+this command. Run it once on the Pi:
 
 ```bash
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 ```
 
 That installs `wmr-bridge-upgrade.path` and `wmr-bridge-upgrade.service`. After
-that, the app can start upgrades without `sudo`.
+that, a companion build that supports the trigger can start upgrades without
+`sudo`.
 
 ## If something fails
 

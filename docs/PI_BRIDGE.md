@@ -305,7 +305,9 @@ version comes from `pi/wmr_bridge/__version__`, not from the tag.
 The Pi package version is reported by `wmr-bridge --version`, by
 `hello.version` on every WebSocket handshake, and by `status.version`. The
 companion app shows the received version and compares it with the latest GitHub
-release; when a newer release exists it offers an upgrade.
+release. The trigger itself is a bridge feature: a companion build has to send
+the command described below, and one that does not yet implement it shows the
+version and an update notice only.
 
 `hello.upgradeCapable` is `true` only when the daemon has a token and
 `/var/lib/wmr-bridge` exists and is writable by the `wmr` service user. A
@@ -357,15 +359,16 @@ release contents, the same as the piped bootstrap.
 **One-time sudo bootstrap.** Releases up to and including 0.3.23 (0.3.19 and
 older included) ship neither `wmr-bridge-upgrade.path` nor
 `wmr-bridge-upgrade.service`, and their daemon has no `StateDirectory=` and no
-`upgradeCapable` field. On those installs the app treats a missing flag as
-false and shows the installer command. Run it once as root:
+`upgradeCapable` field. A companion build with trigger support treats a missing
+flag as false and shows the installer command; a build without trigger support
+has no upgrade button to show it in place of. Run the command once as root:
 
 ```bash
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 ```
 
-The release cut from this tree installs and enables both units, so later
-upgrades start from the app without `sudo`.
+The release cut from this tree installs and enables both units, so a companion
+build with trigger support can start later upgrades without `sudo`.
 
 ### Verifying a release by hand
 
