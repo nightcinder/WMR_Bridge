@@ -653,7 +653,7 @@ class Bridge:
 
         temp = self.upgrade_dir / ".upgrade.trigger.tmp"
         try:
-            fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+            fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             try:
                 os.fsync(fd)
             finally:
