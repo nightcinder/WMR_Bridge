@@ -29,6 +29,7 @@ LIST="$(tar -tzf "$ARCHIVE")"
 for path in \
     "${PREFIX}VERSION" \
     "${PREFIX}pi/install.sh" \
+    "${PREFIX}pi/minisign.pub" \
     "${PREFIX}pi/wmr-bridge.in" \
     "${PREFIX}pi/wmr_bridge/__main__.py" \
     "${PREFIX}pi/tools/wifi_probe.py" \

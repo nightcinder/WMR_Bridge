@@ -4,8 +4,11 @@
 # Usage on Raspberry Pi / Linux host:
 #   sudo ./pi/install.sh
 #
-# One-line install (no checkout): fetch the release .deb, verify it against the
-# release SHA256SUMS, install it with apt-get and enable/start the service.
+# One-line install (no checkout): fetch the release .deb, verify the release
+# SHA256SUMS against the pinned minisign key, verify the .deb against that list,
+# install it with apt-get and enable/start the service. minisign is installed
+# with apt-get when the host does not have it; the .deb also depends on it for
+# later upgrades.
 # A host without apt-get installs from a checkout or from a locally built
 # release tarball instead (see docs/PI_BRIDGE.md).
 #   curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
@@ -22,6 +25,18 @@
 set -eu
 
 REPO="${WMR_BRIDGE_REPO:-nightcinder/WMR_Bridge}"
+
+# Release signature trust anchor: bare minisign public key lines. A piped
+# install accepts SHA256SUMS only when SHA256SUMS.minisig verifies against one
+# of these, and every asset is then checked against that list. Tests may point
+# WMR_BRIDGE_MINISIGN_PUBKEYS_OVERRIDE at a throwaway key, but only in the
+# unprivileged staging mode: the root-owned upgrade path must never take a
+# trust anchor from its environment.
+WMR_BRIDGE_MINISIGN_PUBKEYS='RWTL80BhYeTEqPhBvFePoSc/uoC+iJCEa41o1uA3h+t4opQbX0yKCnA6'
+MINISIGN_PUBKEYS="$WMR_BRIDGE_MINISIGN_PUBKEYS"
+if [ "${WMR_SKIP_PRIVILEGED:-0}" = "1" ] && [ -n "${WMR_BRIDGE_MINISIGN_PUBKEYS_OVERRIDE:-}" ]; then
+    MINISIGN_PUBKEYS="$WMR_BRIDGE_MINISIGN_PUBKEYS_OVERRIDE"
+fi
 
 die() {
     echo "install.sh: $*" >&2
@@ -142,11 +157,36 @@ if [ -z "$SCRIPT_DIR" ]; then
             die "sha256 verification failed for ${name}"
     }
 
+    # The digest list is only as trustworthy as its signature: accept it only
+    # when SHA256SUMS.minisig verifies against one of the pinned keys. Try each
+    # key so a rotation can ship both the old and the new public key.
+    verify_release_signature() {
+        if ! command -v minisign >/dev/null 2>&1; then
+            echo "install.sh: installing minisign to verify the release signature" >&2
+            DEBIAN_FRONTEND=noninteractive apt-get install -y minisign >/dev/null ||
+                die "could not install minisign; install it and retry: apt-get install minisign"
+        fi
+        [ -s "${TMP_DIR}/SHA256SUMS.minisig" ] ||
+            die "the release has no SHA256SUMS.minisig"
+        for key in $MINISIGN_PUBKEYS; do
+            if minisign -V -q -m "${TMP_DIR}/SHA256SUMS" \
+                -x "${TMP_DIR}/SHA256SUMS.minisig" -P "$key" 2>/dev/null; then
+                echo "install.sh: release signature verified"
+                return 0
+            fi
+        done
+        die "SHA256SUMS does not verify against the pinned minisign key"
+    }
+
     # Releases attach no tarball, so the no-checkout path installs the .deb.
     # Without apt-get, point at the two paths that still work instead of
     # failing on a missing asset.
     command -v apt-get >/dev/null 2>&1 ||
         die "the piped install needs apt-get; install from a checkout (git clone https://github.com/${REPO} && sudo WMR_Bridge/pi/install.sh) or extract a tarball built with pi/build_package.sh and run its pi/install.sh"
+
+    fetch_url "${BASE_URL}/SHA256SUMS.minisig" "${TMP_DIR}/SHA256SUMS.minisig" ||
+        die "could not fetch ${BASE_URL}/SHA256SUMS.minisig"
+    verify_release_signature
 
     DEB="wmr-bridge_${VERSION}_all.deb"
     fetch_url "${BASE_URL}/${DEB}" "${TMP_DIR}/${DEB}" ||
@@ -227,6 +267,7 @@ install -m 0755 "${SCRIPT_DIR}/tools/wifi_probe.py" "${DEST_PI}/tools/wifi_probe
 install -m 0644 "${SCRIPT_DIR}/networkmanager/99-wmr-bridge-powersave.conf" \
     "${DEST_PI}/networkmanager/99-wmr-bridge-powersave.conf"
 install -m 0755 "${SCRIPT_DIR}/install.sh" "${DEST_PI}/install.sh"
+install -m 0644 "${SCRIPT_DIR}/minisign.pub" "${DEST_PI}/minisign.pub"
 install -m 0644 "${SCRIPT_DIR}/wmr-bridge.in" "${DEST_PI}/wmr-bridge.in"
 install -m 0644 "${SCRIPT_DIR}/pyproject.toml" "${DEST_PI}/pyproject.toml"
 install -m 0644 "${SCRIPT_DIR}/README.md" "${DEST_PI}/README.md"

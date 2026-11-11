@@ -661,6 +661,19 @@ def test_package_job_rejects_tag_version_mismatch():
           "a tag/VERSION mismatch fails the package job")
 
 
+def test_release_job_signs_checksums():
+    path = os.path.join(HERE, "..", ".github", "workflows", "firmware.yml")
+    with open(path, encoding="utf-8") as fh:
+        workflow = fh.read()
+    release = workflow.split("\n  release:", 1)[1]
+    check("tools/release/make_sums.sh release" in release,
+          "the release job writes SHA256SUMS before signing")
+    check("tools/release/sign_sums.sh release" in release,
+          "the release job signs SHA256SUMS")
+    check("secrets.MINISIGN_SECRET_KEY" in release,
+          "the release job signs with the repository secret")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

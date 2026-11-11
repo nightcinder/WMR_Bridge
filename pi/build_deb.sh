@@ -110,6 +110,7 @@ install -m 0755 "${SCRIPT_DIR}/tools/wifi_probe.py" "${OPT}/pi/tools/wifi_probe.
 install -m 0644 "${SCRIPT_DIR}/networkmanager/99-wmr-bridge-powersave.conf" \
     "${OPT}/pi/networkmanager/99-wmr-bridge-powersave.conf"
 install -m 0755 "${SCRIPT_DIR}/install.sh" "${OPT}/pi/install.sh"
+install -m 0644 "${SCRIPT_DIR}/minisign.pub" "${OPT}/pi/minisign.pub"
 install -m 0644 "${SCRIPT_DIR}/wmr-bridge.in" "${OPT}/pi/wmr-bridge.in"
 install -m 0644 "${SCRIPT_DIR}/pyproject.toml" "${OPT}/pi/pyproject.toml"
 install -m 0644 "${SCRIPT_DIR}/README.md" "${OPT}/pi/README.md"

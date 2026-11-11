@@ -68,7 +68,7 @@ class DebPackagingTests(unittest.TestCase):
             self.assertIn(f" Version: {ROOT_VERSION}", info)
             self.assertIn(" Architecture: all", info)
             self.assertIn(
-                " Depends: python3 (>= 3.10), python3-dbus-next, bluez, rfkill, avahi-utils",
+                " Depends: python3 (>= 3.10), python3-dbus-next, bluez, rfkill, avahi-utils, minisign",
                 info,
             )
             self.assertIn(" Recommends: network-manager", info)
@@ -84,6 +84,7 @@ class DebPackagingTests(unittest.TestCase):
                 "./opt/wmr-bridge/pi/tools/wifi_probe.py",
                 "./opt/wmr-bridge/pi/networkmanager/99-wmr-bridge-powersave.conf",
                 "./opt/wmr-bridge/pi/install.sh",
+                "./opt/wmr-bridge/pi/minisign.pub",
                 "./opt/wmr-bridge/samples/controller_frames.txt",
                 "./usr/bin/wmr-bridge",
                 "./etc/systemd/system/wmr-bridge.service",

@@ -283,6 +283,9 @@ jobs:
       # the checkout is what makes tools/release/make_sums.sh available.
       - uses: actions/checkout@v7
 
+      - name: Install minisign
+        run: sudo apt-get update && sudo apt-get install -y minisign
+
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
@@ -295,12 +298,12 @@ jobs:
           name: pi-package
           path: dist
 
-      # Only nine files are user-facing: the three merged factory images, the
+      # Only ten files are user-facing: the three merged factory images, the
       # three application images the split manifest needs, the Pi .deb, the
-      # piped installer and one digest list. Staging into release/ keeps the
-      # per-variant bootloader/partition images, manifests, build-info JSON,
-      # tarball and per-file .sha256 files out of the release.
-      - name: Stage the nine release assets
+      # piped installer, one digest list and its signature. Staging into
+      # release/ keeps the per-variant bootloader/partition images, manifests,
+      # build-info JSON, tarball and per-file .sha256 files out of the release.
+      - name: Stage the ten release assets
         run: |
           set -eu
           mkdir -p release
@@ -312,6 +315,14 @@ jobs:
           cp dist/install.sh release/
           tools/release/make_sums.sh release
           ls -l release
+
+      # The installer trusts SHA256SUMS only when this signature verifies with
+      # the public key pinned in pi/minisign.pub. A missing or wrong secret
+      # fails the release instead of publishing an unverifiable one.
+      - name: Sign release checksums
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: tools/release/sign_sums.sh release
 
       # The GitHub release body is the CHANGELOG section for this tag, not
       # GitHub's generated PR list: the caveats (Switch untested on hardware,

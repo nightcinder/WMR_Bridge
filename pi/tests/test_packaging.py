@@ -34,6 +34,75 @@ def _write_stub(bin_dir: Path, name: str, body: str) -> None:
     path.chmod(0o755)
 
 
+def _have_minisign() -> bool:
+    return shutil.which("minisign") is not None
+
+
+def _minisign_keypair(directory: Path) -> tuple[Path, str]:
+    """Write a throwaway keypair and return its public key file and bare key."""
+    directory.mkdir(parents=True, exist_ok=True)
+    pub = directory / "minisign.pub"
+    key = directory / "minisign.key"
+    proc = subprocess.run(
+        ["minisign", "-G", "-W", "-f", "-p", str(pub), "-s", str(key)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise AssertionError(proc.stderr)
+    bare = pub.read_text(encoding="utf-8").splitlines()[1]
+    return pub, bare
+
+
+def _sign_sums(directory: Path, key: Path) -> None:
+    proc = subprocess.run(
+        [
+            "minisign",
+            "-S",
+            "-s",
+            str(key),
+            "-m",
+            str(directory / "SHA256SUMS"),
+            "-x",
+            str(directory / "SHA256SUMS.minisig"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise AssertionError(proc.stderr)
+
+
+def _stage_signed_release(directory: Path) -> tuple[Path, str]:
+    """Build the .deb, stage a full release directory and sign its sums."""
+    release = directory / "release"
+    build = subprocess.run(
+        [str(BUILD_DEB), "--out", str(release)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if build.returncode != 0:
+        raise AssertionError(build.stderr)
+    for variant in ("", "-left", "-right"):
+        (release / f"wmr-bridge{variant}-factory.bin").write_bytes(b"firmware\n")
+        (release / f"wmr-bridge{variant}-app.bin").write_bytes(b"app\n")
+    shutil.copy(INSTALL_SH, release / "install.sh")
+    sums = subprocess.run(
+        ["/bin/sh", str(MAKE_SUMS), str(release)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if sums.returncode != 0:
+        raise AssertionError(sums.stderr)
+    _pub, bare_key = _minisign_keypair(directory / "keys")
+    _sign_sums(release, directory / "keys" / "minisign.key")
+    return release, bare_key
+
+
 class PackagingTests(unittest.TestCase):
     def test_package_version_matches_root_version(self) -> None:
         self.assertEqual(VERSION, ROOT_VERSION)
@@ -90,6 +159,7 @@ class PackagingTests(unittest.TestCase):
             self.assertTrue((opt_pi / "wmr_bridge" / "__main__.py").is_file())
             self.assertTrue((opt_pi / "tools" / "wifi_probe.py").is_file())
             self.assertTrue((opt_pi / "install.sh").is_file())
+            self.assertTrue((opt_pi / "minisign.pub").is_file())
             self.assertTrue((destdir / "opt" / "wmr-bridge" / "docs" / "PI_BRIDGE.md").is_file())
 
             installed_wrapper = destdir / "usr" / "bin" / "wmr-bridge"
@@ -230,6 +300,7 @@ class PackagingTests(unittest.TestCase):
             self.assertIn("useradd --system --create-home --groups input wmr", calls)
             self.assertNotIn("bluetooth", calls)
 
+    @unittest.skipUnless(_have_minisign(), "minisign is not installed")
     def test_installer_installs_verified_deb_when_piped(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -243,7 +314,8 @@ class PackagingTests(unittest.TestCase):
             self.assertEqual(build.returncode, 0, msg=build.stderr)
 
             # A published release carries the three factory images, the three
-            # application images, the .deb, install.sh and one SHA256SUMS list.
+            # application images, the .deb, install.sh, one SHA256SUMS list
+            # and the minisign signature over that list.
             for variant in ("", "-left", "-right"):
                 (release / f"wmr-bridge{variant}-factory.bin").write_bytes(b"firmware\n")
                 (release / f"wmr-bridge{variant}-app.bin").write_bytes(b"app\n")
@@ -255,6 +327,8 @@ class PackagingTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(sums.returncode, 0, msg=sums.stderr)
+            _pub, bare_key = _minisign_keypair(tmp_path / "keys")
+            _sign_sums(release, tmp_path / "keys" / "minisign.key")
 
             bin_dir = tmp_path / "bin"
             bin_dir.mkdir()
@@ -274,6 +348,10 @@ class PackagingTests(unittest.TestCase):
                 **os.environ,
                 "WMR_BRIDGE_VERSION": VERSION,
                 "WMR_BRIDGE_RELEASE_BASE_URL": release.as_uri(),
+                # Staging mode is what allows the throwaway test key; the root
+                # upgrade path keeps the pinned production key.
+                "WMR_SKIP_PRIVILEGED": "1",
+                "WMR_BRIDGE_MINISIGN_PUBKEYS_OVERRIDE": bare_key,
                 "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
             }
             proc = subprocess.run(
@@ -286,14 +364,13 @@ class PackagingTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            self.assertIn("release signature verified", proc.stdout)
             self.assertIn(f"installing wmr-bridge_{VERSION}_all.deb", proc.stdout)
 
             calls_text = calls.read_text(encoding="utf-8")
             install_lines = [line for line in calls_text.splitlines() if line.startswith("apt-get install -y ")]
             self.assertEqual(len(install_lines), 1)
             self.assertTrue(install_lines[0].endswith(f"wmr-bridge_{VERSION}_all.deb"))
-            self.assertIn("systemctl enable wmr-bridge.service", calls_text)
-            self.assertIn("systemctl restart wmr-bridge.service", calls_text)
             self.assertIn("deb-mode 644", calls_text)
             self.assertIn("tmp-mode 755", calls_text)
 
@@ -314,6 +391,92 @@ class PackagingTests(unittest.TestCase):
             self.assertNotEqual(proc.returncode, 0)
             self.assertIn("sha256 verification failed", proc.stderr)
             self.assertEqual(calls.read_text(encoding="utf-8"), "")
+
+    def test_embedded_release_key_matches_pinned_public_key(self) -> None:
+        keys = [
+            line
+            for line in (PI_DIR / "minisign.pub").read_text(encoding="utf-8").splitlines()
+            if line.startswith("RW")
+        ]
+        self.assertEqual(len(keys), 1)
+        installer = INSTALL_SH.read_text(encoding="utf-8")
+        self.assertIn(f"WMR_BRIDGE_MINISIGN_PUBKEYS='{keys[0]}'", installer)
+
+    @unittest.skipUnless(_have_minisign(), "minisign is not installed")
+    def test_installer_rejects_missing_or_invalid_release_signature(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            release, bare_key = _stage_signed_release(tmp_path)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            calls = tmp_path / "calls.log"
+            _write_stub(bin_dir, "apt-get", f'echo "apt-get $*" >> "{calls}"')
+            _write_stub(bin_dir, "systemctl", f'echo "systemctl $*" >> "{calls}"')
+            env = {
+                **os.environ,
+                "WMR_BRIDGE_VERSION": VERSION,
+                "WMR_BRIDGE_RELEASE_BASE_URL": release.as_uri(),
+                "WMR_SKIP_PRIVILEGED": "1",
+                "WMR_BRIDGE_MINISIGN_PUBKEYS_OVERRIDE": bare_key,
+                "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
+            }
+            installer = INSTALL_SH.read_text(encoding="utf-8")
+
+            def install(base: Path):
+                return subprocess.run(
+                    ["/bin/sh", "-s"],
+                    input=installer,
+                    cwd=tmp_path,
+                    env={**env, "WMR_BRIDGE_RELEASE_BASE_URL": base.as_uri()},
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+            (release / "SHA256SUMS.minisig").unlink()
+            proc = install(release)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("could not fetch", proc.stderr)
+            self.assertIn("SHA256SUMS.minisig", proc.stderr)
+            self.assertFalse(calls.exists())
+
+            (release / "SHA256SUMS.minisig").write_text("not a signature\n", encoding="ascii")
+            proc = install(release)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("does not verify against the pinned minisign key", proc.stderr)
+            self.assertFalse(calls.exists())
+
+            _sign_sums(release, tmp_path / "keys" / "minisign.key")
+            with (release / "SHA256SUMS").open("a", encoding="ascii") as fh:
+                fh.write("0" * 64 + "  wmr-bridge-extra.bin\n")
+            proc = install(release)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("does not verify against the pinned minisign key", proc.stderr)
+            self.assertFalse(calls.exists())
+
+    @unittest.skipUnless(_have_minisign(), "minisign is not installed")
+    def test_release_key_override_needs_unprivileged_staging(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            release, bare_key = _stage_signed_release(tmp_path)
+            env = {
+                **os.environ,
+                "WMR_BRIDGE_VERSION": VERSION,
+                "WMR_BRIDGE_RELEASE_BASE_URL": release.as_uri(),
+                "WMR_BRIDGE_MINISIGN_PUBKEYS_OVERRIDE": bare_key,
+            }
+            env.pop("WMR_SKIP_PRIVILEGED", None)
+            proc = subprocess.run(
+                ["/bin/sh", "-s"],
+                input=INSTALL_SH.read_text(encoding="utf-8"),
+                cwd=tmp_path,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("does not verify against the pinned minisign key", proc.stderr)
 
     def test_installer_requires_apt_for_piped_install(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

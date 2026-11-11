@@ -79,7 +79,8 @@ The package installs a setting to turn power saving off. That setting takes effe
 ## Step 4: Install WMR Bridge
 
 The installer does the whole setup in one step. It downloads the release
-package, checks it against SHA256SUMS, installs it, and starts the service.
+package, verifies the release signature and checks it against SHA256SUMS,
+installs it, and starts the service.
 
 Run this on the Pi:
 
