@@ -95,8 +95,11 @@ token. `apt purge wmr-bridge` removes it. `pi/tools/dry_run.sh` installs,
 reinstalls, replays and removes the `.deb` in a staged rootfs with no root.
 
 When `pi/install.sh` is piped (`curl … | sudo bash`), it fetches the matching
-`wmr-bridge_<version>_all.deb`, verifies it against the release `SHA256SUMS`,
-installs it with `apt-get` and enables/starts `wmr-bridge.service`. The release
+`wmr-bridge_<version>_all.deb`, verifies the release `SHA256SUMS` against the
+minisign public key pinned in `pi/install.sh` (shipped as `pi/minisign.pub`),
+verifies the `.deb` against that list, installs it with `apt-get` and
+enables/starts `wmr-bridge.service`.
+The release
 attaches no tarball, so piped mode needs `apt-get`; without it, install from a
 checkout or from the tarball built locally with `pi/build_package.sh`. Set
 `WMR_BRIDGE_VERSION` to pin a version or

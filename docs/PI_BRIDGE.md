@@ -278,21 +278,24 @@ The release attaches no tarball, so the piped mode needs `apt-get`. Without it,
 use a checkout or the `wmr-bridge-<version>.tar.gz` that `pi/build_package.sh`
 produces on any Linux host. When `install.sh` is piped, `$0` is the shell, so it
 downloads the matching `wmr-bridge_<version>_all.deb` from the same release,
-verifies it against the release `SHA256SUMS`, installs it with `apt-get` and
-enables/starts the unit. Set `WMR_BRIDGE_VERSION=<version>` to pin the Pi
-package version and `WMR_BRIDGE_TAG=<tag>` to name the release tag it comes
-from (the tag defaults to `v<version>`, which only matches when the package
-version equals the tag). Set `WMR_BRIDGE_RELEASE_BASE_URL` to use a mirror. A
-checkout install does not enable the unit; enable it as shown above.
+verifies the release `SHA256SUMS` against the minisign public key pinned in
+`pi/install.sh` (shipped as `pi/minisign.pub`), verifies the `.deb` against that
+list, installs it with `apt-get` and enables/starts the unit. Set `WMR_BRIDGE_VERSION=<version>` to pin
+the Pi package version and `WMR_BRIDGE_TAG=<tag>` to name the release tag it
+comes from (the tag defaults to `v<version>`, which only matches when the
+package version equals the tag). Set `WMR_BRIDGE_RELEASE_BASE_URL` to use a
+mirror. A checkout install does not enable the unit; enable it as shown above.
 
-Releases cut by this workflow attach nine files: `wmr-bridge-factory.bin`,
+Releases cut by this workflow attach ten files: `wmr-bridge-factory.bin`,
 `wmr-bridge-left-factory.bin`, `wmr-bridge-right-factory.bin`,
 `wmr-bridge-app.bin`, `wmr-bridge-left-app.bin`, `wmr-bridge-right-app.bin`,
-`wmr-bridge_<version>_all.deb`, `install.sh` and `SHA256SUMS`. The three
+`wmr-bridge_<version>_all.deb`, `install.sh`, `SHA256SUMS` and
+`SHA256SUMS.minisig`. The three
 factory images and the three application images come from the `build-liesa`
 firmware job; the `.deb` and `install.sh`
 come from the `package` job (`pi/build_deb.sh`, `pi/build_package.sh` and a copy
-of `pi/install.sh`); `SHA256SUMS` is written by `tools/release/make_sums.sh` in
+of `pi/install.sh`); `SHA256SUMS` is written by `tools/release/make_sums.sh` and
+signed by `tools/release/sign_sums.sh` in
 the `release` job. Older tags published different asset lists; `v0.3.11`, for
 example, still carries the tarball and per-file `.sha256` files. The package
 version comes from `pi/wmr_bridge/__version__`, not from the tag.
