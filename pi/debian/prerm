@@ -11,6 +11,8 @@ case "$1" in
             command -v systemctl >/dev/null 2>&1; then
             systemctl stop wmr-bridge.service || true
             systemctl disable wmr-bridge.service || true
+            systemctl stop wmr-bridge-upgrade.path || true
+            systemctl disable wmr-bridge-upgrade.path || true
         fi
         ;;
     upgrade|failed-upgrade)

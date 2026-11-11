@@ -88,10 +88,21 @@ class DebPackagingTests(unittest.TestCase):
                 "./opt/wmr-bridge/samples/controller_frames.txt",
                 "./usr/bin/wmr-bridge",
                 "./etc/systemd/system/wmr-bridge.service",
+                "./etc/systemd/system/wmr-bridge-upgrade.path",
+                "./etc/systemd/system/wmr-bridge-upgrade.service",
+                "./opt/wmr-bridge/pi/systemd/wmr-bridge-upgrade.path",
+                "./opt/wmr-bridge/pi/systemd/wmr-bridge-upgrade.service",
                 "./etc/udev/rules.d/99-wmr-bridge.rules",
                 "./etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf",
             ):
                 self.assertIn(path, contents)
+
+            # The root oneshot runs this installed copy, so /opt must stay
+            # root-owned and not writable by the wmr service user.
+            for line in contents.splitlines():
+                if line.rstrip().endswith("./opt/wmr-bridge/pi/systemd/wmr-bridge-upgrade.service"):
+                    self.assertIn("root/root", line)
+                    self.assertRegex(line, r"^-rw-r--r--")
 
             control_dir = Path(tmp) / "control"
             subprocess.run(
@@ -112,6 +123,8 @@ class DebPackagingTests(unittest.TestCase):
             self.assertIn("bluez_conf.py", postinst)
             self.assertIn("systemctl enable bluetooth.service", postinst)
             self.assertIn("systemctl restart bluetooth.service", postinst)
+            self.assertIn("systemctl enable wmr-bridge-upgrade.path", postinst)
+            self.assertIn("systemctl start wmr-bridge-upgrade.path", postinst)
             self.assertIn("--prefer-5ghz --no-reconnect", postinst)
             self.assertNotIn(".pyc", contents)
 

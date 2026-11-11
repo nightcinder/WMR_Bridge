@@ -1,0 +1,26 @@
+[Unit]
+Description=WMR Bridge release upgrade (triggered by the bridge daemon)
+Documentation=file:/opt/wmr-bridge/docs/PI_BRIDGE.md
+# Do not use PartOf=/BindsTo the daemon: install.sh restarts wmr-bridge.service
+# itself, and binding this oneshot to it would abort the install midway.
+# Rate-limit repeated triggers from a bad or looping client.
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+User=root
+# The trigger file is intentionally ignored as input. Remove it before running
+# so a failed upgrade cannot re-trigger itself and nothing written to it can
+# reach the installer.
+ExecStartPre=/bin/rm -f /var/lib/wmr-bridge/upgrade.trigger
+# install.sh reads these to select a release. Clear them and use no
+# EnvironmentFile= so the daemon-side trigger has no path to a URL, tag or
+# version. The installer falls back to the official latest release.
+Environment=WMR_BRIDGE_REPO= WMR_BRIDGE_RELEASE_BASE_URL= WMR_BRIDGE_TAG= WMR_BRIDGE_VERSION=
+# Run only the root-owned installed copy. --upgrade forces the signed release
+# fetch and exits 0 without reinstalling when the installed version is current
+# (no reinstall or downgrade). The lock makes overlapping runs fail closed.
+ExecStart=/usr/bin/flock -n /var/lib/wmr-bridge/upgrade.lock /opt/wmr-bridge/pi/install.sh --upgrade
+TimeoutStartSec=900
+Nice=10

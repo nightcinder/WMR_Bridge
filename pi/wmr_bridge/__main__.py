@@ -658,6 +658,9 @@ async def _run(args: argparse.Namespace) -> int:
         wifi=wifi_info,
         uplink=uplink_info,
         network=network_snapshot,
+        # systemd sets STATE_DIRECTORY for StateDirectory=; use its first entry
+        # so a non-default unit still finds the trigger directory.
+        upgrade_dir=(os.environ.get("STATE_DIRECTORY", "").split(":")[0] or None),
     )
     server = BridgeServer(
         bridge,

@@ -12,10 +12,12 @@ of whether anybody is subscribed, matching the firmware's counter semantics.
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import hashlib
 import hmac
 import json
 import logging
+import os
 import socket
 import time
 from dataclasses import dataclass, field
@@ -54,6 +56,9 @@ ACTIVITY_STICK_THRESHOLD = 0.10
 ACTIVITY_GYRO_SUM_THRESHOLD = 0.15
 ACTIVITY_GYRO_AXIS_THRESHOLD = 0.08
 MACHINE_ID_PATH = Path("/etc/machine-id")
+# wmr-bridge.service sets StateDirectory=wmr-bridge, so systemd creates this
+# directory writable by the service user even under ProtectSystem=strict.
+DEFAULT_UPGRADE_DIR = Path("/var/lib/wmr-bridge")
 # `inspect_wifi()`/`inspect_uplink()` shell out to `iw`/NetworkManager with
 # subprocess timeouts, so re-sample at most this often and off the event loop.
 NETWORK_REFRESH_INTERVAL_S = 10.0
@@ -341,6 +346,7 @@ class Bridge:
         uplink: dict[str, Any] | None = None,
         network: Callable[[], tuple[dict[str, Any] | None, dict[str, Any] | None]] | None = None,
         network_refresh_s: float = NETWORK_REFRESH_INTERVAL_S,
+        upgrade_dir: str | os.PathLike[str] | None = None,
     ) -> None:
         if not 1 <= batch_max <= BATCH_MAX_COUNT:
             raise ValueError(f"batch_max must be 1..{BATCH_MAX_COUNT}")
@@ -358,6 +364,7 @@ class Bridge:
         self._network_refreshed_at: float | None = None
         self._network_lock = asyncio.Lock()
         self.token = token
+        self.upgrade_dir = Path(upgrade_dir) if upgrade_dir is not None else DEFAULT_UPGRADE_DIR
         self.queue_size = max(1, queue_size)
         # Set by the daemon when the BLE peripheral is up: opens or closes the
         # manual pairing window for the CLI's `wmr-bridge pair` command.
@@ -590,6 +597,87 @@ class Bridge:
             self.uplink = uplink
             self._network_refreshed_at = time.monotonic()
 
+    # ---- upgrade trigger --------------------------------------------------
+
+    @property
+    def upgrade_trigger(self) -> Path:
+        return self.upgrade_dir / "upgrade.trigger"
+
+    @property
+    def upgrade_capable(self) -> bool:
+        """True only when the daemon may ask root to upgrade.
+
+        A bridge without a token treats every client as authenticated, so it
+        must never expose the trigger. systemd creates the state directory for
+        the service user; a checkout run usually has no such directory.
+        """
+
+        if self.token is None:
+            return False
+        try:
+            return self.upgrade_dir.is_dir() and os.access(self.upgrade_dir, os.W_OK)
+        except OSError:
+            return False
+
+    def upgrade_busy(self) -> bool:
+        """True while a trigger is pending or the root oneshot holds the lock."""
+
+        try:
+            if self.upgrade_trigger.exists():
+                return True
+        except OSError:
+            return True
+        lock_path = self.upgrade_dir / "upgrade.lock"
+        try:
+            fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        except OSError:
+            # Let the write attempt report the real error.
+            return False
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return True
+        else:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            return False
+        finally:
+            os.close(fd)
+
+    def request_upgrade(self) -> str:
+        """Write the argument-free trigger, returning ``started`` or ``error``.
+
+        The trigger file is always empty: the root oneshot deletes it before
+        running the installed installer, so nothing a client sends can reach
+        the privileged process.
+        """
+
+        temp = self.upgrade_dir / ".upgrade.trigger.tmp"
+        try:
+            fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            os.replace(temp, self.upgrade_trigger)
+            dir_fd = os.open(self.upgrade_dir, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            except OSError:
+                # Some filesystems reject fsync on a directory; the path unit
+                # only needs the name to be visible.
+                pass
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            LOG.exception("could not write the upgrade trigger in %s", self.upgrade_dir)
+            try:
+                os.unlink(temp)
+            except OSError:
+                pass
+            return "error"
+        LOG.info("upgrade trigger written to %s", self.upgrade_trigger)
+        return "started"
+
     def status(self) -> dict[str, Any]:
         now = self.now_us()
         hands = []
@@ -634,6 +722,7 @@ class Bridge:
             "handFilter": self.hand_filter,
             "hostname": socket.gethostname(),
             "authRequired": self.token is not None,
+            "upgradeCapable": self.upgrade_capable,
             "streams": list(STREAMS),
             "recordSize": DECODED_SIZE,
             "batchMax": BATCH_MAX_COUNT,
@@ -822,6 +911,29 @@ class Bridge:
                 await subscriber.send_json({"type": "error", "code": "pairing_failed"})
                 return True
             await subscriber.send_json({"type": "pairing", **result})
+            return True
+
+        if kind == "upgrade":
+            if not subscriber.authed or self.token is None:
+                # A tokenless bridge marks every subscriber authed, so check
+                # the token itself before touching the trigger.
+                await subscriber.send_json(
+                    {"type": "upgrade_status", "state": "error", "code": "auth_failed"}
+                )
+                return True
+            if not self.upgrade_capable:
+                await subscriber.send_json(
+                    {"type": "upgrade_status", "state": "error", "code": "unavailable"}
+                )
+                return True
+            if self.upgrade_busy():
+                await subscriber.send_json({"type": "upgrade_status", "state": "busy"})
+                return True
+            state = self.request_upgrade()
+            reply: dict[str, Any] = {"type": "upgrade_status", "state": state}
+            if state == "error":
+                reply["code"] = "unavailable"
+            await subscriber.send_json(reply)
             return True
 
         if kind == "close":
