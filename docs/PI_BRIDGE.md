@@ -300,6 +300,66 @@ the `release` job. Older tags published different asset lists; `v0.3.11`, for
 example, still carries the tarball and per-file `.sha256` files. The package
 version comes from `pi/wmr_bridge/__version__`, not from the tag.
 
+### Verifying a release by hand
+
+The piped installer verifies the signature for you. To verify a downloaded
+release by hand, fetch `SHA256SUMS` and `SHA256SUMS.minisig` from the release,
+then check the digest list against the published minisign public key:
+
+```bash
+minisign -Vm SHA256SUMS -p pi/minisign.pub
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+The production minisign public key, shipped as `pi/minisign.pub` and pinned in
+`pi/install.sh` as `WMR_BRIDGE_MINISIGN_PUBKEYS`, is:
+
+```text
+untrusted comment: minisign public key A8C4E4616140F3CB
+RWTL80BhYeTEqPhBvFePoSc/uoC+iJCEa41o1uA3h+t4opQbX0yKCnA6
+```
+
+You can pass the key inline instead of the file:
+`minisign -Vm SHA256SUMS -P RWTL80BhYeTEqPhBvFePoSc/uoC+iJCEa41o1uA3h+t4opQbX0yKCnA6`.
+`SHA256SUMS.minisig` covers `SHA256SUMS` only. `SHA256SUMS` in turn covers
+every other asset, so one signature protects the whole release.
+
+### Bootstrapping an older unsigned install
+
+Pi installs older than the signed release carry no signature check. Bootstrap
+them to the signed path with the same one-line installer:
+
+```bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
+```
+
+The installer fetches the current `.deb`, verifies `SHA256SUMS` against the
+pinned key, verifies the `.deb` against that list, and upgrades in place. The
+token, `/etc/wmr-bridge/wmr-bridge.env` (a conffile), the udev rule and the
+unit survive the upgrade. Set `WMR_BRIDGE_VERSION=<version>` to pin a release.
+
+### Rotating the minisign key
+
+The installer accepts more than one key so a rotation does not break older
+installs. `WMR_BRIDGE_MINISIGN_PUBKEYS` in `pi/install.sh` holds the
+space-separated list of accepted public keys; the installer tries each key in
+turn and accepts the first match. To rotate:
+
+1. Generate a new key pair with minisign: `minisign -G`.
+2. Add the new public key to `WMR_BRIDGE_MINISIGN_PUBKEYS` next to the old one
+   (dual-key window).
+3. Update `pi/minisign.pub` to the new key and re-pin `pi/install.sh`.
+4. Sign the next release's `SHA256SUMS` with the new secret key using
+   `tools/release/sign_sums.sh` (`MINISIGN_SECRET_KEY=...`).
+5. Once every supported install trusts the new key, remove the old key from
+   `WMR_BRIDGE_MINISIGN_PUBKEYS` and from `pi/minisign.pub`.
+
+`SHA256SUMS.minisig` for the rotated release verifies against the new key, while
+older releases still verify against the old key during the dual-key window.
+`WMR_BRIDGE_MINISIGN_PUBKEYS_OVERRIDE` is honoured only in unprivileged
+staging mode (`WMR_SKIP_PRIVILEGED=1`), so a root upgrade never takes a trust
+anchor from its environment.
+
 Or run the equivalent manual steps:
 
 ```bash
@@ -1167,7 +1227,7 @@ INFO/WARNING:
 - Pi-side FF13 controller read over hidraw (the cache and WebSocket forwarding
   are in place; a fresh daemon starts `not_read`).
 - Native system packaging beyond the released `.deb` (`pip install`,
-  APT repository, signing, image).
+  APT repository, image).
 - Bench-validate `--hand` single-hand mode and UDP/mDNS discovery on real
   hardware.
 
