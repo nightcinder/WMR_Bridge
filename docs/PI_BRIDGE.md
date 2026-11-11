@@ -307,7 +307,7 @@ release by hand, fetch `SHA256SUMS` and `SHA256SUMS.minisig` from the release,
 then check the digest list against the published minisign public key:
 
 ```bash
-minisign -Vm SHA256SUMS -p pi/minisign.pub
+minisign -Vm SHA256SUMS -P RWTL80BhYeTEqPhBvFePoSc/uoC+iJCEa41o1uA3h+t4opQbX0yKCnA6
 sha256sum -c SHA256SUMS --ignore-missing
 ```
 
@@ -319,8 +319,8 @@ untrusted comment: minisign public key A8C4E4616140F3CB
 RWTL80BhYeTEqPhBvFePoSc/uoC+iJCEa41o1uA3h+t4opQbX0yKCnA6
 ```
 
-You can pass the key inline instead of the file:
-`minisign -Vm SHA256SUMS -P RWTL80BhYeTEqPhBvFePoSc/uoC+iJCEa41o1uA3h+t4opQbX0yKCnA6`.
+In a repository checkout, use the key file instead of `-P`:
+`minisign -Vm SHA256SUMS -p pi/minisign.pub`.
 `SHA256SUMS.minisig` covers `SHA256SUMS` only. `SHA256SUMS` in turn covers
 every other asset, so one signature protects the whole release.
 
@@ -352,7 +352,8 @@ turn and accepts the first match. To rotate:
 4. Sign the next release's `SHA256SUMS` with the new secret key using
    `tools/release/sign_sums.sh` (`MINISIGN_SECRET_KEY=...`).
 5. Once every supported install trusts the new key, remove the old key from
-   `WMR_BRIDGE_MINISIGN_PUBKEYS` and from `pi/minisign.pub`.
+   `WMR_BRIDGE_MINISIGN_PUBKEYS`. `pi/minisign.pub` holds one key and was
+   switched to the new key in step 3.
 
 `SHA256SUMS.minisig` for the rotated release verifies against the new key, while
 older releases still verify against the old key during the dual-key window.
