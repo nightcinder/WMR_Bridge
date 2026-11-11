@@ -18,7 +18,7 @@ from .bluez import (
     hand_from_override,
     normalize_report,
 )
-from .bridge import Bridge, state_is_active
+from .bridge import Bridge
 from .decode import decode_frame
 
 LOG = logging.getLogger(__name__)
@@ -262,7 +262,7 @@ class HidrawManager:
         self._hand_of[path] = hand
         self._path_of_hand[hand] = path
         self._address_of_hand[hand] = device.uniq
-        self._asleep.discard(hand)
+        self._set_asleep(hand, False)
         self._powered_off.discard(hand)
         self._powered_off_until_us.pop(hand, None)
         self._poweroff_address.pop(hand, None)
@@ -294,7 +294,7 @@ class HidrawManager:
                 # A power-off latch and its cooldown outlive the hidraw node;
                 # the reconnect guard and the deadline in _idle_tick own them.
                 if hand not in self._powered_off:
-                    self._asleep.discard(hand)
+                    self._set_asleep(hand, False)
                     self._warned_no_address.discard(hand)
                 self.bridge.set_hand_connected(hand, False)
         reader.close()
@@ -334,8 +334,18 @@ class HidrawManager:
                 continue
             state = decode_frame(frame)
             self.bridge.ingest(hand, frame, state=state)
-            if state is not None and state_is_active(state):
+            if (
+                state is not None
+                and self.bridge.hands[hand].last_report_active
+            ):
                 self._note_activity(hand, reader)
+
+    def _set_asleep(self, hand: int, asleep: bool) -> None:
+        if asleep:
+            self._asleep.add(hand)
+        else:
+            self._asleep.discard(hand)
+        self.bridge.hands[hand].idle_sleeping = asleep
 
     def _note_activity(self, hand: int, reader: HidrawReader) -> None:
         """Resume streaming immediately when an idle controller moves."""
@@ -346,7 +356,7 @@ class HidrawManager:
             return
         if hand not in self._asleep and hand not in self._powered_off:
             return
-        self._asleep.discard(hand)
+        self._set_asleep(hand, False)
         self._powered_off.discard(hand)
         LOG.info(
             "%s activity: resuming 0x06 keep-alives",
@@ -385,7 +395,7 @@ class HidrawManager:
             address = self._poweroff_address.pop(hand, "")
             self._powered_off_until_us.pop(hand, None)
             self._powered_off.discard(hand)
-            self._asleep.discard(hand)
+            self._set_asleep(hand, False)
             self._warned_no_address.discard(hand)
             LOG.info(
                 "%s power-off cooldown elapsed: reconnects allowed",
@@ -411,7 +421,7 @@ class HidrawManager:
             ):
                 address = self._address_of_hand.get(hand, "")
                 if not address:
-                    self._asleep.add(hand)
+                    self._set_asleep(hand, True)
                     if hand not in self._warned_no_address:
                         LOG.warning(
                             "%s idle for %.0f s but has no Bluetooth address; "
@@ -427,7 +437,7 @@ class HidrawManager:
                     idle_s,
                     address,
                 )
-                self._asleep.add(hand)
+                self._set_asleep(hand, True)
                 # Refuse the hand immediately, then block the page-in before
                 # dropping the ACL: a controller that is still awake
                 # reconnects within seconds of the disconnect.
@@ -459,7 +469,7 @@ class HidrawManager:
                     # Latch only after the ACL actually dropped. A failure
                     # leaves the hand eligible so the next tick retries.
                     self._powered_off.add(hand)
-                    self._asleep.add(hand)
+                    self._set_asleep(hand, True)
                     if self._readers.get(path) is reader:
                         self._close(path)
                     if stats.last_activity_us != activity_before:
@@ -484,7 +494,7 @@ class HidrawManager:
                 and idle_s >= self.idle_sleep_timeout
             ):
                 if hand not in self._asleep:
-                    self._asleep.add(hand)
+                    self._set_asleep(hand, True)
                     LOG.info(
                         "%s idle for %.0f s: pausing 0x06 keep-alives",
                         label,
@@ -493,7 +503,7 @@ class HidrawManager:
                 continue
 
             if hand in self._asleep:
-                self._asleep.discard(hand)
+                self._set_asleep(hand, False)
                 LOG.info("%s activity: resuming 0x06 keep-alives", label)
                 reader.send_enable()
             reader.keep_alive()

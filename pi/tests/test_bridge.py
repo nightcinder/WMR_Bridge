@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from wmr_bridge import __version__
 from wmr_bridge.bridge import Bridge, Subscriber
+from wmr_bridge.decode import BTN_TRACKPAD_TOUCH, ControllerState, decode_frame
 from wmr_bridge.inputs import read_capture
 from wmr_bridge.protocol import Reassembler, parse_batch, unpack_record
 from wmr_bridge.server import BridgeServer
@@ -353,6 +355,103 @@ class HandFilterPayloadTests(unittest.TestCase):
         for bad in ((), (2,), (-1,), (0, 2)):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 Bridge(allowed_hands=bad)
+
+
+class ActivityDetectionTests(unittest.TestCase):
+    BASE: ControllerState = decode_frame(SAMPLE_DATA)  # type: ignore[assignment]
+
+    def state(self, **changes: object) -> ControllerState:
+        return replace(self.BASE, **changes)
+
+    def make_bridge(self, reference: ControllerState | None = None) -> Bridge:
+        bridge = Bridge()
+        bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:00")
+        bridge.ingest(
+            0,
+            SAMPLE_DATA,
+            rx_time_us=1_000,
+            state=reference if reference is not None else self.state(),
+        )
+        return bridge
+
+    def report(self, bridge: Bridge, state: ControllerState, now_us: int = 2_000) -> bool:
+        bridge.ingest(0, SAMPLE_DATA, rx_time_us=now_us, state=state)
+        return bridge.hands[0].last_report_active
+
+    def test_stationary_off_centre_pose_is_idle(self) -> None:
+        still = self.state(
+            buttons=BTN_TRACKPAD_TOUCH,
+            trigger=0.078,
+            thumbstick_x=-0.064,
+            thumbstick_y=0.148,
+            gyro=(0.09, -0.07, 0.05),
+        )
+        bridge = self.make_bridge(still)
+
+        self.assertFalse(self.report(bridge, still))
+
+    def test_button_transition_counts_as_activity(self) -> None:
+        bridge = self.make_bridge()
+
+        self.assertFalse(self.report(bridge, self.state()))
+        self.assertTrue(self.report(bridge, self.state(buttons=BTN_TRACKPAD_TOUCH)))
+        self.assertTrue(self.report(bridge, self.state(buttons=0x01)))
+
+    def test_trigger_delta_counts_as_activity(self) -> None:
+        bridge = self.make_bridge()
+
+        self.assertFalse(self.report(bridge, self.state(trigger=0.05)))
+        self.assertTrue(self.report(bridge, self.state(trigger=0.051)))
+
+    def test_stick_delta_counts_as_activity(self) -> None:
+        probe = self.make_bridge(self.state(thumbstick_x=-0.064, thumbstick_y=0.148))
+        self.assertFalse(
+            self.report(probe, self.state(thumbstick_x=0.026, thumbstick_y=0.148))
+        )
+
+        probe = self.make_bridge(self.state(thumbstick_x=-0.064, thumbstick_y=0.148))
+        self.assertTrue(
+            self.report(probe, self.state(thumbstick_x=0.046, thumbstick_y=0.148))
+        )
+
+        probe = self.make_bridge(self.state(thumbstick_x=-0.064, thumbstick_y=0.148))
+        self.assertTrue(
+            self.report(probe, self.state(thumbstick_x=-0.064, thumbstick_y=0.258))
+        )
+
+    def test_gyro_axis_delta_counts_as_activity(self) -> None:
+        probe = self.make_bridge(self.state(gyro=(0.0, 0.0, 0.0)))
+        self.assertFalse(self.report(probe, self.state(gyro=(0.08, 0.0, 0.0))))
+
+        probe = self.make_bridge(self.state(gyro=(0.0, 0.0, 0.0)))
+        self.assertTrue(self.report(probe, self.state(gyro=(0.09, 0.0, 0.0))))
+
+    def test_gyro_sum_delta_counts_as_activity(self) -> None:
+        probe = self.make_bridge(self.state(gyro=(0.0, 0.0, 0.0)))
+        self.assertFalse(self.report(probe, self.state(gyro=(0.06, 0.06, 0.03))))
+
+        probe = self.make_bridge(self.state(gyro=(0.0, 0.0, 0.0)))
+        self.assertTrue(self.report(probe, self.state(gyro=(0.06, 0.06, 0.06))))
+
+    def test_activity_moves_the_reference_forward(self) -> None:
+        bridge = self.make_bridge()
+        moved = self.state(buttons=0x01)
+
+        self.assertTrue(self.report(bridge, moved))
+        self.assertFalse(self.report(bridge, moved))
+
+    def test_connect_and_disconnect_reset_the_reference(self) -> None:
+        bridge = self.make_bridge()
+        bridge.set_hand_connected(0, False)
+        bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:00")
+
+        self.assertFalse(self.report(bridge, self.state(buttons=0x01)))
+
+    def test_status_exposes_idle_sleep(self) -> None:
+        bridge = Bridge()
+        bridge.hands[0].idle_sleeping = True
+
+        self.assertTrue(bridge.status()["hands"][0]["idleSleep"])
 
 
 class WifiPayloadTests(unittest.TestCase):

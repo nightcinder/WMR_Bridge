@@ -94,6 +94,13 @@ class HandStats:
     address: str = ""
     last_rx_us: int = 0
     last_activity_us: int = 0
+    idle_sleeping: bool = False
+    # The last observed report is kept as the reference for the next one. A
+    # controller resting off-centre (Right's stick is (-0.064, 0.148)) or with a
+    # static touch bit must not look active forever; only a change from this
+    # baseline counts.
+    last_report_active: bool = False
+    _activity_ref: ControllerState | None = field(default=None, repr=False)
 
     def to_json(self, sequence: int, now_us: int) -> dict[str, Any]:
         return {
@@ -109,33 +116,47 @@ class HandStats:
             "lastActivityAgeMs": None
             if not self.last_activity_us
             else round((now_us - self.last_activity_us) / 1000.0, 1),
+            "idleSleep": self.idle_sleeping,
         }
 
+    def reset_activity(self) -> None:
+        """Drop the per-hand reference so the next report starts a fresh baseline."""
 
-def state_is_active(state: ControllerState) -> bool:
-    """True when a decoded report shows buttons, trigger, stick or gyro movement."""
+        self._activity_ref = None
+        self.last_report_active = False
 
-    if state.buttons:
-        return True
-    if state.trigger > ACTIVITY_TRIGGER_THRESHOLD:
-        return True
-    if (
-        abs(state.thumbstick_x) > ACTIVITY_STICK_THRESHOLD
-        or abs(state.thumbstick_y) > ACTIVITY_STICK_THRESHOLD
-    ):
-        return True
-    gx, gy, gz = state.gyro
-    return (
-        abs(gx) + abs(gy) + abs(gz) > ACTIVITY_GYRO_SUM_THRESHOLD
-        or max(abs(gx), abs(gy), abs(gz)) > ACTIVITY_GYRO_AXIS_THRESHOLD
-    )
+    def note_activity(self, state: ControllerState, now_us: int) -> bool:
+        """Compare a report with this hand's baseline and latch activity.
 
+        The first report after a connect/disconnect establishes the reference.
+        A later report counts as activity when its buttons changed or its
+        trigger, stick or gyro moved past the detector thresholds; activity
+        moves the reference forward so a held button or off-centre rest pose is
+        not reported active on every subsequent frame.
+        """
 
-def report_is_active(data: bytes) -> bool:
-    """True when a 0x01 report shows buttons, trigger, stick or gyro movement."""
-
-    state = decode_frame(data)
-    return state is not None and state_is_active(state)
+        reference = self._activity_ref
+        if reference is None:
+            self._activity_ref = state
+            self.last_report_active = False
+            return False
+        gx, gy, gz = state.gyro
+        rx, ry, rz = reference.gyro
+        active = (
+            state.buttons != reference.buttons
+            or abs(state.trigger - reference.trigger) > ACTIVITY_TRIGGER_THRESHOLD
+            or abs(state.thumbstick_x - reference.thumbstick_x) > ACTIVITY_STICK_THRESHOLD
+            or abs(state.thumbstick_y - reference.thumbstick_y) > ACTIVITY_STICK_THRESHOLD
+            or abs(gx - rx) > ACTIVITY_GYRO_AXIS_THRESHOLD
+            or abs(gy - ry) > ACTIVITY_GYRO_AXIS_THRESHOLD
+            or abs(gz - rz) > ACTIVITY_GYRO_AXIS_THRESHOLD
+            or abs(gx - rx) + abs(gy - ry) + abs(gz - rz) > ACTIVITY_GYRO_SUM_THRESHOLD
+        )
+        self.last_report_active = active
+        if active:
+            self._activity_ref = state
+            self.last_activity_us = now_us
+        return active
 
 
 def _parse_json(text: str) -> dict[str, Any] | None:
@@ -444,8 +465,8 @@ class Bridge:
             return None
         if state is None:
             state = decode_frame(frame.data)
-        if state is not None and state_is_active(state):
-            stats.last_activity_us = now_us
+        if state is not None:
+            stats.note_activity(state, now_us)
         subscribers = tuple(subscriber for subscriber in self.subscribers if subscriber.stream)
         sinks = tuple(self.sinks)
         if not subscribers and not sinks:
@@ -480,6 +501,11 @@ class Bridge:
             # A new connection is the start of a fresh idle window even when
             # the controller is motionless.
             stats.last_activity_us = self.now_us()
+        if changed:
+            # Both ends of a connection start a fresh activity baseline: the
+            # next report is the reference, not a movement away from the last
+            # session's pose.
+            stats.reset_activity()
         stats.connected = connected
         if address:
             stats.address = address
