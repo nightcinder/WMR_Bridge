@@ -576,6 +576,67 @@ class DbusNextInterfaceTests(unittest.TestCase):
 
 
 @unittest.skipUnless(HAS_DBUS_NEXT, "python3-dbus-next is not installed")
+class PropertiesChangedTests(unittest.TestCase):
+    """Emit the real PropertiesChanged signal for ``Value`` and ``Notifying``.
+
+    dbus-next wraps the value in a ``Variant`` of the property's signature
+    itself, so a pre-wrapped value raises ``SignatureBodyMismatchError`` here.
+    """
+
+    def setUp(self) -> None:
+        from dbus_next.message_bus import BaseMessageBus
+
+        class RecordingBus(BaseMessageBus):
+            """Keeps the signals so the test can marshal them itself."""
+
+            def __init__(self) -> None:
+                self._path_exports: dict = {}
+                self._name_owners: dict = {}
+                self._disconnected = True
+                self.signals: list = []
+
+            def disconnect(self) -> None:
+                pass
+
+            def export(self, path, interface) -> None:
+                BaseMessageBus.export(self, path, interface)
+
+            def _emit_interface_added(self, path, interface) -> None:
+                pass
+
+            def send(self, message) -> None:
+                self.signals.append(message)
+
+        self.bus = RecordingBus()
+        self.app = _application()
+        self.interfaces = build_dbus_interfaces(self.app)
+
+    def test_notify_emits_raw_bytes_for_value(self) -> None:
+        spec = CHARACTERISTIC_BY_UUID[FF11_RAW]
+        characteristic = self.interfaces["Characteristic"](spec)
+        self.bus.export(characteristic_path(spec.uuid), characteristic)
+        backend = DbusGattBackend()
+        backend._characteristics = {spec.uuid: characteristic}
+        payload = bytes((1, 2, 3))
+        backend.notify(spec.uuid, payload)
+        self.assertEqual(len(self.bus.signals), 1)
+        value = self.bus.signals[0].body[1]["Value"]
+        self.assertEqual(value.signature, "ay")
+        self.assertEqual(value.value, payload)
+
+    def test_start_and_stop_notify_emit_raw_booleans(self) -> None:
+        spec = CHARACTERISTIC_BY_UUID[FF11_RAW]
+        characteristic = self.interfaces["Characteristic"](spec)
+        self.bus.export(characteristic_path(spec.uuid), characteristic)
+        characteristic.StartNotify()
+        characteristic.StopNotify()
+        self.assertEqual(
+            [signal.body[1]["Notifying"].value for signal in self.bus.signals],
+            [True, False],
+        )
+
+
+@unittest.skipUnless(HAS_DBUS_NEXT, "python3-dbus-next is not installed")
 class ManagedObjectsTests(unittest.TestCase):
     """Drive dbus-next's own ``GetManagedObjects`` over the exported FF10 tree.
 
