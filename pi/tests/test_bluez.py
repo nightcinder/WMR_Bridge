@@ -31,7 +31,8 @@ from wmr_bridge.bluez import (
     scan_and_pair,
     set_device_blocked,
 )
-from wmr_bridge.bridge import Bridge, report_is_active
+from wmr_bridge.bridge import Bridge
+from wmr_bridge.decode import BTN_TRACKPAD_TOUCH
 from wmr_bridge.inputs import HidrawManager
 
 
@@ -1021,29 +1022,6 @@ def controller_frame(
     return b"\xA1\x01" + bytes(payload)
 
 
-class ActivityDetectionTests(unittest.TestCase):
-    def test_resting_frame_is_idle(self) -> None:
-        self.assertFalse(report_is_active(controller_frame()))
-
-    def test_any_button_counts_as_activity(self) -> None:
-        self.assertTrue(report_is_active(controller_frame(buttons=0x01)))
-        self.assertTrue(report_is_active(controller_frame(buttons=0x40)))
-
-    def test_trigger_past_its_dead_zone_counts(self) -> None:
-        self.assertFalse(report_is_active(controller_frame(trigger=12)))
-        self.assertTrue(report_is_active(controller_frame(trigger=13)))
-
-    def test_stick_deflection_counts(self) -> None:
-        self.assertFalse(report_is_active(controller_frame(stick_x=0x07FF + 200)))
-        self.assertTrue(report_is_active(controller_frame(stick_x=0x07FF + 300)))
-        self.assertTrue(report_is_active(controller_frame(stick_y=0x07FF - 300)))
-
-    def test_gyro_motion_counts(self) -> None:
-        self.assertFalse(report_is_active(controller_frame(gyro=(7000, 0, 0))))
-        self.assertTrue(report_is_active(controller_frame(gyro=(9000, 0, 0))))
-        self.assertTrue(report_is_active(controller_frame(gyro=(6000, 6000, 6000))))
-
-
 class DisconnectTests(unittest.TestCase):
     ADDRESS = "AA:BB:CC:DD:EE:00"
 
@@ -1149,7 +1127,7 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
 
     def make_manager(self, *, sleep: float = 300.0, poweroff: float = 900.0,
                      poweroff_cb=None, cooldown: float = 60.0,
-                     reconnect_guard=None):
+                     reconnect_guard=None, reference: bytes | None = None):
         bridge = Bridge()
         manager = HidrawManager(
             bridge,
@@ -1168,6 +1146,14 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
         manager._hand_of[reader.path] = 0
         manager._path_of_hand[0] = reader.path
         manager._address_of_hand[0] = self.ADDRESS
+        # Establish the per-hand baseline the way a real connect plus first
+        # report does, so tests can move away from a known rest pose.
+        bridge.set_hand_connected(0, True, self.ADDRESS)
+        bridge.ingest(
+            0,
+            controller_frame() if reference is None else reference,
+            rx_time_us=self.START_US,
+        )
         bridge.hands[0].last_activity_us = self.START_US
         return manager, bridge, reader
 
@@ -1193,6 +1179,72 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
         await manager._idle_tick(self.START_US + 301_000_000)
         self.assertEqual(reader.enables, 1)
         self.assertEqual(reader.writes, 0)
+
+    async def test_stationary_off_centre_pose_sleeps_and_powers_off(self) -> None:
+        calls: list[str] = []
+
+        def poweroff(address: str) -> bool:
+            calls.append(address)
+            return True
+
+        still = controller_frame(
+            buttons=BTN_TRACKPAD_TOUCH,
+            trigger=20,
+            stick_x=0x07FF - 131,
+            stick_y=0x07FF + 303,
+            gyro=(9000, -7000, 5000),
+        )
+        manager, bridge, reader = self.make_manager(
+            poweroff_cb=poweroff, reference=still
+        )
+        reader.reads = [still, still]
+        manager._on_readable(0, reader)  # type: ignore[arg-type]
+
+        self.assertEqual(bridge.hands[0].last_activity_us, self.START_US)
+
+        await manager._idle_tick(self.START_US + 300_000_000)
+        self.assertIn(0, manager._asleep)
+        self.assertTrue(bridge.status()["hands"][0]["idleSleep"])
+
+        reader.reads = [still]
+        manager._on_readable(0, reader)  # type: ignore[arg-type]
+        self.assertIn(0, manager._asleep)
+
+        await manager._idle_tick(self.START_US + 900_000_000)
+        self.assertEqual(calls, [self.ADDRESS])
+        self.assertIn(0, manager._powered_off)
+
+    async def test_stationary_frames_do_not_wake_but_movement_does(self) -> None:
+        still = controller_frame(
+            buttons=BTN_TRACKPAD_TOUCH,
+            trigger=20,
+            stick_x=0x07FF - 131,
+            stick_y=0x07FF + 303,
+        )
+        manager, bridge, reader = self.make_manager(reference=still)
+        reader.reads = [still]
+        manager._on_readable(0, reader)  # type: ignore[arg-type]
+        await manager._idle_tick(self.START_US + 300_000_000)
+        self.assertIn(0, manager._asleep)
+
+        reader.reads = [still, still]
+        manager._on_readable(0, reader)  # type: ignore[arg-type]
+        self.assertIn(0, manager._asleep)
+        self.assertEqual(reader.enables, 0)
+
+        moved = controller_frame(
+            buttons=BTN_TRACKPAD_TOUCH,
+            trigger=20,
+            stick_x=0x07FF - 131,
+            stick_y=0x07FF + 303,
+            gyro=(9000, 0, 0),
+        )
+        reader.reads = [moved]
+        manager._on_readable(0, reader)  # type: ignore[arg-type]
+
+        self.assertNotIn(0, manager._asleep)
+        self.assertFalse(bridge.status()["hands"][0]["idleSleep"])
+        self.assertEqual(reader.enables, 1)
 
     async def test_poweroff_disconnects_once_at_idle_timeout(self) -> None:
         calls: list[str] = []

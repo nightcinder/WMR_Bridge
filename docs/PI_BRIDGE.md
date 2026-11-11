@@ -841,7 +841,9 @@ header-only window until an ingest layer fills the cache.
       "delivered": 7300,
       "dropped": 0,
       "sequence": 7312,
-      "lastRxAgeMs": 6.2
+      "lastRxAgeMs": 6.2,
+      "lastActivityAgeMs": 18.4,
+      "idleSleep": false
     },
     {
       "hand": "RIGHT",
@@ -853,7 +855,9 @@ header-only window until an ingest layer fills the cache.
       "delivered": 0,
       "dropped": 0,
       "sequence": 0,
-      "lastRxAgeMs": null
+      "lastRxAgeMs": null,
+      "lastActivityAgeMs": null,
+      "idleSleep": false
     }
   ],
   "clients": 1,

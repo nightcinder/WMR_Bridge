@@ -449,9 +449,10 @@ controller has to be discovered by name). Discovery settings:
 
 Both bridges keep a connected controller awake with a 0x06 keep-alive. After 5
 minutes without activity they pause it so the controller can sleep; after 15
-minutes they drop the link so the controller powers off. Activity means button
-presses, trigger above 0.05, stick movement above 0.10, or gyro movement above
-the thresholds in [docs/PROTOCOL.md](docs/PROTOCOL.md).
+minutes they drop the link so the controller powers off. On the Pi, activity is
+measured against the hand's own baseline: a button transition, trigger moved
+by more than 0.05, stick moved by more than 0.10, or gyro movement above the
+thresholds in [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 On the ESP32 firmware set `WMR_CFG_IDLE_SLEEP_MS` (default 300000 ms) and
 `WMR_CFG_IDLE_POWEROFF_MS` (default 900000 ms) in `src/wmr_config.h` or with

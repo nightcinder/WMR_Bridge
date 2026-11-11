@@ -978,7 +978,7 @@ Set either macro to 0 to disable that stage. `WMR_CFG_IDLE_POWEROFF_MS` must be
 before the power-off threshold wakes the controller. The bridge sends the 0x06
 pair again at once.
 
-Activity means any of these in a decoded report:
+On the ESP32 firmware, activity means any of these in a decoded report:
 
 - a button is pressed (buttons, thumbstick click, home, menu, squeeze,
   trackpad click or touch, BT pairing).
@@ -1000,9 +1000,13 @@ On the Pi host bridge the same policy runs in `HidrawManager`. The flags are
 sleep timeout. The bridge pauses the 10 s 0x06 keep-alive after the sleep
 timeout and disconnects Bluetooth after the power-off timeout so the
 controller powers off. Pass the flags through `WMR_BRIDGE_ARGS` when running
-under systemd. Activity uses the same thresholds as the firmware. If a
-controller has no Bluetooth address, the bridge cannot power it off. It logs a
-warning and retries on the next tick.
+under systemd. On the Pi, activity is relative to a per-hand baseline latched
+on connect: a button transition, trigger moved by more than 0.05, thumbstick
+moved by more than 0.10 on either axis, or gyro moved by more than 0.08 on any
+axis or 0.15 in sum. An active report moves the baseline forward, so an
+off-centre resting stick or a static touch bit does not keep the hand awake.
+If a controller has no Bluetooth address, the bridge cannot power it off. It
+logs a warning and retries on the next tick.
 
 The Pi cooldown is `--idle-reconnect-cooldown` (seconds, default 60, 0
 disables it). At the power-off timeout the bridge blocks the controller in
