@@ -100,7 +100,7 @@ The bridge reports the Wi-Fi band and the active uplink in `hello` and `status`.
 ## 4. Install
 
 The fastest path is the one-line installer. It downloads the package, checks
-it against SHA256SUMS, and installs it:
+the release signature and the package against SHA256SUMS, and installs it:
 
 ```bash
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
@@ -166,8 +166,8 @@ sudo apt install ./wmr-bridge_<version>_all.deb
 
 Replace `<version>` with the Pi package version.
 
-The installer downloads the release `.deb` and verifies it against
-`SHA256SUMS`, then installs with `apt-get`. The package creates the `wmr`
+The installer downloads the release `.deb`, verifies the release signature and
+the `.deb` against `SHA256SUMS`, then installs with `apt-get`. The package creates the `wmr`
 service user, installs to `/opt/wmr-bridge/pi`, adds the udev rule and the
 NetworkManager power-save drop-in, writes a `0640 wmr:wmr` token at
 `/etc/wmr-bridge/token`, installs the systemd unit and puts
