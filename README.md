@@ -309,6 +309,22 @@ local build from `pi/build_package.sh`. The one-line install works from
 `releases/latest/download/install.sh` and needs `apt-get`. The Pi setup page on
 GitHub Pages is at <https://nightcinder.github.io/WMR_Bridge/pi.html>.
 
+The companion app can show the Pi bridge version and offer an upgrade.
+`hello.version` (and `status.version`) is the Pi package version;
+`wmr-bridge --version` prints the same string. An authenticated WebSocket
+client sends `{"type":"upgrade"}`. The daemon writes an empty
+`/var/lib/wmr-bridge/upgrade.trigger`, and `wmr-bridge-upgrade.path` starts the
+root `wmr-bridge-upgrade.service`, which runs
+`/opt/wmr-bridge/pi/install.sh --upgrade`. That fetches the latest release,
+verifies `SHA256SUMS.minisig` against the pinned minisign key, verifies the
+`.deb` against `SHA256SUMS`, installs it and restarts the service. The daemon
+runs as `wmr` and cannot install packages: the trigger carries no data, the
+unit clears the release-selection variables and runs only the root-owned
+installed copy, and `hello.upgradeCapable` is false on a tokenless bridge or
+when the state directory is missing. Releases up to 0.3.23 (0.3.19 and older
+included) ship no upgrade unit; their app shows the one-line `sudo` installer,
+and running it once installs the units for later app-triggered upgrades.
+
 ## BLE interface (summary)
 
 Service `0000FF10-0000-1000-8000-00805F9B34FB`. Raw characteristic

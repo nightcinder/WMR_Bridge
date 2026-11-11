@@ -300,6 +300,73 @@ the `release` job. Older tags published different asset lists; `v0.3.11`, for
 example, still carries the tarball and per-file `.sha256` files. The package
 version comes from `pi/wmr_bridge/__version__`, not from the tag.
 
+### Version display and app-triggered upgrade
+
+The Pi package version is reported by `wmr-bridge --version`, by
+`hello.version` on every WebSocket handshake, and by `status.version`. The
+companion app shows the received version and compares it with the latest GitHub
+release; when a newer release exists it offers an upgrade.
+
+`hello.upgradeCapable` is `true` only when the daemon has a token and
+`/var/lib/wmr-bridge` exists and is writable by the `wmr` service user. A
+bridge without a token marks every client as authenticated, so it never
+advertises the trigger. A missing or false flag means the app must not send the
+command and should show the one-line installer instead. Releases up to 0.3.23
+omit the field and answer `{"type":"upgrade"}` with
+`{"type":"error","code":"unknown_type"}`.
+
+An authenticated client asks for an upgrade with:
+
+```json
+{"type": "upgrade"}
+```
+
+The reply is `{"type":"upgrade_status","state":"started"}`,
+`{"type":"upgrade_status","state":"busy"}`, or
+`{"type":"upgrade_status","state":"error","code":"auth_failed"|"unavailable"}`.
+The client sends no data. The daemon creates an empty file,
+`/var/lib/wmr-bridge/upgrade.trigger`, and only its name is used.
+
+The path has four parts:
+
+1. `wmr-bridge-upgrade.path` watches for the trigger and starts
+   `wmr-bridge-upgrade.service` as root.
+2. The root oneshot deletes the trigger first, so anything written to it is
+   ignored and a failed run cannot re-trigger itself. It runs only the
+   root-owned `/opt/wmr-bridge/pi/install.sh --upgrade`, with
+   `WMR_BRIDGE_REPO`, `WMR_BRIDGE_RELEASE_BASE_URL`, `WMR_BRIDGE_TAG` and
+   `WMR_BRIDGE_VERSION` cleared and no `EnvironmentFile=`, so a client cannot
+   choose a URL, tag or version.
+3. `--upgrade` fetches the latest release, verifies `SHA256SUMS.minisig`
+   against the pinned minisign key, verifies the `.deb` against
+   `SHA256SUMS`, installs it with `apt-get` and restarts the service. When the
+   latest version is not newer than the installed one it exits 0 without
+   reinstalling, so the trigger never downgrades or reinstalls.
+4. `flock` and the unit's `StartLimitBurst=3` / `StartLimitIntervalSec=600`
+   bound repeated requests. The daemon also keeps its own persisted start
+   history and reports `busy` before systemd would refuse a start; a trigger
+   root never picked up expires after 120 seconds.
+
+The daemon runs as `wmr` and cannot install packages. This is the only path
+that uses root: an authenticated client can ask for an upgrade, but every
+choice of what to install stays with the root-owned installer and unit. The
+signature check makes a corrupt or tampered download fail closed. It does not
+prove the release author, so TLS to GitHub remains the trust anchor for the
+release contents, the same as the piped bootstrap.
+
+**One-time sudo bootstrap.** Releases up to and including 0.3.23 (0.3.19 and
+older included) ship neither `wmr-bridge-upgrade.path` nor
+`wmr-bridge-upgrade.service`, and their daemon has no `StateDirectory=` and no
+`upgradeCapable` field. On those installs the app treats a missing flag as
+false and shows the installer command. Run it once as root:
+
+```bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
+```
+
+The release cut from this tree installs and enables both units, so later
+upgrades start from the app without `sudo`.
+
 ### Verifying a release by hand
 
 The piped installer verifies the signature for you. To verify a downloaded
@@ -527,6 +594,7 @@ ships this package.
   "handFilter": ["LEFT", "RIGHT"],
   "hostname": "wmr-pi",
   "authRequired": true,
+  "upgradeCapable": true,
   "streams": ["raw", "decoded", "batched"],
   "recordSize": 56,
   "batchMax": 9,
@@ -555,7 +623,9 @@ Text messages are JSON control messages. Binary messages from the server are
 stream payloads or tagged FF13 calibration windows. Binary messages from the
 client are rejected with `{"type":"error","code":"binary_not_accepted"}`.
 
-`bridge_id` is a stable identity derived from the hostname and
+`upgradeCapable` says whether the daemon may accept `{"type":"upgrade"}`; it is
+false when the bridge has no token or when its state directory is missing or not
+writable. `bridge_id` is a stable identity derived from the hostname and
 `/etc/machine-id`; it is the same value advertised by mDNS and UDP discovery,
 and by the BLE GATT peripheral. The BLE address of a Pi may be
 random, so the BLE advertisement carries the first eight bytes of
@@ -780,6 +850,7 @@ port can subscribe. With no token on loopback, only local clients can connect.
 | `{"type":"auth","token":"..."}` | `auth_ok` or `auth_failed` |
 | `{"type":"calibration","hand":"LEFT"\|"RIGHT"\|0\|1,"offset":N}` | one tagged binary FF13 window (below) |
 | `{"type":"pairing","action":"open","seconds":N}` or `{"type":"pairing","action":"close"}` | `{"type":"pairing","open":true\|false,"seconds":N\|null}` |
+| `{"type":"upgrade"}` | `{"type":"upgrade_status","state":"started"\|"busy"\|"error","code":...}` |
 | `{"type":"close"}` | close frame, then disconnect |
 
 Rules:
@@ -799,6 +870,12 @@ Rules:
   `pairing_unavailable` when the daemon runs
   with `--no-ble` (or the BLE peripheral failed to start), `bad_action` for an
   unknown action, and `bad_seconds` for an invalid duration.
+- An `upgrade` message requires the token and `upgradeCapable`. Without a
+  token it replies `{"state":"error","code":"auth_failed"}` and writes nothing,
+  even though a tokenless bridge considers the subscriber authenticated. It
+  replies `unavailable` when the state directory is missing or not writable,
+  and `busy` while a trigger is pending or root holds the upgrade lock. See
+  [Version display and app-triggered upgrade](#version-display-and-app-triggered-upgrade).
 - An unknown stream is `bad_stream`. Malformed JSON is `bad_json`. An unknown
   `type` is `unknown_type`.
 - Multiple clients are allowed (default: no explicit cap). Each has its own
@@ -1002,6 +1079,15 @@ The FF16 analogue is the bridge `version` in `hello` and `status`. FF13 is
 advertised in `hello.calibration`; a bridge with calibration disabled omits the
 field rather than pretending to support it.
 
+7. Show `hello.version` on the Pi connection. Compare it with the latest GitHub
+   release and offer an upgrade when the app is connected and
+   `hello.upgradeCapable` is true. Send `{"type":"upgrade"}`, map `busy` and
+   `error` to a retry/label, and after `started` show that the bridge restarts
+   and reconnect with the normal backoff. When `upgradeCapable` is missing or
+   false, show the one-line `sudo install.sh` command from
+   [Version display and app-triggered upgrade](#version-display-and-app-triggered-upgrade);
+   the app never asks for `sudo` or a release URL.
+
 ## Security
 
 This is a bench bridge, not an internet-facing service. The mechanical
@@ -1036,6 +1122,16 @@ safeguards below are enforced by the daemon. The transport is still plaintext.
   controllers deliberately and keep the Pi's Bluetooth adapter trusted-only.
 - Controller motion data can be personal data. Captures and logs should be
   handled accordingly. The repository samples contain no Bluetooth address.
+- The app upgrade trigger is authenticated and carries no input. The daemon
+  runs as `wmr` and can only create the empty
+  `/var/lib/wmr-bridge/upgrade.trigger`. `wmr-bridge-upgrade.path` starts a
+  root oneshot that deletes the file before running the root-owned installed
+  installer with the release-selection variables cleared and no
+  `EnvironmentFile=`, then exits without reinstalling when the release is not
+  newer. A tokenless bridge never advertises `upgradeCapable`; the root unit is
+  `flock`-guarded and rate-limited. The trigger does not change the transport
+  posture: a token holder on the LAN can ask root to install the next signed
+  GitHub release, but cannot choose its contents.
 - WebSocket clients have no rate limit and no authorisation beyond the token,
   and the daemon itself has no TLS. UDP discovery replies are rate-limited per
   source but carry no secret. Treat it as bench equipment with a small, local
