@@ -97,9 +97,10 @@ is in use, and moving that encoder to the same table is a companion follow-up.
 - **No app needed:** HID is generated from every controller report, before and
   independently of the FF10 stream mode. A phone with no FF10 subscription
   still gets input.
-- **Coalescing:** samples between pump ticks are collapsed. At most one HID
-  report is sent per 10 ms, an unchanged report is not resent, and while a
-  FF10 stream frame waits the pump alternates HID and stream sends.
+- **Coalescing:** samples between pump ticks are collapsed. An unchanged
+  report is not resent. At most one HID report is sent per 10 ms when idle and
+  per 20 ms while any stream is active, TCP included. While an FF1x frame
+  waits, HIDS never takes two send slots in a row.
 - **Stuck input:** a hand with no sample for 250 ms is released, and a neutral
   report is sent once. The report history and both hands are cleared on BLE
   connect and disconnect, so neither a controller reconnect nor a phone
@@ -143,10 +144,12 @@ is in use, and moving that encoder to the same table is a companion follow-up.
   link (`ENCRYPTION_KEY_SIZE_16`), so Android pairs before subscribing.
 - **Device Information Service:** `wmr_bridge.gatt` exposes DIS `0x180A` with
   manufacturer, model, firmware revision (the `PROJECT_VER` string) and a
-  7-byte PnP ID. Android reads the PnP ID while it opens a HOGP device. The
-  `0.2.4-25` trace's last read-by-type was first taken for that lookup, but the
-  UUID-printing `0.2.4-29` trace showed it was `0x2A04`, not `0x2A50`. DIS is
-  harmless metadata; it was not the cause of the drop.
+  7-byte PnP ID (`0x2A50`). Android reads the PnP ID while it opens a HOGP
+  device. The PnP ID stays fixed (VID `0x02E5`, PID `0x0001`) so a host can
+  claim the device by VID/PID. The `0.2.4-25` trace's last read-by-type was
+  first taken for that lookup, but the UUID-printing `0.2.4-29` trace showed
+  it was `0x2A04`, not `0x2A50`. DIS is harmless metadata; it was not the
+  cause of the drop.
 - **Peripheral preferred connection parameters:** the `0.2.4-29` trace ends
   with `read-by-type 0x0001 .. 0xffff type=0x2a04 uuid_len=2`, answered
   `attribute not found`. Android's GAP client reads `0x2A04` after service
@@ -518,14 +521,24 @@ Advertising uses two interval tiers:
 - Idle tier (zero Classic controllers connected): intervals run from 150 to 250 ms. This fast rate lets a phone discover the bridge quickly.
 - Active tier (at least one Classic controller connected): intervals switch to 1000 to 1285 ms. The switch occurs after a controller connects and opens its HID channel. This slower rate preserves radio airtime for the two Classic Bluetooth HID links.
 
-### Stream gating and automatic suppression
+### Stream gating
 
-The bridge gates HID reports to protect input integrity and avoid duplicate input:
+The bridge keeps HIDS on at all times and routes data by link:
+
 - Zero controllers connected: the bridge sends no HID input reports.
 - Unsubscribed CCCD: the bridge sends no reports until the central enables notifications on the Report characteristic CCCD. When enabled with a connected controller, the bridge sends one neutral report.
-- Active stream suppression: HID notifications pause automatically when a client subscribes to a TCP or WebSocket stream. HID notifications also pause when a central subscribes to GATT notifications on `FF11`, `FF12`, or `FF14`.
-- Neutral report on transition: when suppression starts, the bridge sends one neutral report. The report clears all buttons, centers the hat switch, and sets axes to zero. This releases any held input on the host.
-- Stream clearance: when all stream clients disconnect and all `FF11`, `FF12`, and `FF14` subscriptions stop, suppression ends. Reports resume on the next controller sample.
+- Always-on HIDS: BLE HIDS (`0x1812`/`0x2A4D`) stays connected and active for
+  OS and DroidDeck gamepad input, even while a TCP/WebSocket or BLE FF1x
+  stream is active. HIDS is not suppressed by a stream.
+- Pacing: the report is sent at most every 10 ms when idle and every 20 ms
+  while any stream is active, TCP included. While an FF1x frame waits, HIDS
+  never takes two send slots in a row.
+- Neutral report on transition: on BLE connect and disconnect, and when a hand
+  has no sample for 250 ms, the bridge sends one neutral report. The report
+  clears all buttons, centers the hat switch, and sets axes to zero.
+- Duplicate input: DroidDeck removes duplicate input in-app with
+  `PadBridge.setExcluded()`. The DIS PnP ID (`0x2A50`) stays fixed (VID
+  `0x02E5`, PID `0x0001`) so a host can claim the device by VID/PID.
 
 ### Pairing rules and CLI flags
 
