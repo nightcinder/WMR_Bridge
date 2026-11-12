@@ -29,11 +29,11 @@ I (27) boot: Multicore bootloader
 
 I (29) boot: chip revision: v1.1
 
-I (31) boot.esp32: SPI Speed      : 40MHz
+I (31) boot.esp32: SPI Speed: 40MHz
 
-I (35) boot.esp32: SPI Mode       : DIO
+I (35) boot.esp32: SPI Mode: DIO
 
-I (39) boot.esp32: SPI Flash Size : 2MB
+I (39) boot.esp32: SPI Flash Size: 2MB
 
 I (42) boot: Enabling RNG early entropy source...
 
@@ -117,7 +117,7 @@ I (433) coexist: coex firmware version: a830d28
 
 I (437) main_task: Started on CPU0
 
-I (439) main_task: Calling app_main()
+I (439) main_task: Calling app_main
 
 I (469) uart: queue free spaces: 10
 

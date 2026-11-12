@@ -1,4 +1,4 @@
-# BLE HID gamepad (ONY-441)
+# BLE HID gamepad 
 
 The ESP32 exposes the two WMR controllers as one standard BLE HID-over-GATT
 gamepad on the same phone link as the FF10 service. Android binds it as an
@@ -27,7 +27,7 @@ host tests if the two ever drift. The report bytes are the firmware's own
 
 ## Mapping
 
-`wmr_hid_map()` is a C port of `mapGamepad()` from
+`wmr_hid_map` is a C port of `mapGamepad` from
 `wmr_core/lib/domain/gamepad.dart`:
 
 - per hand: squeeze → L1/R1, stick click → L3/R3, menu → Select (LEFT) /
@@ -76,7 +76,7 @@ directly, which is the off-by-one the user saw.
 | Stick click RIGHT | 15 / bit 14 | `BUTTON_THUMBR` (107) | R3 |
 
 The hat (d-pad) and both trackpad roles are unchanged. The companion package's
-`encodeHidReport()` still packs its model order for its own
+`encodeHidReport` still packs its model order for its own
 `BluetoothHidDevice`; app HID output should be off when the firmware gamepad
 is in use, and moving that encoder to the same table is a companion follow-up.
 
@@ -89,7 +89,7 @@ is in use, and moving that encoder to the same table is a companion follow-up.
    `BUTTON_*` labels above) and press each control on each hand.
 3. Expected: A→A, B→B, X→X, Y→Y, squeeze→L1/R1, trigger→L2/R2,
    stick click→L3/R3, menu→Select/Start, home→Mode. C and Z never light up.
-4. Paste the observed labels back on ONY-685; a mismatch names the remaining
+4. Paste the observed labels back on; a mismatch names the remaining
    slot offset.
 
 ## Link behaviour
@@ -151,7 +151,7 @@ is in use, and moving that encoder to the same table is a companion follow-up.
   with `read-by-type 0x0001..0xffff type=0x2a04 uuid_len=2`, answered
   `attribute not found`. Android's GAP client reads `0x2A04` after service
   discovery; a failed read takes its client-complete path to
-  `GATT_Disconnect()` on the link. That is the five-second drop every phone run
+  `GATT_Disconnect` on the link. That is the five-second drop every phone run
   showed: discovery completed, no HID read or Report CCCD write happened, and
   the phone closed the ACL itself (`reason=0x13`). `wmr_bridge.gatt` now
   exposes `0x2A04` (min/max 15 ms, latency 0, timeout 4 s).
@@ -159,7 +159,7 @@ is in use, and moving that encoder to the same table is a companion follow-up.
 ## ATT trace
 
 A build with `WMR_CFG_ATT_TRACE=1` (`EXTRA_CFLAGS=-DWMR_CFG_ATT_TRACE=1`
-`python3 tools/firmware/build.py ...`) logs `ATT trace on: ...` at start-up,
+`python3 tools/firmware/build.py...`) logs `ATT trace on:...` at start-up,
 prints one line per ATT or SMP PDU on the phone link, and adds
 `ATT trace=on rx= tx= writes= two_byte_writes= smp= le_sig=` to the status
 block. `tx` is phone→bridge (requests) and `rx` is bridge→phone (responses).
@@ -185,7 +185,7 @@ Host tests compare both implementations against one vector file:
   `tests/vectors/hid_report_descriptor.txt`, checks every report byte and the
   descriptor, then checks the stale/coalescing state machine.
 - Companion package `wmr_companion_hid_android` — the same two vector files
-  are checked against `mapGamepad()` + `encodeHidReport()` (see
+  are checked against `mapGamepad` + `encodeHidReport` (see
   `test/hid_gamepad_vectors_test.dart` in the companion PR).
 
 Run the C side:
@@ -212,9 +212,9 @@ Local build evidence for this change:
 | ESP-IDF | v6.1 |
 | Factory image SHA-256 | `c5da5eb9e8d24aad5e5531183551b47ea323e4a2d6daa9c06db82afb16972eef` |
 
-The first phone attempt could not pair: it ran the pre-ONY-438 image
+The first phone attempt could not pair: it ran the pre- image
 (`0.2.4-7-g90c6c83`) and the bridge showed two names for one address. Both are
-fixed in the builds above. A phone link now needs ONY-438's LE Secure
+fixed in the builds above. A phone link now needs 's LE Secure
 Connections pairing with bonding; a build without it is not a valid test.
 
 The second attempt (`0.2.4-8-gba1a8bb`) paired after several resets but showed
@@ -289,7 +289,7 @@ dropped the link (reason `0x13`) five seconds later. The last request was
 `read-by-type 0x0001..0xffff type=0x2a04` (Peripheral Preferred Connection
 Parameters), answered `attribute not found`. Android's GAP client reads that
 characteristic after discovery; the failed read takes its client-complete path
-to `GATT_Disconnect()`, so the phone closed the ACL before the HID profile
+to `GATT_Disconnect`, so the phone closed the ACL before the HID profile
 could start. DIS (`0.2.4-26`) was a correct addition but not the drop.
 `0.2.4-31-g13c7d9f` adds GAP `0x2A04`; the next trace should show the HID
 Information and Report Map reads and the Report CCCD write. The phone had
@@ -324,7 +324,7 @@ Two changes fix that:
   channel and then disconnects it. Before this, such a link stayed up forever.
   Declining an unknown HID channel also disconnects the underlying ACL.
 
-The firmware logs `unknown Classic link <addr> up ... waiting for a HID
+The firmware logs `unknown Classic link <addr> up... waiting for a HID
 channel` or `incoming device <addr> is not LEFT or RIGHT; disconnecting`, so
 the next capture names the device that used to hold the slot.
 
@@ -334,7 +334,7 @@ The 2026-10-28 18:54 capture (user: "worse than before") has no HCI `0x09`:
 the third ACL slot removed that failure. It shows two boot-time problems
 instead.
 
-1. `connecting LEFT` completed its ACL (`LEFT link up ...`) and then sat for
+1. `connecting LEFT` completed its ACL (`LEFT link up...`) and then sat for
    20 s with no encryption, no SSP confirmation, and no HID channel. The
    discovery connect phase waited for HID events that never came, so the
    single-hand connect never finished; the board was reset.
@@ -401,7 +401,7 @@ Classic and LE are both enabled. During LE pairing the two sides therefore set
 the CT2 bit and derive a BR/EDR link key. Android stores that derived key as a
 **Classic bond for the LE identity address** — and since `0.2.4-36` that
 identity is a static random address that does not exist on BR/EDR. The phone
-then treats the device as dual-mode, `btif_hh_transport_select()` chooses the
+then treats the device as dual-mode, `btif_hh_transport_select` chooses the
 Classic HID transport, pages an address the bridge does not own, and the
 pairing UI returns to the scan list. The bridge never sees the page, which is
 why the log has a bond but no GATT client. With the public address this
@@ -438,7 +438,7 @@ controllers had not reconnected before the log ends), and per-control values
 (stick min/max/centre, trigger range, d-pad sectors). The app-side
 `StickNormalizer` gap below is unchanged.
 
-## Verification STATUS (ONY-441 done-when)
+## Verification STATUS ( done-when)
 
 The phone rows are now a completed hardware result: the 2026-10-28
 `0.2.4-38` run passed the gamepad test in a stock phone. The paste-back
@@ -567,7 +567,7 @@ CLI flags control BLE behavior:
   firmware HOGP device is used; registering `BluetoothHidDevice` disables
   Android's HID Host service, which stops reception of the bridge's HOGP
   input reports.
-- **Security.** Bonding behaviour is ONY-438's and is now merged: LESC with
+- **Security.** Bonding behaviour is 's and is now merged: LESC with
   bonding, unbonded centrals refused. A HID build without it cannot pair on a
   current Android phone, so test only images built after that merge.
 - **iOS and PC hosts** are out of scope.

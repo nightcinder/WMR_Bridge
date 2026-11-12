@@ -355,7 +355,7 @@ static void test_is_wmr(void){
     CHECK(!wmr_decode_frame_is_wmr(NULL, sizeof(f)));
     CHECK(!wmr_decode_frame_is_wmr(f, WMR_DECODE_FRAME_LENGTH - 1));
     /* A same-length frame from another device shares the transport but is not HID input,
-     * so it must not be reported as a HID decode failure (ONY-441 review). */
+     * so it must not be reported as a HID decode failure (review). */
     uint8_t other[WMR_DECODE_FRAME_LENGTH] = {0};
     other[0] = 0xAA; other[1] = 0x02; other[2] = 0x01;
     CHECK(!wmr_decode_frame_is_wmr(other, sizeof(other)));

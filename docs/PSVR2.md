@@ -67,7 +67,7 @@ LEFT GET_REPORT response: status=0x00 len=NN
 LEFT first report: cid=... frame_len=79 descriptor=available
 ```
 
-`LEFT address: ... (discovered, stored, model PSVR2)` is printed at boot and by `s`.
+`LEFT address:... (discovered, stored, model PSVR2)` is printed at boot and by `s`.
 
 ## What is not implemented
 
@@ -139,13 +139,13 @@ element type before raising the frame limit again.
 
 ## Sources
 
-- Bluetooth names, USB IDs and the wake/report facts: ONY-81 report and
+- Bluetooth names, USB IDs and the wake/report facts:  report and
   [WMR_Bridge#44](https://github.com/nightcinder/WMR_Bridge/issues/44).
 - Names were confirmed against Windows/Linux/Apple host reports in that
   investigation. They have not been captured through this firmware.
 - Report layout and scales: Monado's PSVR2 Sense driver,
   `src/xrt/drivers/pssense/pssense_driver.c` (`struct pssense_input_report`,
-  `PSSENSE_GYRO_SCALE_DEG`, `PSSENSE_ACCEL_SCALE`), and the ONY-233 research
+  `PSSENSE_GYRO_SCALE_DEG`, `PSSENSE_ACCEL_SCALE`), and the  research
   page, <https://app.notion.com/p/404145eff9f581ecaf73dfdeed2c8301>.
 - The decoder offsets follow Monado; that source has not been checked against a
   frame from this controller.

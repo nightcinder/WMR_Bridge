@@ -157,7 +157,7 @@ Real-world usable capacity drops to about 180 mAh (90%).
 - Dual-Controller Active Session: 45 to 52 minutes.
 - Single-Controller Active Session: 58 to 65 minutes.
 - Recharge Time: 60 to 75 minutes via USB-C (charge-to-play ratio is above
-  1.2 : 1).
+  1.2: 1).
 
 ---
 

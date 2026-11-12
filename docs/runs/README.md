@@ -15,7 +15,7 @@ build is not a hardware result.
 The minimum run is `docs/runs/sheets/bench.md`: a 12-step, about 24 minute
 pass/fail checklist on a Raspberry Pi 3B+ and an ESP32 with WMR controllers
 and a Pixel 11 Pro. It covers the checks that still gate something real:
-ONY-1058 (keep-alive and idle sleep/power-off) and ONY-1117 (v0.3.16
+ (keep-alive and idle sleep/power-off) and  (v0.3.16
 release). Optional expansions are listed at the end of that sheet.
 
 External testers use `docs/runs/sheets/external-test-user.md`.

@@ -89,7 +89,7 @@ radio run.
 | 17 | `rx_time_us` monotonic | partial; arrival is bursty, not sensor time |
 | 18 | Tick unit and wrap | partial; 100 ns consistent, 2^32 wrap unseen |
 
-Checks 5-7, 11, 12, 15 and 16 are in the removed robustness sheet (ONY-1157; see git history) §1, §2, §3, §5, §9.
+Checks 5-7, 11, 12, 15 and 16 are in the removed robustness sheet (; see git history) §1, §2, §3, §5, §9.
 
 ## Link diagnostics
 
@@ -128,7 +128,7 @@ not established.
 | B11 | Switch FF12/FF14/FF11 | not run; robustness §8 |
 | B12 | `LINKLOG` fields | reported: 19-field header parses |
 
-The FF12 vs FF14 batching comparison is in the removed robustness sheet (ONY-1157; see git history) §4.
+The FF12 vs FF14 batching comparison is in the removed robustness sheet (; see git history) §4.
 
 ## FF15 echo
 
@@ -155,7 +155,7 @@ Host tests cover formats and the reader only.
 | C4 | Input stream during read | inconclusive: no stream was on |
 | C5 | Phone reads FF13 in 496-byte windows | reported OK, CRCs match |
 | C6 | Input keeps streaming after READY | reported: continued; `other=` not reported |
-| C7 | `WMR_CFG_FF13_READ=0` | partly reported; LEFT and the image hash unconfirmed. Folded into the removed robustness sheet (ONY-1157; see git history) §11 |
+| C7 | `WMR_CFG_FF13_READ=0` | partly reported; LEFT and the image hash unconfirmed. Folded into the removed robustness sheet (; see git history) §11 |
 
 ## FF12 decimation diagnostic
 
@@ -166,11 +166,11 @@ airtime is a cause; if not, it is not the only cause.
 
 ## Where the procedures live
 
-- Internal bench (latency-2, FF16/FF17/stick, ONY-446, HID, LED, Sitting R):
-  the removed internal-ESP32 bench sheet (ONY-1157; see git history). ESP32
+- Internal bench (latency-2, FF16/FF17/stick,, HID, LED, Sitting R):
+  the removed internal-ESP32 bench sheet (; see git history). ESP32
   pass/fail steps: `docs/runs/sheets/bench.md`.
 - Remaining protocol and robustness checks, plus close-out:
-  `the removed robustness sheet (ONY-1157; see git history)`.
+  `the removed robustness sheet (; see git history)`.
 - External tester tiers:
   [`runs/sheets/external-test-user.md`](runs/sheets/external-test-user.md).
 - Contention results: [`CONTENTION_LEVERS.md`](CONTENTION_LEVERS.md).

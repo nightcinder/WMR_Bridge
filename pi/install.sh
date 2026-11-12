@@ -115,7 +115,7 @@ enable_service() {
 # phone's fresh Just Works pairing against a stored bond with a negative reply
 # before our NoInputNoOutput agent is asked ("Numeric comparison failed"). Point
 # the repair at the agent so a phone that forgot the bridge can pair again, as
-# the ESP32 does after PIN_OR_KEY_MISSING (ONY-441).
+# the ESP32 does after PIN_OR_KEY_MISSING.
 configure_bluez() {
     if [ "${WMR_SKIP_PRIVILEGED:-0}" = "1" ] || [ -n "${DESTDIR:-}" ]; then
         return 0

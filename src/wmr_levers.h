@@ -32,7 +32,7 @@
  */
 
 /*
- * wmr_levers.h - runtime state for the one-flash ONY-430 LEVERS image.
+ * wmr_levers.h - runtime state for the one-flash LEVERS image.
  *
  * WMR_CFG_TEST_LEVERS=1 replaces the compile-time contention variants with runtime
  * toggles for the four firmware levers (V1 stagger, BLE interval, FF14 hold, Classic TX

@@ -23,7 +23,7 @@ reconnect without scanning.
 | `Pro Controller` | LEFT | Switch |
 
 Trailing spaces and NUL padding are ignored. Anything else must match. The WMR
-names are the ones given in issue #2. The PSVR2 names come from the ONY-81
+names are the ones given in issue #2. The PSVR2 names come from the 
 investigation and the [PSVR2 tracking issue](https://github.com/nightcinder/WMR_Bridge/issues/44).
 Check D2 in TESTING.md covers the WMR names (reported passed, no output pasted).
 The PSVR2 and Switch names have not been seen by this firmware. What the bridge
@@ -166,7 +166,7 @@ was reset.
 
 A controller reconnecting on its own encrypts the ACL about 80 ms after it comes
 up and then opens its HID channel (`link encrypted`, then `incoming HID
-connection`). The 2026-10-28 log (ONY-446) shows the discovery handoff breaking
+connection`). The 2026-10-28 log  shows the discovery handoff breaking
 that: LEFT had just paired, RIGHT's ACL came up 2 s after `discovery
 finished`, and then neither link produced a report for 18 s. There was no
 `RIGHT link encrypted` and no HID channel until the ESP32 was reset. The bridge
@@ -207,13 +207,13 @@ Assumed, not yet checked on these controllers: a WMR controller answers inquiry
 only in pairing mode (turn it on with the front Windows button, then hold the
 small pairing button inside the battery compartment until the LEDs flash). For a fresh
 flash: power on the ESP32, put one or both controllers in pairing mode within
-the first minute, and watch for `Discovery: LEFT is ...` and
+the first minute, and watch for `Discovery: LEFT is...` and
 `descriptor status=0x00`. If pairing mode times out first, put the controller in
 pairing mode again and press `d`.
 
-A failed attempt now logs `Pairing: LEFT attempt 1/3 did not connect; retrying ...`
+A failed attempt now logs `Pairing: LEFT attempt 1/3 did not connect; retrying...`
 and tries again. Only after the last attempt does it forget the address
-(`Pairing: LEFT did not pair ...; address forgotten. Put it in pairing mode and
+(`Pairing: LEFT did not pair...; address forgotten. Put it in pairing mode and
 press d`). That means the next `d` (or the next automatic burst) can find the
 controller again without `F`, and the run ends with
 `Discovery: LEFT was found but did not pair after 3 attempt(s)`. If the log says
@@ -224,7 +224,7 @@ reachable: press `l`/`r` or wake it.
 
 The first device found with a hand's name is used for that hand. Any other
 device with the same name in the same discovery is logged (`another device with
-a controller name ... ignored`) and not used. This applies across models too: a
+a controller name... ignored`) and not used. This applies across models too: a
 WMR LEFT found first keeps a PSVR2 LEFT out. Keep only one controller of each
 hand in pairing mode during discovery. If the wrong one was taken: `F`, then
 discovery again with only the right one in pairing mode. Asking for confirmation
@@ -339,21 +339,21 @@ and `r` connect, `L` and `R` disconnect, `k` and `K` drop one hand's link key,
 serial monitor at 115200 baud stays the advanced fallback for browsers without
 Web Serial.
 
-## Reading the monitor: pairing walkthrough (ONY-313)
+## Reading the monitor: pairing walkthrough 
 
 Firmware logs one format:
 `[    12.345] I pair   LEFT ready: HID descriptor received (model WMR)`.
 A successful pairing run shows, in order: discovery
-(`found ... at ... (..., model ...)`), link up (`... link up at ... (handle=0x..., role=...)`),
+(`found... at... (..., model...)`), link up (`... link up at... (handle=0x..., role=...)`),
 authentication (`... authenticated`), encryption (`... link encrypted`),
-descriptor (`... ready: HID descriptor received (model ...)`), first report
-(`... is streaming: first input report ...`). Discovery ends with a per-hand
+descriptor (`... ready: HID descriptor received (model...)`), first report
+(`... is streaming: first input report...`). Discovery ends with a per-hand
 summary: ready / waiting for descriptor / known but disconnected / not paired
 with next action.
 
 Failure hints on the `pair` tag:
 
-- `authentication failed: ... (link key mismatch) (0x05)`, remove the
+- `authentication failed:... (link key mismatch) (0x05)`, remove the
   controller's old pairing or press `k`/`K` for a bond reset.
 - `PIN or key missing (controller lost the bond)` (0x06).
 - `remote user terminated` (0x13).

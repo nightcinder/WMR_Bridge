@@ -49,7 +49,7 @@ The state machine is `wmr_switch_handshake_*` in `src/wmr_switch.c`.
 
 ## Input report `0x21` (subcommand reply)
 
-A captured frame is `A1 21 ...`. Offsets below count from `A1`:
+A captured frame is `A1 21...`. Offsets below count from `A1`:
 
 | Offset | Size | Field |
 | --- | --- | --- |
@@ -84,7 +84,7 @@ Microsoft block read.
 
 ## Input report `0x30`
 
-A captured frame is `A1 30 ...` and is exactly 50 bytes (49-byte report plus the
+A captured frame is `A1 30...` and is exactly 50 bytes (49-byte report plus the
 HID header). The report carries one button/stick snapshot and three 12-byte IMU
 samples, oldest first, 5 ms apart.
 

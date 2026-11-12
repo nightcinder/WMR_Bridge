@@ -113,7 +113,7 @@ Unchanged from 0.2:
 ## Linux / Raspberry Pi Wi-Fi host bridge (`pi/`)
 
 The Pi bridge carries the same data over a Wi-Fi WebSocket instead of BLE. Its
-mechanical safeguards were added in #47 / ONY-116:
+mechanical safeguards were added in #47 /:
 
 - `--bind` defaults to `127.0.0.1`. A non-loopback bind requires a shared
   bearer token (`--token-file` preferred, mode `0640`, owned by `wmr`).
@@ -183,7 +183,7 @@ can hold it.
 ## Before wider use
 
 - Pair and bond on the target phone. Confirm an unbonded central is refused.
-  Record the run (Nick, ONY-438 acceptance).
+  Record the run (Nick,  acceptance).
 - Cut over the UUIDs per [BLE_MIGRATION.md](BLE_MIGRATION.md), including the
   owner decision on removing FF10.
 - Terminate TLS on the Pi for any use beyond a trusted LAN.

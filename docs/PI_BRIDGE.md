@@ -158,7 +158,7 @@ the pairer retries with a 30 s backoff instead of disabling itself. Check
 `rfkill list bluetooth` and `systemctl status bluetooth`. A `could not scan;
 retrying with backoff` line names a scan failure such as a resetting adapter;
 the pairer re-probes power and retries, so pairing resumes when the adapter
-recovers. A `pairing ... failed: org.bluez...` line is the BlueZ error for that
+recovers. A `pairing... failed: org.bluez...` line is the BlueZ error for that
 attempt. If it says `AuthenticationFailed`, remove the controller's old bond on
 the other host (or with `bluetoothctl remove <MAC>`), then put it in pairing
 mode again.
@@ -172,7 +172,7 @@ cat /sys/class/hidraw/hidraw*/device/uevent | grep -E 'HID_NAME|HID_UNIQ'
 
 A WMR input report appears on hidraw as report ID `0x01` followed by 44 payload
 bytes. The bridge accepts that 45-byte form, the firmware's 46-byte
-`A1 01 ...` form, and a bare 44-byte payload. Other report IDs are ignored.
+`A1 01...` form, and a bare 44-byte payload. Other report IDs are ignored.
 Diagnose with `sudo evtest` or `sudo hexdump -C /dev/hidrawN`.
 
 If the nodes are not readable by your user:
@@ -244,7 +244,7 @@ troubleshooting, see the [Raspberry Pi Deployment and Update Runbook](DEPLOY_RPI
 On Raspberry Pi OS 64-bit (Bookworm or Trixie), install the Debian package:
 
 ```bash
-sudo apt install ./wmr-bridge_<version>_all.deb
+sudo apt install./wmr-bridge_<version>_all.deb
 journalctl -u wmr-bridge -f
 ```
 
@@ -260,14 +260,14 @@ unit and keeps the token. `apt purge wmr-bridge` removes the token.
 If a traceback points at a line that does not match
 `/opt/wmr-bridge/pi/wmr_bridge/*.py`, the installed tree is stale from an
 earlier version, not a bytecode problem: reinstall the matching `.deb` with
-`sudo apt install --reinstall ./wmr-bridge_<version>_all.deb`. The package
+`sudo apt install --reinstall./wmr-bridge_<version>_all.deb`. The package
 copies the tagged modules and ships no bytecode, and `postinst`/`install.sh`
 remove `__pycache__` left by a previous install.
 
 The piped installer installs the `.deb` and enables the unit for you:
 
 ```bash
-# one line, no checkout: installs the .deb and enables/starts the unit
+# one line, no checkout: installs the.deb and enables/starts the unit
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 
 # or from a checkout or an extracted locally built tarball
@@ -472,11 +472,11 @@ image date and kernel in the sitting record (section 5.1 of the run sheet).
 Build and verify the installable packages on any Linux host:
 
 ```bash
-pi/build_package.sh                 # dist/wmr-bridge-0.3.25.tar.gz + .sha256
-pi/build_deb.sh                     # dist/wmr-bridge_0.3.25_all.deb + .sha256
+pi/build_package.sh                 # dist/wmr-bridge-0.3.25.tar.gz +.sha256
+pi/build_deb.sh                     # dist/wmr-bridge_0.3.25_all.deb +.sha256
 pi/tools/verify_package.sh dist/wmr-bridge-0.3.25.tar.gz
 scp dist/wmr-bridge_0.3.25_all.deb pi@<pi>:~
-ssh pi@<pi> 'sudo apt install ./wmr-bridge_0.3.25_all.deb'
+ssh pi@<pi> 'sudo apt install./wmr-bridge_0.3.25_all.deb'
 ```
 
 The tarball alternative is
@@ -496,7 +496,7 @@ the P2 check runnable on the Pi before a controller is paired:
 ```bash
 cd /opt/wmr-bridge/pi
 python3 -m wmr_bridge --list
-python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
+python3 -m wmr_bridge --replay../samples/controller_frames.txt --bind 127.0.0.1
 python3 tools/wifi_probe.py --stream batched --duration 10
 ```
 
@@ -745,7 +745,7 @@ when the adapter still holds a bond for the phone, before any `Agent1` callback;
 the
 phone then shows `Numeric comparison failed`. `confirm` sends that repair to
 the bridge's default agent, which accepts and logs it. This is the lesson from
-the ESP32 firmware's stale-bond handling (ONY-441): a phone that forgot the
+the ESP32 firmware's stale-bond handling: a phone that forgot the
 bridge may pair again and replace the old key instead of being refused. An
 explicit `always` is left alone. The Classic auto-pairer runs its own
 interactive `bluetoothctl` session to bond controllers on the same adapter.
@@ -765,7 +765,7 @@ the reason and the new `Adapter1.Pairable` state (for example
 `BLE pairing window closed (an LE bond is stored); Adapter1.Pairable -> off`),
 `BLE pairing window opened manually for 180 s`,
 `BLE pairing agent registered`/`claimed`/`reclaimed`, the
-`BlueZ JustWorksRepairing = ...` policy line read from `main.conf` at BLE
+`BlueZ JustWorksRepairing =...` policy line read from `main.conf` at BLE
 start, one line per agent
 callback with the method, device and result
 (`BLE pairing agent: method=RequestAuthorization device=<device> result=accepted`),
@@ -960,15 +960,15 @@ FF13 (see [PROTOCOL.md](PROTOCOL.md)):
 | 4 | u32 | blob length in bytes, 0 unless ready |
 | 8 | u32 | offset of this window |
 | 12 | u32 | CRC-32 of the whole blob, 0 unless ready |
-| 16 | `n` | `blob[offset .. offset+n)`, `n = min(total_len - offset, 496)`; empty unless ready |
+| 16 | `n` | `blob[offset.. offset+n)`, `n = min(total_len - offset, 496)`; empty unless ready |
 
 The largest message is 513 bytes (tag, header and 496 data bytes), well inside
 the WebSocket limit. The blob is the controller config block exactly as read,
 still obfuscated; the client checks the CRC-32 and de-obfuscates it as for BLE
 FF13.
 
-The daemon caches the blob per hand through `Bridge.set_calibration_blob()` and
-tracks `set_calibration_state()` for in-progress or failed reads. The Pi-side
+The daemon caches the blob per hand through `Bridge.set_calibration_blob` and
+tracks `set_calibration_state` for in-progress or failed reads. The Pi-side
 read from the controller over hidraw is not implemented yet, so on a fresh
 daemon both hands report `not_read` and a calibration request returns a
 header-only window until an ingest layer fills the cache.
@@ -1267,7 +1267,7 @@ or third-party packages.
 Replay smoke test:
 
 ```bash
-python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1 --port 8765
+python3 -m wmr_bridge --replay../samples/controller_frames.txt --bind 127.0.0.1 --port 8765
 python3 tools/wifi_probe.py --stream batched --duration 10
 ```
 
@@ -1288,7 +1288,7 @@ tester checklist and pinned image/package checksums are in
 | P2 | Replay probe | ~160 rec/s, no gaps, no drops |
 | P3 | Live one controller, `decoded` | buttons, stick, trigger and IMU change sensibly; sequence rises ~150-180/s; `errors` 0 after 60 s |
 | P4 | Live both controllers | both hands stream concurrently; per-hand sequences independent; no decode errors |
-| P5 | 5 GHz link, 10 min | `iw ... link` above 5000 MHz; `dropped` 0; probe RTT p50/p95 recorded; compare with 2.4 GHz in the same sitting |
+| P5 | 5 GHz link, 10 min | `iw... link` above 5000 MHz; `dropped` 0; probe RTT p50/p95 recorded; compare with 2.4 GHz in the same sitting |
 | P6 | Upstream loss | record tick-based missing-report share per hand (as in the firmware runs) and compare with the ESP32 baseline; do not claim improvement from sequence gaps alone |
 | P7 | Controller reconnect | power-cycle one controller; it reappears, the client stays subscribed, sequences continue (no reset) |
 | P8 | Network reconnect | drop/rejoin Wi-Fi; client reconnects and re-subscribes; token still enforced |
@@ -1314,8 +1314,8 @@ INFO/WARNING:
 - Client connect/disconnect: `client connected: <peer>` / `client disconnected: <peer>`.
 - Subscribe/unsubscribe: `client <peer> subscribed to batched` /
   `client <peer> unsubscribed`.
-- No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check ...`.
-- Auto-pair: one `auto-pair: scanning ...` line per attempt (at most every 30 s while a hand is missing), then `found`, `pairing`, `paired`, `trusting`, `connecting`, and `connected` lines for the controller it hears. A failed attempt logs `pairing <MAC> failed: <BlueZ error>`. `wmr-bridge status` prints the same state without reading the journal.
+- No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check...`.
+- Auto-pair: one `auto-pair: scanning...` line per attempt (at most every 30 s while a hand is missing), then `found`, `pairing`, `paired`, `trusting`, `connecting`, and `connected` lines for the controller it hears. A failed attempt logs `pairing <MAC> failed: <BlueZ error>`. `wmr-bridge status` prints the same state without reading the journal.
 - Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
 - `hello.version` reports the package version (`0.3.25`; `0.1.0` before PR #78 merged).
 
@@ -1325,7 +1325,7 @@ INFO/WARNING:
 | --- | --- |
 | `no /dev/hidraw nodes` | `systemctl status bluetooth`, `lsmod \| grep hidp`, controller paired/trusted/connected |
 | `bluetoothctl show` says `Powered: no`, `Pairable: no`, Class 0 | adapter firmware crashed or the UART attach failed; `btmon` showing `HCI Reset` answered by `Hardware Error` (0x10, code 0x00) is the crashed-controller signature. Reboot the Pi; if the error survives the reboot, power-cycle the board. Restarting only `bluetooth.service` does not reload the firmware |
-| Phone will not re-pair after the upgrade; adapter `pairable=no` | a stored LE bond closes pairability (ONY-1226). Open a window with `wmr-bridge pair` (180 s), or remove the phone's stale bond with `bluetoothctl remove <MAC>`. v0.3.25 does not touch `/var/lib/bluetooth`; the upgrade scripts now leave bluetoothd alone when `JustWorksRepairing` is already set |
+| Phone will not re-pair after the upgrade; adapter `pairable=no` | a stored LE bond closes pairability. Open a window with `wmr-bridge pair` (180 s), or remove the phone's stale bond with `bluetoothctl remove <MAC>`. v0.3.25 does not touch `/var/lib/bluetooth`; the upgrade scripts now leave bluetoothd alone when `JustWorksRepairing` is already set |
 | Wi-Fi auth fails with Bluetooth off | the shared token is only learned over the BLE FF13 encrypted read; the companion's manual Wi-Fi entry does not persist a token. Copy it from `/etc/wmr-bridge/token` (unchanged across upgrades) or read it over BLE |
 | Node exists but `--list` shows name `-` | custom controller name; use `--left/--right` with the MAC or path |
 | Permission denied opening hidraw | run as root or add the user to `input`; check udev mode |

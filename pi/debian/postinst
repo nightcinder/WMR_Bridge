@@ -71,7 +71,6 @@ case "$1" in
             # rejects a phone's fresh Just Works pairing against a stored bond
             # before our agent is asked ("Numeric comparison failed"). Route the
             # repair through the agent, as the ESP32 does after a stale bond
-            # (ONY-441).
             BLUEZ_CONF="${DESTDIR}/etc/bluetooth/main.conf"
             BLUEZ_TOOL="${DESTDIR}/opt/wmr-bridge/pi/wmr_bridge/bluez_conf.py"
             BLUEZ_RESTART=0

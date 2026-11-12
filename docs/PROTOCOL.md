@@ -118,7 +118,7 @@ fragment: a 12-byte header followed by a chunk of one controller frame.
 | 6 | u16 | `total_len` | Length of the whole frame in bytes (46 for WMR, 79 for PSVR2, 50 for Switch) |
 | 8 | u16 | `offset` | Offset of this chunk within the frame |
 | 10 | u16 | `chunk_len` | Bytes of frame data in this notification |
-| 12 | `chunk_len` | `data` | `frame[offset .. offset+chunk_len)` |
+| 12 | `chunk_len` | `data` | `frame[offset.. offset+chunk_len)` |
 
 The frame is the controller's HID input report exactly as BTstack delivers it:
 byte 0 = `0xA1` (HID DATA/input transaction header), byte 1 = report ID, then
@@ -257,7 +257,7 @@ integers are little-endian. Floats are IEEE 754 binary32, little-endian.
 | 2 | u8 | `flags` | bit0 `CALIBRATED`. Always 0 in version 1 (see below). Other bits 0 |
 | 3 | u8 | `buttons` | bit0 thumbstick click, bit1 home, bit2 menu, bit3 squeeze click, bit4 trackpad click, bit5 BT pairing, bit6 trackpad touch, bit7 0 |
 | 4 | u32 | `sequence` | The same per-hand sequence number as the raw FF11 frame this sample was decoded from. Gaps = loss before transmission |
-| 8 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time()` when the HID report was received, microseconds since ESP32 boot. For latency and jitter diagnostics only; not a sensor clock |
+| 8 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time` when the HID report was received, microseconds since ESP32 boot. For latency and jitter diagnostics only; not a sensor clock |
 | 16 | u32 | `device_ticks` | Primary clock for sensor timing. Controller's own timer, 100 ns per tick, wraps at 2^32 (see "Timing") |
 | 20 | 3 x f32 | `gyro` x, y, z | rad/s, uncalibrated, raw sensor axes |
 | 32 | 3 x f32 | `accel` x, y, z | m/s^2, uncalibrated scale, raw sensor axes |
@@ -365,7 +365,7 @@ until the rotation capture in [DECODING.md](DECODING.md) is done.
   one of the two streams is ever active, so there is no contention). A full
   queue drops the newest sample and counts it in `drop`, as for FF11.
 - Where decoding happens. The HID callback only copies the report and stamps
-  `rx_time_us` (`esp_timer_get_time()`) at arrival. Decoding into the 56-byte
+  `rx_time_us` (`esp_timer_get_time`) at arrival. Decoding into the 56-byte
   record happens when the notification pump takes a frame from the queue, and
   only while FF12 is the active stream.
 - Minimum MTU: 59 (56 + 3 bytes of ATT opcode and handle). Below that nothing
@@ -448,7 +448,7 @@ after FF12.
 
 One notification value = a 2-byte header followed by `count` complete FF12
 version 1 records, unchanged (each keeps its own `version` = 1, `hand`,
-`sequence`, `rx_time_us`, `device_ticks`, ...):
+`sequence`, `rx_time_us`, `device_ticks`,...):
 
 | Offset | Size | Field | Meaning |
 | --- | --- | --- | --- |
@@ -486,7 +486,7 @@ nothing itself). A batch is sent from the queue when the ATT stack can send
 - the oldest queued record has waited one connection interval (the interval the
   phone granted; 15 ms until it is known, `WMR_CFG_BATCH_HOLD_DEFAULT_US`): the
   queue is then flushed as a partial batch. `WMR_CFG_BATCH_HOLD_INTERVALS`
-  (default 1) multiplies the hold. 2 is the ONY-176 airtime variant and adds
+  (default 1) multiplies the hold. 2 is the  airtime variant and adds
   about one interval of batch latency.
 
 So a record is held for batching no longer than the configured number of
@@ -605,7 +605,7 @@ ignored except the missing answer.
 | 0 | u8 | `version` | `1`. A receiver must ignore an answer with an unknown version |
 | 1 | u8 | reserved | 0 |
 | 2 | u16 | `ping_id` | From the request |
-| 4 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time()` when the request reached the ATT write callback, microseconds since ESP32 boot. The same clock as FF12 `rx_time_us` |
+| 4 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time` when the request reached the ATT write callback, microseconds since ESP32 boot. The same clock as FF12 `rx_time_us` |
 | 12 | u32 | `turnaround_us` | Time from `rx_time_us` to just before the answer was handed to `att_server_notify`. Saturates at `0xFFFFFFFF` |
 | 16 | u16 | `queue_depth` | Stream frames queued when the request arrived (the backlog the answer skipped). 0 with no stream |
 | 18 | u16 | reserved | 0 |
@@ -834,7 +834,7 @@ Read / notify value: a 16-byte header, then data.
 | 4 | u32 | `total_len` | Blob length in bytes. 0 unless READY |
 | 8 | u32 | `offset` | Start of this window in the blob |
 | 12 | u32 | `crc32` | CRC-32 (IEEE 802.3, reflected, polynomial `0xEDB88320`, init and final XOR `0xFFFFFFFF`) of the whole blob. 0 unless READY |
-| 16 | `n` | data | `blob[offset .. offset+n)`, `n = min(total_len - offset, 496)`. Empty unless READY |
+| 16 | `n` | data | `blob[offset.. offset+n)`, `n = min(total_len - offset, 496)`. Empty unless READY |
 
 A notify carries only the 16-byte header (no data), sent when a hand's `state`
 changes, so the app knows when to start reading. The phone reads the blob by
@@ -862,7 +862,7 @@ First block-read request for block `0x02` (64 bytes, rest zero), then a follow-u
 for block `0x03` with `addr` `0x01020304`:
 
 ```
-06 02 02 FF FF FF FF 00 ...            06 02 03 04 03 02 01 00 ...
+06 02 02 FF FF FF FF 00...            06 02 03 04 03 02 01 00...
 ```
 
 Config response (78 bytes, from the report ID; BTstack delivers it behind the
@@ -870,7 +870,7 @@ Config response (78 bytes, from the report ID; BTstack delivers it behind the
 `AA BB CC`, rest zero:
 
 ```
-02 00 02 00 02 34 12 00 00 03 AA BB CC 00 ...
+02 00 02 00 02 34 12 00 00 03 AA BB CC 00...
 ```
 
 FF13 header-only value (notify, or any non-READY read), RIGHT, state `READY`
@@ -1049,10 +1049,10 @@ Writes execute control actions that mirror serial console commands. Writes take
 
 | Opcode | Name | Size | Argument | Action / firmware function |
 | --- | --- | --- | --- | --- |
-| `0x01` | DISCOVER | 1-2 B | hand ignored | `wmr_controller_discover()`: starts bounded inquiry/discovery for unbound hands |
+| `0x01` | DISCOVER | 1-2 B | hand ignored | `wmr_controller_discover`: starts bounded inquiry/discovery for unbound hands |
 | `0x02` | CONNECT | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_connect(hand)`: initiates Classic BT HID connection; if that hand is already open or opening, returns OK without starting a second attempt; if its previous disconnect is still closing, returns BUSY |
 | `0x03` | DISCONNECT | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_disconnect(hand)`: closes Classic BT HID connection |
-| `0x04` | FORGET_ADDRS | 1-2 B | hand ignored | `wmr_controller_forget_addresses()`: clears stored NVS addresses (refused if connected/connecting) |
+| `0x04` | FORGET_ADDRS | 1-2 B | hand ignored | `wmr_controller_forget_addresses`: clears stored NVS addresses (refused if connected/connecting) |
 | `0x05` | FORGET_BOND | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_forget_bond(hand)`: clears paired link key (refused if connected/connecting) |
 
 ### Result codes and ATT errors

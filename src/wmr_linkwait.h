@@ -36,7 +36,7 @@
  *
  * A controller that reconnects on its own normally encrypts the ACL about 80 ms after
  * the link comes up, and only then opens its HID channel. After the discovery handoff
- * the 2026-10-28 field log (ONY-446) shows the ACL staying up with neither for 18 s,
+ * the 2026-10-28 field log shows the ACL staying up with neither for 18 s,
  * until the ESP32 was reset. This module is the host's side of that handoff: it asks
  * the controller to encrypt the link when the controller does not, and drops a link
  * that never produces a HID channel so the controller pages again.

@@ -144,8 +144,8 @@ Pinned 2026-11-11 assets:
 git clone https://github.com/nightcinder/WMR_Bridge.git
 cd WMR_Bridge
 ./pi/build_deb.sh
-sudo apt install ./dist/*.deb
-# or: sudo ./pi/install.sh
+sudo apt install./dist/*.deb
+# or: sudo./pi/install.sh
 ```
 
 **One-line installer:**
@@ -165,7 +165,7 @@ wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.25/SHA256S
 wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.25/SHA256SUMS.minisig
 minisign -Vm SHA256SUMS -P RWTL80BhYeTEqPhBvFePoSc/uoC+iJCEa41o1uA3h+t4opQbX0yKCnA6
 sha256sum -c SHA256SUMS --ignore-missing
-sudo apt install ./wmr-bridge_<version>_all.deb
+sudo apt install./wmr-bridge_<version>_all.deb
 ```
 
 Replace `<version>` with the Pi package version.
@@ -281,7 +281,7 @@ From a checkout:
 ```bash
 git pull
 ./pi/build_deb.sh
-sudo apt install ./dist/*.deb
+sudo apt install./dist/*.deb
 ```
 
 From release artifacts:

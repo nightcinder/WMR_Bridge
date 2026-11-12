@@ -118,7 +118,7 @@ GAMEPAD_APPEARANCE = 0x03C4
 ADV_FAST_MIN_INTERVAL_MS = 150
 ADV_FAST_MAX_INTERVAL_MS = 250
 # Slow advertising leaves airtime for the two Classic HID links on the same
-# radio once a controller connects (ONY-1112 Amendment 1).
+# radio once a controller connects (see docs).
 ADV_MIN_INTERVAL_MS = 1000
 ADV_MAX_INTERVAL_MS = 1285
 # A newly flashed Pi is pairable for this long after BLE starts even when a
@@ -472,7 +472,7 @@ class GattApplication:
         A Pi's BLE address can be random, so a scanner cannot key on it. The
         first eight bytes are enough to match the advertisement with the
         ``bridge_id`` read from FF16. Advertising is fast while there is no
-        Classic controller link to protect and drops to the ONY-1112 slow
+        Classic controller link to protect and drops to the slow
         interval as soon as one connects. The gamepad appearance and the HID
         service UUID make Android classify the bridge as a controller.
         """
@@ -1554,7 +1554,7 @@ class DbusGattBackend:
 class BluezGattPeripheral:
     """Attach a BlueZ GATT application to a :class:`Bridge`.
 
-    Pairability follows the ONY-1226 verdict: the adapter is pairable while it
+    Pairability follows the verdict: the adapter is pairable while it
     has no LE bond, for ``pairing_window_s`` after boot, or while a manual
     window is open. ``continuous_pairing`` is the opt-in ESP32-style mode that
     keeps the adapter pairable regardless of stored bonds.

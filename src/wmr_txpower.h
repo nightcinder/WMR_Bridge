@@ -32,7 +32,7 @@
  */
 
 /*
- * wmr_txpower.h - Classic BR/EDR TX power get/set/readback (ONY-430 R5).
+ * wmr_txpower.h - Classic BR/EDR TX power get/set/readback (R5).
  *
  * Only used by the LEVERS image. esp_bredr_tx_power_get returns the *configured*
  * range, not the hardware maximum, so a successful set is reported together with

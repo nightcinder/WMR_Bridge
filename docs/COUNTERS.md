@@ -39,7 +39,7 @@ contradicted this paragraph. It no longer does.
 | `rx` | Reports received from that controller | Counts every report, including those never forwarded |
 | `tx` | FF11: frames whose last fragment was accepted by `att_server_notify`. FF12: records accepted by `att_server_notify`. FF14: valid records inside batches accepted by `att_server_notify` (records, not notifications) | Handed to the BLE stack, not confirmed received by the phone |
 | `drop` | Reports discarded because the queue was full, or the length was 0 or over `WMR_CFG_MAX_FRAME` (80) | Drop-newest: queued frames are kept |
-| `offline` | Reports received while no FF11/FF12/FF14 stream was active | Intentional, not an error. Since ONY-441 these reports may still have been sent through the HID gamepad |
+| `offline` | Reports received while no FF11/FF12/FF14 stream was active | Intentional, not an error. Since  these reports may still have been sent through the HID gamepad |
 | `purged` | Frames that were queued, then discarded by a queue reset | See [RECONNECT_AND_QUEUE.md](RECONNECT_AND_QUEUE.md) |
 | `mtu_skip` | FF12 and FF14: data discarded because the ATT MTU could not carry it. FF12: a frame when the MTU is below 59. FF14: a frame when the MTU is below 61, or the older records of a multi-record Switch frame that did not fit (all three need 173) | Zero on FF11. Intentional, not a queue problem |
 | `dec_err` | FF12 and FF14: queued frames that were not a valid 46-byte WMR, exactly-79-byte PSVR2 or exactly-50-byte Switch input report, discarded | Should stay 0 |
@@ -109,7 +109,7 @@ reports are lost. Background and caveats: [DECODING.md](DECODING.md),
 ```
 STREAM phone=1 adv=off hid=on sub=1 stream=decoded mtu=517 conn=[15.00ms lat=1 to=5000ms] q=0/256 high=3 notify=1234 errors=0
   vhci_drop=0 log_errors=0
-  LEFT  rx=600 tx=600 ... rate_rx=147.0/s rate_tx=147.0/s
+  LEFT  rx=600 tx=600... rate_rx=147.0/s rate_tx=147.0/s
   LEFT link: rssi=0 fcc=0 lq=255 mode=active rate_rx=147.0/s dev_missing=312 last5s=26.5% cum=17.7% period=4.99ms discont=0
   RIGHT rx=...
   RIGHT link: rssi=0 fcc=0 lq=255 mode=active rate_rx=165.0/s dev_missing=21 last5s=3.4% cum=3.4% period=4.99ms discont=0

@@ -49,7 +49,7 @@ from . import ws as wsmod
 STREAMS = ("raw", "decoded", "batched")
 HAND_NAMES = ("LEFT", "RIGHT")
 # Activity thresholds for the controller idle policy. Values match the plan in
-# ONY-1124: any button, a trigger past its dead zone, meaningful stick
+# any button, a trigger past its dead zone, meaningful stick
 # deflection, or motion above the stationary MEMS bias/noise floor.
 ACTIVITY_TRIGGER_THRESHOLD = 0.05
 ACTIVITY_STICK_THRESHOLD = 0.10

@@ -56,7 +56,7 @@ For a VR-grade dual-controller target, yes. For the current 3DoF viewer, no.
   return toward its alone level and RIGHT to lose the roughly eight points that
   appear when LEFT is also connected. RIGHT's own ~10.8 % is still there, so
   even two bridges may not reach a 3-5 % bar. That sitting has not run
-  (the removed multi-bridge sheet (ONY-1157; see git history)).
+  (the removed multi-bridge sheet (; see git history)).
 - The Pi/Wi-Fi bridge moves only the phone link. It can remove BLE airtime
   from the ESP32 radio, but it cannot remove the 9-11 % no-phone baseline, so
   it is not a single-ESP32 fix either.
@@ -230,19 +230,19 @@ Status of each option:
 | FF14 batching (about 48 notifications/s instead of about 300/s) | No clear loss gain. The FF14 run sat inside the FF12 run-to-run spread, and LEFT rose through the session ([`STATUS.md`](STATUS.md)) |
 | Phone connected but no stream, then FF11/FF12/FF14 | Loss rises when the phone is present and more when it streams, but the no-phone baseline is already 9-11 %. BLE is a contributor, not the whole cause (recorded sessions, not all at one position) |
 | One controller alone versus both | LEFT about 0.5 % alone versus about 19 % both. RIGHT about 10.8 % alone versus about 19 % both. The pair adds contention, and RIGHT has a separate baseline loss |
-| Staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`, V1) | Code exists, run-ready. The run was never done (`the removed single-ESP32 levers sheet (ONY-1157; see git history)` section 2) |
+| Staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`, V1) | Code exists, run-ready. The run was never done (`the removed single-ESP32 levers sheet (; see git history)` section 2) |
 | BLE interval: request 30 ms instead of 7.5-15 ms | Not run. The request is already a compile-time knob. Prerequisite is the B1 image and the phone's granted interval |
-| FF14 hold: two connection intervals (`WMR_CFG_BATCH_HOLD_INTERVALS=2`) | Not run. Knob added in ONY-176. Default 1 keeps the current one-interval hold |
+| FF14 hold: two connection intervals (`WMR_CFG_BATCH_HOLD_INTERVALS=2`) | Not run. Knob added in. Default 1 keeps the current one-interval hold |
 | DLE confirmation on the current build | Not run on the current build. The 2026-10-22 log shows 251 octets / 2120 us accepted. Capture the line again on this image |
 | Controller task core/priority and HCI buffers | Ruled out by the archived diagnostics: `vhci_drop=0`, `log_errors=0`, queue high-water 41/256 (sample `q=2/256 high=41`), and `tx` trailing `rx` only by queued records. No run needed unless a future window shows a nonzero drop or error counter |
 
-ONY-176 status (2026-10-24). No new hardware run has happened, so no lever in
+ status (2026-10-24). No new hardware run has happened, so no lever in
 this section has a new result. All six are now either run-ready or ruled out.
 V1 and the BLE interval/hold images are compile-time builds. Right-asymmetry
 phases 1-2 need no flash. DLE is already logged and only needs a current-build
 capture. Core/priority and HCI buffers are ruled out by the diagnostics above.
 The run order, commands and per-lever pass rules are in
-`the removed single-ESP32 levers sheet (ONY-1157; see git history)`.
+`the removed single-ESP32 levers sheet (; see git history)`.
 The best measured configuration therefore remains unchanged: default both-hands
 FF14 at MTU 517, the granted 15 ms interval and a one-interval batch hold, with
 18-25 % dual-hand loss. No single-ESP32 variant has yet beaten it.
@@ -252,15 +252,15 @@ Not tested, and practical:
 - Physical separation / antenna geometry. Sitting R in the bench sheet swaps the
   controller between hand slots and positions, then swaps the board, to separate
   controller, position and antenna. Its phases 1-2 have not run, and they need
-  no reflash (the removed internal-ESP32 bench sheet (ONY-1157; see git
-  history), `the removed single-ESP32 levers sheet (ONY-1157; see git history)`
+  no reflash (the removed internal-ESP32 bench sheet (; see git
+  history), `the removed single-ESP32 levers sheet (; see git history)`
   section 3). This is the cheapest way to find out whether part of the loss is
   RF geometry rather than scheduling.
 - Data Length Extension and BLE airtime. The firmware now logs the data-length
   event. The 2026-10-22 log shows 251 octets / 2120 us accepted, so DLE is not
   the unknown it was. A current-build capture and the A/B of a 30 ms interval
   request and a two-interval FF14 hold have not run
-  (`the removed single-ESP32 levers sheet (ONY-1157; see git history)`
+  (`the removed single-ESP32 levers sheet (; see git history)`
   section 4).
 - BLE connection interval/priority variations. The bridge asks for 7.5-15 ms.
   The phone granted 15 ms with latency 1. A longer interval lowers the number of
@@ -366,7 +366,7 @@ are not results of this investigation.
 | Option | What it can see | Advantages | Problems | Verdict |
 | --- | --- | --- | --- | --- |
 | ESP32 firmware | Only the reports that arrived. No render clock | One implementation for every phone. No app change | It cannot predict lost samples because it never saw them. Synthesizing records would consume BLE airtime, add at least one connection interval of delay, and make the phone treat invented data as measured. It does not know when the app will draw | No |
-| App (Flutter view, iOS view, ...) | The rendered frame clock | Can extrapolate exactly to the frame being drawn. Easy to tune per app | Duplicates the same logic in every app and on every platform. The 3D view is not the only consumer. The library's public pose stream would still be stale. It also makes the behaviour untestable outside a UI | No, except as a temporary local patch |
+| App (Flutter view, iOS view,...) | The rendered frame clock | Can extrapolate exactly to the frame being drawn. Easy to tune per app | Duplicates the same logic in every app and on every platform. The 3D view is not the only consumer. The library's public pose stream would still be stale. It also makes the behaviour untestable outside a UI | No, except as a temporary local patch |
 | Shared library (`wmr_core`, above `wmr_fusion`) | Orientation, bias-corrected gyro, device ticks and arrival timestamps. The app's injected clock | One tested implementation for the Flutter app and other consumers. Pure Dart, no plugins. Can be optional and fail soft. Can expose both the measured pose and the predicted pose | It must not feed prediction back into the filter. It needs the app to pass its render timestamp. The Swift kit needs the same formula if it ever runs a native pipeline | Yes |
 
 The library is the right boundary because it already owns the state a predictor
@@ -436,7 +436,7 @@ These are host tests, no hardware:
 ## 5. Is the 2026-10-22 latency run still current?
 
 Short answer: the stream ladder has one current pass. The ladder repeats are
-not run; latency-2 is closed (ONY-23) as **Stay Flutter** under the ONY-1010
+not run; latency-2 is closed  as **Stay Flutter** under the 
 amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). Four
 120 s runs
 on 2026-10-24 with firmware `v0.1.1`
@@ -523,8 +523,8 @@ the RSSI samples span 8 dB (the app reads RSSI twice per run, at start and
 stop, at 1 dB resolution, so that spread does not prove the rig moved). So the
 4 ms FF11/FF12 penalty against FF14 cannot be separated from session drift.
 
-The FF14 and no-stream repeats remain unrun. Latency-2 closed (ONY-23) as
-**Stay Flutter** under the ONY-1010 amendment (warm/stable start; one-sided
+The FF14 and no-stream repeats remain unrun. Latency-2 closed  as
+**Stay Flutter** under the  amendment (warm/stable start; one-sided
 `d <= +5 ms`, stalls within 25 %); the 2026-11-07 pair lands in between (stay
 Flutter, gaps filed upstream), so the Dart client's share of the round trip is
 off the critical path and the remainder is plugin and radio.
@@ -540,7 +540,7 @@ what is missing:
   the current firmware and APK hashes recorded. The 2026-10-24 sitting covers
   the first four (one pass, not interleaved). The two repeats are still needed
   before a 4 ms difference between streams is called real.
-- Latency-2 is closed (ONY-23, **Stay Flutter**) under the ONY-1010 amendment
+- Latency-2 is closed (, **Stay Flutter**) under the  amendment
   (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %), with
   2026-10-28 `d` = +3.7 ms (one unpaired run per client) and 2026-11-07 `d` =
   -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms; the 250 ms pair misses the Stay
@@ -629,7 +629,7 @@ Until those exist, this is a design recommendation, not a shipped feature.
 - The 40.5-44.8 ms streamed latency figures are current for the `0.1.1`/`0.1.0`
   release pair (the 2026-10-24 runs reproduced the 2026-10-22 FF14 median and
   added none/FF11/FF12). The ladder repeats still gate the stream ordering, but
-  the native-vs-Flutter decision is closed: ONY-23 is **Stay Flutter** (ONY-1010
+  the native-vs-Flutter decision is closed:  is **Stay Flutter** (
   amendment: warm/stable start, one-sided `d <= +5 ms`, stalls within 25 %; the
   2026-11-07 pair lands in between).
 - Build prediction only after the loss work, as an opt-in presentation layer

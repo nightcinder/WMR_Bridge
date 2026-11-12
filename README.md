@@ -127,59 +127,8 @@ reuse it. The output in `dist/` includes the bootloader, partition table,
 application and merged factory images, plus a browser flasher page. The browser
 manifest writes the three separate images at offsets `0x1000`, `0x8000` and
 `0x10000`. It does not write NVS (`0x9000`-`0xFFFF`), so a reflash with
-"Erase device" unchecked keeps the stored pairings. `0.3.25` is the current
-release. It is the Pi installer-and-recovery release on top of 0.3.24: the
-`.deb` post-install script and `install.sh` restart `bluetooth.service` only
-when the `JustWorksRepairing` policy actually changes, so an in-place upgrade
-keeps the stored phone bond and no longer crashes the combo controller into
-`HCI Hardware Error` (0x10); `wmr-bridge status` names the reboot recovery and
-the `wmr-bridge pair` escape hatch (ONY-1290). The 0.3.24 release is the Pi
-app-triggered upgrade release on top of the 0.3.23 Just Works re-pair release:
-an authenticated WebSocket `{"type":"upgrade"}` asks the
-root upgrade unit to install the latest signed release, `hello` advertises
-`upgradeCapable`, and the release checksum list is minisign-signed (ONY-1223,
-ONY-1276). Pis on 0.3.23 or older need one manual `sudo` install first to get
-the upgrade unit. The 0.3.23 release is the Pi Just Works re-pair release on
-top of the 0.3.22 bondable-pairing release: the installer and `.deb`
-post-install script set
-`JustWorksRepairing = confirm` in `/etc/bluetooth/main.conf`, so a phone that
-still holds a bond can pair again instead of failing with `Numeric comparison
-failed (0x0c)`, provided a pairing window is open (ONY-1253). The 0.3.22
-release is the Pi bondable-pairing release on top of the 0.3.21 LE
-pairing-agent release: the adapter is pairable whenever BlueZ holds no phone
-bond, so bonds that belong to the WMR controllers no longer close the door,
-and `wmr-bridge pair [--seconds SECONDS]` opens a manual BLE pairing window on
-the running service instead of restarting it inside the 180-second boot window
-(ONY-1249). The 0.3.21 release is the Pi LE pairing-agent release on top of the
-0.3.20 BLE gamepad release: the daemon keeps its Just Works agent claimed
-through a phone bond, reclaims it after every controller scan, and holds
-pairability and the agent open for 10 seconds after the last agent request, so
-Android no longer closes the pairing page mid-exchange (ONY-1244). It also logs
-every agent callback and pairing cancellation for the journal. The 0.3.20
-release exposes the controllers as a standard BLE HID-over-GATT gamepad on the
-same LE link as
-FF10, advertises the gamepad appearance (`0x03C4`) in two interval tiers, and
-is pairable only during the 180-second boot window or while no LE bond is
-stored unless `--ble-continuous-pairing` is set (ONY-1214, ONY-1228,
-ONY-1229). It keeps the 0.3.19 discoverable advertisement flag (ONY-1197), the
-0.3.18 FF10 `org.bluez.GattService1` export that makes `RegisterApplication`
-succeed (ONY-1186) and the idle power-off reconnect cooldown (ONY-1185), the
-0.3.17 dbus-next GATT start annotations, FF10 advertised by default
-with per-client CCCD gating, an Ethernet uplink over 5 GHz and 2.4 GHz Wi-Fi
-using route metrics, `AF_NETLINK` in the systemd unit and token access for
-`wifi_probe.py`. The firmware last changed in 0.3.16, which added controller
-idle sleep and power-off (ONY-1128) on top of the 0.3.15 change that re-sends
-the FF13 streaming-enable pair on reconnect and every 10 s so a connected
-controller stays awake. The controller-family firmware on top of 0.3.5
-remains: one driver
-table per model, PSVR2 FF12/FF14 decoding, and Nintendo Switch Joy-Con/Pro
-handshake and `0x30` decoding. Switch support
-is host-tested and firmware-build-tested only and has never run on a
-controller ([#145](https://github.com/nightcinder/WMR_Bridge/issues/145)).
-FF10–FF17 payloads are unchanged, so companions at 0.2.2 or later continue to
-work. The Raspberry Pi host bridge forwards FF13 calibration blobs but does not
-yet read calibration from controllers. Packaged releases are CI-built and
-hardware-unverified. See [CHANGELOG.md](CHANGELOG.md) for the full notes. To
+"Erase device" unchecked keeps the stored pairings. `0.3.25` is the current release. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+ for the full notes. To
 install the current release without ESP-IDF, use the hosted browser installer at
 <https://nightcinder.github.io/WMR_Bridge/>, which serves all three variants,
 or the Pi setup page at <https://nightcinder.github.io/WMR_Bridge/pi.html>. The
@@ -295,7 +244,7 @@ airtime from the phone link without changing the companion app's parsers.
 ```bash
 cd pi
 ./run_tests.sh
-python3 -m wmr_bridge --replay ../samples/controller_frames.txt   # no hardware
+python3 -m wmr_bridge --replay../samples/controller_frames.txt   # no hardware
 python3 tools/wifi_probe.py --stream batched                      # second terminal
 ```
 

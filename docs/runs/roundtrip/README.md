@@ -55,9 +55,9 @@ Notes for re-deriving the runs:
   the per-record arrivals and device ticks. Percentiles in the JSON are
   nearest-rank over the whole run.
 
-## 2026-11-07 app against probe latency bench (ONY-23, WMR_Bridge v0.3.5)
+## 2026-11-07 app against probe latency bench (, WMR_Bridge v0.3.5)
 
-Eight initial runs and one re-run were recorded on 2026-11-07 with a Pixel phone. The eight initial runs test Companion 0.3.18 and native GATT probe 0.3.18 against WMR_Bridge v0.3.5. The re-run tests the post-ONY-991 probe build (wmr-companion commit `1843864`). These exports correspond to runs 1, 2, 3, 4, 13, 14, 17, and 18 from the removed internal-ESP32 bench sheet (ONY-1157; see git history), plus the re-run of run 4 after the ONY-991 echo fix. Companion `none` mode (run 1) is known broken (ONY-980) and skipped in the bench protocol; it is archived here for completeness because the tester recorded it.
+Eight initial runs and one re-run were recorded on 2026-11-07 with a Pixel phone. The eight initial runs test Companion 0.3.18 and native GATT probe 0.3.18 against WMR_Bridge v0.3.5. The re-run tests the post- probe build (wmr-companion commit `1843864`). These exports correspond to runs 1, 2, 3, 4, 13, 14, 17, and 18 from the removed internal-ESP32 bench sheet (; see git history), plus the re-run of run 4 after the  echo fix. Companion `none` mode (run 1) is known broken  and skipped in the bench protocol; it is archived here for completeness because the tester recorded it.
 
 | Run | Client | Stream | Interval | Files | Round trip p50 / p99 / max | Pings over 50 ms | Tick loss LEFT / RIGHT | Stalls over 50 ms LEFT / RIGHT | RSSI start to end |
 |---|---|---|---|---|---|---|---|---|---|
@@ -73,7 +73,7 @@ Eight initial runs and one re-run were recorded on 2026-11-07 with a Pixel phone
 
 Notes on the 2026-11-07 runs:
 
-- Run 1 (App none) is invalid because companion none mode is known broken (ONY-980; runs 1, 6, and 9 are skipped in the bench sheet). It is preserved here because the tester ran it.
+- Run 1 (App none) is invalid because companion none mode is known broken (; runs 1, 6, and 9 are skipped in the bench sheet). It is preserved here because the tester ran it.
 - Run 4 (initial) received controller stream packets and recorded stream stalls. Every round-trip ping timed out because no echo response arrived.
-- Run 4 (re-run) was recorded after the ONY-991 echo fix. All 473 pings were answered with 0 timeouts.
+- Run 4 (re-run) was recorded after the  echo fix. All 473 pings were answered with 0 timeouts.
 - Runs 13, 14, 17, and 18 exercised the ping interval ladder. The clients received no stream frame records during these runs.

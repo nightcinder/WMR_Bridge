@@ -60,7 +60,7 @@ PowerShell profile as above. To build without flashing, omit `--flash`.
 | `--variant both\|left\|right` | Which hands the image serves. `both` (default) is today's build. `left` / `right` are compile-time single-hand images that advertise `WMR Bridge L` / `WMR Bridge R`. See [Two bridges](#two-bridges-one-hand-each). |
 | `--out DIR` | Artifact directory. Default `dist/`. |
 | `--work DIR` | Managed BTstack/build directory. Default `.fw-build/`. |
-| `--flash PORT` | Flash `COM5`, `/dev/ttyUSB0`, ... after a successful build. |
+| `--flash PORT` | Flash `COM5`, `/dev/ttyUSB0`,... after a successful build. |
 | `--idf-export SCRIPT` | POSIX ESP-IDF `export.sh` to source first. |
 | `--clean` | Delete the managed work directory first (fresh clone and build). |
 
