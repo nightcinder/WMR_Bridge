@@ -153,8 +153,10 @@ journalctl -u wmr-bridge -n 200 --no-pager
 
 `auto-pair: Bluetooth adapter is not usable yet` means the adapter is still
 rfkill-blocked or `bluetoothd` is down. A stock Pi OS image soft-blocks
-Bluetooth at boot; the systemd unit clears that block as root before start and
-the pairer retries with a 30 s backoff instead of disabling itself. Check
+Bluetooth at boot; the bridge reports `Powered: no`, the root
+`wmr-bridge-bt-recover.service` unblocks it and restarts `hciuart` and
+`bluetooth`, and the pairer retries with a 30 s backoff instead of disabling
+itself. Check
 `rfkill list bluetooth` and `systemctl status bluetooth`. A `could not scan;
 retrying with backoff` line names a scan failure such as a resetting adapter;
 the pairer re-probes power and retries, so pairing resumes when the adapter
@@ -543,7 +545,7 @@ remain P1-P14 in the run sheet.
 
 ### Automatic 5 GHz preference
 
-The service runs `wmr-bridge --prefer-5ghz` before it starts the bridge. This command is a one-shot action. It does not start the daemon. It reads the active NetworkManager connection on the Wi-Fi interface, drops a trailing `-5ghz` to identify the 2.4 GHz base, and creates or updates a profile named `<base>-5ghz`. The clone keeps the base profile as the 2.4 GHz fallback. The clone sets `802-11-wireless.band` to `a` and `connection.autoconnect-priority` to 50. NetworkManager then prefers a 5 GHz BSSID when one is visible. The base profile stays in place, so a 2.4 GHz network still works.
+The installer and the package's post-install script run `wmr-bridge --prefer-5ghz` once on a fresh install. The service does not run it on every start, so an upgrade restart does not re-open or switch the Wi-Fi profile. This command is a one-shot action. It does not start the daemon. It reads the active NetworkManager connection on the Wi-Fi interface, drops a trailing `-5ghz` to identify the 2.4 GHz base, and creates or updates a profile named `<base>-5ghz`. The clone keeps the base profile as the 2.4 GHz fallback. The clone sets `802-11-wireless.band` to `a` and `connection.autoconnect-priority` to 50. NetworkManager then prefers a 5 GHz BSSID when one is visible. The base profile stays in place, so a 2.4 GHz network still works.
 
 The command also orders the uplinks with NetworkManager route metrics: wired profiles (`802-3-ethernet`) get `ipv4.route-metric` and `ipv6.route-metric` 100, the 5 GHz clone gets 200, and the 2.4 GHz base profile gets 300. A wired `eth0` therefore beats 5 GHz Wi-Fi, which beats 2.4 GHz, regardless of which profile autoconnected.
 
@@ -1324,7 +1326,7 @@ INFO/WARNING:
 | Symptom | Check |
 | --- | --- |
 | `no /dev/hidraw nodes` | `systemctl status bluetooth`, `lsmod \| grep hidp`, controller paired/trusted/connected |
-| `bluetoothctl show` says `Powered: no`, `Pairable: no`, Class 0 | adapter firmware crashed or the UART attach failed; `btmon` showing `HCI Reset` answered by `Hardware Error` (0x10, code 0x00) is the crashed-controller signature. Reboot the Pi; if the error survives the reboot, power-cycle the board. Restarting only `bluetooth.service` does not reload the firmware |
+| `bluetoothctl show` says `Powered: no`, `Pairable: no`, Class 0 | adapter firmware crashed or the UART attach failed; `btmon` showing `HCI Reset` answered by `Hardware Error` (0x10, code 0x00) is the crashed-controller signature. The daemon first tries `Adapter1.Powered=True`, then asks `wmr-bridge-bt-recover.service` (root) to restart `hciuart` and `bluetooth.service` and start the bridge again, at most once per cooldown. If `Powered` still reads no after that, reboot the Pi; if the error survives the reboot, power-cycle the board |
 | Phone will not re-pair after the upgrade; adapter `pairable=no` | a stored LE bond closes pairability. Open a window with `wmr-bridge pair` (180 s), or remove the phone's stale bond with `bluetoothctl remove <MAC>`. v0.3.25 does not touch `/var/lib/bluetooth`; the upgrade scripts now leave bluetoothd alone when `JustWorksRepairing` is already set |
 | Wi-Fi auth fails with Bluetooth off | the shared token is only learned over the BLE FF13 encrypted read; the companion's manual Wi-Fi entry does not persist a token. Copy it from `/etc/wmr-bridge/token` (unchanged across upgrades) or read it over BLE |
 | Node exists but `--list` shows name `-` | custom controller name; use `--left/--right` with the MAC or path |

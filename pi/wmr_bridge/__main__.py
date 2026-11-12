@@ -26,6 +26,7 @@ from .bluez import (
     _run_command,
     collect_status,
     discover_hidraw,
+    read_adapter,
     set_device_blocked,
 )
 from .bridge import Bridge
@@ -70,10 +71,39 @@ def _validate_idle_timeouts(args: argparse.Namespace) -> None:
         )
 
 
-async def _pair_window(args: argparse.Namespace) -> int:
+def _pair_adapter_problem(reader: Callable[[], Any]) -> str | None:
+    """Return a diagnostic when the local adapter is visibly powered off."""
+
+    adapter = reader()
+    if adapter is not None and not adapter.powered:
+        return (
+            "the Bluetooth adapter reports Powered: no, so it cannot advertise "
+            "or pair; the daemon asks wmr-bridge-bt-recover.service to restart "
+            "hciuart and bluetoothd, and 'wmr-bridge status' shows the adapter "
+            "state. If btmon shows HCI Reset answered by Hardware Error, reboot "
+            "the Pi."
+        )
+    return None
+
+
+async def _pair_window(
+    args: argparse.Namespace,
+    *,
+    adapter_reader: Callable[[], Any] | None = None,
+) -> int:
     """Ask the running daemon to open or close its manual BLE window."""
 
     from . import ws as wsmod
+
+    if (
+        adapter_reader is not None
+        and not args.close
+        and args.host in ("127.0.0.1", "::1", "localhost")
+    ):
+        problem = _pair_adapter_problem(adapter_reader)
+        if problem is not None:
+            print(problem)
+            return 1
 
     token = args.token or os.environ.get("WMR_BRIDGE_TOKEN")
     token_file = args.token_file
@@ -117,7 +147,15 @@ async def _pair_window(args: argparse.Namespace) -> int:
         await client.send_json(message)
         reply = await asyncio.wait_for(client.recv_json(), 5)
         if reply.get("type") == "error":
-            print(f"could not change the pairing window: {reply.get('code')}")
+            code = reply.get("code")
+            if code == "pairing_unavailable":
+                print(
+                    "BLE pairing is unavailable: the daemon has no GATT "
+                    "peripheral; check 'wmr-bridge status' (Powered: no?) and "
+                    "'journalctl -u wmr-bridge'"
+                )
+            else:
+                print(f"could not change the pairing window: {code}")
             return 1
         if reply.get("type") != "pairing":
             print(f"unexpected reply from wmr-bridge: {reply.get('type')!r}")
@@ -144,6 +182,22 @@ async def _pair_window(args: argparse.Namespace) -> int:
                     "now applies."
                 )
         else:
+            if reply.get("powered") is False:
+                print(
+                    "the daemon reports the Bluetooth adapter is Powered: no, "
+                    "so it cannot advertise; it asks wmr-bridge-bt-recover.service "
+                    "to restart hciuart and bluetoothd. Check 'wmr-bridge status'; "
+                    "if btmon shows HCI Reset answered by Hardware Error, reboot "
+                    "the Pi."
+                )
+                return 1
+            if reply.get("advertising") is False:
+                print(
+                    "the daemon is not advertising the BLE service; check "
+                    "'journalctl -u wmr-bridge' for a failed GATT registration "
+                    "and restart wmr-bridge.service"
+                )
+                return 1
             if not manual:
                 print(
                     "the daemon did not open a manual pairing window; check "
@@ -167,7 +221,7 @@ async def _pair_window(args: argparse.Namespace) -> int:
 
 def _pair_command(args: argparse.Namespace) -> int:
     try:
-        return asyncio.run(_pair_window(args))
+        return asyncio.run(_pair_window(args, adapter_reader=read_adapter))
     except KeyboardInterrupt:
         return 130
 
@@ -748,6 +802,26 @@ async def _run(args: argparse.Namespace) -> int:
             async def _pairing_control(
                 action: str, seconds: float | None
             ) -> dict[str, Any]:
+                powered = await ble.adapter_powered()
+                advertising = ble.advertising
+                if action == "open" and not powered:
+                    return {
+                        "open": False,
+                        "manual": ble.manual_pairing_window_open(),
+                        "reason": "adapter powered off",
+                        "powered": False,
+                        "advertising": advertising,
+                        "seconds": None if seconds is None else seconds,
+                    }
+                if action == "open" and not advertising:
+                    return {
+                        "open": False,
+                        "manual": ble.manual_pairing_window_open(),
+                        "reason": "advertisement not registered",
+                        "powered": powered,
+                        "advertising": False,
+                        "seconds": None if seconds is None else seconds,
+                    }
                 if action == "open":
                     await ble.open_pairing_window(seconds)
                 else:
@@ -756,6 +830,8 @@ async def _run(args: argparse.Namespace) -> int:
                     "open": ble.pairing_window_open(),
                     "manual": ble.manual_pairing_window_open(),
                     "reason": ble.pairable_reason(),
+                    "powered": powered,
+                    "advertising": advertising,
                     "seconds": None if seconds is None else seconds,
                 }
 

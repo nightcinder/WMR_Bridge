@@ -326,9 +326,11 @@ instead of rejecting the Just Works confirmation. If the journal shows
 `BlueZ JustWorksRepairing = never`, re-run the installer to apply that setting.
 
 If the log says `auto-pair: Bluetooth adapter is not usable yet`, check that
-Bluetooth is running and not blocked. The service clears a boot-time soft
-block as root before start and keeps retrying, so no restart is needed once
-the block clears:
+Bluetooth is running and not blocked. A fresh install clears a boot-time soft
+block as root, and while the bridge runs a `Powered: no` report triggers the
+root `wmr-bridge-bt-recover.service`, which unblocks it and restarts
+`hciuart` and `bluetooth`; the pairer keeps retrying, so no restart is needed
+once the block clears:
 
 ```bash
 rfkill list bluetooth

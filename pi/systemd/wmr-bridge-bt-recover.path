@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for a WMR Bridge Bluetooth recovery trigger
+
+[Path]
+# The daemon (User=wmr) may only create this empty file. It carries no data,
+# so a client cannot choose a command or an adapter for root to act on.
+PathExists=/var/lib/wmr-bridge/bt-recover.trigger
+Unit=wmr-bridge-bt-recover.service
+
+[Install]
+WantedBy=multi-user.target

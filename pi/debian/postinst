@@ -14,6 +14,10 @@ SYSTEMD_RUN_DIR="${WMR_SYSTEMD_RUN_DIR:-/run/systemd/system}"
 ETC_DIR="${DESTDIR}/etc/wmr-bridge"
 TOKEN_FILE="${ETC_DIR}/token"
 
+# dpkg passes the version being replaced as $2. Empty means a fresh install;
+# an upgrade must not stage the Wi-Fi profile or poke rfkill again.
+PREVIOUS_VERSION="${2:-}"
+
 case "$1" in
     configure)
         if [ "$SKIP_PRIVILEGED" != "1" ]; then
@@ -53,11 +57,12 @@ case "$1" in
                 usermod -aG wmr "$SUDO_USER" 2>/dev/null || true
             fi
             # Stage the 5 GHz-preferred NetworkManager profile from the
-            # unpacked tree. --no-reconnect leaves an SSH session on its
-            # current link; the unit's ExecStartPre applies the preference when
-            # the service starts. No NetworkManager or a 2.4 GHz-only radio is
-            # non-fatal.
-            if command -v nmcli >/dev/null 2>&1 &&
+            # unpacked tree on a fresh install only. An upgrade can leave a
+            # working Wi-Fi link alone; re-running nmcli there competes with
+            # Bluetooth and delays the first connection. --no-reconnect leaves
+            # an SSH session on its current link. No NetworkManager or a
+            # 2.4 GHz-only radio is non-fatal.
+            if [ -z "$PREVIOUS_VERSION" ] && command -v nmcli >/dev/null 2>&1 &&
                 [ -f "${DESTDIR}/opt/wmr-bridge/pi/wmr_bridge/__main__.py" ]; then
                 (cd "${DESTDIR}/opt/wmr-bridge/pi" &&
                     python3 -m wmr_bridge --prefer-5ghz --no-reconnect) ||
@@ -83,9 +88,10 @@ case "$1" in
                     echo "wmr-bridge: could not enable BlueZ Just Works re-pairing (non-fatal)" >&2
                 fi
             fi
-            if command -v rfkill >/dev/null 2>&1; then
-                # Stock Pi OS ships Bluetooth soft-blocked; clear it before
-                # the unit's own ExecStartPre runs so bluetoothd powers on.
+            if [ -z "$PREVIOUS_VERSION" ] && command -v rfkill >/dev/null 2>&1; then
+                # Stock Pi OS ships Bluetooth soft-blocked on first install.
+                # On upgrade leave rfkill alone; the daemon's recovery path
+                # clears a real block only when Adapter1.Powered stays off.
                 rfkill unblock bluetooth || true
             fi
             if [ -d "$SYSTEMD_RUN_DIR" ] && command -v systemctl >/dev/null 2>&1; then
@@ -109,6 +115,10 @@ case "$1" in
                 # daemon over an authenticated WebSocket.
                 systemctl enable wmr-bridge-upgrade.path || true
                 systemctl start wmr-bridge-upgrade.path || true
+                # Path-activated, root-run adapter recovery requested by the
+                # daemon when Adapter1.Powered stays off.
+                systemctl enable wmr-bridge-bt-recover.path || true
+                systemctl start wmr-bridge-bt-recover.path || true
             fi
         fi
         ;;
