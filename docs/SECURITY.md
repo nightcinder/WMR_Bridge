@@ -183,7 +183,7 @@ can hold it.
 ## Before wider use
 
 - Pair and bond on the target phone. Confirm an unbonded central is refused.
-  Record the run (Nick,  acceptance).
+  Record the run (Nick, acceptance).
 - Cut over the UUIDs per [BLE_MIGRATION.md](BLE_MIGRATION.md), including the
   owner decision on removing FF10.
 - Terminate TLS on the Pi for any use beyond a trusted LAN.

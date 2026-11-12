@@ -27,16 +27,16 @@ requested. Never assume the requested value.
 ## Connection sequence
 
 1. Scan for the name `WMR Bridge` or service `0xFF10`. Call
-   `connectGatt(...)`.
-2. After `onConnectionStateChange(... STATE_CONNECTED)`, call
+   `connectGatt( ... )`.
+2. After `onConnectionStateChange( ... STATE_CONNECTED)`, call
    `gatt.requestMtu(517)` and wait for `onMtuChanged`. Record the negotiated
    MTU.
 3. Call `gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)`.
    This asks for a short connection interval. It is a request, not a guarantee,
    and it raises phone battery use. Sustained forwarding in testing used a large
    negotiated MTU and High priority together.
-4. Call `gatt.discoverServices`. Find service `0000FF10-...` /
-   characteristic `0000FF11-...`.
+4. Call `gatt.discoverServices()`. Find service `0000FF10- ... ` /
+   characteristic `0000FF11- ... `.
 5. Call `gatt.setCharacteristicNotification(ch, true)` and write
    `ENABLE_NOTIFICATION_VALUE` (`0x0001`) to the descriptor
    `00002902-0000-1000-8000-00805f9b34fb`. Both are required. The first only
@@ -61,10 +61,10 @@ receive is current, not old (see [RECONNECT_AND_QUEUE.md](RECONNECT_AND_QUEUE.md
 ## Android pitfalls
 
 - A cached GATT database can be stale after reflashing. Call
-  `BluetoothGatt.refresh` (hidden API) or toggle Bluetooth.
+  `BluetoothGatt.refresh()` (hidden API) or toggle Bluetooth.
 - The bridge serves a single phone. Once one connection owns the subscription,
   CCC writes from a second connection are rejected.
-- Call `close` on the `BluetoothGatt` after disconnect, or Android may keep
+- Call `close()` on the `BluetoothGatt` after disconnect, or Android may keep
   the link slot.
 - The 16-byte status value (read of FF11) is for diagnostics. Do not poll it at
   stream rate.

@@ -62,7 +62,7 @@ Pi 4/5 data.
 Confirm:
 
 ```bash
-uname -m                      # aarch64
+uname -m # aarch64
 systemctl is-active bluetooth # active
 ```
 
@@ -83,8 +83,8 @@ record its date and hash instead.
 
 ```bash
 ssh <user>@wmr-pi.local
-iw dev wlan0 link              # freq must be 5xxx
-iw dev wlan0 get power_save    # off; the installer adds a drop-in
+iw dev wlan0 link # freq must be 5xxx
+iw dev wlan0 get power_save # off; the installer adds a drop-in
 ```
 
 If the link is at 2.4 GHz, reconnect to the 5 GHz SSID before continuing.
@@ -144,8 +144,8 @@ Pinned 2026-11-11 assets:
 git clone https://github.com/nightcinder/WMR_Bridge.git
 cd WMR_Bridge
 ./pi/build_deb.sh
-sudo apt install./dist/*.deb
-# or: sudo./pi/install.sh
+sudo apt install ./dist/*.deb
+# or: sudo ./pi/install.sh
 ```
 
 **One-line installer:**
@@ -165,7 +165,7 @@ wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.25/SHA256S
 wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.25/SHA256SUMS.minisig
 minisign -Vm SHA256SUMS -P RWTL80BhYeTEqPhBvFePoSc/uoC+iJCEa41o1uA3h+t4opQbX0yKCnA6
 sha256sum -c SHA256SUMS --ignore-missing
-sudo apt install./wmr-bridge_<version>_all.deb
+sudo apt install ./wmr-bridge_<version>_all.deb
 ```
 
 Replace `<version>` with the Pi package version.
@@ -281,7 +281,7 @@ From a checkout:
 ```bash
 git pull
 ./pi/build_deb.sh
-sudo apt install./dist/*.deb
+sudo apt install ./dist/*.deb
 ```
 
 From release artifacts:
@@ -295,9 +295,9 @@ After upgrade, confirm the bond, token and environment survived:
 
 ```bash
 bluetoothctl devices Paired
-bluetoothctl show          # Powered: yes; Pairable: no is normal with a stored bond
+bluetoothctl show # Powered: yes; Pairable: no is normal with a stored bond
 ls -la /etc/wmr-bridge/token
-cat /etc/wmr-bridge/wmr-bridge.env      # if customised
+cat /etc/wmr-bridge/wmr-bridge.env # if customised
 sudo systemctl restart wmr-bridge
 python3 /opt/wmr-bridge/pi/tools/wifi_probe.py --host 127.0.0.1 --token-file /etc/wmr-bridge/token --stream batched --duration 5
 ```

@@ -9,7 +9,7 @@ deploy for users with no ESP32 knowledge.
 
 There are two audiences:
 
-| You want to... | Use |
+| You want to ... | Use |
 | --- | --- |
 | Install the bridge on a board without ESP-IDF | the [browser flasher](#browser-flasher-end-users) |
 | Build and flash your own changes | [`tools/firmware/build.py`](#one-command-build-and-flash) |
@@ -60,7 +60,7 @@ PowerShell profile as above. To build without flashing, omit `--flash`.
 | `--variant both\|left\|right` | Which hands the image serves. `both` (default) is today's build. `left` / `right` are compile-time single-hand images that advertise `WMR Bridge L` / `WMR Bridge R`. See [Two bridges](#two-bridges-one-hand-each). |
 | `--out DIR` | Artifact directory. Default `dist/`. |
 | `--work DIR` | Managed BTstack/build directory. Default `.fw-build/`. |
-| `--flash PORT` | Flash `COM5`, `/dev/ttyUSB0`,... after a successful build. |
+| `--flash PORT` | Flash `COM5`, `/dev/ttyUSB0`, ... after a successful build. |
 | `--idf-export SCRIPT` | POSIX ESP-IDF `export.sh` to source first. |
 | `--clean` | Delete the managed work directory first (fresh clone and build). |
 
@@ -108,13 +108,13 @@ board, so each bridge serves one hand and does not accept the other.
 
 ```powershell
 # Windows PowerShell, one board per command. --flash is optional.
-python tools\firmware\build.py --variant left  --flash COM5
+python tools\firmware\build.py --variant left --flash COM5
 python tools\firmware\build.py --variant right --flash COM6
 ```
 
 ```bash
 # Linux / macOS
-python3 tools/firmware/build.py --variant left  --idf-export ~/esp/esp-idf/export.sh --flash /dev/ttyUSB0
+python3 tools/firmware/build.py --variant left --idf-export ~/esp/esp-idf/export.sh --flash /dev/ttyUSB0
 python3 tools/firmware/build.py --variant right --idf-export ~/esp/esp-idf/export.sh --flash /dev/ttyUSB1
 ```
 
@@ -161,8 +161,8 @@ boot banner and `STREAM` line show which image is running
 Build each variant into the same output directory. Order does not matter:
 
 ```bash
-python3 tools/firmware/build.py --variant both  --idf-export ~/esp/esp-idf/export.sh --out dist
-python3 tools/firmware/build.py --variant left  --idf-export ~/esp/esp-idf/export.sh --out dist
+python3 tools/firmware/build.py --variant both --idf-export ~/esp/esp-idf/export.sh --out dist
+python3 tools/firmware/build.py --variant left --idf-export ~/esp/esp-idf/export.sh --out dist
 python3 tools/firmware/build.py --variant right --idf-export ~/esp/esp-idf/export.sh --out dist
 ```
 
@@ -254,7 +254,7 @@ when a matching manifest and images are next to it.
 Every build prints and checks its static DRAM and application image size:
 
 ```
-[fw] both: DRAM  118.9 KiB used (119.7 KiB budget,  0.8 free), app   595.0 KiB ( 1500.0 KiB budget,  905.0 free)
+[fw] both: DRAM 118.9 KiB used (119.7 KiB budget, 0.8 free), app 595.0 KiB (1500.0 KiB budget, 905.0 free)
 ```
 
 The DRAM figure is the static allocation from `idf.py size --format json2`, the

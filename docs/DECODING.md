@@ -17,8 +17,8 @@ and [Monado reference deep-dive](#monado-reference-deep-dive-investigation-of-un
 | --- | --- | --- |
 | 0 | u8 | buttons: 0x01 stick click, 0x02 home, 0x04 menu, 0x08 squeeze, 0x10 trackpad click, 0x20 BT pairing, 0x40 trackpad touch |
 | 1-3 | 2 x 12 bit | thumbstick X (byte1 + low nibble of byte2), Y (high nibble of byte2 + byte3 << 4); centre 0x7FF |
-| 4 | u8 | trigger 0..255 |
-| 5, 6 | u8, u8 | trackpad X, Y, 0..0x64, both 0xFF when untouched |
+| 4 | u8 | trigger 0 .. 255 |
+| 5, 6 | u8, u8 | trackpad X, Y, 0 .. 0x64, both 0xFF when untouched |
 | 7 | u8 | battery (raw) |
 | 8-16 | 3 x s24 LE | accelerometer; Monado divides by 49000 (about m/s^2) |
 | 17-18 | s16 LE | temperature (raw) |
@@ -62,7 +62,7 @@ What the phone does with the blob (all from Monado, `wmr_controller_base.c` and
 2. Skip the first 2 bytes. XOR the rest with `wmr_config_key` (1024 bytes, from
    `wmr_config_key.h`): `data[i] ^= key[i % 1024]`. The result is JSON text.
 3. Parse JSON `CalibrationInformation.InertialSensors[]`. Each entry has `SensorType`
-   (`CALIBRATION_InertialSensorType_Gyro`, `..._Accelerometer`, `..._Magnetometer`) and:
+   (`CALIBRATION_InertialSensorType_Gyro`, ` ... _Accelerometer`, ` ... _Magnetometer`) and:
    - `Rt.Rotation` (9 floats, row-major 3x3) and `Rt.Translation` (3 floats): the
      sensor's pose;
    - `MixingMatrixTemperatureModel` (36 floats = 9 elements x 4 temperature
@@ -120,7 +120,7 @@ Capture file format (text, one frame per line):
 # wmr-capture v1
 # hand: LEFT (as stated by the operator)
 @begin still t=0.000000
-F 0.013251 0 8231 A1010003...   <seconds> <hand 0/1> <sequence> <46-byte frame hex>
+F 0.013251 0 8231 A1010003 ... <seconds> <hand 0/1> <sequence> <46-byte frame hex>
 @end still t=6.100000
 ```
 
@@ -245,9 +245,9 @@ Where it happens is not established; see [Investigation notes](#investigation-no
   both are kept as raw integers and exported only as debug variables. A true battery discharge/percentage
   curve and a temperature conversion formula (e.g. thermistor curve or linear conversion) are not defined
   in Monado and require hardware bench measurement.
-- Input control ranges in code: Trigger is 0..255 normalized by `/ 255.0f` to [0, 1]; trackpad is 0..100
+- Input control ranges in code: Trigger is 0 .. 255 normalized by `/ 255.0f` to [0, 1]; trackpad is 0 .. 100
   centered at 50 (`0x32`) mapped by `(raw - 50) / 50.0f` to [-1, 1], with `0xFF` indicating untouched
-  (mapped to 0); thumbstick is 12-bit unsigned (0..4095) centered at 2047 (`0x07FF`) mapped by
+  (mapped to 0); thumbstick is 12-bit unsigned (0 .. 4095) centered at 2047 (`0x07FF`) mapped by
   `(raw - 0x7FF) / 0x7FF` clamped to 1.0. These follow Monado's reference equations (`wmr_controller_og.c:269-294`),
   but physical travel limits and user deadzones on actual hardware remain to be characterized.
 - Per-device mix matrix, bias and pose (needs the config block; partly decoded on the phone).
@@ -290,7 +290,7 @@ still needed.
 
 In the first FF12 bench check (user-run, reported) the resting stick values were hand 0
 (-0.029, 0.014) and hand 1 (-0.064, 0.148). The decoder defines the centre as raw `0x7FF`
-(2047 of 0..4095): `value = (raw - 0x7FF) / 0x7FF`, clamped to 1.0, which maps `0x7FF` to
+(2047 of 0 .. 4095): `value = (raw - 0x7FF) / 0x7FF`, clamped to 1.0, which maps `0x7FF` to
 exactly 0 (tested in `tests/test_decode.c`) and is Monado's formula, with no dead zone and
 no centre calibration. The resting values therefore correspond to raw readings of about
 1988 and 2076 (hand 0) and 1916 and 2350 (hand 1): the controller reports a resting
@@ -322,13 +322,13 @@ reads). Consequently, all line citations below apply equally to both commits.
 
 In Monado's OG WMR controller driver (`src/xrt/drivers/wmr/wmr_controller_og.c`):
 - Line 199: `uint8_t battery;` in `struct wmr_controller_og_input`
-- Line 295: `last_input->battery = read8(&p);` in `wmr_controller_og_packet_parse`
-- Line 476: `u_var_add_u8(wcb, &ctrl->last_inputs.battery, "input.battery");` in `wmr_controller_og_create`
+- Line 295: `last_input->battery = read8(&p);` in `wmr_controller_og_packet_parse()`
+- Line 476: `u_var_add_u8(wcb, &ctrl->last_inputs.battery, "input.battery");` in `wmr_controller_og_create()`
 
 In Monado's HP Reverb G2 driver (`src/xrt/drivers/wmr/wmr_controller_hp.c`):
 - Line 144: `uint8_t battery;` in `struct wmr_controller_hp_input`
-- Line 241: `last_input->battery = read8(&p);` in `wmr_controller_hp_packet_parse`
-- Line 411: `u_var_add_u8(wcb, &ctrl->last_inputs.battery, "input.battery");` in `wmr_controller_hp_create`
+- Line 241: `last_input->battery = read8(&p);` in `wmr_controller_hp_packet_parse()`
+- Line 411: `u_var_add_u8(wcb, &ctrl->last_inputs.battery, "input.battery");` in `wmr_controller_hp_create()`
 
 Findings:
 1. Monado implements no battery calculation, scaling, or percentage conversion for WMR controllers.
@@ -344,8 +344,8 @@ Findings:
 
 In Monado's OG WMR controller driver (`src/xrt/drivers/wmr/wmr_controller_og.c`):
 - Line 206: `int32_t temperature;` in `struct wmr_controller_og_input.imu`
-- Line 314: `last_input->imu.temperature = read16(&p);` in `wmr_controller_og_packet_parse`
-- Line 486: `u_var_add_i32(wcb, &ctrl->last_inputs.imu.temperature, "imu.temperature");` in `wmr_controller_og_create`
+- Line 314: `last_input->imu.temperature = read16(&p);` in `wmr_controller_og_packet_parse()`
+- Line 486: `u_var_add_i32(wcb, &ctrl->last_inputs.imu.temperature, "imu.temperature");` in `wmr_controller_og_create()`
 
 In `src/xrt/drivers/wmr/wmr_protocol.h`:
 - Lines 130-137:
@@ -415,7 +415,7 @@ In Monado's OG WMR controller driver (`src/xrt/drivers/wmr/wmr_controller_og.c`)
   ```
 - Lines 308-311:
   ```c
-  U_LOG_IFL_T(wcb->log_level, "Accel [m/s^2]: %f",
+  U_LOG_IFL_T(wcb->log_level, "Accel [m/s^2] : %f",
               sqrtf(last_input->imu.acc.x * last_input->imu.acc.x +
                     last_input->imu.acc.y * last_input->imu.acc.y +
                     last_input->imu.acc.z * last_input->imu.acc.z));
@@ -456,7 +456,7 @@ In Monado's OG WMR controller driver (`src/xrt/drivers/wmr/wmr_controller_og.c`)
   - Line 287: `last_input->trigger = (float)read8(&p) / 0xFF;`
   - Line 379: `xrt_inputs[WMR_CONTROLLER_INDEX_TRIGGER_VALUE].value.vec1.x = cur_inputs->trigger;`
   - Line 475: `u_var_add_f32(wcb, &ctrl->last_inputs.trigger, "input.trigger");`
-  - Range: `0x00.. 0xFF` (0.. 255 unsigned) normalized to `[0.0, 1.0]`. $0x00 \to 0.0$ (released), $0xFF \to 1.0$ (fully pulled).
+  - Range: `0x00 .. 0xFF` (0 .. 255 unsigned) normalized to `[0.0, 1.0]`. $0x00 \to 0.0$ (released), $0xFF \to 1.0$ (fully pulled).
 - Trackpad (bytes 5, 6):
   - Lines 192-197: `struct { bool click; bool touch; struct xrt_vec2 values; } trackpad;`
   - Lines 289-294:
@@ -464,12 +464,12 @@ In Monado's OG WMR controller driver (`src/xrt/drivers/wmr/wmr_controller_og.c`)
     // Read trackpad coordinates (0x00 - 0x64. Both are 0xFF when untouched)
     uint8_t trackpad_x = read8(&p);
     uint8_t trackpad_y = read8(&p);
-    last_input->trackpad.values.x = (trackpad_x == 0xFF) ? 0.0f: (float)(trackpad_x - 0x32) / 0x32;
-    last_input->trackpad.values.y = (trackpad_y == 0xFF) ? 0.0f: (float)(trackpad_y - 0x32) / 0x32;
+    last_input->trackpad.values.x = (trackpad_x == 0xFF) ? 0.0f : (float)(trackpad_x - 0x32) / 0x32;
+    last_input->trackpad.values.y = (trackpad_y == 0xFF) ? 0.0f : (float)(trackpad_y - 0x32) / 0x32;
     ```
   - Lines 382-384: mapped to `WMR_CONTROLLER_INDEX_TRACKPAD_CLICK`, `TRACKPAD_TOUCH`, and `TRACKPAD` (vec2).
   - Lines 480-483: exposed via `u_var_add_bool` and `u_var_add_f32`.
-  - Range: `0x00.. 0x64` (0.. 100 decimal) per axis when touched; both bytes are `0xFF` when untouched.
+  - Range: `0x00 .. 0x64` (0 .. 100 decimal) per axis when touched; both bytes are `0xFF` when untouched.
   - Normalization: Center is `0x32` (50 decimal).
     - Untouched (`0xFF`): returns `0.0f`.
     - Min (`0x00` = 0): $(0 - 50) / 50 = -1.0f$.
@@ -479,7 +479,7 @@ In Monado's OG WMR controller driver (`src/xrt/drivers/wmr/wmr_controller_og.c`)
   - Line 264: `last_input->trackpad.click = buttons & 0x10;` (bit 4)
   - Line 266: `last_input->trackpad.touch = buttons & 0x40;` (bit 6)
 - Thumbstick (bytes 1-3):
-  - Lines 270-284: two 12-bit unsigned coordinates (0.. 4095) packed across 3 bytes. Center is `0x07FF` (2047).
+  - Lines 270-284: two 12-bit unsigned coordinates (0 .. 4095) packed across 3 bytes. Center is `0x07FF` (2047).
   - Normalized via `(float)(stick - 0x07FF) / 0x07FF` and clamped to `1.0f`.
 - Buttons (byte 0):
   - Lines 259-266: bitmask:
@@ -558,8 +558,8 @@ and the axis mapping are not valid on such a capture, so the tools now say so:
   [COUNTERS.md](COUNTERS.md).
 - After the phone connects the bridge asks for a 7.5-15 ms connection interval, latency
   0, 4 s timeout and logs what the phone actually granted
-  (`BLE connection parameters at connect:...` and, if the phone changes them,
-  `... updated:...`). Windows centrals often keep a longer interval (tens of ms), which
+  (`BLE connection parameters at connect: ... ` and, if the phone changes them,
+  ` ... updated: ... `). Windows centrals often keep a longer interval (tens of ms), which
   limits how many notifications fit per second whatever the bridge asks; the log shows
   whether the request was honoured. This has not been tried on hardware.
 
@@ -590,7 +590,7 @@ the user; nothing here flashes anything):
 
 ```powershell
 # 1. Build and flash as in docs/BUILD_WINDOWS.md, then open the monitor and note, after the
-#    PC connects: the 'BLE connection parameters...' lines and the STREAM line.
+# PC connects: the 'BLE connection parameters ... ' lines and the STREAM line.
 # 2. In another terminal, with the bridge not connected to a phone:
 pip install bleak
 python tools/capture_ble.py --hand LEFT
@@ -598,7 +598,7 @@ python tools/analyze_capture.py captures/<file>.txt --hand LEFT
 # 3. Repeat for --hand RIGHT. Keep the monitor output from step 1 next to each capture.
 ```
 
-Report with each capture: the printed MTU, the `conn=[...]` text, the per-phase loss lines
+Report with each capture: the printed MTU, the `conn=[ ... ]` text, the per-phase loss lines
 from `capture_ble.py`, and the STREAM/`rx`/`tx`/`drop` lines from the monitor during the
 `still` phase.
 
@@ -736,7 +736,7 @@ Real use is at distance, so the weak-link case is the one that matters.
 
 - Run-length histogram, no new capture needed. `tools/analyze_capture.py` now prints, per
   phase and hand, how many reports are missing according to the tick deltas and how long the
-  missing runs are (`1x40, 3x12,...`). Isolated runs of 1 and no pattern point to 1; runs
+  missing runs are (`1x40, 3x12, ... `). Isolated runs of 1 and no pattern point to 1; runs
   of about three at a steady rhythm point to 2; a few very long runs (tens of ms or more)
   point to stalls (3 or 4). Run it on the existing LEFT and RIGHT captures.
   *Limit:* if every delta is the same multiple of the real period (perfectly uniform loss)
@@ -787,7 +787,7 @@ Real use is at distance, so the weak-link case is the one that matters.
     two links = 1.2 commands per second, plus 1.2 Command Complete events per second. They
     are sent one at a time, at least 100 ms apart (so at most 10 per second, and only for
     about 0.6 s of every 5 s), and an unanswered command is abandoned after 500 ms. Shown as
-    `rssi=... fcc=... lq=...`, or `n/a(0xNN)` with the HCI status if the controller refuses.
+    `rssi= ... fcc= ... lq= ... `, or `n/a(0xNN)` with the HCI status if the controller refuses.
     Interpretation caveats, unverified here: for BR/EDR, Read RSSI is, as I understand the
     specification, a difference from the "golden receive power range" (0 = within range,
     negative = too weak) rather than dBm; the failed-contact counter is, as I understand it,
@@ -797,7 +797,7 @@ Real use is at distance, so the weak-link case is the one that matters.
     registered with `hci_dump_init` (from `src/wmr_linkdiag.c`; this repository's
     `integration/main-CMakeLists.txt` only lists its sources) receives BTstack's error-level
     messages. A message whose format matches the one in `hci_transport_esp32_vhci.c`
-    (`transport_recv_pkt_cb... dropping packet`) increments `vhci_drop`; all error-level
+    (`transport_recv_pkt_cb ... dropping packet`) increments `vhci_drop`; all error-level
     messages increment `log_errors` (which therefore includes the drops). Packet logging is
     turned off and only the error level reaches the sink, so the cost is one function call per
     error message and one flag test per HCI packet. Limits: it depends on BTstack's wording (a
@@ -829,15 +829,15 @@ What exists, and what it is documented to do:
 | Option | Where | Documented effect | State in this build |
 | --- | --- | --- | --- |
 | `BTDM_CTRL_AUTO_LATENCY` (`auto_latency` in `esp_bt_controller_config_t`) | `controller/esp32/Kconfig.in`, `esp_bt.h` | "BLE auto latency, used to enhance classic BT performance while classic BT and BLE are enabled at the same time." Dual mode only. The text does not say what it changes; the name suggests it adjusts BLE connection latency, which is a guess | off (`# CONFIG_BTDM_CTRL_AUTO_LATENCY is not set`) |
-| `BTDM_CTRL_MODEM_SLEEP` (ORIG mode), `esp_bt_sleep_enable/disable` | same | "bluetooth controller sleeps between BR/EDR frames and BLE events" and wakes on a schedule. Nothing says it affects loss | on, ORIG, main-XTAL low-power clock |
+| `BTDM_CTRL_MODEM_SLEEP` (ORIG mode), `esp_bt_sleep_enable/disable()` | same | "bluetooth controller sleeps between BR/EDR frames and BLE events" and wakes on a schedule. Nothing says it affects loss | on, ORIG, main-XTAL low-power clock |
 | `esp_bredr_tx_power_set(min, max)` | `esp_bt.h` | BR/EDR TX power range, applies to inquiry, page and connection; default minimum `ESP_PWR_LVL_N0`, maximum `ESP_PWR_LVL_P3`. Not a scheduling option; it is the ESP32's transmit power towards the controllers | not called; defaults |
-| `esp_coex_preference_set` (deprecated), `esp_coex_status_bit_set/clear` | `esp_coex/include/esp_coexist.h` | Arbitrate Wi-Fi against Bluetooth (`ESP_COEX_PREFER_WIFI/BT/BALANCE`). The status bits defined for BLE are for BLE Mesh and for BT only A2DP. No Classic-against-BLE priority exists in this API | not called |
+| `esp_coex_preference_set()` (deprecated), `esp_coex_status_bit_set/clear()` | `esp_coex/include/esp_coexist.h` | Arbitrate Wi-Fi against Bluetooth (`ESP_COEX_PREFER_WIFI/BT/BALANCE`). The status bits defined for BLE are for BLE Mesh and for BT only A2DP. No Classic-against-BLE priority exists in this API | not called |
 | `ESP_COEX_SW_COEXIST_ENABLE` | `esp_coex/Kconfig` | Software Wi-Fi/Bluetooth coexistence. Its help says that if only Bluetooth is used, disabling it reduces binary size (no mention of any other effect) | on (the Wi-Fi component is compiled in, but the application and the BTstack port source do not call `esp_wifi_*`; whether the Wi-Fi libraries are initialised at run time was not checked) |
 | `BTDM_CTRL_BR_EDR_MAX_ACL_CONN`, `BTDM_CTRL_BLE_MAX_CONN` | `Kconfig.in` | Maximum connections; each costs static RAM (1.2 KB and 1 KB). Nothing says they change scheduling | 4 and 3, while 2 and 1 are used |
 | `controller_task_prio`, `BTDM_CTRL_PINNED_TO_CORE`, `BTDM_CTRL_HLI` | `esp_bt.h`, `Kconfig.in` | Controller task priority and core, high-level interrupt | core 0, HLI on |
 
-The BTstack ESP32 port (`hci_transport_esp32_vhci.c`) calls `BT_CONTROLLER_INIT_CONFIG_DEFAULT`
-unchanged and then `esp_bt_controller_enable`: it sets none of the options above, so every one of
+The BTstack ESP32 port (`hci_transport_esp32_vhci.c`) calls `BT_CONTROLLER_INIT_CONFIG_DEFAULT()`
+unchanged and then `esp_bt_controller_enable()`: it sets none of the options above, so every one of
 them is controlled by `sdkconfig`. BTstack itself has only HCI-level knobs (below), nothing about
 Classic-against-BLE priority.
 

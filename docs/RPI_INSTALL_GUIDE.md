@@ -47,7 +47,7 @@ ssh <username>@wmr-pi.local
 Run these two checks:
 
 ```bash
-uname -m                      # must print aarch64
+uname -m # must print aarch64
 systemctl is-active bluetooth # must print active
 ```
 
@@ -140,7 +140,7 @@ The installer starts the service. Check it:
 wmr-bridge --version
 wmr-bridge --list
 systemctl status wmr-bridge
-systemctl is-active wmr-bridge   # active
+systemctl is-active wmr-bridge # active
 journalctl -u wmr-bridge -n 50 --no-pager
 ```
 
@@ -272,7 +272,7 @@ The token file permissions may be wrong. Fix them:
 ```bash
 sudo chown wmr:wmr /etc/wmr-bridge/token
 sudo chmod 0640 /etc/wmr-bridge/token
-sudo usermod -aG wmr "$USER"   # log out and back in, or use sudo for the probe
+sudo usermod -aG wmr "$USER" # log out and back in, or use sudo for the probe
 sudo systemctl restart wmr-bridge
 ```
 
@@ -303,7 +303,7 @@ journalctl -u wmr-bridge -n 200 --no-pager
 `wmr-bridge status` shows whether the Bluetooth adapter is powered, pairable
 and scanning, and whether each hand has a bond and a hidraw node. In the log,
 `auto-pair: scanning` is the heartbeat, `found`/`paired` shows a controller was
-heard, and `pairing <MAC> failed:...` gives the BlueZ error.
+heard, and `pairing <MAC> failed: ... ` gives the BlueZ error.
 
 **A phone sees the bridge but will not pair.**
 Open a pairing window on the running service, then pair from the phone:
@@ -336,7 +336,7 @@ systemctl status bluetooth
 sudo rfkill unblock bluetooth
 ```
 
-`automatic controller pairing is off... until restart` names a scan failure;
+`automatic controller pairing is off ... until restart` names a scan failure;
 restart the service after fixing it:
 
 ```bash

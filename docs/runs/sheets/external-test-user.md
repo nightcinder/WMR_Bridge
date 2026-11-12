@@ -88,7 +88,7 @@ Fix the board and phone positions. FF14 batched, FF15 echo on, 250 ms, 120 s. Ex
 
 ### 6.2 Phone + one WMR controller: FF11 capture
 
-Open **Capture**, choose LEFT, start. Hold still 5 s, twist 360° in 4 s, flip forward 4 s, lean right 4 s. Finish and share the `.txt`; repeat for RIGHT. Name them `...-capture-left.txt` and `...-capture-right.txt`. Send raw files; do not analyse them yourself.
+Open **Capture**, choose LEFT, start. Hold still 5 s, twist 360° in 4 s, flip forward 4 s, lean right 4 s. Finish and share the `.txt`; repeat for RIGHT. Name them ` ... -capture-left.txt` and ` ... -capture-right.txt`. Send raw files; do not analyse them yourself.
 
 ### 6.3 PSVR2: desktop FF11 capture
 
@@ -120,9 +120,9 @@ Use one folder:
 ```text
 wmr-ext-<handle>-<YYYYMMDD>/
   manifest.md
-  tier0/  installer.png, controller-control.png, connect.png, debug.png, leds.jpg
-  tier1/  serial.log, logcat.txt, setup.jpg, error.png
-  tier2/  latency-*.json/csv, capture-left/right.txt, glasses screenshots, psvr2-left.txt
+  tier0/ installer.png, controller-control.png, connect.png, debug.png, leds.jpg
+  tier1/ serial.log, logcat.txt, setup.jpg, error.png
+  tier2/ latency-*.json/csv, capture-left/right.txt, glasses screenshots, psvr2-left.txt
   README.txt
 ```
 

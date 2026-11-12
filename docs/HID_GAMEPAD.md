@@ -1,4 +1,4 @@
-# BLE HID gamepad 
+# BLE HID gamepad
 
 The ESP32 exposes the two WMR controllers as one standard BLE HID-over-GATT
 gamepad on the same phone link as the FF10 service. Android binds it as an
@@ -15,10 +15,10 @@ button bits use the host's HID order rather than the package's model order
 | byte | content |
 |---|---|
 | 0-1 | 16 button bits, little endian, in Android/Linux HID order: A, B, C, X, Y, Z, L1, R1, L2, R2, Select, Start, Mode, L3, R3 (bit 0 is the first entry; bit 15 unused) |
-| 2 | low nibble: hat switch 0..7 clockwise from up, 15 = centred; high nibble 0 |
-| 3, 4 | left stick X, Y: -127..127, Y positive down |
+| 2 | low nibble: hat switch 0 .. 7 clockwise from up, 15 = centred; high nibble 0 |
+| 3, 4 | left stick X, Y: -127 .. 127, Y positive down |
 | 5, 6 | right stick X (Z), Y (Rz), same scale |
-| 7, 8 | left trigger (Brake), right trigger (Accelerator): 0..255 |
+| 7, 8 | left trigger (Brake), right trigger (Accelerator): 0 .. 255 |
 
 The descriptor is byte-for-byte `hidReportDescriptor` from that package. The
 firmware copies it into `src/wmr_hid.c`; the descriptor vector file fails the
@@ -27,7 +27,7 @@ host tests if the two ever drift. The report bytes are the firmware's own
 
 ## Mapping
 
-`wmr_hid_map` is a C port of `mapGamepad` from
+`wmr_hid_map()` is a C port of `mapGamepad()` from
 `wmr_core/lib/domain/gamepad.dart`:
 
 - per hand: squeeze → L1/R1, stick click → L3/R3, menu → Select (LEFT) /
@@ -36,7 +36,7 @@ host tests if the two ever drift. The report bytes are the firmware's own
   same press/release hysteresis as the app (`previous` state);
 - trackpad click + touch → d-pad (left) or face buttons (right), using the
   same sector rule and centre radius;
-- sticks: -1..1 with Y negated for HID; the `invertStickY` and
+- sticks: -1 .. 1 with Y negated for HID; the `invertStickY` and
   `invertTrackpadY` settings are honoured;
 - tilt: the pure mapper accepts roll/pitch and the same tilt config, but the
   firmware has no orientation fusion, so it always passes no tilt. Tilt stays
@@ -76,7 +76,7 @@ directly, which is the off-by-one the user saw.
 | Stick click RIGHT | 15 / bit 14 | `BUTTON_THUMBR` (107) | R3 |
 
 The hat (d-pad) and both trackpad roles are unchanged. The companion package's
-`encodeHidReport` still packs its model order for its own
+`encodeHidReport()` still packs its model order for its own
 `BluetoothHidDevice`; app HID output should be off when the firmware gamepad
 is in use, and moving that encoder to the same table is a companion follow-up.
 
@@ -148,10 +148,10 @@ is in use, and moving that encoder to the same table is a companion follow-up.
   UUID-printing `0.2.4-29` trace showed it was `0x2A04`, not `0x2A50`. DIS is
   harmless metadata; it was not the cause of the drop.
 - **Peripheral preferred connection parameters:** the `0.2.4-29` trace ends
-  with `read-by-type 0x0001..0xffff type=0x2a04 uuid_len=2`, answered
+  with `read-by-type 0x0001 .. 0xffff type=0x2a04 uuid_len=2`, answered
   `attribute not found`. Android's GAP client reads `0x2A04` after service
   discovery; a failed read takes its client-complete path to
-  `GATT_Disconnect` on the link. That is the five-second drop every phone run
+  `GATT_Disconnect()` on the link. That is the five-second drop every phone run
   showed: discovery completed, no HID read or Report CCCD write happened, and
   the phone closed the ACL itself (`reason=0x13`). `wmr_bridge.gatt` now
   exposes `0x2A04` (min/max 15 ms, latency 0, timeout 4 s).
@@ -159,7 +159,7 @@ is in use, and moving that encoder to the same table is a companion follow-up.
 ## ATT trace
 
 A build with `WMR_CFG_ATT_TRACE=1` (`EXTRA_CFLAGS=-DWMR_CFG_ATT_TRACE=1`
-`python3 tools/firmware/build.py...`) logs `ATT trace on:...` at start-up,
+`python3 tools/firmware/build.py ... `) logs `ATT trace on: ... ` at start-up,
 prints one line per ATT or SMP PDU on the phone link, and adds
 `ATT trace=on rx= tx= writes= two_byte_writes= smp= le_sig=` to the status
 block. `tx` is phone→bridge (requests) and `rx` is bridge→phone (responses).
@@ -185,7 +185,7 @@ Host tests compare both implementations against one vector file:
   `tests/vectors/hid_report_descriptor.txt`, checks every report byte and the
   descriptor, then checks the stale/coalescing state machine.
 - Companion package `wmr_companion_hid_android` — the same two vector files
-  are checked against `mapGamepad` + `encodeHidReport` (see
+  are checked against `mapGamepad()` + `encodeHidReport()` (see
   `test/hid_gamepad_vectors_test.dart` in the companion PR).
 
 Run the C side:
@@ -212,9 +212,9 @@ Local build evidence for this change:
 | ESP-IDF | v6.1 |
 | Factory image SHA-256 | `c5da5eb9e8d24aad5e5531183551b47ea323e4a2d6daa9c06db82afb16972eef` |
 
-The first phone attempt could not pair: it ran the pre- image
+The first phone attempt could not pair: it ran an older image
 (`0.2.4-7-g90c6c83`) and the bridge showed two names for one address. Both are
-fixed in the builds above. A phone link now needs 's LE Secure
+fixed in the builds above. A phone link now needs LE Secure
 Connections pairing with bonding; a build without it is not a valid test.
 
 The second attempt (`0.2.4-8-gba1a8bb`) paired after several resets but showed
@@ -286,10 +286,10 @@ The `0.2.4-29-g748e928-att` trace (`ATT trace=on`, one line per ATT PDU, UUID
 column) shows the phone pairing, bonding and discovering every service,
 characteristic and descriptor. It then sent **no read and no write at all**, and
 dropped the link (reason `0x13`) five seconds later. The last request was
-`read-by-type 0x0001..0xffff type=0x2a04` (Peripheral Preferred Connection
+`read-by-type 0x0001 .. 0xffff type=0x2a04` (Peripheral Preferred Connection
 Parameters), answered `attribute not found`. Android's GAP client reads that
 characteristic after discovery; the failed read takes its client-complete path
-to `GATT_Disconnect`, so the phone closed the ACL before the HID profile
+to `GATT_Disconnect()`, so the phone closed the ACL before the HID profile
 could start. DIS (`0.2.4-26`) was a correct addition but not the drop.
 `0.2.4-31-g13c7d9f` adds GAP `0x2A04`; the next trace should show the HID
 Information and Report Map reads and the Report CCCD write. The phone had
@@ -324,7 +324,7 @@ Two changes fix that:
   channel and then disconnects it. Before this, such a link stayed up forever.
   Declining an unknown HID channel also disconnects the underlying ACL.
 
-The firmware logs `unknown Classic link <addr> up... waiting for a HID
+The firmware logs `unknown Classic link <addr> up ... waiting for a HID
 channel` or `incoming device <addr> is not LEFT or RIGHT; disconnecting`, so
 the next capture names the device that used to hold the slot.
 
@@ -334,7 +334,7 @@ The 2026-10-28 18:54 capture (user: "worse than before") has no HCI `0x09`:
 the third ACL slot removed that failure. It shows two boot-time problems
 instead.
 
-1. `connecting LEFT` completed its ACL (`LEFT link up...`) and then sat for
+1. `connecting LEFT` completed its ACL (`LEFT link up ... `) and then sat for
    20 s with no encryption, no SSP confirmation, and no HID channel. The
    discovery connect phase waited for HID events that never came, so the
    single-hand connect never finished; the board was reset.
@@ -438,7 +438,7 @@ controllers had not reconnected before the log ends), and per-control values
 (stick min/max/centre, trigger range, d-pad sectors). The app-side
 `StickNormalizer` gap below is unchanged.
 
-## Verification STATUS ( done-when)
+## Verification STATUS (done-when)
 
 The phone rows are now a completed hardware result: the 2026-10-28
 `0.2.4-38` run passed the gamepad test in a stock phone. The paste-back
@@ -453,7 +453,7 @@ Classic-entry questions rather than filling in every value.
 | Gamepad tester: d-pad via left trackpad (8 sectors) | PASS (user): controls register; sectors not itemised | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | user confirmation, 2026-10-28 |
 | Gamepad tester: face buttons via right trackpad | PASS (user): controls register | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | user confirmation, 2026-10-28 |
 | Analog sticks: full range, centre, Y direction | PASS (user): sticks register; range/centre not itemised | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | user confirmation, 2026-10-28 |
-| Analog triggers: 0..255 and L2/R2 hysteresis | PASS (user): triggers register; values not itemised | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | user confirmation, 2026-10-28 |
+| Analog triggers: 0 .. 255 and L2/R2 hysteresis | PASS (user): triggers register; values not itemised | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | user confirmation, 2026-10-28 |
 | No stuck input after controller disconnect/reconnect | PARTIAL: after the bridge reboot the phone received only the neutral report; controller power-cycle not re-captured | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | 16:44 capture, above |
 | No stuck input after BLE disconnect/reconnect | PARTIAL: phone reconnected to the bond after a bridge reboot and got only the neutral report (`HID reports=1`); a controller power-cycle after that reboot was not captured, so the reconnect half of this row is unproven | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | 16:44 capture, above |
 | FF12 notification rate unchanged while HID is active | PARTIAL: controller/source rate unchanged (~170-190 reports/s per hand, 0 drops, FF13 `state=2`) with HID at ~68/s, but FF12 was not subscribed in this run (`stream=none`), so the simultaneous FF12 + HID notification rate was not sampled | Pixel 11 Pro / Android 17 | `0.2.4-38-g4bcf01c` | 16:42-16:44 capture, above |
@@ -567,7 +567,7 @@ CLI flags control BLE behavior:
   firmware HOGP device is used; registering `BluetoothHidDevice` disables
   Android's HID Host service, which stops reception of the bridge's HOGP
   input reports.
-- **Security.** Bonding behaviour is 's and is now merged: LESC with
+- **Security.** Bonding behaviour is now merged: LESC with
   bonding, unbonded centrals refused. A HID build without it cannot pair on a
   current Android phone, so test only images built after that merge.
 - **iOS and PC hosts** are out of scope.

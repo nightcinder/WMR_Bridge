@@ -33,7 +33,7 @@ phone subscribed) has not been run yet.
   stored LE bond keeps the adapter unpairable. A token is still generated only
   when `/etc/wmr-bridge/token` is absent or empty; upgrades do not rotate it.
 - **Still open : the companion does not persist the token.** With
-  Bluetooth down the manual Wi-Fi entry has no way to learn it.  covers
+  Bluetooth down the manual Wi-Fi entry has no way to learn it. covers
   saving the token
   (and the bridge endpoint it was read with), reconnecting to that saved bridge
   on launch, and rescanning after a drop without restarting the app. The fix
@@ -124,8 +124,8 @@ for the hardware re-run.
   `--ble-continuous-pairing`): the agent is registered only while the adapter
   is pairable, so a later re-pair without a window fails with no default agent.
   Every agent callback now logs one
-  `BLE pairing agent: method=... device=... result=...` journal line, and the
-  BLE start logs the configured `BlueZ JustWorksRepairing = ...` policy. An
+  `BLE pairing agent: method= ... device= ... result= ... ` journal line, and the
+  BLE start logs the configured `BlueZ JustWorksRepairing = ... ` policy. An
   explicit `always` value is left alone.
 
 ## 0.3.22 — 2026-11-10
@@ -299,7 +299,7 @@ later continue to work.
 ### Verification
 
 - Host C tests, the Pi unittest suite and the ESP-IDF build run in CI before
-  tagging. BLE advertising still waits on  in three states
+  tagging. BLE advertising still waits on in three states
   (advertising only, connected-not-subscribed, notifying) with a pass bar of
   0 gaps and at most 0.5 percent loss.
 
@@ -349,7 +349,7 @@ continue to work.
 ### Verification
 
 - Host C tests, the Pi unittest suite and the ESP-IDF build run in CI before
-  tagging. BLE advertising waits on  in three states (advertising only,
+  tagging. BLE advertising waits on in three states (advertising only,
   connected-not-subscribed, notifying) with a pass bar of 0 gaps and at most
   0.5 percent loss.
 
@@ -433,7 +433,7 @@ with real controllers yet.
   code quit one second after issuing `pair`, which tore down the agent and
   aborted the attempt. Unpaired controllers known to BlueZ are left to the
   scan session instead of a separate agentless `pair`.
-- **Visible pairing progress.** The daemon logs one `auto-pair: scanning ...`
+- **Visible pairing progress.** The daemon logs one `auto-pair: scanning ... `
   line per attempt, then `found`, `pairing`, `paired`, `trusting`, `connecting`
   and `connected`, and reports the BlueZ error on a failed `pair`. The new
   `wmr-bridge status` (also `--status`) prints the adapter's
@@ -469,7 +469,7 @@ pairing has run only against a mocked `bluetoothctl`.
 
 ### Raspberry Pi bridge
 
-- **Automatic pairing (#164, ; hardened in #166, ).** The
+- **Automatic pairing (#164, ; hardened in #166).** The
   daemon scans, pairs, trusts and connects WMR controllers on its own, so the
   operator only puts each hand in pairing mode. It looks at allowed hands only,
   backs off idle scans, parses the `bluetoothctl` scan output in one session,
@@ -488,7 +488,7 @@ pairing has run only against a mocked `bluetoothctl`.
 
 ### Flasher and release assets
 
-- **Three-image manifest (#161, ; docs #162, ).** The ESP Web
+- **Three-image manifest (#161, ; docs #162).** The ESP Web
   Tools manifest writes `bootloader.bin` at `0x1000`, `partition-table.bin` at
   `0x8000` and `app.bin` at `0x10000` instead of the merged factory image at 0.
   Flashing with "Erase device" unchecked leaves NVS (`0x9000`–`0xFFFF`) alone,
@@ -498,13 +498,12 @@ pairing has run only against a mocked `bluetoothctl`.
 
 ### Docs
 
-- Pi setup and pairing rewritten for automatic pairing (#163, ; #167,
-  ): the run sheet gains P11 (start unpaired, put a controller in
+- Pi setup and pairing rewritten for automatic pairing (#163, ; #167,): the run sheet gains P11 (start unpaired, put a controller in
   pairing mode, unattended pair/trust/connect within 60 s, repeat for the other
   hand, and confirm `--no-auto-pair` does not pair). The guide and flasher page
   cover the token, omit the restart, state WMR-only support and say the app
   still takes host and port manually. The GATT probe is retired from the
-  latency plan and  is recorded as **Stay Flutter** (#160, ).
+  latency plan and is recorded as **Stay Flutter** (#160).
 
 ### Verification
 
@@ -529,7 +528,7 @@ Firmware and Pi artifacts remain CI-built and hardware-unverified.
 
 ### Release assets
 
-- **Six assets per release (#155, ).** The `release` job in
+- **Six assets per release (#155).** The `release` job in
   `.github/workflows/firmware.yml` stages only `wmr-bridge-factory.bin`,
   `wmr-bridge-left-factory.bin`, `wmr-bridge-right-factory.bin`,
   `wmr-bridge_<pi-version>_all.deb`, `install.sh` and `SHA256SUMS`. The
@@ -543,7 +542,7 @@ Firmware and Pi artifacts remain CI-built and hardware-unverified.
 
 ### Raspberry Pi Pages site
 
-- **Pi setup page (#156, ).** `docs/flasher/pi.html` is a three-step
+- **Pi setup page (#156).** `docs/flasher/pi.html` is a three-step
   guide (Pi Imager, one-line install, `bluetoothctl` pairing) with copy
   buttons in the flasher's dark theme; `docs/flasher/index.html` links it.
   The tag-time `pages` job publishes `index.html`, `pi.html` and `install.sh`,
@@ -553,7 +552,7 @@ Firmware and Pi artifacts remain CI-built and hardware-unverified.
 
 ### Triage
 
-- **6DoF-only pose bundles and repeated anchor frames (#154, ).**
+- **6DoF-only pose bundles and repeated anchor frames (#154).**
   `tools/triage_bundle.py` no longer requires `captures/` when the bundle
   carries pose recordings, treats a zero bridge count and a missing
   `latency/` as expected in `6dof_only` mode, and reports a pose file whose
@@ -563,12 +562,12 @@ Firmware and Pi artifacts remain CI-built and hardware-unverified.
 
 ### Docs
 
-- Simple-English Raspberry Pi install guide (#153, ), Raspberry Pi and
+- Simple-English Raspberry Pi install guide (#153), Raspberry Pi and
   ESP32 flashing docs leading with the one-line installer and one factory
-  image per variant (#158, ), run sheets trimmed and consolidated
-  (#152 , #150 ), latency and bench runs archived (#151
-  , #157 ), and current-release lines refreshed for 0.3.11
-  (#149 ).
+  image per variant (#158), run sheets trimmed and consolidated
+  (#152 , #150), latency and bench runs archived (#151
+  , #157), and current-release lines refreshed for 0.3.11
+  (#149).
 
 ### Verification
 
@@ -595,7 +594,7 @@ this repository, so `0.3.11` is the next free Bridge version.)
 
 ### Firmware
 
-- **Driver table and PSVR2 FF12/FF14 decode (#142, ).**
+- **Driver table and PSVR2 FF12/FF14 decode (#142).**
   `src/wmr_controller_driver.{h,c}` holds one entry per model with its
   Bluetooth names, input-report predicate, FF12/FF14 decoder, wake report and
   FF13 support; discovery, classification and decoding look it up instead of
@@ -604,7 +603,7 @@ this repository, so `0.3.11` is the next free Bridge version.)
   `9.80665/4096` m/s², 333 ns IMU ticks converted to 100 ns), and a frame that
   is not exactly 79 bytes is counted in `dec_err`. Covered by `test_decode`,
   `test_discovery` and `test_protocol`; never run on a PSVR2 controller.
-- **Switch Joy-Con/Pro support (#144, ).** Discovery matches
+- **Switch Joy-Con/Pro support (#144).** Discovery matches
   `Joy-Con (L)`, `Joy-Con (R)` and `Pro Controller`; after
   `DESCRIPTOR_AVAILABLE` the bridge sends HID output report `0x01`
   subcommands (enable the 6-axis sensor, read the two SPI calibration blocks,
@@ -614,33 +613,33 @@ this repository, so `0.3.11` is the next free Bridge version.)
   packing and sample unpacking; the `WMR_MODEL_SWITCH` model bit is stored in
   the address record. Not run on a controller; hardware verification is
   tracked in [#145](https://github.com/nightcinder/WMR_Bridge/issues/145).
-- **Internal codec target (#141, ).** The wire-format constants live in
+- **Internal codec target (#141).** The wire-format constants live in
   `src/wmr_codec.h` and build into a static `wmr_codec` target, so host tests
   and the firmware share one definition without `wmr_protocol.h` or
   `wmr_psvr2.h` pulling in `wmr_config.h`. No payload change.
 
 ### Pi host bridge
 
-- **FF13 calibration forwarding over `wmr-wifi-v1` (#140, ).** `hello`
+- **FF13 calibration forwarding over `wmr-wifi-v1` (#140).** `hello`
   advertises `calibration` (version, 16-byte header, 496-byte window and
-  message tag `0x13`); a `{"type":"calibration","hand":...,"offset":N}` request
+  message tag `0x13`); a `{"type":"calibration","hand": ... ,"offset":N}` request
   returns one tagged binary window from a per-hand cache, and `hello`/`status`
   report each hand's state and blob CRC. The daemon answers `not_read` until an
   ingest layer supplies a blob, because the Pi-side controller read over
   hidraw is not implemented: **the Pi does not yet read FF13 calibration from
   controllers.** `pi/tests/test_protocol.py` and `pi/tests/test_ws.py` cover
   the windows, CRC and WebSocket forwarding.
-- **Package `0.2.4` (#140, ).** The Pi package version moves from
+- **Package `0.2.4` (#140).** The Pi package version moves from
   `0.2.3` to `0.2.4` because `hello` gains the calibration fields. The `.deb`
   and tarball asset names follow `wmr_bridge.__version__`.
 
 ### CI and build
 
-- **Blocking security scans and Pi package verification (#136, ).**
+- **Blocking security scans and Pi package verification (#136).**
   gitleaks and Semgrep no longer run with `continue-on-error`, and Semgrep uses
   `--error`, so a finding holds the merge. The host-tests workflow also builds
   the Pi tarball and `.deb` and verifies the tarball before the dry run.
-- **VERSION file (#137, ).** The root `VERSION` file is the version
+- **VERSION file (#137).** The root `VERSION` file is the version
   source when git has no tag to describe: `tools/firmware/build.py` reads it
   after `git describe`, and `tests/run_c_tests.sh` stamps it into the host-test
   application descriptor. This release sets it to `0.3.11`.
@@ -674,7 +673,7 @@ CI-built and hardware-unverified.
 
 ### Firmware
 
-- **FF10 encryption enforcement (#132, ).** `wmr_bridge.gatt` now marks
+- **FF10 encryption enforcement (#132).** `wmr_bridge.gatt` now marks
   every FF10 data characteristic and its CCC `ENCRYPTION_KEY_SIZE_16` as well
   as `WRITE_ENCRYPTED`/`READ_ENCRYPTED`. BTstack rejects an unencrypted access
   only when the attribute's key-size nibble is non-zero, so the earlier
@@ -689,7 +688,7 @@ CI-built and hardware-unverified.
 
 ### Triage
 
-- **6-run pose bundles (#129, ).** `tools/triage_bundle.py` accepts
+- **6-run pose bundles (#129).** `tools/triage_bundle.py` accepts
   non-occlusion pose runs of 14 s or longer (15 s bench timer with boundary
   tolerance) and treats a six-run, one-run-per-motion bundle as complete. The
   pose-filter sheet moves from the 42-run schedule in filter-spec rev 4 §8 to
@@ -698,7 +697,7 @@ CI-built and hardware-unverified.
 
 ### CI
 
-- **Secret and static-analysis scans (#130, ).** `security.yml` runs
+- **Secret and static-analysis scans (#130).** `security.yml` runs
   gitleaks and Semgrep on pull requests and pushes to `main`, and Dependabot
   covers the GitHub Actions and pip ecosystems. Both scanners are report-only
   (`continue-on-error`), so a finding is visible in the checks list without
@@ -722,7 +721,7 @@ hardware-unverified.
 
 ### Flasher
 
-- **In-page controller pairing and packet counters (#127, ).**
+- **In-page controller pairing and packet counters (#127).**
   `docs/flasher/index.html` can request the controller bonds from the running
   firmware and shows per-hand packet counters, so a controller can be paired
   from the browser instead of a serial console. The flasher keeps the existing
@@ -732,16 +731,16 @@ hardware-unverified.
 
 ### Docs
 
-- **Web flasher pairing workflow (#128, ).** [`README.md`](README.md)
+- **Web flasher pairing workflow (#128).** [`README.md`](README.md)
   and [`docs/DISCOVERY.md`](docs/DISCOVERY.md) document the in-page pairing
   steps and what to check when a hand does not bind.
 - **Tester docs.** The external-tester sheet and runbooks pin Companion
   v0.3.7, v0.3.8 and v0.3.10 and Bridge v0.3.3 as those releases ship
-  (#123–#126; ).
+  (#123–#126;).
 
 ## 0.3.3 — 2026-11-01
 
-The  review-pass release on top of 0.3.2. FF10–FF17 keep their
+The review-pass release on top of 0.3.2. FF10–FF17 keep their
 payloads, so companions at 0.2.2 or later continue to work, and the firmware
 reports the tag version over FF16 (0.3.3 when tagged). Two firmware
 behaviour fixes: the BLE HID gamepad now puts each control in its Android
@@ -750,7 +749,7 @@ timeout. Firmware and Pi artifacts remain CI-built and hardware-unverified.
 
 ### Firmware
 
-- **HID gamepad button slots (#118, ).** Firmware 0.3.0–0.3.2 packed
+- **HID gamepad button slots (#118).** Firmware 0.3.0–0.3.2 packed
   the companion's model order straight into HID bits, but Android maps Button
   usages 1–16 straight to `BTN_A`… and reserves usages 3 and 6, so X/Y landed
   one usage early, squeeze L1/R1 and trigger L2/R2 two, and the stick clicks
@@ -760,7 +759,7 @@ timeout. Firmware and Pi artifacts remain CI-built and hardware-unverified.
   L3/R3; C and Z stay unused. The HID descriptor and report shape are
   unchanged. The file is the same from 0.3.0 through 0.3.2, so the mis-mapping
   was shipped in all three releases.
-- **5 s disconnect detection and FF17 CONNECT ACK (#119, ).**
+- **5 s disconnect detection and FF17 CONNECT ACK (#119).**
   `HCI_Write_Link_Supervision_Timeout` now applies the 5 s
   `WMR_CFG_CLASSIC_SUPERVISION_TIMEOUT` per ACL while the bridge is master,
   deferred and retried from `HCI_EVENT_ROLE_CHANGE` when a controller-
@@ -773,14 +772,14 @@ timeout. Firmware and Pi artifacts remain CI-built and hardware-unverified.
 
 ### Triage
 
-- **Multi-run pose captures (#120, ).** `tools/triage_bundle.py`
+- **Multi-run pose captures (#120).** `tools/triage_bundle.py`
   accepts `pose_capture_<runtime>_<hand>_<segment>_runN.json` for repeats
   beyond the first run, so occlusion runs and multi-word segment names are
   no longer skipped. Regression tests cover runs 1–4.
 
 ### Docs
 
-- **Companion pin and BLE HOGP coexistence (#121, ).** The tester
+- **Companion pin and BLE HOGP coexistence (#121).** The tester
   runbooks pin WMR Companion v0.3.6 (2011), and
   [`docs/HID_GAMEPAD.md`](docs/HID_GAMEPAD.md) explains that the firmware's
   HOGP gamepad (`0x1812`) and the companion's `BluetoothHidDevice` output
@@ -811,25 +810,25 @@ remain CI-built and hardware-unverified.
 
 ### CI
 
-- **All-asset `SHA256SUMS` (#112, ).** The release job now writes one
+- **All-asset `SHA256SUMS` (#112).** The release job now writes one
   `SHA256SUMS` covering every attached asset (firmware images, `.deb`,
   tarball, installer, per-file `.sha256`), verified against the files before
   the release runs; `tools/release/make_sums.sh`.
-- **Repo checkout in the release job (#112, ).** The release runner
+- **Repo checkout in the release job (#112).** The release runner
   checks out the repository so `make_sums.sh` is available.
 
 ### Pi host bridge
 
-- **`wmr-bridge` on `PATH` + package `0.2.3` (#113, ).** The `.deb`
+- **`wmr-bridge` on `PATH` + package `0.2.3` (#113).** The `.deb`
   and installer put a `wmr-bridge` launcher on `PATH`
   (`/usr/bin/wmr-bridge`); `wmr-bridge --version` prints
   `wmr_bridge 0.2.3`. Package bump `0.2.2` → `0.2.3`.
 
 ### Tooling tests
 
-- **Release-sums host test (#112, ).** `tests/test_release_sums.py`
+- **Release-sums host test (#112).** `tests/test_release_sums.py`
   covers the all-asset digest list.
-- **Pi packaging/deb host tests (#113, ).** `pi/tests/test_deb.py`
+- **Pi packaging/deb host tests (#113).** `pi/tests/test_deb.py`
   and `pi/tests/test_packaging.py`.
 
 ### Verification
@@ -849,30 +848,30 @@ and hardware-unverified.
 
 ### Pi host bridge
 
-- **Pi bridge `.deb` + one-line installer (#103, ).** `pi/` now
+- **Pi bridge `.deb` + one-line installer (#103).** `pi/` now
   builds a `.deb` and a release-fetching one-line installer.
-- **Pi release attachments (#104, ).** CI attaches the Pi bridge
+- **Pi release attachments (#104).** CI attaches the Pi bridge
   `.deb`, tarball and installer to `v*` releases.
-- **RPi deployment and update runbook (#105, ).** Tester-facing RPi
+- **RPi deployment and update runbook (#105).** Tester-facing RPi
   deployment and update documentation.
 - **Pi package `0.2.2` .** Packaging/installer fixes with no
   runtime change.
 
 ### Tester docs and tooling
 
-- **Tester quickstart + pose-filter sheet (#100, ; #101, ).**
+- **Tester quickstart + pose-filter sheet (#100, ; #101).**
   Tester quickstart plus the pose-filter sheet carrying the filter-spec rev 4
   §7 grid.
-- **Tester-bundle triage CLI (#106, ).** CLI for triaging tester
+- **Tester-bundle triage CLI (#106).** CLI for triaging tester
   bundles.
-- **Flag 6DoF capture runs shorter than 30 s (#109, ).**
-- ** sheet refresh + TESTING.md leftovers (#107, ).** App
+- **Flag 6DoF capture runs shorter than 30 s (#109).**
+- ** sheet refresh + TESTING.md leftovers (#107).** App
   target and testing-doc cleanup.
 
 ### CI
 
-- **Workflow actions to current Node 24 majors (#99, ).**
-- **Firmware build on the Liesa self-hosted runner (#108, ).**
+- **Workflow actions to current Node 24 majors (#99).**
+- **Firmware build on the Liesa self-hosted runner (#108).**
 
 ### Housekeeping
 
@@ -896,19 +895,19 @@ CI-built and hardware-unverified; the 0.3.0 bench sitting is
 
 ### Phone link
 
-- **LE Secure Connections with bonding (#88, ).** The bridge requires
+- **LE Secure Connections with bonding (#88).** The bridge requires
   LESC + bonding on the phone link, sends a Security Request as soon as a
   central connects, and encrypts every data characteristic except FF16 (the
   version stays readable before pairing). A stale bond is deleted and the
   phone can pair again; a central that does not become bonded within 30 s is
   disconnected. Just Works pairing is encrypted but not MITM-protected — see
   [`docs/SECURITY.md`](docs/SECURITY.md).
-- **BLE HID gamepad (#89, ).** One standard HID-over-GATT gamepad
+- **BLE HID gamepad (#89).** One standard HID-over-GATT gamepad
   (service `0x1812`, Report ID 1) shares the phone link, so Android binds the
   controllers with no app. CTKD is disabled so a dual-mode phone keeps the LE
   HID transport; the bridge advertises from a static random LE address and
   exposes DIS `0x180A`. See [`docs/HID_GAMEPAD.md`](docs/HID_GAMEPAD.md).
-- **GATT security docs and pair-timeout state (#90, ).** The GATT
+- **GATT security docs and pair-timeout state (#90).** The GATT
   documentation now matches the descriptor, and a pair timeout reports the
   real link state.
 
@@ -930,7 +929,7 @@ CI-built and hardware-unverified; the 0.3.0 bench sitting is
 - **Status LED map (#96).** Red = no controller, yellow = LEFT only, blue =
   RIGHT only, green = both. Red at boot until a controller connects; GPIO 4,
   WS2812/NeoPixel.
-- **LEVERS runtime contention toggles (#86, ).** `l`, `v`, `t` and `q`
+- **LEVERS runtime contention toggles (#86).** `l`, `v`, `t` and `q`
   switch the contention levers from the console without rebuilding. The bench
   image was rebuilt on post- master (#97); see
   `the removed single-ESP32 levers sheet (; see git history)`.
@@ -940,7 +939,7 @@ CI-built and hardware-unverified; the 0.3.0 bench sitting is
 
 ### Pi host bridge
 
-- **Packaging and a no-hardware dry run (#87, ).** `pi/build_package.sh`
+- **Packaging and a no-hardware dry run (#87).** `pi/build_package.sh`
   builds `dist/wmr-bridge-<version>.tar.gz` and its `.sha256`;
   `pi/tools/verify_package.sh` checks an archive and `pi/tools/dry_run.sh`
   exercises the daemon without hardware. The Pi package version stays `0.2.1`

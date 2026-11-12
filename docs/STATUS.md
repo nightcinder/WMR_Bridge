@@ -17,8 +17,7 @@ version; `hello` advertises `upgradeCapable`; release checksums are
 minisign-signed and the installer verifies `SHA256SUMS.minisig` against the
 pinned public key before the `.deb`. Releases before 0.3.24
 — including 0.3.19 and older — ship no upgrade unit and need one manual `sudo`
-install to get it. The package also keeps the per-hand activity baseline
- and the dbus-next GATT notification fix. It keeps the
+install to get it. The package also keeps the per-hand activity baseline and the dbus-next GATT notification fix. It keeps the
 0.3.23 Just Works re-pair fix: the installer and `.deb` post-install
 script set `JustWorksRepairing = confirm` in `/etc/bluetooth/main.conf` and
 restart `bluetooth.service` only when that policy changes, so bluetoothd sends
@@ -50,7 +49,7 @@ dbus-next GATT start annotations and the 0.3.16 uplink order — Ethernet over
 5 GHz over 2.4 GHz Wi-Fi via route metrics — plus `AF_NETLINK` in the systemd
 unit and token access for `wifi_probe.py`. The
 ESP32 firmware last changed
-in 0.3.16, which added controller idle sleep and power-off  on top of
+in 0.3.16, which added controller idle sleep and power-off on top of
 the 0.3.15 change that re-sends the FF13 streaming-enable pair on reconnect and
 every 10 s so a connected controller stays awake. The firmware's
 controller families are unchanged from
@@ -62,7 +61,7 @@ through BlueZ automatically (the `v0.3.12` release shipped `0.2.4`) and does not
 yet read FF13 calibration from controllers. FF10–FF17 payloads otherwise match
 0.3.15, so companions at 0.2.2 or later continue to work. The Pi BLE gamepad,
 advertising and pairing path has not run on hardware; the three-state jitter
-check is. ESP32-over-BLE is
+check is pending. ESP32-over-BLE is
 the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the
 second supported first-class target; Pi is host-tests-only until the Pi sitting
 runs, see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md) and
@@ -99,24 +98,24 @@ maintained at the project's single entry point:
 | FF13 controller calibration blob manager & GATT stream | Merged | Yes; both blocks read to READY (app-side parsing/fusion tracked in companion docs/STATUS.md) |
 | Controller discovery by name & NVS address persistence | Merged | Yes; D1–D11 checks passed |
 | Link diagnostics (`link:`, `role:`, `POLICY:`) | Merged | Yes; verified in contention-2 runs |
-| Firmware/Pi logging cleanup (single log format, human-readable pairing diagnostics, Pi hand/client logs)  | Merged (v0.2.1) | Host tests only; not run on hardware |
-| Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (, PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.11 image has not been run on hardware (internal bench runbook block C) |
-| BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (, #88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.11 pairing and encryption run is not yet done (internal bench runbook block B) |
+| Firmware/Pi logging cleanup (single log format, human-readable pairing diagnostics, Pi hand/client logs) | Merged (v0.2.1) | Host tests only; not run on hardware |
+| Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.11 image has not been run on hardware (internal bench runbook block C) |
+| BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (#88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.11 pairing and encryption run is not yet done (internal bench runbook block B) |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, not run on hardware |
 | Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests only (417 tests + loopback replay), the real BlueZ auto-pair path has not been run on Pi hardware or with controllers; the root upgrade unit and minisign verification have not run on Pi hardware; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has not been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Console `v` read on the 0.2.4 hardware run (`0.2.4`, ESP-IDF v6.1); the live FF16 phone read on v0.3.11 is open (internal bench runbook block B) |
-| PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added by  (v0.3.11) | Host tests and firmware build only, never run on a PSVR2 controller |
-| Switch Joy-Con/Pro controller support: discovery names, output report `0x01` subcommand handshake, SPI calibration packed into FF13, three-sample `0x30` decode into FF12/FF14 (, [`docs/SWITCH.md`](SWITCH.md)) | Merged (v0.3.11) | Host tests (`tests/test_switch.c`) and firmware build only, never run on a Switch controller; hardware verification tracked in GitHub #145 |
-| Controller ACL that stalls after discovery: encrypt it from the bridge, then drop it after 4 s so the controller pages again (, #92, [`docs/DISCOVERY.md`](DISCOVERY.md)) | Merged (v0.3.0) | Host-tested (`tests/test_linkwait.c`); field logs on 0.2.4 only, packaged v0.3.11 not run on hardware (internal bench runbook block C) |
+| PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added by (v0.3.11) | Host tests and firmware build only, never run on a PSVR2 controller |
+| Switch Joy-Con/Pro controller support: discovery names, output report `0x01` subcommand handshake, SPI calibration packed into FF13, three-sample `0x30` decode into FF12/FF14 ([`docs/SWITCH.md`](SWITCH.md)) | Merged (v0.3.11) | Host tests (`tests/test_switch.c`) and firmware build only, never run on a Switch controller; hardware verification tracked in GitHub #145 |
+| Controller ACL that stalls after discovery: encrypt it from the bridge, then drop it after 4 s so the controller pages again (#92, [`docs/DISCOVERY.md`](DISCOVERY.md)) | Merged (v0.3.0) | Host-tested (`tests/test_linkwait.c`); field logs on 0.2.4 only, packaged v0.3.11 not run on hardware (internal bench runbook block C) |
 | Addressable status LED: red none, yellow LEFT, blue RIGHT, green both (#96) | Merged (v0.3.0) | Host-tested (`tests/test_status_led.c`); the GPIO 4 colour check has not run on hardware (internal bench runbook block E) |
-| Runtime contention toggles (`l`/`v`/`t`/`q` LEVERS commands,, #86/#97, [`docs/CONTENTION_LEVERS.md`](CONTENTION_LEVERS.md)) | Merged (v0.3.0) | Host-tested (`tests/test_levers.c`); bench run still open |
-| Pi host-bridge packaging: `build_package.sh`, `verify_package.sh` and a no-hardware `dry_run.sh` (, #87, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)) | Merged (v0.3.0) | Packaging tests and dry run pass; never run on Pi hardware |
+| Runtime contention toggles (`l`/`v`/`t`/`q` LEVERS commands, #86/#97, [`docs/CONTENTION_LEVERS.md`](CONTENTION_LEVERS.md)) | Merged (v0.3.0) | Host-tested (`tests/test_levers.c`); bench run still open |
+| Pi host-bridge packaging: `build_package.sh`, `verify_package.sh` and a no-hardware `dry_run.sh` (#87, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)) | Merged (v0.3.0) | Packaging tests and dry run pass; never run on Pi hardware |
 | M5Stack ATOM Lite + Atomic Battery Base battery life investigation ([`docs/ATOM_LITE_BATTERY.md`](ATOM_LITE_BATTERY.md)) | Documented | Electrical and efficiency model: about 45–52 min dual-controller, about 58–65 min single-controller; not recommended for session VR |
-| BLE HID-over-GATT gamepad (, merged for v0.3.0) | Implemented and passes the 2026-10-28 phone run on the pre-0.3.0 branch build `0.2.4-38-g4bcf01c`: it pairs, bonds, raises ATT MTU to 517, enables the HID Report CCCD (`hid=on`) and streams HID reports (about 68/s, `errors=0`) with both controllers connected; the phone reconnects to the bond after a bridge reboot without re-pairing. CTKD was the last blocker: `0.2.4-38` disables it, so Android keeps the LE HID transport and shows no second Classic entry | PASS (phone + mapping) on `0.2.4-38-g4bcf01c`: Pixel 11 Pro / Android 17; gamepad appears and controls register in the tester. Controller power-cycle after the reboot was not re-captured. The v0.3.11 recheck is open (internal bench runbook block D). See [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
-| Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented;  Sitting R run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE. The 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)).  adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers (`the removed single-ESP32 levers sheet (; see git history)`); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1).  (M7 latency-2) is closed: **Stay Flutter** under the  amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). The 2026-11-07 pair misses the Stay branch on RIGHT stalls (440 vs 698, 37 % apart) and lands in between: stay Flutter, gaps filed upstream. 2026-10-28 `d` = +3.7 ms (one unpaired run per client); 2026-11-07 `d` = -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms (rule in [latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md); figures in [`docs/runs/roundtrip/`](runs/roundtrip/README.md)) |
+| BLE HID-over-GATT gamepad (merged for v0.3.0) | Implemented and passes the 2026-10-28 phone run on the pre-0.3.0 branch build `0.2.4-38-g4bcf01c`: it pairs, bonds, raises ATT MTU to 517, enables the HID Report CCCD (`hid=on`) and streams HID reports (about 68/s, `errors=0`) with both controllers connected; the phone reconnects to the bond after a bridge reboot without re-pairing. CTKD was the last blocker: `0.2.4-38` disables it, so Android keeps the LE HID transport and shows no second Classic entry | PASS (phone + mapping) on `0.2.4-38-g4bcf01c`: Pixel 11 Pro / Android 17; gamepad appears and controls register in the tester. Controller power-cycle after the reboot was not re-captured. The v0.3.11 recheck is open (internal bench runbook block D). See [`docs/HID_GAMEPAD.md`](HID_GAMEPAD.md) |
+| Packet loss and pose prediction investigation ([`docs/PREDICTION.md`](PREDICTION.md)) | Documented; Sitting R run-ready | Re-analysis of the 2026-10-22 120 s run: 18–25 % missing on the Classic uplinks, 0 sequence gaps on BLE. The 2026-10-24 run on the `v0.1.1` bridge and `0.1.0` app measured 21.0 % (LEFT) and 15.2 % (RIGHT) tick loss, inside that spread, and the later FF12 run in the same sitting 30.7 % / 17.6 %. One ESP32 is adequate for the 3DoF demo but not VR-grade dual-controller tracking, and 40.5–44.8 ms is the current round-trip median with any stream against 61.6 ms with none ([`docs/runs/roundtrip/`](runs/roundtrip/README.md)). adds the run-ready order for V1 stagger, RIGHT-asymmetry phases 1-2, DLE/interval/FF14 hold and the diagnostics rule-out for host buffers (`the removed single-ESP32 levers sheet (; see git history)`); it also adds the `WMR_CFG_BATCH_HOLD_INTERVALS` knob (default 1). (M7 latency-2) is closed: **Stay Flutter** under the amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). The 2026-11-07 pair misses the Stay branch on RIGHT stalls (440 vs 698, 37 % apart) and lands in between: stay Flutter, gaps filed upstream. 2026-10-28 `d` = +3.7 ms (one unpaired run per client); 2026-11-07 `d` = -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms (rule in [latency-2](https://github.com/nightcinder/wmr-companion/blob/main/docs/runs/sheets/latency-2.md); figures in [`docs/runs/roundtrip/`](runs/roundtrip/README.md)) |
 
-## BLE HID gamepad 
+## BLE HID gamepad
 
 Scope: the same phone link also exposes one standard BLE HID-over-GATT gamepad,
 so Android sees the controllers with no app. The FF10 service is unchanged.
@@ -170,7 +169,7 @@ The `0.2.4-29-g748e928-att` trace shows where the phone stops. It paired,
 bonded, and discovered every service, characteristic and descriptor; then it
 sent no ATT read and no ATT write at all, and dropped the link (reason `0x13`)
 five seconds later. The last request was
-`read-by-type 0x0001..0xFFFF type=0x2A04`, a lookup of Peripheral Preferred
+`read-by-type 0x0001 .. 0xFFFF type=0x2A04`, a lookup of Peripheral Preferred
 Connection Parameters, which the bridge did not expose, so it was answered
 `attribute not found`. Android's GAP client reads `0x2A04` after discovery and
 disconnects the link when that read fails, which is why the HID profile never
@@ -198,11 +197,11 @@ run at about 68/s with `errors=0`. The phone reconnects to the bond after a
 bridge reboot and no Classic entry appears. The user confirms the tester
 registers controls. Details in `HID_GAMEPAD.md` §0.2.4-38 field run.
 
-## Android verification campaign (, 0.3.11 pass)
+## Android verification campaign (0.3.11 pass)
 
 Scope: phone + one ESP32 only. Sheet:
 the removed internal-ESP32 bench sheet (; see git history).
-The 0.3.11 bench pass has four gate checks: FF16 on Companion `0.2.2`, 
+The 0.3.11 bench pass has four gate checks: FF16 on Companion `0.2.2`,
 RIGHT reconnect, status LED colours, and the Android HID gamepad. All four are
 `not run`. The rows below are the 0.2.4 sitting. A row leaves `not run`
 only when that check's figures arrive, from the removed internal-ESP32 bench
@@ -216,7 +215,7 @@ so because a run exists. `, ` means nothing has run yet.
 | FF17 scan/connect | `partial`, status v2 captured from FF17 notifications: version 1, both hands `addr_source` 2 (NVS) with distinct tails, discovery idle / round 4, `flags` 0 on both (taken disconnected). DISCOVER `0x01` → `last_result` `0x03` NOTHING_TO_DO; `0x05 0x01` FORGET_BOND RIGHT → `last_result` `0x00` OK with RIGHT disconnected, which explains the earlier `05/06` as a >2-byte write and makes a `134` consistent with ATT `0x86`. Connected-state status, connect/disconnect, double disconnect, `0x7f` and step 6 as written (BUSY while RIGHT connected) unrun; RIGHT link key cleared, so it must be re-paired | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | the removed internal-ESP32 bench sheet (; see git history) |
 | Stick dead zone | `partial`, normalized rest `0.0000, 0.0000` both hands at dead zone 0.05, centres LEFT `-0.0227, 0.0090` / RIGHT `-0.1119, 0.0819`; three sittings: RIGHT stable at about `-0.112, +0.085` (real bias), LEFT moved `-0.030, -0.011` → `-0.008, +0.021` → `+0.017, +0.025`, still learning. Dead zone 0 set but saved settings read `learn true` after the switch was reported off (toggle persistence unconfirmed), so no centre-zeroed raw/normalized pair; end stops, held offset and a confirmed learning-off run missing | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | the removed internal-ESP32 bench sheet (; see git history) |
 | Latency stream ladder | `partial`, one 120 s run per stream: p50 `none` 63.4 / 62.3, FF11 34.3, FF12 34.5, FF14 39.3 ms, 479/479 answered; one session, so no ladder verdict (`latency-2` §3.3) | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/runs/sheets/latency-2.md` §3–§5 |
-| App-vs-native probe decision | `pass`,  closed: **Stay Flutter** under the  amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). The 2026-11-07 pair misses the Stay branch on RIGHT stalls (440 vs 698, 37 % apart) and lands in between: stay Flutter, gaps filed upstream. 2026-10-28 app 39.3 vs probe 35.6 ms (`d` = +3.7, one unpaired run per client); 2026-11-07 `d` = -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms, probe stalls 610/698 vs app 490/440 | Pixel 11 Pro, Android 17; 2026-11-07 builds in `docs/runs/roundtrip/README.md` | `wmr-companion` `docs/runs/sheets/latency-2.md` (rule); `docs/runs/roundtrip/README.md` (figures);  (amendment) |
+| App-vs-native probe decision | `pass`, closed: **Stay Flutter** under the amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). The 2026-11-07 pair misses the Stay branch on RIGHT stalls (440 vs 698, 37 % apart) and lands in between: stay Flutter, gaps filed upstream. 2026-10-28 app 39.3 vs probe 35.6 ms (`d` = +3.7, one unpaired run per client); 2026-11-07 `d` = -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms, probe stalls 610/698 vs app 490/440 | Pixel 11 Pro, Android 17; 2026-11-07 builds in `docs/runs/roundtrip/README.md` | `wmr-companion` `docs/runs/sheets/latency-2.md` (rule); `docs/runs/roundtrip/README.md` (figures); (amendment) |
 | FF13 calibration applied in fusion | `partial`, pose recordings: 6.6 s face-down rest LEFT `+0.00°`, RIGHT `−0.03°`; a 14.4 s hand-held take turned RIGHT `−25.3°`. Prose rest pair 83.5 / 42.7 unlabelled for off/on, no 90° error | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/PROTOCOL.md` "FF13 config block in the app"; the removed internal-ESP32 bench sheet (; see git history) |
 
  closed on 2026-11-07. The 2026-10-28 pair gave `d` = +3.7 ms (one
@@ -224,7 +223,7 @@ unpaired run per client) and the 2026-11-07 session gave `d` = -16.3 ms at
 250 ms, -2.6 ms at 50 ms and -9.9 ms at 1000 ms, with probe stalls 610/698
 against app 490/440. The 250 ms pair is app 11:43 against a probe re-run at
 15:18 (app RSSI not recorded), and the 50 and 1000 ms runs received no stream
-frames. Under the  amendment (warm/stable start; one-sided
+frames. Under the amendment (warm/stable start; one-sided
 `d <= +5 ms`, stalls within 25 %) the 250 ms pair misses the Stay branch on
 RIGHT stalls (440 vs 698, 37 % apart) and lands in between: **Stay Flutter**,
 with the `universal_ble` gaps filed upstream. The Dart client is not the
@@ -277,7 +276,7 @@ Full run sheet and figures:
   multi-bridge, export v3) did not move the streamed median, and the no-stream
   penalty reproduced (about 59 ms then, 61.6 ms now), which fits the
   slave-latency explanation. That is one pass of the ladder: the none and FF14
-  repeats are not run. Latency-2 closed  as **Stay Flutter** under the
+  repeats are not run. Latency-2 closed as **Stay Flutter** under the
    amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within
   25 %); the 2026-11-07 pair lands in between (stay Flutter, gaps filed
   upstream), so the Dart client is not the bottleneck and the split lies in the
@@ -311,9 +310,9 @@ However:
   `uplink` object, writes `--json-out`, and enforces the Sitting P criteria with
   `--assert-gates`; that is host-tested tooling, not a hardware result.
 
-## 5. Single-ESP32 Contention Levers 
+## 5. Single-ESP32 Contention Levers
 
-Follow-up to. Run sheet:
+Follow-up to the contention work. Run sheet:
 `the removed single-ESP32 levers sheet (; see git history)`.
 No lever here has a new hardware result. This table is the run-ready state, not
 evidence.
@@ -321,13 +320,13 @@ evidence.
 | Lever | Status | Result / prerequisite |
 |---|---|---|
 | V1 staggered connect (`WMR_CFG_STAGGER_FIRST_HAND=1/2`) | Not run | Code on `main`. Needs the two V1 images and the A/B/A block at one fixed position |
-| RIGHT asymmetry, phases 1-2 | Not run | No reflash. Power one controller at a time (see the removed single-ESP32 levers sheet, ) |
+| RIGHT asymmetry, phases 1-2 | Not run | No reflash. Power one controller at a time (see the removed single-ESP32 levers sheet) |
 | DLE confirmation, current build | Not run on the current build; 2026-10-22 log shows 251/2120 accepted | `tx 251 octets / 2120 us, rx 251 octets / 2120 us`. Capture the line again on this build |
 | Longer BLE interval (30 ms request) | Not run | Existing `WMR_CFG_CONN_INTERVAL_MIN/MAX`. Phone must grant it and the granted value must be recorded |
 | Longer FF14 hold (2 intervals) | Not run | New `WMR_CFG_BATCH_HOLD_INTERVALS=2`. Default 1 leaves current behaviour unchanged |
 | Controller task core/priority, HCI buffers | Ruled out by diagnostics | Archived runs: `vhci_drop=0`, `log_errors=0`, queue high-water 41/256 (sample `q=2/256 high=41`), `tx` trailing `rx` only by queued records. No run unless a future window shows a nonzero drop/error counter |
 
-Best measured configuration is unchanged by: the default both-hands FF14
+Best measured configuration is unchanged: the default both-hands FF14
 stream at MTU 517 with the granted 15 ms interval and a one-interval batch hold.
 Its measured dual-hand loss is 18–25 % per hand
 ([`docs/PREDICTION.md`](PREDICTION.md) section 1), and no tested single-ESP32

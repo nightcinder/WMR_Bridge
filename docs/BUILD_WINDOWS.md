@@ -57,7 +57,7 @@ fails without them.
 
 Simplest rule: re-copy `main-CMakeLists.txt` with `-Force` after every pull
 (`Copy-Item wmr_bridge\integration\main-CMakeLists.txt port\esp32\main\CMakeLists.txt -Force`).
-When updating the copy at `wmr_bridge` with `robocopy... /E`, note that robocopy
+When updating the copy at `wmr_bridge` with `robocopy ... /E`, note that robocopy
 does not delete files. Source files removed or renamed upstream stay in the
 folder. That is harmless as long as the CMake file does not list them. Robocopy
 exit codes below 8 are success.
@@ -100,11 +100,11 @@ of the 1.5 MB app partition).
 
 ```powershell
 idf.py -B build-wmr-bridge -p COM3 flash
-idf.py -B build-wmr-bridge -p COM3 monitor     # needs an interactive terminal
+idf.py -B build-wmr-bridge -p COM3 monitor # needs an interactive terminal
 ```
 
 Use your board's COM port. If flashing says "No serial data received", hold
-BOOT while it prints `Connecting....`, check the cable carries data, and make
+BOOT while it prints `Connecting ... .`, check the cable carries data, and make
 sure no other program (monitor, Android Studio logcat bridge, terminal) holds
 the port. Exit the monitor with Ctrl+].
 
@@ -113,7 +113,7 @@ the port. Exit the monitor with Ctrl+].
 The GATT database is compiled by `tool\compile_gatt.py`. `main/CMakeLists.txt`
 runs it explicitly through the ESP-IDF Python interpreter. Executing the script
 directly on this Windows setup launched Node.js instead of Python. So do not
-"simplify" the custom command back to `target_gatt` or a bare script path.
+"simplify" the custom command back to `target_gatt()` or a bare script path.
 The generated header is `build-wmr-bridge\esp-idf\main\wmr_bridge.h`.
 
 ## Rolling back
@@ -148,25 +148,25 @@ $env:EXAMPLE = "wmr_bridge"
 # 0. Keep a copy so you can put it back exactly.
 Copy-Item sdkconfig sdkconfig.before-coex-test
 
-# 1. Change ONE option, either in menuconfig...
+# 1. Change ONE option, either in menuconfig ...
 idf.py -B build-wmr-bridge menuconfig
-#    Component config > Bluetooth > Controller Options > Auto latency          (BTDM_CTRL_AUTO_LATENCY)
-#    Component config > Bluetooth > Controller Options > MODEM SLEEP Options >
-#                                          Bluetooth modem sleep                (BTDM_CTRL_MODEM_SLEEP)
-#    (press / and type the option name to jump to it), save with S, quit with Q...
-#... or by editing sdkconfig. The two lines currently read:
-#        # CONFIG_BTDM_CTRL_AUTO_LATENCY is not set
-#        CONFIG_BTDM_CTRL_MODEM_SLEEP=y
-#    Auto latency on:   CONFIG_BTDM_CTRL_AUTO_LATENCY=y
-#    Modem sleep off:   # CONFIG_BTDM_CTRL_MODEM_SLEEP is not set
+# Component config > Bluetooth > Controller Options > Auto latency (BTDM_CTRL_AUTO_LATENCY)
+# Component config > Bluetooth > Controller Options > MODEM SLEEP Options >
+# Bluetooth modem sleep (BTDM_CTRL_MODEM_SLEEP)
+# (press / and type the option name to jump to it), save with S, quit with Q ...
+# ... or by editing sdkconfig. The two lines currently read:
+# # CONFIG_BTDM_CTRL_AUTO_LATENCY is not set
+# CONFIG_BTDM_CTRL_MODEM_SLEEP=y
+# Auto latency on: CONFIG_BTDM_CTRL_AUTO_LATENCY=y
+# Modem sleep off: # CONFIG_BTDM_CTRL_MODEM_SLEEP is not set
 
 # 2. Clean rebuild (the controller configuration is compiled into the objects):
-idf.py -B build-wmr-bridge fullclean      # deletes only the build-wmr-bridge directory
+idf.py -B build-wmr-bridge fullclean # deletes only the build-wmr-bridge directory
 idf.py -B build-wmr-bridge build
 
 # 3. Check that it took effect before flashing:
 Select-String build-wmr-bridge\config\sdkconfig.h -Pattern "AUTO_LATENCY|MODEM_SLEEP "
-#    expect  #define CONFIG_BTDM_CTRL_AUTO_LATENCY 1   (or no MODEM_SLEEP line when it is off)
+# expect #define CONFIG_BTDM_CTRL_AUTO_LATENCY 1 (or no MODEM_SLEEP line when it is off)
 ```
 
 Do not put these lines in `sdkconfig.defaults`. ESP-IDF reads that file only when
@@ -180,7 +180,7 @@ Copy-Item sdkconfig.before-coex-test sdkconfig -Force
 idf.py -B build-wmr-bridge fullclean
 idf.py -B build-wmr-bridge build
 Select-String build-wmr-bridge\config\sdkconfig.h -Pattern "AUTO_LATENCY|MODEM_SLEEP "
-#    expect  CONFIG_BTDM_CTRL_MODEM_SLEEP 1  and no CONFIG_BTDM_CTRL_AUTO_LATENCY
+# expect CONFIG_BTDM_CTRL_MODEM_SLEEP 1 and no CONFIG_BTDM_CTRL_AUTO_LATENCY
 ```
 
 Changing only one option per run keeps the result attributable. Record the

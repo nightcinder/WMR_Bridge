@@ -87,7 +87,7 @@ phone streaming, 30 s settle, `last5s_pct`.
 | Longer BLE interval request (30 ms) | B1 image; phone must grant and record the granted value |
 | FF14 two-interval hold (`WMR_CFG_BATCH_HOLD_INTERVALS=2`) | Knob added in; default 1 unchanged |
 | Physical separation / antenna geometry | Right-asymmetry phases 1 to 2, no reflash |
-| Classic TX power (raise max above default P3) | `esp_bredr_tx_power_get` returns the configured range (default N0..P3), not the hardware max. Probe by reading the current max, then `esp_bredr_tx_power_set(ESP_PWR_LVL_N0, ESP_PWR_LVL_P6)` (and P9), checking return + readback, and A/B whichever level is accepted. Untested. |
+| Classic TX power (raise max above default P3) | `esp_bredr_tx_power_get` returns the configured range (default N0 .. P3), not the hardware max. Probe by reading the current max, then `esp_bredr_tx_power_set(ESP_PWR_LVL_N0, ESP_PWR_LVL_P6)` (and P9), checking return + readback, and A/B whichever level is accepted. Untested. |
 | FF12 decimation re-run, interleaved | Same protocol at N=1/2/4 |
 | Three-state A/B/C at one fixed position | A (streaming) vs B (connected, idle) vs C (disconnected), both passes |
 

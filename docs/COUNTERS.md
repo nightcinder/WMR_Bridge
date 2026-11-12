@@ -11,7 +11,7 @@ STREAM phone=1 adv=off hid=on sub=1 stream=decoded mtu=247 conn=[11.25ms lat=0 t
   FF14 batches_tx=0 records_in_batches=0 mean=n/a max=0 batch_full_flushes=0
   HID reports=1200 errors=0 decode_errors=0
   FF15 echo accepted=0 sent=0 pending=0 busy=0 bad=0 unsubscribed=0 cancelled=0
-  LEFT  rx=600 tx=600 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=60.0/s rate_tx=60.0/s
+  LEFT rx=600 tx=600 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=60.0/s rate_tx=60.0/s
   RIGHT rx=600 tx=600 drop=0 offline=0 purged=0 mtu_skip=0 dec_err=0 decimated=0 rate_rx=60.0/s rate_tx=60.0/s
 ```
 
@@ -28,7 +28,7 @@ contradicted this paragraph. It no longer does.
 | `sub` | 1 if the phone enabled FF11, FF12 or FF14 notifications | |
 | `stream` | `none`, `raw` (FF11), `decoded` (FF12) or `batched` (FF14): the active stream. Only one can be active | |
 | `mtu` | Negotiated ATT MTU of the phone link (0 = no phone, 23 = default) | The negotiated value, not what the phone requested |
-| `conn=[...]` | Connection interval, slave latency and supervision timeout currently in use (`n/a` with no phone). Set at connect and updated when the phone grants a connection-parameter update | The phone decides. `(update requested, not granted yet)` is appended while the bridge's request (7.5-15 ms, latency 0, 4 s timeout) has had no answer. A phone that refuses or ignores it leaves that text on, and the interval stays at the phone's choice |
+| `conn=[ ... ]` | Connection interval, slave latency and supervision timeout currently in use (`n/a` with no phone). Set at connect and updated when the phone grants a connection-parameter update | The phone decides. `(update requested, not granted yet)` is appended while the bridge's request (7.5-15 ms, latency 0, 4 s timeout) has had no answer. A phone that refuses or ignores it leaves that text on, and the interval stays at the phone's choice |
 | `q=n/N` | Frames queued now / queue capacity | Counts frames, both hands together. A partly sent frame counts as queued |
 | `high` | Peak queue depth since boot | Never decreases |
 | `notify` | BLE notifications accepted by `att_server_notify` | FF11: fragments, not frames. FF12: one per record. FF14: one per batch (so it equals `batches_tx` while FF14 streams) |
@@ -39,7 +39,7 @@ contradicted this paragraph. It no longer does.
 | `rx` | Reports received from that controller | Counts every report, including those never forwarded |
 | `tx` | FF11: frames whose last fragment was accepted by `att_server_notify`. FF12: records accepted by `att_server_notify`. FF14: valid records inside batches accepted by `att_server_notify` (records, not notifications) | Handed to the BLE stack, not confirmed received by the phone |
 | `drop` | Reports discarded because the queue was full, or the length was 0 or over `WMR_CFG_MAX_FRAME` (80) | Drop-newest: queued frames are kept |
-| `offline` | Reports received while no FF11/FF12/FF14 stream was active | Intentional, not an error. Since  these reports may still have been sent through the HID gamepad |
+| `offline` | Reports received while no FF11/FF12/FF14 stream was active | Intentional, not an error. Since the HID gamepad release, these reports may still have been sent through the HID gamepad |
 | `purged` | Frames that were queued, then discarded by a queue reset | See [RECONNECT_AND_QUEUE.md](RECONNECT_AND_QUEUE.md) |
 | `mtu_skip` | FF12 and FF14: data discarded because the ATT MTU could not carry it. FF12: a frame when the MTU is below 59. FF14: a frame when the MTU is below 61, or the older records of a multi-record Switch frame that did not fit (all three need 173) | Zero on FF11. Intentional, not a queue problem |
 | `dec_err` | FF12 and FF14: queued frames that were not a valid 46-byte WMR, exactly-79-byte PSVR2 or exactly-50-byte Switch input report, discarded | Should stay 0 |
@@ -63,7 +63,7 @@ The per-hand `sequence` counter (the number placed on the wire) always equals `r
 Every received report ends up in exactly one place, so at any instant:
 
 ```
-sum over hands of  rx  =  sum of (tx + drop + offline + purged + mtu_skip + dec_err + decimated)  +  q
+sum over hands of rx = sum of (tx + drop + offline + purged + mtu_skip + dec_err + decimated) + q
 ```
 
 (`q` is the current queue depth.) This holds per hand if you could see the
@@ -109,9 +109,9 @@ reports are lost. Background and caveats: [DECODING.md](DECODING.md),
 ```
 STREAM phone=1 adv=off hid=on sub=1 stream=decoded mtu=517 conn=[15.00ms lat=1 to=5000ms] q=0/256 high=3 notify=1234 errors=0
   vhci_drop=0 log_errors=0
-  LEFT  rx=600 tx=600... rate_rx=147.0/s rate_tx=147.0/s
+  LEFT rx=600 tx=600 ... rate_rx=147.0/s rate_tx=147.0/s
   LEFT link: rssi=0 fcc=0 lq=255 mode=active rate_rx=147.0/s dev_missing=312 last5s=26.5% cum=17.7% period=4.99ms discont=0
-  RIGHT rx=...
+  RIGHT rx= ...
   RIGHT link: rssi=0 fcc=0 lq=255 mode=active rate_rx=165.0/s dev_missing=21 last5s=3.4% cum=3.4% period=4.99ms discont=0
 ```
 
@@ -143,7 +143,7 @@ LINKLOG,12345,LEFT,157.8,1124,9000,21.2,17.7,-28,227,0,batched,517,15.00,0,980,4
 ```
 
 (Illustrative format only, not measurements.) The header is printed once, before
-the first line. Then one `LINKLOG,...` line per hand per statistics interval
+the first line. Then one `LINKLOG, ... ` line per hand per statistics interval
 (5 s), after the `link:` line with the same numbers. Filter on the prefix
 `LINKLOG,`.
 

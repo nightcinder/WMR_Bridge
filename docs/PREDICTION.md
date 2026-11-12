@@ -70,7 +70,7 @@ For a VR-grade dual-controller target, yes. For the current 3DoF viewer, no.
 The product has three Bluetooth links:
 
 ```
-WMR LEFT  -- Classic BR/EDR ACL --> ESP32 --\
+WMR LEFT -- Classic BR/EDR ACL --> ESP32 --\
 WMR RIGHT -- Classic BR/EDR ACL --> ESP32 ----> BLE GATT --> phone
 ```
 
@@ -272,7 +272,7 @@ Not tested, and practical:
   `tx` trailing `rx` only by queued records. A future run that shows a nonzero
   drop or error counter reopens it. Otherwise the diagnostics rule it out.
 - Classic TX power and channel/frequency-hopping control. `esp_bredr_tx_power_set`
-  is not called. The ESP-IDF default BR/EDR range is N0..P3
+  is not called. The ESP-IDF default BR/EDR range is N0 .. P3
   (`ESP_PWR_LVL_P3`), and the power enum extends higher, so the default is not
   demonstrably the hardware maximum (`esp_bredr_tx_power_get` returns the
   configured range, not the supported max; probe by reading the current max,
@@ -366,7 +366,7 @@ are not results of this investigation.
 | Option | What it can see | Advantages | Problems | Verdict |
 | --- | --- | --- | --- | --- |
 | ESP32 firmware | Only the reports that arrived. No render clock | One implementation for every phone. No app change | It cannot predict lost samples because it never saw them. Synthesizing records would consume BLE airtime, add at least one connection interval of delay, and make the phone treat invented data as measured. It does not know when the app will draw | No |
-| App (Flutter view, iOS view,...) | The rendered frame clock | Can extrapolate exactly to the frame being drawn. Easy to tune per app | Duplicates the same logic in every app and on every platform. The 3D view is not the only consumer. The library's public pose stream would still be stale. It also makes the behaviour untestable outside a UI | No, except as a temporary local patch |
+| App (Flutter view, iOS view, ... ) | The rendered frame clock | Can extrapolate exactly to the frame being drawn. Easy to tune per app | Duplicates the same logic in every app and on every platform. The 3D view is not the only consumer. The library's public pose stream would still be stale. It also makes the behaviour untestable outside a UI | No, except as a temporary local patch |
 | Shared library (`wmr_core`, above `wmr_fusion`) | Orientation, bias-corrected gyro, device ticks and arrival timestamps. The app's injected clock | One tested implementation for the Flutter app and other consumers. Pure Dart, no plugins. Can be optional and fail soft. Can expose both the measured pose and the predicted pose | It must not feed prediction back into the filter. It needs the app to pass its render timestamp. The Swift kit needs the same formula if it ever runs a native pipeline | Yes |
 
 The library is the right boundary because it already owns the state a predictor
@@ -406,7 +406,7 @@ predictor would integrate it:
 
 ```
 tau = clamp((now - receivedAt), 0, maxHorizon)
-q_pred = q_last * exp(0.5 * omega * tau)      // quaternion exponential
+q_pred = q_last * exp(0.5 * omega * tau) // quaternion exponential
 ```
 
 At the next real sample, the view can blend from `q_pred` to the new measured
@@ -436,7 +436,7 @@ These are host tests, no hardware:
 ## 5. Is the 2026-10-22 latency run still current?
 
 Short answer: the stream ladder has one current pass. The ladder repeats are
-not run; latency-2 is closed  as **Stay Flutter** under the 
+not run; latency-2 is closed as **Stay Flutter** under the
 amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). Four
 120 s runs
 on 2026-10-24 with firmware `v0.1.1`
@@ -523,8 +523,8 @@ the RSSI samples span 8 dB (the app reads RSSI twice per run, at start and
 stop, at 1 dB resolution, so that spread does not prove the rig moved). So the
 4 ms FF11/FF12 penalty against FF14 cannot be separated from session drift.
 
-The FF14 and no-stream repeats remain unrun. Latency-2 closed  as
-**Stay Flutter** under the  amendment (warm/stable start; one-sided
+The FF14 and no-stream repeats remain unrun. Latency-2 closed as
+**Stay Flutter** under the amendment (warm/stable start; one-sided
 `d <= +5 ms`, stalls within 25 %); the 2026-11-07 pair lands in between (stay
 Flutter, gaps filed upstream), so the Dart client's share of the round trip is
 off the critical path and the remainder is plugin and radio.
@@ -540,7 +540,7 @@ what is missing:
   the current firmware and APK hashes recorded. The 2026-10-24 sitting covers
   the first four (one pass, not interleaved). The two repeats are still needed
   before a 4 ms difference between streams is called real.
-- Latency-2 is closed (, **Stay Flutter**) under the  amendment
+- Latency-2 is closed (**Stay Flutter**) under the amendment
   (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %), with
   2026-10-28 `d` = +3.7 ms (one unpaired run per client) and 2026-11-07 `d` =
   -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms; the 250 ms pair misses the Stay
@@ -629,8 +629,7 @@ Until those exist, this is a design recommendation, not a shipped feature.
 - The 40.5-44.8 ms streamed latency figures are current for the `0.1.1`/`0.1.0`
   release pair (the 2026-10-24 runs reproduced the 2026-10-22 FF14 median and
   added none/FF11/FF12). The ladder repeats still gate the stream ordering, but
-  the native-vs-Flutter decision is closed:  is **Stay Flutter** (
-  amendment: warm/stable start, one-sided `d <= +5 ms`, stalls within 25 %; the
+  the native-vs-Flutter decision is closed: is **Stay Flutter** (amendment: warm/stable start, one-sided `d <= +5 ms`, stalls within 25 %; the
   2026-11-07 pair lands in between).
 - Build prediction only after the loss work, as an opt-in presentation layer
   with the tests and hardware acceptance in sections 4-6.

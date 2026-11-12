@@ -6,7 +6,7 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.25 candidate), LEFT and RIGHT WMR contro
 
 1. Boot and uplink (PR #187, #188). Start `wmr-bridge` on Pi 3B+ with `--idle-sleep-timeout 30 --idle-poweroff-timeout 90`. Pair LEFT and RIGHT controllers. Run `wmr-bridge status`.
    - [ ] PASS / FAIL — Both controllers connected. Uplink matches the active interface (`eth0` metric 100 or `wlan0` 5 GHz metric 200). BlueZ advertises `WMR Bridge`.
-2. UDP discovery and Sitting P gates (, PR #193). Run `python3 pi/tools/wifi_probe.py --discover --assert-gates --duration 30 --json-out /tmp/pi_probe.json` while moving both controllers.
+2. UDP discovery and Sitting P gates (PR #193). Run `python3 pi/tools/wifi_probe.py --discover --assert-gates --duration 30 --json-out /tmp/pi_probe.json` while moving both controllers.
    - [ ] PASS / FAIL — Command exits 0. UDP port 9877 discovered. RTT p50 under 15 ms. Missing share at most 3.0% per hand. Zero sequence gaps. Server drops (`dropped`) are 0 (observed; not a gate).
 3. LAN auto-connect. Open `wmr_companion_app` on Pixel 11 Pro on the same LAN.
    - [ ] PASS / FAIL — App auto-discovers Pi via UDP port 9877 and streams both hands over TCP at 150-180 reports/s per hand.
@@ -14,12 +14,12 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.25 candidate), LEFT and RIGHT WMR contro
    - [ ] PASS / FAIL — CompositeBleTransport fails over to BLE GATT within 2500 ms with continuous pose updates.
 5. BLE-to-TCP recovery. Run `sudo ip link set wlan0 up` on Pi and wait up to 5 s.
    - [ ] PASS / FAIL — Transport auto-upgrades back to TCP within 5 s with no app restart.
-6. Pi idle sleep and wake (PR #190, ). Leave both controllers untouched for 35 s, then tilt LEFT.
+6. Pi idle sleep and wake (PR #190). Leave both controllers untouched for 35 s, then tilt LEFT.
    - [ ] PASS / FAIL — Journal logs keep-alive paused at about 30 s. Tilting wakes the stream within 1 s.
-7. Pi idle power-off and reconnect guard (PR #190, ). Leave both controllers untouched for 95 s.
-   - [ ] PASS / FAIL — Journal logs the BlueZ block at about 90 s and both LED rings turn off. The expected trace is: `idle for <N> s: disconnecting... to power it off`, `bluetoothctl block <addr>` (BlueZ drops the ACL with the block), then either `bluetoothctl disconnected <addr>` or `bluetoothctl <addr> already disconnected` depending on which drop wins, and no `LEFT/RIGHT connected` line for 60 s. After `power-off cooldown elapsed: reconnects allowed` and `bluetoothctl unblock <addr>`, press a button on LEFT; it reconnects and streams. Stop Pi `wmr-bridge` before Part B.
+7. Pi idle power-off and reconnect guard (PR #190). Leave both controllers untouched for 95 s.
+   - [ ] PASS / FAIL — Journal logs the BlueZ block at about 90 s and both LED rings turn off. The expected trace is: `idle for <N> s: disconnecting ... to power it off`, `bluetoothctl block <addr>` (BlueZ drops the ACL with the block), then either `bluetoothctl disconnected <addr>` or `bluetoothctl <addr> already disconnected` depending on which drop wins, and no `LEFT/RIGHT connected` line for 60 s. After `power-off cooldown elapsed: reconnects allowed` and `bluetoothctl unblock <addr>`, press a button on LEFT; it reconnects and streams. Stop Pi `wmr-bridge` before Part B.
 
-   The  log showed reports still arriving after the 5-minute keep-alive pause; do not treat that pause alone as evidence the controller is asleep. The ACL drop in item 7 is the power-off signal.
+   The log showed reports still arriving after the 5-minute keep-alive pause; do not treat that pause alone as evidence the controller is asleep. The ACL drop in item 7 is the power-off signal.
 
 ## Part B: ESP32 (~14 min)
 

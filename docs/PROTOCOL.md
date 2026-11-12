@@ -118,7 +118,7 @@ fragment: a 12-byte header followed by a chunk of one controller frame.
 | 6 | u16 | `total_len` | Length of the whole frame in bytes (46 for WMR, 79 for PSVR2, 50 for Switch) |
 | 8 | u16 | `offset` | Offset of this chunk within the frame |
 | 10 | u16 | `chunk_len` | Bytes of frame data in this notification |
-| 12 | `chunk_len` | `data` | `frame[offset.. offset+chunk_len)` |
+| 12 | `chunk_len` | `data` | `frame[offset .. offset+chunk_len)` |
 
 The frame is the controller's HID input report exactly as BTstack delivers it:
 byte 0 = `0xA1` (HID DATA/input transaction header), byte 1 = report ID, then
@@ -136,8 +136,8 @@ Example (RIGHT, sequence `0x01020304`, 46-byte frame, notification capacity 44
 bytes), first fragment header then second fragment header:
 
 ```
-52 01 04 03 02 01 2E 00 00 00 20 00   | 32 data bytes   (offset 0,  chunk 32)
-52 01 04 03 02 01 2E 00 20 00 0E 00   | 14 data bytes   (offset 32, chunk 14)
+52 01 04 03 02 01 2E 00 00 00 20 00 | 32 data bytes (offset 0, chunk 32)
+52 01 04 03 02 01 2E 00 20 00 0E 00 | 14 data bytes (offset 32, chunk 14)
 ```
 
 ## Fragmentation
@@ -257,14 +257,14 @@ integers are little-endian. Floats are IEEE 754 binary32, little-endian.
 | 2 | u8 | `flags` | bit0 `CALIBRATED`. Always 0 in version 1 (see below). Other bits 0 |
 | 3 | u8 | `buttons` | bit0 thumbstick click, bit1 home, bit2 menu, bit3 squeeze click, bit4 trackpad click, bit5 BT pairing, bit6 trackpad touch, bit7 0 |
 | 4 | u32 | `sequence` | The same per-hand sequence number as the raw FF11 frame this sample was decoded from. Gaps = loss before transmission |
-| 8 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time` when the HID report was received, microseconds since ESP32 boot. For latency and jitter diagnostics only; not a sensor clock |
+| 8 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time()` when the HID report was received, microseconds since ESP32 boot. For latency and jitter diagnostics only; not a sensor clock |
 | 16 | u32 | `device_ticks` | Primary clock for sensor timing. Controller's own timer, 100 ns per tick, wraps at 2^32 (see "Timing") |
 | 20 | 3 x f32 | `gyro` x, y, z | rad/s, uncalibrated, raw sensor axes |
 | 32 | 3 x f32 | `accel` x, y, z | m/s^2, uncalibrated scale, raw sensor axes |
 | 44 | i16 | `temperature_raw` | Raw sensor word, scale not established |
-| 46 | 2 x i16 | `stick` x, y | -32767..32767 = -1.0..1.0, 0 = centre |
-| 50 | 2 x i16 | `trackpad` x, y | -32767..32767 = -1.0..1.0; both 0 when `trackpad touch` is clear |
-| 54 | u8 | `trigger` | 0..255 |
+| 46 | 2 x i16 | `stick` x, y | -32767 .. 32767 = -1.0 .. 1.0, 0 = centre |
+| 50 | 2 x i16 | `trackpad` x, y | -32767 .. 32767 = -1.0 .. 1.0; both 0 when `trackpad touch` is clear |
+| 54 | u8 | `trigger` | 0 .. 255 |
 | 55 | u8 | `battery` | Raw controller byte, scale not established |
 
 ### Scales
@@ -289,7 +289,7 @@ A PSVR2 hand decodes through its driver entry (`wmr_controller_driver.c`,
 `wmr_decoded_from_psvr2_frame`). The frame must be exactly 79 bytes with the
 `A1 31` header. Offsets and scales follow Monado's `pssense` driver: gyro is
 raw x `pi/1024` rad/s; accel is raw x `9.80665/4096` m/s^2 (+-8 g); the stick is
-0..255 with x `(raw - 128)/128` and y `(128 - raw)/128`; the trigger is 0..255;
+0 .. 255 with x `(raw - 128)/128` and y `(128 - raw)/128`; the trigger is 0 .. 255;
 `device_ticks` is the controller IMU counter times 333 ns, converted to the
 record's 100 ns ticks. Temperature is a raw degrees-C byte and battery is the
 raw battery-state byte (high nibble charge state, low nibble level). Only PS,
@@ -365,7 +365,7 @@ until the rotation capture in [DECODING.md](DECODING.md) is done.
   one of the two streams is ever active, so there is no contention). A full
   queue drops the newest sample and counts it in `drop`, as for FF11.
 - Where decoding happens. The HID callback only copies the report and stamps
-  `rx_time_us` (`esp_timer_get_time`) at arrival. Decoding into the 56-byte
+  `rx_time_us` (`esp_timer_get_time()`) at arrival. Decoding into the 56-byte
   record happens when the notification pump takes a frame from the queue, and
   only while FF12 is the active stream.
 - Minimum MTU: 59 (56 + 3 bytes of ATT opcode and handle). Below that nothing
@@ -448,7 +448,7 @@ after FF12.
 
 One notification value = a 2-byte header followed by `count` complete FF12
 version 1 records, unchanged (each keeps its own `version` = 1, `hand`,
-`sequence`, `rx_time_us`, `device_ticks`,...):
+`sequence`, `rx_time_us`, `device_ticks`, ... ):
 
 | Offset | Size | Field | Meaning |
 | --- | --- | --- | --- |
@@ -486,7 +486,7 @@ nothing itself). A batch is sent from the queue when the ATT stack can send
 - the oldest queued record has waited one connection interval (the interval the
   phone granted; 15 ms until it is known, `WMR_CFG_BATCH_HOLD_DEFAULT_US`): the
   queue is then flushed as a partial batch. `WMR_CFG_BATCH_HOLD_INTERVALS`
-  (default 1) multiplies the hold. 2 is the  airtime variant and adds
+  (default 1) multiplies the hold. 2 is the airtime variant and adds
   about one interval of batch latency.
 
 So a record is held for batching no longer than the configured number of
@@ -605,7 +605,7 @@ ignored except the missing answer.
 | 0 | u8 | `version` | `1`. A receiver must ignore an answer with an unknown version |
 | 1 | u8 | reserved | 0 |
 | 2 | u16 | `ping_id` | From the request |
-| 4 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time` when the request reached the ATT write callback, microseconds since ESP32 boot. The same clock as FF12 `rx_time_us` |
+| 4 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time()` when the request reached the ATT write callback, microseconds since ESP32 boot. The same clock as FF12 `rx_time_us` |
 | 12 | u32 | `turnaround_us` | Time from `rx_time_us` to just before the answer was handed to `att_server_notify`. Saturates at `0xFFFFFFFF` |
 | 16 | u16 | `queue_depth` | Stream frames queued when the request arrived (the backlog the answer skipped). 0 with no stream |
 | 18 | u16 | reserved | 0 |
@@ -664,8 +664,8 @@ of the answer, and `t2 = rx_time_us`, `t3 = rx_time_us + turnaround_us`
 
 ## Counters
 
-`FF15 echo accepted=... sent=... pending=... busy=... bad=... unsubscribed=...
-cancelled=...` on the periodic line ([COUNTERS.md](COUNTERS.md)). Identity:
+`FF15 echo accepted= ... sent= ... pending= ... busy= ... bad= ... unsubscribed= ...
+cancelled= ... ` on the periodic line ([COUNTERS.md](COUNTERS.md)). Identity:
 `accepted = sent + cancelled + pending`.
 
 ## Bench-test items
@@ -723,8 +723,8 @@ Commands are 64-byte HID reports with report ID `0x06`:
 
 Block read is command `0x02`. Responses are 78 bytes: `[0]` response report ID
 (`0x02` for block reads, `0x06` for the init commands), `[2]` echoed command id,
-`[4]` echoed block id, `[5..8]` `blk_remain` u32 LE (bytes of the block not yet
-delivered), `[9]` `len` (data bytes in this response, at most 68), `[10..77]`
+`[4]` echoed block id, `[5 .. 8]` `blk_remain` u32 LE (bytes of the block not yet
+delivered), `[9]` `len` (data bytes in this response, at most 68), `[10 .. 77]`
 data.
 
 Reading one block:
@@ -834,7 +834,7 @@ Read / notify value: a 16-byte header, then data.
 | 4 | u32 | `total_len` | Blob length in bytes. 0 unless READY |
 | 8 | u32 | `offset` | Start of this window in the blob |
 | 12 | u32 | `crc32` | CRC-32 (IEEE 802.3, reflected, polynomial `0xEDB88320`, init and final XOR `0xFFFFFFFF`) of the whole blob. 0 unless READY |
-| 16 | `n` | data | `blob[offset.. offset+n)`, `n = min(total_len - offset, 496)`. Empty unless READY |
+| 16 | `n` | data | `blob[offset .. offset+n)`, `n = min(total_len - offset, 496)`. Empty unless READY |
 
 A notify carries only the 16-byte header (no data), sent when a hand's `state`
 changes, so the app knows when to start reading. The phone reads the blob by
@@ -862,7 +862,7 @@ First block-read request for block `0x02` (64 bytes, rest zero), then a follow-u
 for block `0x03` with `addr` `0x01020304`:
 
 ```
-06 02 02 FF FF FF FF 00...            06 02 03 04 03 02 01 00...
+06 02 02 FF FF FF FF 00 ... 06 02 03 04 03 02 01 00 ...
 ```
 
 Config response (78 bytes, from the report ID; BTstack delivers it behind the
@@ -870,7 +870,7 @@ Config response (78 bytes, from the report ID; BTstack delivers it behind the
 `AA BB CC`, rest zero:
 
 ```
-02 00 02 00 02 34 12 00 00 03 AA BB CC 00...
+02 00 02 00 02 34 12 00 00 03 AA BB CC 00 ...
 ```
 
 FF13 header-only value (notify, or any non-READY read), RIGHT, state `READY`
@@ -897,7 +897,7 @@ bytes, then 104 at offset 496). A hand that is not READY reads `total_len` 0,
   revision/serial comparison from the design above is not implemented (block
   `0x02` only; blocks `0x00` and `0x03` are never read). A FAILED or NOT_READ
   hand is retried on its next connection.
-- Commands go out with `hid_host_send_report(cid, 0x06, bytes 1..63)`, i.e. as
+- Commands go out with `hid_host_send_report(cid, 0x06, bytes 1 .. 63)`, i.e. as
   an HID output report on the interrupt channel, without Monado's init commands.
   Whether the controller accepts that is exactly what C1 checks.
 - Report routing in the HID handler: `0x01` input (unchanged), `0x02`/`0x06`
@@ -1049,10 +1049,10 @@ Writes execute control actions that mirror serial console commands. Writes take
 
 | Opcode | Name | Size | Argument | Action / firmware function |
 | --- | --- | --- | --- | --- |
-| `0x01` | DISCOVER | 1-2 B | hand ignored | `wmr_controller_discover`: starts bounded inquiry/discovery for unbound hands |
+| `0x01` | DISCOVER | 1-2 B | hand ignored | `wmr_controller_discover()`: starts bounded inquiry/discovery for unbound hands |
 | `0x02` | CONNECT | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_connect(hand)`: initiates Classic BT HID connection; if that hand is already open or opening, returns OK without starting a second attempt; if its previous disconnect is still closing, returns BUSY |
 | `0x03` | DISCONNECT | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_disconnect(hand)`: closes Classic BT HID connection |
-| `0x04` | FORGET_ADDRS | 1-2 B | hand ignored | `wmr_controller_forget_addresses`: clears stored NVS addresses (refused if connected/connecting) |
+| `0x04` | FORGET_ADDRS | 1-2 B | hand ignored | `wmr_controller_forget_addresses()`: clears stored NVS addresses (refused if connected/connecting) |
 | `0x05` | FORGET_BOND | 2 B | hand (`0x00`=LEFT, `0x01`=RIGHT) | `wmr_controller_forget_bond(hand)`: clears paired link key (refused if connected/connecting) |
 
 ### Result codes and ATT errors
@@ -1086,15 +1086,15 @@ bytes, it fits within the default ATT MTU of 23 bytes (20-byte payload +
 | Offset | Size | Field | Description |
 | --- | --- | --- | --- |
 | 0 | u8 | `version` | Format version, `1` |
-| 1 | u8 | `left_flags` | Bit 0: connected, Bit 1: connecting, Bit 2: descriptor received, Bits 3..7: reserved (0) |
+| 1 | u8 | `left_flags` | Bit 0: connected, Bit 1: connecting, Bit 2: descriptor received, Bits 3 .. 7: reserved (0) |
 | 2 | u8 | `left_addr_source` | 0: None, 1: Compile override, 2: Stored in NVS |
 | 3 | u8 | `left_model` | 0: WMR, 1: PSVR2, 2: Switch |
-| 4..6 | 3 B | `left_addr_tail` | Last 3 bytes of Bluetooth address (device ID: bytes 3, 4, 5). `00 00 00` if no address |
+| 4 .. 6 | 3 B | `left_addr_tail` | Last 3 bytes of Bluetooth address (device ID: bytes 3, 4, 5). `00 00 00` if no address |
 | 7 | u8 | `reserved0` | Reserved, `0` |
-| 8 | u8 | `right_flags` | Bit 0: connected, Bit 1: connecting, Bit 2: descriptor received, Bits 3..7: reserved (0) |
+| 8 | u8 | `right_flags` | Bit 0: connected, Bit 1: connecting, Bit 2: descriptor received, Bits 3 .. 7: reserved (0) |
 | 9 | u8 | `right_addr_source` | 0: None, 1: Compile override, 2: Stored in NVS |
 | 10 | u8 | `right_model` | 0: WMR, 1: PSVR2, 2: Switch |
-| 11..13 | 3 B | `right_addr_tail` | Last 3 bytes of Bluetooth address (device ID: bytes 3, 4, 5). `00 00 00` if no address |
+| 11 .. 13 | 3 B | `right_addr_tail` | Last 3 bytes of Bluetooth address (device ID: bytes 3, 4, 5). `00 00 00` if no address |
 | 14 | u8 | `reserved1` | Reserved, `0` |
 | 15 | u8 | `discovery_state` | 0: Idle, 1: Inquiry, 2: Remote name requests, 3: Connecting discovered |
 | 16 | u8 | `discovery_round` | Current discovery round (0 when idle) |
@@ -1119,7 +1119,7 @@ Notifications do not count toward stream transmission counters.
 Bluetooth inquiry (discovery) shares the 2.4 GHz radio and antenna with ongoing
 BLE notifications. While discovery is active (`discovery_state != 0`), packet
 loss or latency jitter may increase on running controller streams. The client UI
-should display a temporary notice (for example "Scanning... stream may stutter")
+should display a temporary notice (for example "Scanning ... stream may stutter")
 while `discovery_state` is non-zero.
 
 # Proposals (NOT decided, NOT implemented, NOT part of the spec above)

@@ -166,7 +166,7 @@ airtime is a cause; if not, it is not the only cause.
 
 ## Where the procedures live
 
-- Internal bench (latency-2, FF16/FF17/stick,, HID, LED, Sitting R):
+- Internal bench (latency-2, FF16/FF17/stick, HID, LED, Sitting R):
   the removed internal-ESP32 bench sheet (; see git history). ESP32
   pass/fail steps: `docs/runs/sheets/bench.md`.
 - Remaining protocol and robustness checks, plus close-out:
