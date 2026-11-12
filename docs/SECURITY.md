@@ -113,7 +113,7 @@ Unchanged from 0.2:
 ## Linux / Raspberry Pi Wi-Fi host bridge (`pi/`)
 
 The Pi bridge carries the same data over a Wi-Fi WebSocket instead of BLE. Its
-mechanical safeguards were added in #47 /:
+mechanical safeguards were added in #47:
 
 - `--bind` defaults to `127.0.0.1`. A non-loopback bind requires a shared
   bearer token (`--token-file` preferred, mode `0640`, owned by `wmr`).
