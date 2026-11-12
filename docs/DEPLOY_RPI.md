@@ -62,7 +62,7 @@ Pi 4/5 data.
 Confirm:
 
 ```bash
-uname -m # aarch64
+uname -m                      # aarch64
 systemctl is-active bluetooth # active
 ```
 
@@ -83,8 +83,8 @@ record its date and hash instead.
 
 ```bash
 ssh <user>@wmr-pi.local
-iw dev wlan0 link # freq must be 5xxx
-iw dev wlan0 get power_save # off; the installer adds a drop-in
+iw dev wlan0 link              # freq must be 5xxx
+iw dev wlan0 get power_save    # off; the installer adds a drop-in
 ```
 
 If the link is at 2.4 GHz, reconnect to the 5 GHz SSID before continuing.
@@ -295,9 +295,9 @@ After upgrade, confirm the bond, token and environment survived:
 
 ```bash
 bluetoothctl devices Paired
-bluetoothctl show # Powered: yes; Pairable: no is normal with a stored bond
+bluetoothctl show          # Powered: yes; Pairable: no is normal with a stored bond
 ls -la /etc/wmr-bridge/token
-cat /etc/wmr-bridge/wmr-bridge.env # if customised
+cat /etc/wmr-bridge/wmr-bridge.env      # if customised
 sudo systemctl restart wmr-bridge
 python3 /opt/wmr-bridge/pi/tools/wifi_probe.py --host 127.0.0.1 --token-file /etc/wmr-bridge/token --stream batched --duration 5
 ```

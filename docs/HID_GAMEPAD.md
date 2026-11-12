@@ -159,7 +159,7 @@ is in use, and moving that encoder to the same table is a companion follow-up.
 ## ATT trace
 
 A build with `WMR_CFG_ATT_TRACE=1` (`EXTRA_CFLAGS=-DWMR_CFG_ATT_TRACE=1`
-`python3 tools/firmware/build.py ... `) logs `ATT trace on: ... ` at start-up,
+`python3 tools/firmware/build.py...`) logs `ATT trace on:...` at start-up,
 prints one line per ATT or SMP PDU on the phone link, and adds
 `ATT trace=on rx= tx= writes= two_byte_writes= smp= le_sig=` to the status
 block. `tx` is phone→bridge (requests) and `rx` is bridge→phone (responses).
@@ -334,7 +334,7 @@ The 2026-10-28 18:54 capture (user: "worse than before") has no HCI `0x09`:
 the third ACL slot removed that failure. It shows two boot-time problems
 instead.
 
-1. `connecting LEFT` completed its ACL (`LEFT link up ... `) and then sat for
+1. `connecting LEFT` completed its ACL (`LEFT link up...`) and then sat for
    20 s with no encryption, no SSP confirmation, and no HID channel. The
    discovery connect phase waited for HID events that never came, so the
    single-hand connect never finished; the board was reset.

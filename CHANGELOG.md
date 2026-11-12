@@ -17,7 +17,7 @@ phone subscribed) has not been run yet.
 
 ### Raspberry Pi bridge
 
-- **Keep the adapter and the phone bond across an upgrade .** The
+- **Keep the adapter and the phone bond across an upgrade.** The
   `.deb` post-install script and `install.sh` restarted `bluetooth.service` on
   every install, including an in-place upgrade from a release that already
   carried the `JustWorksRepairing = confirm` policy. A bluetoothd restart while
@@ -32,8 +32,8 @@ phone subscribed) has not been run yet.
   the crashed-controller recovery and the `wmr-bridge pair` escape hatch when a
   stored LE bond keeps the adapter unpairable. A token is still generated only
   when `/etc/wmr-bridge/token` is absent or empty; upgrades do not rotate it.
-- **Still open : the companion does not persist the token.** With
-  Bluetooth down the manual Wi-Fi entry has no way to learn it. covers
+- **Still open: the companion does not persist the token.** With
+  Bluetooth down the manual Wi-Fi entry has no way to learn it. It covers
   saving the token
   (and the bridge endpoint it was read with), reconnecting to that saved bridge
   on launch, and rescanning after a drop without restarting the app. The fix
@@ -55,7 +55,7 @@ command is
 
 ### Raspberry Pi bridge
 
-- **App-triggered upgrade through a root systemd unit .** The daemon
+- **App-triggered upgrade through a root systemd unit.** The daemon
   runs as `wmr` and cannot install packages, so it writes an empty
   `/var/lib/wmr-bridge/upgrade.trigger` (mode 0600) when an authenticated
   WebSocket client sends `{"type":"upgrade"}` and replies
@@ -73,7 +73,7 @@ command is
   and a persisted trigger history answer `busy` before systemd would refuse a
   start, and a trigger root never picked up expires after 120 seconds. The
   `.deb` ships and enables both units.
-- **Minisign-signed release checksums .** The release job
+- **Minisign-signed release checksums.** The release job
   installs `minisign` and signs `SHA256SUMS` into `SHA256SUMS.minisig` with the
   repository secret, then verifies it against the pinned `pi/minisign.pub`
   before publishing, so a missing or wrong secret fails the release. The
@@ -83,18 +83,18 @@ command is
   dependency, and the installer installs it with `apt-get` if it is missing.
   This is the first release carrying `SHA256SUMS.minisig`; its public key is
   published in `pi/minisign.pub`.
-- **Controller activity against a per-hand baseline .** Activity was
+- **Controller activity against a per-hand baseline.** Activity was
   decided from absolute thresholds, so a controller resting off-centre or with
   a static touch bit looked active on every frame and never reached idle sleep.
   Each hand now keeps the previous report as its baseline and only a button
   change or movement past the trigger, stick or gyro thresholds counts; the
   baseline resets on connect and disconnect, and `status` reports `idleSleep`.
-- **dbus-next GATT property notifications .** The GATT backend
+- **dbus-next GATT property notifications.** The GATT backend
   pre-wrapped `Value` and `Notifying` in `Variant` while dbus-next's
   `emit_properties_changed` wraps them again, so every notification raised
   `SignatureBodyMismatchError`. Both properties are now passed plain, so the
   FF10 notifications and the HID report actually emit.
-- **Version display and upgrade documentation .** The
+- **Version display and upgrade documentation.** The
   companion, `docs/PI_BRIDGE.md` and `docs/RPI_INSTALL_GUIDE.md` now document
   the displayed Pi version, `hello.upgradeCapable`, the authenticated upgrade
   command, the one-time `sudo` bootstrap for older Pis, and minisign
@@ -110,7 +110,7 @@ for the hardware re-run.
 
 ### Raspberry Pi bridge
 
-- **A phone can re-pair over its stored bond .** BlueZ defaults
+- **A phone can re-pair over its stored bond.** BlueZ defaults
   `JustWorksRepairing` to `never`, so when the adapter still held a bond for the
   Pixel, bluetoothd answered the kernel's Just Works confirm hint `0x01` with a
   negative reply before the bridge's `NoInputNoOutput` agent was asked; the
@@ -124,8 +124,8 @@ for the hardware re-run.
   `--ble-continuous-pairing`): the agent is registered only while the adapter
   is pairable, so a later re-pair without a window fails with no default agent.
   Every agent callback now logs one
-  `BLE pairing agent: method= ... device= ... result= ... ` journal line, and the
-  BLE start logs the configured `BlueZ JustWorksRepairing = ... ` policy. An
+  `BLE pairing agent: method=...device=...result=...` journal line, and the
+  BLE start logs the configured `BlueZ JustWorksRepairing =...` policy. An
   explicit `always` value is left alone.
 
 ## 0.3.22 — 2026-11-10
@@ -138,7 +138,7 @@ sheet carries the procedure for the hardware re-run.
 
 ### Raspberry Pi bridge
 
-- **A phone can pair after the boot window .** The adapter is now
+- **A phone can pair after the boot window.** The adapter is now
   pairable whenever BlueZ holds no phone bond. The stored-bond check treated
   any non-peripheral major class as an LE central, so two bonded WMR
   controllers could close the door even though the Pi had no LE bond; it now
@@ -162,7 +162,7 @@ bench sheet carries the procedure for the hardware re-run.
 
 ### Raspberry Pi bridge
 
-- **Keep the LE pairing agent through a phone bond .** BlueZ clears a
+- **Keep the LE pairing agent through a phone bond.** BlueZ clears a
   client's default agent when the Classic auto-pairer's `bluetoothctl` session
   exits, so a phone pairing around a controller scan could find that
   empty-capability agent or no default agent, and Android closed the pairing
@@ -190,7 +190,7 @@ work has run on hardware; the bench sheet carries the procedure.
 
 ### Raspberry Pi bridge
 
-- **HID-over-GATT gamepad .** The GATT application now exports the
+- **HID-over-GATT gamepad.** The GATT application now exports the
   HID service (`0x1812`) beside FF10: HID Information, the firmware's 91-byte
   Report Map, Protocol Mode, HID Control Point and an encrypted input Report
   (ID 1) with its Report Reference descriptor. `wmr_bridge/hid_gamepad.py`
@@ -201,7 +201,7 @@ work has run on hardware; the bench sheet carries the procedure.
   while a WebSocket client or an FF11/FF12/FF14 subscriber is active, with one
   neutral report on the transition so a host never keeps a held input.
 - **Gamepad appearance, bond-aware pairability and two-tier advertising
-  .** The advertisement now carries Appearance `0x03C4` (gamepad)
+.** The advertisement now carries Appearance `0x03C4` (gamepad)
   and lists `0x1812` before FF10, so Android classifies the bridge as a
   controller. Advertising runs at 150–250 ms with no controller connected and
   at 1000–1285 ms once one connects, which leaves airtime for the two Classic
@@ -210,14 +210,14 @@ work has run on hardware; the bench sheet carries the procedure.
   bonded phone reconnects without pairability. `--ble-continuous-pairing`
   keeps the adapter pairable while BLE is active, matching the ESP32, and is
   opt-in.
-- **Just Works agent for a phone LE bond .** The daemon registers a
+- **Just Works agent for a phone LE bond.** The daemon registers a
   `NoInputNoOutput` BlueZ agent (`/org/wmr/bridge/agent`) and claims it as the
   default agent while the adapter is pairable, so BlueZ accepts a phone's LE
   bond as Just Works instead of rejecting it for lack of an agent. When the
   adapter is not pairable the agent is unregistered and BlueZ refuses unbonded
   peers; a peer that asks for legacy PIN or passkey authentication gets a
   rejection that names the pairing window and the old-bond remedy.
-- **BLE gamepad documentation .** `docs/HID_GAMEPAD.md` gains the Pi
+- **BLE gamepad documentation.** `docs/HID_GAMEPAD.md` gains the Pi
   D-Bus GATT layout, advertising tiers, stream gating and pairing-rule
   sections, and `pi/README.md` documents the HID service, the flags and the
   pairing behaviour.
@@ -232,7 +232,7 @@ at 0.2.2 or later continue to work.
 
 ### Raspberry Pi bridge
 
-- **Discoverable BLE advertisement .** BlueZ only adds the LE General
+- **Discoverable BLE advertisement.** BlueZ only adds the LE General
   Discoverable flag (Flags AD type `0x01`, value `0x06`) to the advertising data
   when the `LEAdvertisement1` object sets `Discoverable`. Without it the adapter
   advertised FF10 and `ActiveInstances` reported 1, but a phone's Bluetooth scan
@@ -241,7 +241,7 @@ at 0.2.2 or later continue to work.
   dbus-next advertisement interface, so the advertisement carries the flag
   beside the local name `WMR Bridge` and the FF10 service UUID. Host tests assert
   both. BLE advertising has not been verified on hardware; the three-state
-  jitter check is .
+  jitter check is pending.
 
 ## 0.3.18 — 2026-11-10
 
@@ -254,7 +254,7 @@ at 0.2.2 or later continue to work.
 
 ### Raspberry Pi bridge
 
-- **GATT service registration .** dbus-next answers
+- **GATT service registration.** dbus-next answers
   `ObjectManager.GetManagedObjects` from the objects exported on the bus and
   ignores a `GetManagedObjects` method on an exported interface. The peripheral
   exported only characteristics and descriptors, so BlueZ saw no
@@ -265,7 +265,7 @@ at 0.2.2 or later continue to work.
   advertises it by default. It no longer exports the `0x2902` CCC descriptor by
   hand; BlueZ creates the CCC for a notify/indicate characteristic itself. Host
   tests drive dbus-next's real `GetManagedObjects` over the exported tree.
-- **Idle power-off no longer bounces back .** After the 15-minute
+- **Idle power-off no longer bounces back.** After the 15-minute
   idle disconnect the still-awake controller paged the Pi again 3 s later, and
   the hidraw monitor reopened it and reset its idle timer. The bridge now
   blocks the controller in BlueZ at the power-off timeout (the block drops the
@@ -287,7 +287,7 @@ later continue to work.
 
 ### Raspberry Pi bridge
 
-- **dbus-next GATT start annotations .** dbus-next rejects a `None`
+- **dbus-next GATT start annotations.** dbus-next rejects a `None`
   return annotation on a `@method`; building the service interfaces raised
   when the peripheral started, so the adapter never exported the GATT
   application and the Pi advertised nothing over Bluetooth. The FF10, FF11,
@@ -299,7 +299,7 @@ later continue to work.
 ### Verification
 
 - Host C tests, the Pi unittest suite and the ESP-IDF build run in CI before
-  tagging. BLE advertising still waits on in three states
+  tagging. BLE advertising still waits on verification in three states
   (advertising only, connected-not-subscribed, notifying) with a pass bar of
   0 gaps and at most 0.5 percent loss.
 
@@ -314,32 +314,32 @@ continue to work.
 
 ### Raspberry Pi bridge
 
-- **Default always-on BLE advertising .** The daemon advertises the
+- **Default always-on BLE advertising.** The daemon advertises the
   FF10 GATT service by default. Each client controls its own notifications
   through the CCCD. Pass `--no-ble` to disable the BLE peripheral. `--ble-fallback`
   stays as a deprecated no-op alias and prints a deprecation warning. Slow
   advertising uses LEAdvertisement1 intervals of about 1000 to 1285 ms.
-- **Uplink preference .** The bridge picks the active uplink in this
+- **Uplink preference.** The bridge picks the active uplink in this
   order: `eth0`, then `wlan0` on 5 GHz, then `wlan0` on 2.4 GHz. It uses route
   metrics (IPv4 and IPv6), not only autoconnect priority. `prefer_5ghz`
   takes `eth0` into account and lowers the wired route metric. `hello` and
   `status` report the active uplink in a separate `uplink` object.
-- **Token access for `wifi_probe.py` .** Read
+- **Token access for `wifi_probe.py`.** Read
   `/etc/wmr-bridge/token` with `sudo python3 tools/wifi_probe.py --token-file /etc/wmr-bridge/token`, or as a
   user in the `wmr` group with `--token-file /etc/wmr-bridge/token`. The token file is mode 0640 and owned by
   `wmr:wmr`.
-- **Probe discovery and Sitting P gates .** `wifi_probe.py` gains
+- **Probe discovery and Sitting P gates.** `wifi_probe.py` gains
   `--discover` (UDP `WMR_DISCOVER_V1`, port 8765), `--json-out PATH`, and
   `--assert-gates`, which exits non-zero unless RTT p50 is below 15 ms,
   per-hand tick-based loss is at most 3 %, and sequence gaps are zero. A hand
   with no frames fails the loss and gap gates, so an idle run cannot pass. The
   probe prints the `hello` `uplink` object next to `wifi`.
-- **Service hardening .** `AF_NETLINK` is added to
+- **Service hardening.** `AF_NETLINK` is added to
   `RestrictAddressFamilies` in the systemd unit.
 
 ### Host tools
 
-- **Triage USB and speed-gate facts .** `tools/triage_bundle.py`
+- **Triage USB and speed-gate facts.** `tools/triage_bundle.py`
   reads the companion's `device_environment.json` and prints each USB
   device's VID:PID, interface class triples and displays, flagging an
   unrecognized vendor ID or interface class. It also reports per-cell guided
@@ -349,7 +349,7 @@ continue to work.
 ### Verification
 
 - Host C tests, the Pi unittest suite and the ESP-IDF build run in CI before
-  tagging. BLE advertising waits on in three states (advertising only,
+  tagging. BLE advertising waits on verification in three states (advertising only,
   connected-not-subscribed, notifying) with a pass bar of 0 gaps and at most
   0.5 percent loss.
 
@@ -362,11 +362,11 @@ unreachable. WMR controllers get a keep-alive on both targets: the ESP32
 re-sends the FF13 streaming-enable pair on reconnect and every 10 s, and the Pi
 re-sends the WMR `0x06` pair. FF10–FF17 payloads and companions at 0.2.2 or
 later are unchanged. The BLE fallback is opt-in (`--ble-fallback`), has not run
-on hardware, and waits on .
+on hardware, and waits on verification.
 
 ### ESP32 bridge
 
-- **Controllers stay awake after reconnect .** A reconnecting hand
+- **Controllers stay awake after reconnect.** A reconnecting hand
   with a cached config block no longer re-reads it; the firmware re-sends the
   two streaming-enable commands for the fresh link, then repeats them every
   10 s while the hand is connected and READY. `WMR_CFG_KEEPALIVE_MS=0` disables
@@ -374,26 +374,26 @@ on hardware, and waits on .
 
 ### Raspberry Pi bridge
 
-- **Wi-Fi band inspection and automatic 5 GHz preference .** The daemon inspects the radio before connecting, keeps a
+- **Wi-Fi band inspection and automatic 5 GHz preference.** The daemon inspects the radio before connecting, keeps a
   5 GHz-capable adapter on 5 GHz, and treats a 2.4 GHz-only radio such as the
   CYW43439 in a Pi Zero 2 W as a warning-only no-op. `hello`, `status` and
   `wmr-bridge probe` report `freqMhz`, `band`, `supports5Ghz`,
   `contentionWarning` and `warning`. `--prefer-5ghz` runs as a one-shot action;
   the systemd unit and Debian installer stage the NetworkManager profile before
   start, and `--no-reconnect` keeps an SSH session on its current link.
-- **UDP discovery and stable bridge identity .** The daemon
+- **UDP discovery and stable bridge identity.** The daemon
   answers `WMR_DISCOVER_V1 <nonce>` probes on UDP port 8765 with its bridge id,
   hostname, WebSocket port, path, hands and version, rate-limited per source.
   The `bridge_id` is stable across restarts, the reply never carries the token,
   and clients confirm `hello.bridge_id` before authenticating. mDNS
   advertisement remains optional (`--advertise-mdns`), and `docs/PI_BRIDGE.md`
   documents the client discovery contract.
-- **Opt-in BlueZ BLE GATT fallback .** `--ble-fallback` serves the
+- **Opt-in BlueZ BLE GATT fallback.** `--ble-fallback` serves the
   same FF11, FF12 and FF14 payloads over a BlueZ GATT peripheral when Wi-Fi is
   unreachable, with `--ble-adapter` and `--ble-pairing-window` overrides. It is
   off by default, needs `python3-dbus-next`, and is not yet verified on
   hardware .
-- **Resilient service start and scan backoff .** The
+- **Resilient service start and scan backoff.** The
   service clears a boot-time Bluetooth rfkill soft block as root before start
   and keeps retrying instead of exiting, caps discovery backoff, logs the LAN
   address and advertises mDNS. The daemon throttles single-hand scans and sends
@@ -425,7 +425,7 @@ with real controllers yet.
 
 ### Raspberry Pi bridge
 
-- **Auto-pairing works with real controllers .** The BlueZ session
+- **Auto-pairing works with real controllers.** The BlueZ session
   now registers a `NoInputNoOutput` (Just Works) agent before scanning. Without
   one, `bluetoothctl` answered every `pair` with
   `org.bluez.Error.AuthenticationFailed` and no bond was made. The session also
@@ -433,7 +433,7 @@ with real controllers yet.
   code quit one second after issuing `pair`, which tore down the agent and
   aborted the attempt. Unpaired controllers known to BlueZ are left to the
   scan session instead of a separate agentless `pair`.
-- **Visible pairing progress.** The daemon logs one `auto-pair: scanning ... `
+- **Visible pairing progress.** The daemon logs one `auto-pair: scanning...`
   line per attempt, then `found`, `pairing`, `paired`, `trusting`, `connecting`
   and `connected`, and reports the BlueZ error on a failed `pair`. The new
   `wmr-bridge status` (also `--status`) prints the adapter's
@@ -469,14 +469,14 @@ pairing has run only against a mocked `bluetoothctl`.
 
 ### Raspberry Pi bridge
 
-- **Automatic pairing (#164, ; hardened in #166).** The
+- **Automatic pairing (#164, hardened in #166).** The
   daemon scans, pairs, trusts and connects WMR controllers on its own, so the
   operator only puts each hand in pairing mode. It looks at allowed hands only,
   backs off idle scans, parses the `bluetoothctl` scan output in one session,
   logs adapter power or scan failures once, and stops paging hands that already
   have a `Paired: yes` + `Trusted: yes` bond. `--no-auto-pair` leaves pairing to
   the operator.
-- **Package version and install (#165, ; #166).** `pi/wmr_bridge` reports
+- **Package version and install (#165, #166).** `pi/wmr_bridge` reports
   the root `VERSION` (`0.3.13`), and `build_package.sh`/`build_deb.sh` fail on a
   mismatch. The installer creates its staging directory readable by `_apt`,
   adds the `wmr` user to the `bluetooth` group, moves `bluez` to `Depends`, and
@@ -488,7 +488,7 @@ pairing has run only against a mocked `bluetoothctl`.
 
 ### Flasher and release assets
 
-- **Three-image manifest (#161, ; docs #162).** The ESP Web
+- **Three-image manifest (#161, docs #162).** The ESP Web
   Tools manifest writes `bootloader.bin` at `0x1000`, `partition-table.bin` at
   `0x8000` and `app.bin` at `0x10000` instead of the merged factory image at 0.
   Flashing with "Erase device" unchecked leaves NVS (`0x9000`–`0xFFFF`) alone,
@@ -498,7 +498,7 @@ pairing has run only against a mocked `bluetoothctl`.
 
 ### Docs
 
-- Pi setup and pairing rewritten for automatic pairing (#163, ; #167,): the run sheet gains P11 (start unpaired, put a controller in
+- Pi setup and pairing rewritten for automatic pairing (#163, #167): the run sheet gains P11 (start unpaired, put a controller in
   pairing mode, unattended pair/trust/connect within 60 s, repeat for the other
   hand, and confirm `--no-auto-pair` does not pair). The guide and flasher page
   cover the token, omit the restart, state WMR-only support and say the app
@@ -558,7 +558,7 @@ Firmware and Pi artifacts remain CI-built and hardware-unverified.
   `latency/` as expected in `6dof_only` mode, and reports a pose file whose
   recorded hand repeats the preceding anchor frame. The fresh external bundle
   is recorded in
-  `the removed android-xr sheet (; see git history)`.
+  `the removed android-xr sheet (see git history)`.
 
 ### Docs
 
@@ -622,7 +622,7 @@ this repository, so `0.3.11` is the next free Bridge version.)
 
 - **FF13 calibration forwarding over `wmr-wifi-v1` (#140).** `hello`
   advertises `calibration` (version, 16-byte header, 496-byte window and
-  message tag `0x13`); a `{"type":"calibration","hand": ... ,"offset":N}` request
+  message tag `0x13`); a `{"type":"calibration","hand":...,"offset":N}` request
   returns one tagged binary window from a per-hand cache, and `hello`/`status`
   report each hand's state and blob CRC. The daemon answers `not_read` until an
   ingest layer supplies a blob, because the Pi-side controller read over
@@ -736,7 +736,7 @@ hardware-unverified.
   steps and what to check when a hand does not bind.
 - **Tester docs.** The external-tester sheet and runbooks pin Companion
   v0.3.7, v0.3.8 and v0.3.10 and Bridge v0.3.3 as those releases ship
-  (#123–#126;).
+  (#123–#126).
 
 ## 0.3.3 — 2026-11-01
 
@@ -854,12 +854,12 @@ and hardware-unverified.
   `.deb`, tarball and installer to `v*` releases.
 - **RPi deployment and update runbook (#105).** Tester-facing RPi
   deployment and update documentation.
-- **Pi package `0.2.2` .** Packaging/installer fixes with no
+- **Pi package `0.2.2`.** Packaging/installer fixes with no
   runtime change.
 
 ### Tester docs and tooling
 
-- **Tester quickstart + pose-filter sheet (#100, ; #101).**
+- **Tester quickstart + pose-filter sheet (#100, #101).**
   Tester quickstart plus the pose-filter sheet carrying the filter-spec rev 4
   §7 grid.
 - **Tester-bundle triage CLI (#106).** CLI for triaging tester
@@ -875,7 +875,7 @@ and hardware-unverified.
 
 ### Housekeeping
 
-- **Truth-up test counts and current release .** Pi test count
+- **Truth-up test counts and current release.** Pi test count
   corrected to 122; host checks to 6127.
 
 ### Verification
@@ -932,7 +932,7 @@ CI-built and hardware-unverified; the 0.3.0 bench sitting is
 - **LEVERS runtime contention toggles (#86).** `l`, `v`, `t` and `q`
   switch the contention levers from the console without rebuilding. The bench
   image was rebuilt on post- master (#97); see
-  `the removed single-ESP32 levers sheet (; see git history)`.
+  `the removed single-ESP32 levers sheet (see git history)`.
 - **CI always reports `Build firmware` (#93).** The workflow no longer has a
   paths filter, so the required check runs on every PR.
 - **GATT docs cross-checked against `wmr_bridge.gatt` (#94).**

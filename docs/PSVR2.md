@@ -59,15 +59,15 @@ decoder therefore produces a sample rather than a `dec_err`.
 Console examples for a recognised PSVR2 hand:
 
 ```
-Discovery: LEFT is 1C: ... (name in inquiry response, model PSVR2)
+Discovery: LEFT is 1C:... (name in inquiry response, model PSVR2)
 LEFT descriptor status=0x00 (model PSVR2)
 PSVR2: LEFT wake scheduled in 250 ms
 PSVR2: LEFT wake: GET_REPORT feature 0x05 status=0x00
 LEFT GET_REPORT response: status=0x00 len=NN
-LEFT first report: cid= ... frame_len=79 descriptor=available
+LEFT first report: cid=... frame_len=79 descriptor=available
 ```
 
-`LEFT address: ... (discovered, stored, model PSVR2)` is printed at boot and by `s`.
+`LEFT address:...(discovered, stored, model PSVR2)` is printed at boot and by `s`.
 
 ## What is not implemented
 
@@ -109,7 +109,7 @@ LEFT first report: cid= ... frame_len=79 descriptor=available
 
 ```bash
 # Default firmware: PSVR2 and WMR, MAX_FRAME=80
-python3 tools/firmware/build.py --variant both # needs ESP-IDF on PATH
+python3 tools/firmware/build.py --variant both        # needs ESP-IDF on PATH
 
 # Host tests (PSVR2 is part of the default build: 243 discovery checks,
 # 6129 protocol checks)

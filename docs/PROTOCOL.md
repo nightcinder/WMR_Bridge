@@ -136,8 +136,8 @@ Example (RIGHT, sequence `0x01020304`, 46-byte frame, notification capacity 44
 bytes), first fragment header then second fragment header:
 
 ```
-52 01 04 03 02 01 2E 00 00 00 20 00 | 32 data bytes (offset 0, chunk 32)
-52 01 04 03 02 01 2E 00 20 00 0E 00 | 14 data bytes (offset 32, chunk 14)
+52 01 04 03 02 01 2E 00 00 00 20 00   | 32 data bytes   (offset 0,  chunk 32)
+52 01 04 03 02 01 2E 00 20 00 0E 00   | 14 data bytes   (offset 32, chunk 14)
 ```
 
 ## Fragmentation
@@ -862,7 +862,7 @@ First block-read request for block `0x02` (64 bytes, rest zero), then a follow-u
 for block `0x03` with `addr` `0x01020304`:
 
 ```
-06 02 02 FF FF FF FF 00 ... 06 02 03 04 03 02 01 00 ...
+06 02 02 FF FF FF FF 00 ...            06 02 03 04 03 02 01 00 ...
 ```
 
 Config response (78 bytes, from the report ID; BTstack delivers it behind the

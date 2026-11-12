@@ -13,9 +13,9 @@ WebSocket over Wi-Fi, while keeping the controller-facing Bluetooth Classic
 protocol and the existing FF11/FF12/FF14 payloads unchanged.
 
 ```
-WMR LEFT --\ Classic Bluetooth HID 5 GHz Wi-Fi
+WMR LEFT  --\   Classic Bluetooth HID            5 GHz Wi-Fi
               >----------------------> Raspberry Pi ----------------> phone / PC
-WMR RIGHT --/ 46-byte frames BlueZ + wmr_bridge WebSocket (FF11/12/14)
+WMR RIGHT --/   46-byte frames          BlueZ + wmr_bridge   WebSocket (FF11/12/14)
 ```
 
 ## Why a Pi, and why 5 GHz
@@ -114,7 +114,7 @@ Pass `--no-auto-pair` to disable the auto-pairer and pair by hand.
 Check the pairing state at any time:
 
 ```bash
-wmr-bridge status # or: wmr-bridge --status
+wmr-bridge status      # or: wmr-bridge --status
 ```
 
 It prints the adapter (`powered`, `pairable`, `discovering`), each hand's
@@ -158,7 +158,7 @@ the pairer retries with a 30 s backoff instead of disabling itself. Check
 `rfkill list bluetooth` and `systemctl status bluetooth`. A `could not scan;
 retrying with backoff` line names a scan failure such as a resetting adapter;
 the pairer re-probes power and retries, so pairing resumes when the adapter
-recovers. A `pairing ... failed: org.bluez ... ` line is the BlueZ error for that
+recovers. A `pairing...failed: org.bluez...` line is the BlueZ error for that
 attempt. If it says `AuthenticationFailed`, remove the controller's old bond on
 the other host (or with `bluetoothctl remove <MAC>`), then put it in pairing
 mode again.
@@ -172,13 +172,13 @@ cat /sys/class/hidraw/hidraw*/device/uevent | grep -E 'HID_NAME|HID_UNIQ'
 
 A WMR input report appears on hidraw as report ID `0x01` followed by 44 payload
 bytes. The bridge accepts that 45-byte form, the firmware's 46-byte
-`A1 01 ... ` form, and a bare 44-byte payload. Other report IDs are ignored.
+`A1 01...` form, and a bare 44-byte payload. Other report IDs are ignored.
 Diagnose with `sudo evtest` or `sudo hexdump -C /dev/hidrawN`.
 
 If the nodes are not readable by your user:
 
 ```bash
-sudo usermod -aG input "$USER" # log out and back in
+sudo usermod -aG input "$USER"     # log out and back in
 ```
 
 or install the shipped udev rule:
@@ -421,7 +421,7 @@ turn and accepts the first match. To rotate:
    (dual-key window).
 3. Update `pi/minisign.pub` to the new key and re-pin `pi/install.sh`.
 4. Sign the next release's `SHA256SUMS` with the new secret key using
-   `tools/release/sign_sums.sh` (`MINISIGN_SECRET_KEY= ... `).
+   `tools/release/sign_sums.sh` (`MINISIGN_SECRET_KEY=...`).
 5. Once every supported install trusts the new key, remove the old key from
    `WMR_BRIDGE_MINISIGN_PUBKEYS`. `pi/minisign.pub` holds one key and was
    switched to the new key in step 3.
@@ -472,8 +472,8 @@ image date and kernel in the sitting record (section 5.1 of the run sheet).
 Build and verify the installable packages on any Linux host:
 
 ```bash
-pi/build_package.sh # dist/wmr-bridge-0.3.25.tar.gz + .sha256
-pi/build_deb.sh # dist/wmr-bridge_0.3.25_all.deb + .sha256
+pi/build_package.sh                 # dist/wmr-bridge-0.3.25.tar.gz + .sha256
+pi/build_deb.sh                     # dist/wmr-bridge_0.3.25_all.deb + .sha256
 pi/tools/verify_package.sh dist/wmr-bridge-0.3.25.tar.gz
 scp dist/wmr-bridge_0.3.25_all.deb pi@<pi>:~
 ssh pi@<pi> 'sudo apt install ./wmr-bridge_0.3.25_all.deb'
@@ -765,7 +765,7 @@ the reason and the new `Adapter1.Pairable` state (for example
 `BLE pairing window closed (an LE bond is stored); Adapter1.Pairable -> off`),
 `BLE pairing window opened manually for 180 s`,
 `BLE pairing agent registered`/`claimed`/`reclaimed`, the
-`BlueZ JustWorksRepairing = ... ` policy line read from `main.conf` at BLE
+`BlueZ JustWorksRepairing =...` policy line read from `main.conf` at BLE
 start, one line per agent
 callback with the method, device and result
 (`BLE pairing agent: method=RequestAuthorization device=<device> result=accepted`),
@@ -853,15 +853,15 @@ port can subscribe. With no token on loopback, only local clients can connect.
 
 | Client sends | Server replies |
 | --- | --- |
-| `{"type":"subscribe","stream":"raw"\|"decoded"\|"batched"}` | `{"type":"subscribed","stream": ... ,"recordSize":56,"batchMax":9,"fragmentCapacity":244}` |
+| `{"type":"subscribe","stream":"raw"\|"decoded"\|"batched"}` | `{"type":"subscribed","stream":...,"recordSize":56,"batchMax":9,"fragmentCapacity":244}` |
 | `{"type":"unsubscribe"}` | `{"type":"unsubscribed"}` |
 | `{"type":"status"}` | a `status` object (below) |
-| `{"type":"ping","id":N,"t":ms}` | `{"type":"pong","id":N,"t":ms,"serverTimeUs": ... }` |
+| `{"type":"ping","id":N,"t":ms}` | `{"type":"pong","id":N,"t":ms,"serverTimeUs":...}` |
 | `{"type":"hello"}` | another `hello` |
-| `{"type":"auth","token":" ... "}` | `auth_ok` or `auth_failed` |
+| `{"type":"auth","token":"..."}` | `auth_ok` or `auth_failed` |
 | `{"type":"calibration","hand":"LEFT"\|"RIGHT"\|0\|1,"offset":N}` | one tagged binary FF13 window (below) |
 | `{"type":"pairing","action":"open","seconds":N}` or `{"type":"pairing","action":"close"}` | `{"type":"pairing","open":true\|false,"seconds":N\|null}` |
-| `{"type":"upgrade"}` | `{"type":"upgrade_status","state":"started"\|"busy"\|"error","code": ... }` |
+| `{"type":"upgrade"}` | `{"type":"upgrade_status","state":"started"\|"busy"\|"error","code":...}` |
 | `{"type":"close"}` | close frame, then disconnect |
 
 Rules:
@@ -1082,7 +1082,7 @@ The intended companion change is small:
 5. Treat the bridge as one source per Pi. Multi-bridge setups (one Pi per hand)
    work the same way as multiple ESP32 bridges: connect one WebSocket per Pi,
    each carrying its own LEFT or RIGHT hand.
-6. Read calibration with `{"type":"calibration","hand": ... ,"offset": ... }` and
+6. Read calibration with `{"type":"calibration","hand":...,"offset":...}` and
    collect 496-byte windows until `total_len` bytes, then verify the CRC-32.
    The request works while a stream is subscribed.
 
@@ -1155,7 +1155,7 @@ Pi and point the companion at `wss://<pi>:8443/` instead of
 `ws://<pi>:8765/`:
 
 ```
-phone (wss://) --TLS--> stunnel or nginx on the Pi --ws://127.0.0.1--> wmr_bridge
+phone (wss) --TLS--> stunnel or nginx on the Pi --ws://127.0.0.1--> wmr_bridge
 ```
 
 Keep the daemon on loopback (`--bind 127.0.0.1`) so only the terminator can
@@ -1167,10 +1167,10 @@ stunnel (simplest). `/etc/stunnel/wmr-bridge.conf`:
 
 ```
 [wmr-bridge]
-accept = 0.0.0.0:8443
+accept  = 0.0.0.0:8443
 connect = 127.0.0.1:8765
-cert = /etc/wmr-bridge/tls/fullchain.pem
-key = /etc/wmr-bridge/tls/privkey.pem
+cert    = /etc/wmr-bridge/tls/fullchain.pem
+key     = /etc/wmr-bridge/tls/privkey.pem
 ```
 
 `systemctl enable --now stunnel4`. stunnel forwards the TLS payload unchanged,
@@ -1183,7 +1183,7 @@ nginx (if it is already on the Pi). The upgrade headers are required:
 server {
     listen 8443 ssl;
     server_name wmr-bridge.local;
-    ssl_certificate /etc/wmr-bridge/tls/fullchain.pem;
+    ssl_certificate     /etc/wmr-bridge/tls/fullchain.pem;
     ssl_certificate_key /etc/wmr-bridge/tls/privkey.pem;
 
     location / {
@@ -1288,7 +1288,7 @@ tester checklist and pinned image/package checksums are in
 | P2 | Replay probe | ~160 rec/s, no gaps, no drops |
 | P3 | Live one controller, `decoded` | buttons, stick, trigger and IMU change sensibly; sequence rises ~150-180/s; `errors` 0 after 60 s |
 | P4 | Live both controllers | both hands stream concurrently; per-hand sequences independent; no decode errors |
-| P5 | 5 GHz link, 10 min | `iw ... link` above 5000 MHz; `dropped` 0; probe RTT p50/p95 recorded; compare with 2.4 GHz in the same sitting |
+| P5 | 5 GHz link, 10 min | `iw...link` above 5000 MHz; `dropped` 0; probe RTT p50/p95 recorded; compare with 2.4 GHz in the same sitting |
 | P6 | Upstream loss | record tick-based missing-report share per hand (as in the firmware runs) and compare with the ESP32 baseline; do not claim improvement from sequence gaps alone |
 | P7 | Controller reconnect | power-cycle one controller; it reappears, the client stays subscribed, sequences continue (no reset) |
 | P8 | Network reconnect | drop/rejoin Wi-Fi; client reconnects and re-subscribes; token still enforced |
@@ -1309,13 +1309,13 @@ been run, treat the Pi path as unverified.
 The daemon uses Python's `logging` module. Hand and client events are logged at
 INFO/WARNING:
 
-- Hand connect/disconnect: `LEFT connected: /dev/hidraw0 (AA:BB: ... )` and
+- Hand connect/disconnect: `LEFT connected: /dev/hidraw0 (AA:BB:...)` and
   `LEFT disconnected: /dev/hidraw0 after 123 report(s)`.
 - Client connect/disconnect: `client connected: <peer>` / `client disconnected: <peer>`.
 - Subscribe/unsubscribe: `client <peer> subscribed to batched` /
   `client <peer> unsubscribed`.
-- No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check ... `.
-- Auto-pair: one `auto-pair: scanning ... ` line per attempt (at most every 30 s while a hand is missing), then `found`, `pairing`, `paired`, `trusting`, `connecting`, and `connected` lines for the controller it hears. A failed attempt logs `pairing <MAC> failed: <BlueZ error>`. `wmr-bridge status` prints the same state without reading the journal.
+- No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check...`.
+- Auto-pair: one `auto-pair: scanning...` line per attempt (at most every 30 s while a hand is missing), then `found`, `pairing`, `paired`, `trusting`, `connecting`, and `connected` lines for the controller it hears. A failed attempt logs `pairing <MAC> failed: <BlueZ error>`. `wmr-bridge status` prints the same state without reading the journal.
 - Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
 - `hello.version` reports the package version (`0.3.25`; `0.1.0` before PR #78 merged).
 

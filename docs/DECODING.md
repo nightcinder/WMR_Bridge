@@ -62,7 +62,7 @@ What the phone does with the blob (all from Monado, `wmr_controller_base.c` and
 2. Skip the first 2 bytes. XOR the rest with `wmr_config_key` (1024 bytes, from
    `wmr_config_key.h`): `data[i] ^= key[i % 1024]`. The result is JSON text.
 3. Parse JSON `CalibrationInformation.InertialSensors[]`. Each entry has `SensorType`
-   (`CALIBRATION_InertialSensorType_Gyro`, ` ... _Accelerometer`, ` ... _Magnetometer`) and:
+   (`CALIBRATION_InertialSensorType_Gyro`, `..._Accelerometer`, `..._Magnetometer`) and:
    - `Rt.Rotation` (9 floats, row-major 3x3) and `Rt.Translation` (3 floats): the
      sensor's pose;
    - `MixingMatrixTemperatureModel` (36 floats = 9 elements x 4 temperature
@@ -120,7 +120,7 @@ Capture file format (text, one frame per line):
 # wmr-capture v1
 # hand: LEFT (as stated by the operator)
 @begin still t=0.000000
-F 0.013251 0 8231 A1010003 ... <seconds> <hand 0/1> <sequence> <46-byte frame hex>
+F 0.013251 0 8231 A1010003...   <seconds> <hand 0/1> <sequence> <46-byte frame hex>
 @end still t=6.100000
 ```
 
@@ -558,8 +558,8 @@ and the axis mapping are not valid on such a capture, so the tools now say so:
   [COUNTERS.md](COUNTERS.md).
 - After the phone connects the bridge asks for a 7.5-15 ms connection interval, latency
   0, 4 s timeout and logs what the phone actually granted
-  (`BLE connection parameters at connect: ... ` and, if the phone changes them,
-  ` ... updated: ... `). Windows centrals often keep a longer interval (tens of ms), which
+  (`BLE connection parameters at connect:...` and, if the phone changes them,
+  `...updated:...`). Windows centrals often keep a longer interval (tens of ms), which
   limits how many notifications fit per second whatever the bridge asks; the log shows
   whether the request was honoured. This has not been tried on hardware.
 
@@ -598,7 +598,7 @@ python tools/analyze_capture.py captures/<file>.txt --hand LEFT
 # 3. Repeat for --hand RIGHT. Keep the monitor output from step 1 next to each capture.
 ```
 
-Report with each capture: the printed MTU, the `conn=[ ... ]` text, the per-phase loss lines
+Report with each capture: the printed MTU, the `conn=[...]` text, the per-phase loss lines
 from `capture_ble.py`, and the STREAM/`rx`/`tx`/`drop` lines from the monitor during the
 `still` phase.
 
@@ -736,7 +736,7 @@ Real use is at distance, so the weak-link case is the one that matters.
 
 - Run-length histogram, no new capture needed. `tools/analyze_capture.py` now prints, per
   phase and hand, how many reports are missing according to the tick deltas and how long the
-  missing runs are (`1x40, 3x12, ... `). Isolated runs of 1 and no pattern point to 1; runs
+  missing runs are (`1x40, 3x12,...`). Isolated runs of 1 and no pattern point to 1; runs
   of about three at a steady rhythm point to 2; a few very long runs (tens of ms or more)
   point to stalls (3 or 4). Run it on the existing LEFT and RIGHT captures.
   *Limit:* if every delta is the same multiple of the real period (perfectly uniform loss)
@@ -787,7 +787,7 @@ Real use is at distance, so the weak-link case is the one that matters.
     two links = 1.2 commands per second, plus 1.2 Command Complete events per second. They
     are sent one at a time, at least 100 ms apart (so at most 10 per second, and only for
     about 0.6 s of every 5 s), and an unanswered command is abandoned after 500 ms. Shown as
-    `rssi= ... fcc= ... lq= ... `, or `n/a(0xNN)` with the HCI status if the controller refuses.
+    `rssi=...fcc=...lq=...`, or `n/a(0xNN)` with the HCI status if the controller refuses.
     Interpretation caveats, unverified here: for BR/EDR, Read RSSI is, as I understand the
     specification, a difference from the "golden receive power range" (0 = within range,
     negative = too weak) rather than dBm; the failed-contact counter is, as I understand it,
@@ -797,7 +797,7 @@ Real use is at distance, so the weak-link case is the one that matters.
     registered with `hci_dump_init` (from `src/wmr_linkdiag.c`; this repository's
     `integration/main-CMakeLists.txt` only lists its sources) receives BTstack's error-level
     messages. A message whose format matches the one in `hci_transport_esp32_vhci.c`
-    (`transport_recv_pkt_cb ... dropping packet`) increments `vhci_drop`; all error-level
+    (`transport_recv_pkt_cb...dropping packet`) increments `vhci_drop`; all error-level
     messages increment `log_errors` (which therefore includes the drops). Packet logging is
     turned off and only the error level reaches the sink, so the cost is one function call per
     error message and one flag test per HCI packet. Limits: it depends on BTstack's wording (a

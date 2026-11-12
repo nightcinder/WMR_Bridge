@@ -27,7 +27,7 @@ New to the Pi? Read the simple-English beginner guide:
 
 ```bash
 cd pi
-python3 -m unittest discover -s tests -v # 417 host tests
+python3 -m unittest discover -s tests -v          # 417 host tests
 python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 
 # in a second terminal
@@ -70,8 +70,8 @@ pi/tools/dry_run.sh
 ## Installable packages
 
 ```bash
-pi/build_package.sh # dist/wmr-bridge-<version>.tar.gz + checksum
-pi/build_deb.sh # dist/wmr-bridge_<version>_all.deb + checksum
+pi/build_package.sh                          # dist/wmr-bridge-<version>.tar.gz + checksum
+pi/build_deb.sh                              # dist/wmr-bridge_<version>_all.deb + checksum
 pi/tools/verify_package.sh dist/wmr-bridge-<version>.tar.gz
 ```
 
@@ -79,7 +79,7 @@ On a Raspberry Pi OS 64-bit host (Bookworm or Trixie), install either the `.deb`
 or the tarball:
 
 ```bash
-sudo apt install ./wmr-bridge_<version>_all.deb # enables and starts the unit
+sudo apt install ./wmr-bridge_<version>_all.deb   # enables and starts the unit
 # or: extract the tarball and run sudo wmr-bridge-<version>/pi/install.sh
 ```
 
@@ -117,10 +117,10 @@ sudo systemctl enable --now bluetooth
 # turn it on with the front Windows button, then hold the small pairing button
 # inside the battery compartment until the LEDs pulse slowly.
 
-sudo usermod -aG input "$USER" # or run the bridge as a user in group input
-wmr-bridge --list # confirm both controllers are visible
-wmr-bridge status # adapter, bond and hidraw state when pairing fails
-wmr-bridge pair # open a 180 s BLE window when a phone will not pair
+sudo usermod -aG input "$USER"   # or run the bridge as a user in group input
+wmr-bridge --list                # confirm both controllers are visible
+wmr-bridge status                # adapter, bond and hidraw state when pairing fails
+wmr-bridge pair                  # open a 180 s BLE window when a phone will not pair
 
 # Pi on the LAN, phone connecting to it: a token is required.
 wmr-bridge --bind 0.0.0.0 --token-file /etc/wmr-bridge/token
@@ -225,11 +225,11 @@ Current package version: see `wmr_bridge.__version__`.
 
 The daemon logs hand and client events:
 
-- Hand connect/disconnect: `LEFT connected: /dev/hidraw0 (AA:BB: ... )` and
+- Hand connect/disconnect: `LEFT connected: /dev/hidraw0 (AA:BB:...)` and
   `LEFT disconnected: /dev/hidraw0 after 123 report(s)`.
 - Client connect/disconnect: `client connected: <peer>` / `client disconnected: <peer>`.
 - Subscribe/unsubscribe: `client <peer> subscribed to batched` / `client <peer> unsubscribed`.
-- No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check ... `.
+- No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check...`.
 - Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
 
 ## Status

@@ -207,11 +207,11 @@ Assumed, not yet checked on these controllers: a WMR controller answers inquiry
 only in pairing mode (turn it on with the front Windows button, then hold the
 small pairing button inside the battery compartment until the LEDs flash). For a fresh
 flash: power on the ESP32, put one or both controllers in pairing mode within
-the first minute, and watch for `Discovery: LEFT is ... ` and
+the first minute, and watch for `Discovery: LEFT is...` and
 `descriptor status=0x00`. If pairing mode times out first, put the controller in
 pairing mode again and press `d`.
 
-A failed attempt now logs `Pairing: LEFT attempt 1/3 did not connect; retrying ... `
+A failed attempt now logs `Pairing: LEFT attempt 1/3 did not connect; retrying...`
 and tries again. Only after the last attempt does it forget the address
 (`Pairing: LEFT did not pair ... ; address forgotten. Put it in pairing mode and
 press d`). That means the next `d` (or the next automatic burst) can find the
@@ -344,16 +344,16 @@ Web Serial.
 Firmware logs one format:
 `[ 12.345] I pair LEFT ready: HID descriptor received (model WMR)`.
 A successful pairing run shows, in order: discovery
-(`found ... at ... ( ... , model ... )`), link up (` ... link up at ... (handle=0x ... , role= ... )`),
-authentication (` ... authenticated`), encryption (` ... link encrypted`),
-descriptor (` ... ready: HID descriptor received (model ... )`), first report
-(` ... is streaming: first input report ... `). Discovery ends with a per-hand
+(`found...at...(..., model...)`), link up (`...link up at...(handle=0x..., role=...)`),
+authentication (`...authenticated`), encryption (`...link encrypted`),
+descriptor (`...ready: HID descriptor received (model...)`), first report
+(`...is streaming: first input report...`). Discovery ends with a per-hand
 summary: ready / waiting for descriptor / known but disconnected / not paired
 with next action.
 
 Failure hints on the `pair` tag:
 
-- `authentication failed: ... (link key mismatch) (0x05)`, remove the
+- `authentication failed:...(link key mismatch) (0x05)`, remove the
   controller's old pairing or press `k`/`K` for a bond reset.
 - `PIN or key missing (controller lost the bond)` (0x06).
 - `remote user terminated` (0x13).

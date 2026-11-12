@@ -20,9 +20,9 @@ targets. The Pi bridge is host-tests-only until the Pi sitting runs. The ESP32
 firmware has the bench runs recorded below.
 
 ```
- WMR LEFT --\ Classic Bluetooth HID BLE GATT notifications
+ WMR LEFT  --\  Classic Bluetooth HID                       BLE GATT notifications
               >------------------> ESP32 (BTstack) ------------------------------> Android phone
- WMR RIGHT --/ 46/79-byte frames bounded queue service FF10 / characteristic FF11
+ WMR RIGHT --/  46/79-byte frames     bounded queue          service FF10 / characteristic FF11
 ```
 
 The raw stream (FF11) is a raw pipe. Each controller frame goes to the phone
@@ -219,8 +219,8 @@ Firmware logs one format (seconds with a millisecond fraction, one-letter level,
 six-char tag):
 
 ```
-[ 12.345] I pair LEFT ready: HID descriptor received (model WMR)
-[ 12.980] W pair RIGHT authentication failed: authentication failed (link key mismatch) (0x05); remove the controller's old pairing or press k/K for a bond reset
+[    12.345] I pair   LEFT ready: HID descriptor received (model WMR)
+[    12.980] W pair   RIGHT authentication failed: authentication failed (link key mismatch) (0x05); remove the controller's old pairing or press k/K for a bond reset
 ```
 
 Tags: `boot`, `pair`, `link`, `psvr2`, `stagger`, `ff13` (plus older `BLE`/`FF`
@@ -243,8 +243,8 @@ airtime from the phone link without changing the companion app's parsers.
 ```bash
 cd pi
 ./run_tests.sh
-python3 -m wmr_bridge --replay ../samples/controller_frames.txt # no hardware
-python3 tools/wifi_probe.py --stream batched # second terminal
+python3 -m wmr_bridge --replay ../samples/controller_frames.txt   # no hardware
+python3 tools/wifi_probe.py --stream batched                      # second terminal
 ```
 
 The `0.1.0` release adds `--hand left|right` for one Pi per hand, optional mDNS
@@ -452,7 +452,7 @@ press after the cooldown reconnects normally. 0 disables the guard.
 ## Running the host tests
 
 ```powershell
-.\tests\run_tests.ps1 # needs gcc, clang or zig on PATH; no ESP-IDF required
+.\tests\run_tests.ps1     # needs gcc, clang or zig on PATH; no ESP-IDF required
 ```
 
 The Linux/Pi host bridge has its own standard-library Python suite:
