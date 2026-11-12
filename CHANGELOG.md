@@ -392,7 +392,7 @@ on hardware, and waits on verification.
   same FF11, FF12 and FF14 payloads over a BlueZ GATT peripheral when Wi-Fi is
   unreachable, with `--ble-adapter` and `--ble-pairing-window` overrides. It is
   off by default, needs `python3-dbus-next`, and is not yet verified on
-  hardware .
+  hardware.
 - **Resilient service start and scan backoff.** The
   service clears a boot-time Bluetooth rfkill soft block as root before start
   and keeps retrying instead of exiting, caps discovery backoff, logs the LAN
@@ -401,16 +401,15 @@ on hardware, and waits on verification.
 
 ### Tooling
 
-- CI adds CodeQL and publishes Semgrep SARIF to code scanning , and
-  libFuzzer harnesses cover the three byte-level parsers .
+- CI adds CodeQL and publishes Semgrep SARIF to code scanning, and
+  libFuzzer harnesses cover the three byte-level parsers.
 
 ### Verification
 
 - Host C tests, the Pi unittest suite and the ESP-IDF build run in CI before
   tagging; the tag stages exactly nine release assets and the firmware reports
   the tag version over FF16. No packaged firmware has been flashed to hardware,
-  the 5 GHz preference has no hardware run recorded, and the BLE fallback waits
-  on .
+  the 5 GHz preference has no hardware run recorded.
 
 ## 0.3.14 — 2026-11-08
 

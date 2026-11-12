@@ -73,7 +73,7 @@ Eight initial runs and one re-run were recorded on 2026-11-07 with a Pixel phone
 
 Notes on the 2026-11-07 runs:
 
-- Run 1 (App none) is invalid because companion none mode is known broken ( runs 1, 6, and 9 are skipped in the bench sheet). It is preserved here because the tester ran it.
+- Run 1 (App none) is invalid because companion none mode is known broken (runs 1, 6, and 9 are skipped in the bench sheet). It is preserved here because the tester ran it.
 - Run 4 (initial) received controller stream packets and recorded stream stalls. Every round-trip ping timed out because no echo response arrived.
 - Run 4 (re-run) was recorded after the echo fix. All 473 pings were answered with 0 timeouts.
 - Runs 13, 14, 17, and 18 exercised the ping interval ladder. The clients received no stream frame records during these runs.

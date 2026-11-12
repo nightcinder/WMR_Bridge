@@ -252,7 +252,7 @@ Not tested, and practical:
 - Physical separation / antenna geometry. Sitting R in the bench sheet swaps the
   controller between hand slots and positions, then swaps the board, to separate
   controller, position and antenna. Its phases 1-2 have not run, and they need
-  no reflash (the removed internal-ESP32 bench sheet ( see git
+  no reflash (the removed internal-ESP32 bench sheet (see git
   history), `the removed single-ESP32 levers sheet (see git history)`
   section 3). This is the cheapest way to find out whether part of the loss is
   RF geometry rather than scheduling.

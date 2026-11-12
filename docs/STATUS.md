@@ -218,7 +218,7 @@ so because a run exists. `, ` means nothing has run yet.
 | App-vs-native probe decision | `pass`, closed: **Stay Flutter** under the amendment (warm/stable start; one-sided `d <= +5 ms`, stalls within 25 %). The 2026-11-07 pair misses the Stay branch on RIGHT stalls (440 vs 698, 37 % apart) and lands in between: stay Flutter, gaps filed upstream. 2026-10-28 app 39.3 vs probe 35.6 ms (`d` = +3.7, one unpaired run per client); 2026-11-07 `d` = -16.3 / -2.6 / -9.9 ms at 250 / 50 / 1000 ms, probe stalls 610/698 vs app 490/440 | Pixel 11 Pro, Android 17; 2026-11-07 builds in `docs/runs/roundtrip/README.md` | `wmr-companion` `docs/runs/sheets/latency-2.md` (rule); `docs/runs/roundtrip/README.md` (figures); (amendment) |
 | FF13 calibration applied in fusion | `partial`, pose recordings: 6.6 s face-down rest LEFT `+0.00°`, RIGHT `−0.03°`; a 14.4 s hand-held take turned RIGHT `−25.3°`. Prose rest pair 83.5 / 42.7 unlabelled for off/on, no 90° error | Pixel 11 Pro, Android 17; bridge 0.2.4 / `41a9e5f`, app 0.2.1 | `wmr-companion` `docs/PROTOCOL.md` "FF13 config block in the app"; the removed internal-ESP32 bench sheet (see git history) |
 
- closed on 2026-11-07. The 2026-10-28 pair gave `d` = +3.7 ms (one
+The app-vs-native probe closed on 2026-11-07. The 2026-10-28 pair gave `d` = +3.7 ms (one
 unpaired run per client) and the 2026-11-07 session gave `d` = -16.3 ms at
 250 ms, -2.6 ms at 50 ms and -9.9 ms at 1000 ms, with probe stalls 610/698
 against app 490/440. The 250 ms pair is app 11:43 against a probe re-run at

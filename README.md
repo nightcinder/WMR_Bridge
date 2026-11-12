@@ -127,8 +127,8 @@ reuse it. The output in `dist/` includes the bootloader, partition table,
 application and merged factory images, plus a browser flasher page. The browser
 manifest writes the three separate images at offsets `0x1000`, `0x8000` and
 `0x10000`. It does not write NVS (`0x9000`-`0xFFFF`), so a reflash with
-"Erase device" unchecked keeps the stored pairings. `0.3.25` is the current release. See [CHANGELOG.md](CHANGELOG.md) for release notes. To
-install the current release without ESP-IDF, use the hosted browser installer at
+"Erase device" unchecked keeps the stored pairings. `0.3.25` is the current release. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+To install the current release without ESP-IDF, use the hosted browser installer at
 <https://nightcinder.github.io/WMR_Bridge/>, which serves all three variants,
 or the Pi setup page at <https://nightcinder.github.io/WMR_Bridge/pi.html>. The
 [GitHub release](https://github.com/nightcinder/WMR_Bridge/releases/latest)
