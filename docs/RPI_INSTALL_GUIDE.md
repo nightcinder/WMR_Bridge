@@ -303,7 +303,7 @@ journalctl -u wmr-bridge -n 200 --no-pager
 `wmr-bridge status` shows whether the Bluetooth adapter is powered, pairable
 and scanning, and whether each hand has a bond and a hidraw node. In the log,
 `auto-pair: scanning` is the heartbeat, `found`/`paired` shows a controller was
-heard, and `pairing <MAC> failed: ...` gives the BlueZ error.
+heard, and `pairing <MAC> failed:...` gives the BlueZ error.
 
 **A phone sees the bridge but will not pair.**
 Open a pairing window on the running service, then pair from the phone:
@@ -336,7 +336,7 @@ systemctl status bluetooth
 sudo rfkill unblock bluetooth
 ```
 
-`automatic controller pairing is off ... until restart` names a scan failure;
+`automatic controller pairing is off...until restart` names a scan failure;
 restart the service after fixing it:
 
 ```bash

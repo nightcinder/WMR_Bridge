@@ -1005,7 +1005,7 @@ static void disc_connect_progress(void);
 static void disc_pair_failed(unsigned hand, uint8_t status);
 static void accept_incoming(controller_t *c, uint16_t cid);
 
-/* ---- Controller-initiated link handoff (docs/DISCOVERY.md, ONY-446) ------ */
+/* ---- Controller-initiated link handoff (docs/DISCOVERY.md) ------ */
 
 static wmr_linkwait_t linkwait[WMR_NUM_CONTROLLERS];
 static btstack_timer_source_t linkwait_timer;
@@ -2015,7 +2015,7 @@ static void on_remote_name(const uint8_t *packet){
 
 /* ---- Classic link role logging ------------------------------------------ */
 
-/* One parseable line per link, for the contention-2 REF runs (ONY-14). The
+/* One parseable line per link, for the contention-2 REF runs. The
  * role is whatever BTstack currently has cached for the handle: at connection
  * complete that can still be unknown, and the role-change event fills it in.
  * Logging only: no policy, role request or link state is changed here. */

@@ -435,7 +435,7 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 #error "WMR_CFG_CLASSIC_NO_SNIFF and WMR_CFG_CLASSIC_FORCE_MASTER are alternative variants; enable at most one"
 #endif
 
-/* ---- One-flash contention test image (ONY-430) --------------------------- */
+/* ---- One-flash contention test image --------------------------- */
 
 /* 0 = release behaviour: every lever below uses the compile-time value above and the
  * console keys are absent. 1 = LEVERS image: V1 stagger, the 30 ms BLE interval request,
@@ -533,7 +533,7 @@ static inline bool wmr_bridge_hand_enabled(int bridge_hands, int hand){
 
 /* FF14 hold in connection intervals. 1 = one interval (default and current behaviour).
  * 2 holds a partial batch for two intervals, trading about one interval of extra latency
- * for fewer, larger notifications; the ONY-176 airtime sitting uses 2 as its variant. */
+ * for fewer, larger notifications; the airtime sitting uses 2 as its variant. */
 #ifndef WMR_CFG_BATCH_HOLD_INTERVALS
 #define WMR_CFG_BATCH_HOLD_INTERVALS      1
 #endif

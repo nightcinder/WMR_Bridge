@@ -1,9 +1,9 @@
-/* Host tests for the ONY-446 controller-reconnect handoff watchdog (src/wmr_linkwait.c).
+/* Host tests for the controller-reconnect handoff watchdog (src/wmr_linkwait.c).
  *
  * The case that matters: a controller-initiated ACL that does not encrypt on its own.
  * The host must ask for encryption once, then drop the link if no HID channel follows,
  * so the controller can page again without a reboot. A HID connection that was only
- * accepted (cid assigned, no CONNECTION_OPENED) does not count as open (ONY-466). */
+ * accepted (cid assigned, no CONNECTION_OPENED) does not count as open. */
 
 #include <stdio.h>
 #include "wmr_linkwait.h"

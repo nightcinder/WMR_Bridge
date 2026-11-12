@@ -28,7 +28,7 @@ requested. Never assume the requested value.
 
 1. Scan for the name `WMR Bridge` or service `0xFF10`. Call
    `connectGatt(...)`.
-2. After `onConnectionStateChange(... STATE_CONNECTED)`, call
+2. After `onConnectionStateChange(...STATE_CONNECTED)`, call
    `gatt.requestMtu(517)` and wait for `onMtuChanged`. Record the negotiated
    MTU.
 3. Call `gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)`.

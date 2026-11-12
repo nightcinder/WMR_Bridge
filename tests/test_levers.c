@@ -1,4 +1,4 @@
-/* Host tests for the ONY-430 LEVERS runtime state (src/wmr_levers.c).
+/* Host tests for the LEVERS runtime state (src/wmr_levers.c).
  *
  * Built twice by CI: once with the release default and once with
  * -DWMR_CFG_TEST_LEVERS=1. The release build must return the compile-time values and

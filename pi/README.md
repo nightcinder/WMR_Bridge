@@ -139,7 +139,7 @@ and owned by `wmr:wmr`.
 
 The service runs `wmr-bridge --prefer-5ghz` before the daemon starts. The command clones the active NetworkManager connection into `<connection>-5ghz`. It restricts the clone to 5 GHz. It sets the clone's autoconnect priority to 50. The base profile stays as the 2.4 GHz fallback. The command switches only when a 5 GHz BSSID is visible. A failed switch leaves the current connection in place. Pass `--no-reconnect` to save the profile without switching.
 
-`prefer_5ghz()` also lowers the route metric of the wired profile, so an Ethernet uplink wins over 5 GHz Wi-Fi and 5 GHz Wi-Fi wins over 2.4 GHz Wi-Fi. It uses route metrics (IPv4 and IPv6), not only autoconnect priority.
+`prefer_5ghz` also lowers the route metric of the wired profile, so an Ethernet uplink wins over 5 GHz Wi-Fi and 5 GHz Wi-Fi wins over 2.4 GHz Wi-Fi. It uses route metrics (IPv4 and IPv6), not only autoconnect priority.
 
 A 2.4 GHz-only radio, such as the CYW43439 in a Pi Zero 2 W, is a warning-only no-op. The command reports that the adapter has no 5 GHz radio.
 
@@ -229,7 +229,7 @@ The daemon logs hand and client events:
   `LEFT disconnected: /dev/hidraw0 after 123 report(s)`.
 - Client connect/disconnect: `client connected: <peer>` / `client disconnected: <peer>`.
 - Subscribe/unsubscribe: `client <peer> subscribed to batched` / `client <peer> unsubscribed`.
-- No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check ...`.
+- No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check...`.
 - Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
 
 ## Status

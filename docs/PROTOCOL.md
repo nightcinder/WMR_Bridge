@@ -262,9 +262,9 @@ integers are little-endian. Floats are IEEE 754 binary32, little-endian.
 | 20 | 3 x f32 | `gyro` x, y, z | rad/s, uncalibrated, raw sensor axes |
 | 32 | 3 x f32 | `accel` x, y, z | m/s^2, uncalibrated scale, raw sensor axes |
 | 44 | i16 | `temperature_raw` | Raw sensor word, scale not established |
-| 46 | 2 x i16 | `stick` x, y | -32767..32767 = -1.0..1.0, 0 = centre |
-| 50 | 2 x i16 | `trackpad` x, y | -32767..32767 = -1.0..1.0; both 0 when `trackpad touch` is clear |
-| 54 | u8 | `trigger` | 0..255 |
+| 46 | 2 x i16 | `stick` x, y | -32767 .. 32767 = -1.0 .. 1.0, 0 = centre |
+| 50 | 2 x i16 | `trackpad` x, y | -32767 .. 32767 = -1.0 .. 1.0; both 0 when `trackpad touch` is clear |
+| 54 | u8 | `trigger` | 0 .. 255 |
 | 55 | u8 | `battery` | Raw controller byte, scale not established |
 
 ### Scales
@@ -289,7 +289,7 @@ A PSVR2 hand decodes through its driver entry (`wmr_controller_driver.c`,
 `wmr_decoded_from_psvr2_frame`). The frame must be exactly 79 bytes with the
 `A1 31` header. Offsets and scales follow Monado's `pssense` driver: gyro is
 raw x `pi/1024` rad/s; accel is raw x `9.80665/4096` m/s^2 (+-8 g); the stick is
-0..255 with x `(raw - 128)/128` and y `(128 - raw)/128`; the trigger is 0..255;
+0 .. 255 with x `(raw - 128)/128` and y `(128 - raw)/128`; the trigger is 0 .. 255;
 `device_ticks` is the controller IMU counter times 333 ns, converted to the
 record's 100 ns ticks. Temperature is a raw degrees-C byte and battery is the
 raw battery-state byte (high nibble charge state, low nibble level). Only PS,
@@ -448,7 +448,7 @@ after FF12.
 
 One notification value = a 2-byte header followed by `count` complete FF12
 version 1 records, unchanged (each keeps its own `version` = 1, `hand`,
-`sequence`, `rx_time_us`, `device_ticks`, ...):
+`sequence`, `rx_time_us`, `device_ticks`, ... ):
 
 | Offset | Size | Field | Meaning |
 | --- | --- | --- | --- |
@@ -486,7 +486,7 @@ nothing itself). A batch is sent from the queue when the ATT stack can send
 - the oldest queued record has waited one connection interval (the interval the
   phone granted; 15 ms until it is known, `WMR_CFG_BATCH_HOLD_DEFAULT_US`): the
   queue is then flushed as a partial batch. `WMR_CFG_BATCH_HOLD_INTERVALS`
-  (default 1) multiplies the hold. 2 is the ONY-176 airtime variant and adds
+  (default 1) multiplies the hold. 2 is the airtime variant and adds
   about one interval of batch latency.
 
 So a record is held for batching no longer than the configured number of
@@ -664,8 +664,8 @@ of the answer, and `t2 = rx_time_us`, `t3 = rx_time_us + turnaround_us`
 
 ## Counters
 
-`FF15 echo accepted=... sent=... pending=... busy=... bad=... unsubscribed=...
-cancelled=...` on the periodic line ([COUNTERS.md](COUNTERS.md)). Identity:
+`FF15 echo accepted= ... sent= ... pending= ... busy= ... bad= ... unsubscribed= ...
+cancelled= ... ` on the periodic line ([COUNTERS.md](COUNTERS.md)). Identity:
 `accepted = sent + cancelled + pending`.
 
 ## Bench-test items
@@ -723,8 +723,8 @@ Commands are 64-byte HID reports with report ID `0x06`:
 
 Block read is command `0x02`. Responses are 78 bytes: `[0]` response report ID
 (`0x02` for block reads, `0x06` for the init commands), `[2]` echoed command id,
-`[4]` echoed block id, `[5..8]` `blk_remain` u32 LE (bytes of the block not yet
-delivered), `[9]` `len` (data bytes in this response, at most 68), `[10..77]`
+`[4]` echoed block id, `[5 .. 8]` `blk_remain` u32 LE (bytes of the block not yet
+delivered), `[9]` `len` (data bytes in this response, at most 68), `[10 .. 77]`
 data.
 
 Reading one block:
@@ -897,7 +897,7 @@ bytes, then 104 at offset 496). A hand that is not READY reads `total_len` 0,
   revision/serial comparison from the design above is not implemented (block
   `0x02` only; blocks `0x00` and `0x03` are never read). A FAILED or NOT_READ
   hand is retried on its next connection.
-- Commands go out with `hid_host_send_report(cid, 0x06, bytes 1..63)`, i.e. as
+- Commands go out with `hid_host_send_report(cid, 0x06, bytes 1 .. 63)`, i.e. as
   an HID output report on the interrupt channel, without Monado's init commands.
   Whether the controller accepts that is exactly what C1 checks.
 - Report routing in the HID handler: `0x01` input (unchanged), `0x02`/`0x06`
@@ -1086,15 +1086,15 @@ bytes, it fits within the default ATT MTU of 23 bytes (20-byte payload +
 | Offset | Size | Field | Description |
 | --- | --- | --- | --- |
 | 0 | u8 | `version` | Format version, `1` |
-| 1 | u8 | `left_flags` | Bit 0: connected, Bit 1: connecting, Bit 2: descriptor received, Bits 3..7: reserved (0) |
+| 1 | u8 | `left_flags` | Bit 0: connected, Bit 1: connecting, Bit 2: descriptor received, Bits 3 .. 7: reserved (0) |
 | 2 | u8 | `left_addr_source` | 0: None, 1: Compile override, 2: Stored in NVS |
 | 3 | u8 | `left_model` | 0: WMR, 1: PSVR2, 2: Switch |
-| 4..6 | 3 B | `left_addr_tail` | Last 3 bytes of Bluetooth address (device ID: bytes 3, 4, 5). `00 00 00` if no address |
+| 4 .. 6 | 3 B | `left_addr_tail` | Last 3 bytes of Bluetooth address (device ID: bytes 3, 4, 5). `00 00 00` if no address |
 | 7 | u8 | `reserved0` | Reserved, `0` |
-| 8 | u8 | `right_flags` | Bit 0: connected, Bit 1: connecting, Bit 2: descriptor received, Bits 3..7: reserved (0) |
+| 8 | u8 | `right_flags` | Bit 0: connected, Bit 1: connecting, Bit 2: descriptor received, Bits 3 .. 7: reserved (0) |
 | 9 | u8 | `right_addr_source` | 0: None, 1: Compile override, 2: Stored in NVS |
 | 10 | u8 | `right_model` | 0: WMR, 1: PSVR2, 2: Switch |
-| 11..13 | 3 B | `right_addr_tail` | Last 3 bytes of Bluetooth address (device ID: bytes 3, 4, 5). `00 00 00` if no address |
+| 11 .. 13 | 3 B | `right_addr_tail` | Last 3 bytes of Bluetooth address (device ID: bytes 3, 4, 5). `00 00 00` if no address |
 | 14 | u8 | `reserved1` | Reserved, `0` |
 | 15 | u8 | `discovery_state` | 0: Idle, 1: Inquiry, 2: Remote name requests, 3: Connecting discovered |
 | 16 | u8 | `discovery_round` | Current discovery round (0 when idle) |
@@ -1119,7 +1119,7 @@ Notifications do not count toward stream transmission counters.
 Bluetooth inquiry (discovery) shares the 2.4 GHz radio and antenna with ongoing
 BLE notifications. While discovery is active (`discovery_state != 0`), packet
 loss or latency jitter may increase on running controller streams. The client UI
-should display a temporary notice (for example "Scanning... stream may stutter")
+should display a temporary notice (for example "Scanning ... stream may stutter")
 while `discovery_state` is non-zero.
 
 # Proposals (NOT decided, NOT implemented, NOT part of the spec above)

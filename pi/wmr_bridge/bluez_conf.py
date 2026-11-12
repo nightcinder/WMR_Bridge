@@ -9,7 +9,7 @@ bridge's ``NoInputNoOutput`` agent is never asked.
 
 ``JustWorksRepairing = confirm`` sends the same request to the default agent,
 where :class:`wmr_bridge.ble_gatt.PairingAgentPolicy` accepts it.  This is the
-ESP32 lesson from ONY-441: a phone that forgot the bridge may pair again and
+ESP32 lesson: a phone that forgot the bridge may pair again and
 replace the stale key instead of being refused.  Keep ``always`` if an admin
 selected it, because that also repairs without the agent.
 

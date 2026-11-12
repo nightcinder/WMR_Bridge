@@ -17,8 +17,8 @@ and [Monado reference deep-dive](#monado-reference-deep-dive-investigation-of-un
 | --- | --- | --- |
 | 0 | u8 | buttons: 0x01 stick click, 0x02 home, 0x04 menu, 0x08 squeeze, 0x10 trackpad click, 0x20 BT pairing, 0x40 trackpad touch |
 | 1-3 | 2 x 12 bit | thumbstick X (byte1 + low nibble of byte2), Y (high nibble of byte2 + byte3 << 4); centre 0x7FF |
-| 4 | u8 | trigger 0..255 |
-| 5, 6 | u8, u8 | trackpad X, Y, 0..0x64, both 0xFF when untouched |
+| 4 | u8 | trigger 0 .. 255 |
+| 5, 6 | u8, u8 | trackpad X, Y, 0 .. 0x64, both 0xFF when untouched |
 | 7 | u8 | battery (raw) |
 | 8-16 | 3 x s24 LE | accelerometer; Monado divides by 49000 (about m/s^2) |
 | 17-18 | s16 LE | temperature (raw) |
@@ -245,9 +245,9 @@ Where it happens is not established; see [Investigation notes](#investigation-no
   both are kept as raw integers and exported only as debug variables. A true battery discharge/percentage
   curve and a temperature conversion formula (e.g. thermistor curve or linear conversion) are not defined
   in Monado and require hardware bench measurement.
-- Input control ranges in code: Trigger is 0..255 normalized by `/ 255.0f` to [0, 1]; trackpad is 0..100
+- Input control ranges in code: Trigger is 0 .. 255 normalized by `/ 255.0f` to [0, 1]; trackpad is 0 .. 100
   centered at 50 (`0x32`) mapped by `(raw - 50) / 50.0f` to [-1, 1], with `0xFF` indicating untouched
-  (mapped to 0); thumbstick is 12-bit unsigned (0..4095) centered at 2047 (`0x07FF`) mapped by
+  (mapped to 0); thumbstick is 12-bit unsigned (0 .. 4095) centered at 2047 (`0x07FF`) mapped by
   `(raw - 0x7FF) / 0x7FF` clamped to 1.0. These follow Monado's reference equations (`wmr_controller_og.c:269-294`),
   but physical travel limits and user deadzones on actual hardware remain to be characterized.
 - Per-device mix matrix, bias and pose (needs the config block; partly decoded on the phone).
@@ -290,7 +290,7 @@ still needed.
 
 In the first FF12 bench check (user-run, reported) the resting stick values were hand 0
 (-0.029, 0.014) and hand 1 (-0.064, 0.148). The decoder defines the centre as raw `0x7FF`
-(2047 of 0..4095): `value = (raw - 0x7FF) / 0x7FF`, clamped to 1.0, which maps `0x7FF` to
+(2047 of 0 .. 4095): `value = (raw - 0x7FF) / 0x7FF`, clamped to 1.0, which maps `0x7FF` to
 exactly 0 (tested in `tests/test_decode.c`) and is Monado's formula, with no dead zone and
 no centre calibration. The resting values therefore correspond to raw readings of about
 1988 and 2076 (hand 0) and 1916 and 2350 (hand 1): the controller reports a resting
@@ -558,8 +558,8 @@ and the axis mapping are not valid on such a capture, so the tools now say so:
   [COUNTERS.md](COUNTERS.md).
 - After the phone connects the bridge asks for a 7.5-15 ms connection interval, latency
   0, 4 s timeout and logs what the phone actually granted
-  (`BLE connection parameters at connect: ...` and, if the phone changes them,
-  `... updated: ...`). Windows centrals often keep a longer interval (tens of ms), which
+  (`BLE connection parameters at connect:...` and, if the phone changes them,
+  `...updated:...`). Windows centrals often keep a longer interval (tens of ms), which
   limits how many notifications fit per second whatever the bridge asks; the log shows
   whether the request was honoured. This has not been tried on hardware.
 
@@ -590,7 +590,7 @@ the user; nothing here flashes anything):
 
 ```powershell
 # 1. Build and flash as in docs/BUILD_WINDOWS.md, then open the monitor and note, after the
-#    PC connects: the 'BLE connection parameters ...' lines and the STREAM line.
+# PC connects: the 'BLE connection parameters ... ' lines and the STREAM line.
 # 2. In another terminal, with the bridge not connected to a phone:
 pip install bleak
 python tools/capture_ble.py --hand LEFT
@@ -736,7 +736,7 @@ Real use is at distance, so the weak-link case is the one that matters.
 
 - Run-length histogram, no new capture needed. `tools/analyze_capture.py` now prints, per
   phase and hand, how many reports are missing according to the tick deltas and how long the
-  missing runs are (`1x40, 3x12, ...`). Isolated runs of 1 and no pattern point to 1; runs
+  missing runs are (`1x40, 3x12,...`). Isolated runs of 1 and no pattern point to 1; runs
   of about three at a steady rhythm point to 2; a few very long runs (tens of ms or more)
   point to stalls (3 or 4). Run it on the existing LEFT and RIGHT captures.
   *Limit:* if every delta is the same multiple of the real period (perfectly uniform loss)
@@ -787,7 +787,7 @@ Real use is at distance, so the weak-link case is the one that matters.
     two links = 1.2 commands per second, plus 1.2 Command Complete events per second. They
     are sent one at a time, at least 100 ms apart (so at most 10 per second, and only for
     about 0.6 s of every 5 s), and an unanswered command is abandoned after 500 ms. Shown as
-    `rssi=... fcc=... lq=...`, or `n/a(0xNN)` with the HCI status if the controller refuses.
+    `rssi=...fcc=...lq=...`, or `n/a(0xNN)` with the HCI status if the controller refuses.
     Interpretation caveats, unverified here: for BR/EDR, Read RSSI is, as I understand the
     specification, a difference from the "golden receive power range" (0 = within range,
     negative = too weak) rather than dBm; the failed-contact counter is, as I understand it,
@@ -797,7 +797,7 @@ Real use is at distance, so the weak-link case is the one that matters.
     registered with `hci_dump_init` (from `src/wmr_linkdiag.c`; this repository's
     `integration/main-CMakeLists.txt` only lists its sources) receives BTstack's error-level
     messages. A message whose format matches the one in `hci_transport_esp32_vhci.c`
-    (`transport_recv_pkt_cb ... dropping packet`) increments `vhci_drop`; all error-level
+    (`transport_recv_pkt_cb...dropping packet`) increments `vhci_drop`; all error-level
     messages increment `log_errors` (which therefore includes the drops). Packet logging is
     turned off and only the error level reaches the sink, so the cost is one function call per
     error message and one flag test per HCI packet. Limits: it depends on BTstack's wording (a
@@ -865,7 +865,7 @@ Other BLE settings that could lower the airtime cost besides batching (read from
   be carried in fewer link-layer packets if the controller and the phone accept it. The firmware
   does not log the data-length change event, so whether it took effect is unknown.
 - PHY. Whether this ESP32 controller supports anything but the 1M PHY has now been checked
-  (ONY-98) and the answer is a permanent no, 2M PHY is not available on this hardware at any price.
+   and the answer is a permanent no, 2M PHY is not available on this hardware at any price.
   The three independent checks:
   1. The firmware never asks for it. There is no `gap_le_set_phy` / `hci_le_set_phy` call
      anywhere under `src/`. The only BLE connection tuning is the interval/latency request at

@@ -40,13 +40,13 @@ All multi-byte fields are little-endian.
 | Frame offset | Size | Field | Mapping |
 | --- | --- | --- | --- |
 | 3, 4 | 2 x u8 | left/right thumbstick | x = `(raw - 128) / 128`, y = `(128 - raw) / 128`, then Q15 |
-| 5 | u8 | trigger | `trigger` (0..255) |
-| 10..12 | 3 x u8 | buttons | PS -> home, Share/Options -> menu, L1/R1 -> squeeze, L3/R3 -> thumbstick click; face buttons and capacitive touches have no WMR bit |
-| 18..23 | 3 x i16 | gyro x, y, z | raw x 180/1024 deg/s, converted to rad/s (`raw * pi / 1024`) |
-| 24..29 | 3 x i16 | accel x, y, z | raw x 9.80665/4096 m/s^2 (+-8 g range) |
-| 30..33 | u32 | IMU ticks | x 333 ns, stored in `device_ticks` as 100 ns ticks |
+| 5 | u8 | trigger | `trigger` (0 .. 255) |
+| 10 .. 12 | 3 x u8 | buttons | PS -> home, Share/Options -> menu, L1/R1 -> squeeze, L3/R3 -> thumbstick click; face buttons and capacitive touches have no WMR bit |
+| 18 .. 23 | 3 x i16 | gyro x, y, z | raw x 180/1024 deg/s, converted to rad/s (`raw * pi / 1024`) |
+| 24 .. 29 | 3 x i16 | accel x, y, z | raw x 9.80665/4096 m/s^2 (+-8 g range) |
+| 30 .. 33 | u32 | IMU ticks | x 333 ns, stored in `device_ticks` as 100 ns ticks |
 | 34 | u8 | temperature | `temperature_raw` |
-| 44 | u8 | battery state | raw byte in `battery` (high nibble charge state, low nibble 0..10 level) |
+| 44 | u8 | battery state | raw byte in `battery` (high nibble charge state, low nibble 0 .. 10 level) |
 
 `trackpad` stays 0 (the controller has none), `flags` stays 0 (uncalibrated),
 and the record's `sequence`/`rx_time_us` are the bridge's per-hand values, not
@@ -67,7 +67,7 @@ LEFT GET_REPORT response: status=0x00 len=NN
 LEFT first report: cid=... frame_len=79 descriptor=available
 ```
 
-`LEFT address: ... (discovered, stored, model PSVR2)` is printed at boot and by `s`.
+`LEFT address:...(discovered, stored, model PSVR2)` is printed at boot and by `s`.
 
 ## What is not implemented
 
@@ -139,13 +139,13 @@ element type before raising the frame limit again.
 
 ## Sources
 
-- Bluetooth names, USB IDs and the wake/report facts: ONY-81 report and
+- Bluetooth names, USB IDs and the wake/report facts: report and
   [WMR_Bridge#44](https://github.com/nightcinder/WMR_Bridge/issues/44).
 - Names were confirmed against Windows/Linux/Apple host reports in that
   investigation. They have not been captured through this firmware.
 - Report layout and scales: Monado's PSVR2 Sense driver,
   `src/xrt/drivers/pssense/pssense_driver.c` (`struct pssense_input_report`,
-  `PSSENSE_GYRO_SCALE_DEG`, `PSSENSE_ACCEL_SCALE`), and the ONY-233 research
+  `PSSENSE_GYRO_SCALE_DEG`, `PSSENSE_ACCEL_SCALE`), and the research
   page, <https://app.notion.com/p/404145eff9f581ecaf73dfdeed2c8301>.
 - The decoder offsets follow Monado; that source has not been checked against a
   frame from this controller.

@@ -9,7 +9,7 @@ deploy for users with no ESP32 knowledge.
 
 There are two audiences:
 
-| You want to... | Use |
+| You want to ... | Use |
 | --- | --- |
 | Install the bridge on a board without ESP-IDF | the [browser flasher](#browser-flasher-end-users) |
 | Build and flash your own changes | [`tools/firmware/build.py`](#one-command-build-and-flash) |

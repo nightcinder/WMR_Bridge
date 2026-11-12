@@ -57,7 +57,7 @@ fails without them.
 
 Simplest rule: re-copy `main-CMakeLists.txt` with `-Force` after every pull
 (`Copy-Item wmr_bridge\integration\main-CMakeLists.txt port\esp32\main\CMakeLists.txt -Force`).
-When updating the copy at `wmr_bridge` with `robocopy ... /E`, note that robocopy
+When updating the copy at `wmr_bridge` with `robocopy.../E`, note that robocopy
 does not delete files. Source files removed or renamed upstream stay in the
 folder. That is harmless as long as the CMake file does not list them. Robocopy
 exit codes below 8 are success.
