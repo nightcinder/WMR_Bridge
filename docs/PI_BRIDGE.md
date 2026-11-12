@@ -786,12 +786,12 @@ Report Reference descriptor. `wmr_bridge/hid_gamepad.py` ports the
 report byte-identical to the firmware. A HOGP host therefore binds the
 controllers as a gamepad with no app. The bridge sends no HID report until a
 Classic controller is connected and the phone enables the Report CCCD. After
-that, HIDS stays on at all times, even while a WebSocket client or an
-FF11/FF12/FF14 subscriber is active. The report is paced at 10 ms when idle
-and 20 ms while any stream is active, TCP included. It never takes two send
-slots in a row while an FF1x frame waits. A neutral report is still sent on
-BLE connect and disconnect, and a hand with no sample for 250 ms is released
-once.
+that, HID notifications pause automatically while a WebSocket client or an
+FF11/FF12/FF14 subscriber is active, emitting one neutral report on the
+transition; they resume with the next controller sample once all stream
+clients disconnect and all subscriptions stop. The report is paced at 10 ms.
+A neutral report is still sent on BLE connect and disconnect, and a hand with
+no sample for 250 ms is released once.
 
 Discovery and identity:
 
@@ -812,13 +812,16 @@ The bridge keeps the BLE HIDS link up at all times and routes data by type:
 
 | Data | Link | Notes |
 | --- | --- | --- |
-| Gamepad input (HIDS `0x2A4D`) | BLE HIDS, always on | OS and DroidDeck input |
+| Gamepad input (HIDS `0x2A4D`) | BLE HIDS (link stays up) | OS and DroidDeck input |
 | Raw, decoded and batched streams (FF11, FF12, FF14) | Wi-Fi TCP/WebSocket | BLE FF1x is the fallback |
 | Calibration (FF13) | Wi-Fi TCP/WebSocket | BLE FF13 is the fallback |
 | Runtime control, echo and upgrade (FF15, FF17) | Wi-Fi TCP/WebSocket | BLE FF15 and FF17 are the fallback |
 
-HIDS is not suppressed while a stream is active. The DIS PnP ID (`0x2A50`) stays
-fixed (VID `0x02E5`, PID `0x0001`) so a host can claim the device by VID/PID.
+HID report delivery follows the stream-gating rules above. The DIS PnP ID
+(`0x2A50`) stays fixed (VID `0x02E5`, PID `0x0001`) so a host can claim the
+device by VID/PID.
+
+Removal of stream suppression and the 20 ms pacing floor are tracked in ONY-1319.
 
 Per-client gating:
 

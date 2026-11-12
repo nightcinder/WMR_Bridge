@@ -7,15 +7,16 @@ routing between BLE and Wi-Fi.
 
 | Data | Link | Notes |
 | --- | --- | --- |
-| Gamepad input (HIDS `0x2A4D`) | BLE HIDS, always on | OS and DroidDeck input |
+| Gamepad input (HIDS `0x2A4D`) | BLE HIDS (link stays up) | OS and DroidDeck input |
 | Raw, decoded and batched streams (FF11, FF12, FF14) | Wi-Fi TCP/WebSocket | BLE FF1x is the fallback |
 | Calibration (FF13) | Wi-Fi TCP/WebSocket | BLE FF13 is the fallback |
 | Runtime control, echo and upgrade (FF15, FF17) | Wi-Fi TCP/WebSocket | BLE FF15 and FF17 are the fallback |
 
-BLE HIDS (`0x1812`/`0x2A4D`) stays connected and active at all times. It is
-not suppressed by a stream. The report is paced at 10 ms when idle and 20 ms
-while any stream is active, TCP included. While an FF1x frame waits, HIDS
-never takes two send slots in a row.
+BLE HIDS (`0x1812`/`0x2A4D`) stays connected at all times. HID report
+delivery follows the stream-gating rules in [HID_GAMEPAD.md](HID_GAMEPAD.md):
+reports pause while a stream is active. The report is paced at 10 ms.
+
+Removal of stream suppression is tracked in ONY-1319.
 
 ## GATT identifiers
 

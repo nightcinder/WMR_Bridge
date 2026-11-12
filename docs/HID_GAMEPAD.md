@@ -98,9 +98,7 @@ is in use, and moving that encoder to the same table is a companion follow-up.
   independently of the FF10 stream mode. A phone with no FF10 subscription
   still gets input.
 - **Coalescing:** samples between pump ticks are collapsed. An unchanged
-  report is not resent. At most one HID report is sent per 10 ms when idle and
-  per 20 ms while any stream is active, TCP included. While an FF1x frame
-  waits, HIDS never takes two send slots in a row.
+  report is not resent. At most one HID report is sent per 10 ms.
 - **Stuck input:** a hand with no sample for 250 ms is released, and a neutral
   report is sent once. The report history and both hands are cleared on BLE
   connect and disconnect, so neither a controller reconnect nor a phone
@@ -523,22 +521,20 @@ Advertising uses two interval tiers:
 
 ### Stream gating
 
-The bridge keeps HIDS on at all times and routes data by link:
+HID reports are gated to protect input integrity and avoid duplicate input:
 
 - Zero controllers connected: the bridge sends no HID input reports.
 - Unsubscribed CCCD: the bridge sends no reports until the central enables notifications on the Report characteristic CCCD. When enabled with a connected controller, the bridge sends one neutral report.
-- Always-on HIDS: BLE HIDS (`0x1812`/`0x2A4D`) stays connected and active for
-  OS and DroidDeck gamepad input, even while a TCP/WebSocket or BLE FF1x
-  stream is active. HIDS is not suppressed by a stream.
-- Pacing: the report is sent at most every 10 ms when idle and every 20 ms
-  while any stream is active, TCP included. While an FF1x frame waits, HIDS
-  never takes two send slots in a row.
+- Active stream suppression: HID notifications pause automatically when a client subscribes to a TCP or WebSocket stream, or when a central subscribes to GATT notifications on `FF11`, `FF12`, or `FF14`. One neutral report is emitted on the transition to release held input. Reports resume with the next controller sample once all stream clients disconnect and all subscriptions stop.
+- Pacing: at most one HID report is sent per 10 ms; samples in between are coalesced and an unchanged report is not resent.
 - Neutral report on transition: on BLE connect and disconnect, and when a hand
   has no sample for 250 ms, the bridge sends one neutral report. The report
   clears all buttons, centers the hat switch, and sets axes to zero.
 - Duplicate input: DroidDeck removes duplicate input in-app with
   `PadBridge.setExcluded()`. The DIS PnP ID (`0x2A50`) stays fixed (VID
   `0x02E5`, PID `0x0001`) so a host can claim the device by VID/PID.
+
+Removal of stream suppression and the 20 ms pacing floor are tracked in ONY-1319.
 
 ### Pairing rules and CLI flags
 

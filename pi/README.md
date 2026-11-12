@@ -180,11 +180,11 @@ All HID characteristics require encryption (`encrypt-read`, `encrypt-write`) bec
 The bridge applies these rules to HID gamepad reports:
 - The bridge sends no HID reports before a Classic controller connects.
 - The bridge sends no HID reports before the phone enables the Report CCCD. When enabled with a connected controller, the bridge emits one neutral report.
-- HIDS stays on at all times, even while a WebSocket client or an
-  FF11/FF12/FF14 subscriber is active. HIDS is not suppressed by a stream.
-- The report is paced at 10 ms when idle and 20 ms while any stream is active,
-  TCP included. While an FF1x frame waits, HIDS never takes two send slots in
-  a row.
+- HID notifications pause automatically while a WebSocket client or an
+  FF11/FF12/FF14 subscriber is active, emitting one neutral report on the
+  transition. They resume with the next controller sample once all
+  subscriptions stop.
+- The report is paced at 10 ms.
 - On BLE connect and disconnect, and when a hand has no sample for 250 ms, the
   bridge emits one neutral report to release any held buttons or deflections.
 - The DIS PnP ID (`0x2A50`) stays fixed (VID `0x02E5`, PID `0x0001`) so a
