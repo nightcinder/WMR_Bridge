@@ -1,15 +1,25 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-11 (current release 0.3.25: the Pi package in this tree is
-`0.3.25` and fixes the in-place-upgrade regression that broke the stored
-Bluetooth connection. The `.deb` post-install script and `install.sh` restart
-`bluetooth.service` only when the `JustWorksRepairing` policy actually changes,
-and stop `wmr-bridge.service` first when it does, so an upgrade no longer
-crashes the Pi's combo controller into `HCI Hardware Error` (0x10) with
-`Powered: no`, which needed `sudo reboot`. The auto-pairer retries a failed scan
-with backoff, `wmr-bridge status` and the warnings name the crashed-controller
-reboot recovery and the `wmr-bridge pair` escape hatch, and an upgrade leaves
-the bond store and the token untouched. It keeps the 0.3.24
+Last updated: 2026-11-11 (current release 0.3.26: the Pi package in this tree is
+`0.3.26` and recovers a powered-off Bluetooth adapter. bluetoothd can leave
+`Adapter1.Powered` false after the combo controller's firmware crashes; the
+daemon first tries `Powered=True` itself, then asks the root
+`wmr-bridge-bt-recover.path`/`.service` to unblock rfkill, restart `hciuart` and
+`bluetooth.service` and start the bridge again, at most once per 300 s, and it
+retries GATT and advertising. Advertisement re-registration is coalesced over
+1 s, so a burst of controller or phone events no longer surfaces
+`descriptor write: RequestBusy` on the phone, and `wmr-bridge pair` fails with a
+`Powered: no` or not-advertising diagnostic. The `.deb` post-install script
+restarts `wmr-bridge.service` once on an upgrade and stages the 5 GHz profile and
+rfkill only on a fresh install, and the unit no longer runs them on every start.
+It keeps the 0.3.25 installer-and-recovery fix: the `.deb` post-install script
+and `install.sh` restart `bluetooth.service` only when the
+`JustWorksRepairing` policy actually changes, and stop `wmr-bridge.service`
+first when it does, so an upgrade no longer crashes the Pi's combo controller
+into `HCI Hardware Error` (0x10) with `Powered: no`; the auto-pairer retries a
+failed scan with backoff, `wmr-bridge status` and the warnings name the
+crashed-controller reboot recovery and the `wmr-bridge pair` escape hatch, and an
+upgrade leaves the bond store and the token untouched. It keeps the 0.3.24
 app-triggered upgrade path: an authenticated WebSocket `{"type":"upgrade"}`
 writes a trigger that starts the root `wmr-bridge-upgrade.path`/`.service`, which
 runs the installed `install.sh --upgrade` with no client-chosen URL, tag or
@@ -102,7 +112,7 @@ maintained at the project's single entry point:
 | Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.11 image has not been run on hardware (internal bench runbook block C) |
 | BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (#88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.11 pairing and encryption run is not yet done (internal bench runbook block B) |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, not run on hardware |
-| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests only (417 tests + loopback replay), the real BlueZ auto-pair path has not been run on Pi hardware or with controllers; the root upgrade unit and minisign verification have not run on Pi hardware; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
+| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests only (429 tests + loopback replay), the real BlueZ auto-pair path has not been run on Pi hardware or with controllers; the root upgrade unit and minisign verification have not run on Pi hardware; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has not been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Console `v` read on the 0.2.4 hardware run (`0.2.4`, ESP-IDF v6.1); the live FF16 phone read on v0.3.11 is open (internal bench runbook block B) |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added in v0.3.11 | Host tests and firmware build only, never run on a PSVR2 controller |

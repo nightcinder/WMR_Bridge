@@ -98,13 +98,13 @@ at `/etc/wmr-bridge/token`, and starts `wmr-bridge.service`.
 To pin a release, set the version and the tag:
 
 ```bash
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.25/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.25 sudo -E bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.26/install.sh | WMR_BRIDGE_VERSION=<pi-version> WMR_BRIDGE_TAG=v0.3.26 sudo -E bash
 ```
 
 The Pi package version matches the repository `VERSION`, and the release
 workflow refuses to build unless the tag equals `v$(cat VERSION)`. So a release
 cut from this tree reports one version across firmware, Pi package and tag.
-The current released version is v0.3.25; its Pi package is `0.3.25`.
+The current released version is v0.3.26; its Pi package is `0.3.26`.
 
 To check a download by hand, fetch SHA256SUMS and SHA256SUMS.minisig from the
 same release, verify the digest list against the published minisign public key,
@@ -115,9 +115,9 @@ minisign -Vm SHA256SUMS -P RWTL80BhYeTEqPhBvFePoSc/uoC+iJCEa41o1uA3h+t4opQbX0yKC
 sha256sum -c SHA256SUMS --ignore-missing
 ```
 
-The `v0.3.25` release carries ten files: three merged factory images
+The `v0.3.26` release carries ten files: three merged factory images
 (`wmr-bridge-factory.bin`, `-left`, `-right`), three application images
-(`wmr-bridge-app.bin`, `-left`, `-right`), the `0.3.25` package, `install.sh`,
+(`wmr-bridge-app.bin`, `-left`, `-right`), the `0.3.26` package, `install.sh`,
 SHA256SUMS and SHA256SUMS.minisig. There are no per-file checksum files.
 
 Reboot the Pi so the Wi-Fi power-saving setting takes effect:
@@ -216,7 +216,7 @@ sudo cat /etc/wmr-bridge/token
 ```
 
 Paste that token into the companion app. The companion app does not discover
-the Pi: enter its host and port by hand. The v0.3.25 service advertises
+the Pi: enter its host and port by hand. The v0.3.26 service advertises
 `_wmr-bridge._tcp` for discovery tools (`--advertise-mdns`), but the app still
 takes a manual host and port.
 

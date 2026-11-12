@@ -474,16 +474,16 @@ image date and kernel in the sitting record (section 5.1 of the run sheet).
 Build and verify the installable packages on any Linux host:
 
 ```bash
-pi/build_package.sh                 # dist/wmr-bridge-0.3.25.tar.gz + .sha256
-pi/build_deb.sh                     # dist/wmr-bridge_0.3.25_all.deb + .sha256
-pi/tools/verify_package.sh dist/wmr-bridge-0.3.25.tar.gz
-scp dist/wmr-bridge_0.3.25_all.deb pi@<pi>:~
-ssh pi@<pi> 'sudo apt install ./wmr-bridge_0.3.25_all.deb'
+pi/build_package.sh                 # dist/wmr-bridge-0.3.26.tar.gz + .sha256
+pi/build_deb.sh                     # dist/wmr-bridge_0.3.26_all.deb + .sha256
+pi/tools/verify_package.sh dist/wmr-bridge-0.3.26.tar.gz
+scp dist/wmr-bridge_0.3.26_all.deb pi@<pi>:~
+ssh pi@<pi> 'sudo apt install ./wmr-bridge_0.3.26_all.deb'
 ```
 
 The tarball alternative is
-`scp dist/wmr-bridge-0.3.25.tar.gz* pi@<pi>:~` then
-`ssh pi@<pi> 'tar -xzf wmr-bridge-0.3.25.tar.gz && sudo wmr-bridge-0.3.25/pi/install.sh'`.
+`scp dist/wmr-bridge-0.3.26.tar.gz* pi@<pi>:~` then
+`ssh pi@<pi> 'tar -xzf wmr-bridge-0.3.26.tar.gz && sudo wmr-bridge-0.3.26/pi/install.sh'`.
 Both carry `pi/` (daemon, probe, installer, systemd unit, udev rule,
 NetworkManager drop-in), `docs/PI_BRIDGE.md` and
 `samples/controller_frames.txt`, so they install without a git checkout. The
@@ -579,15 +579,15 @@ origin was allowed at startup with `--allow-origin <value>` (repeatable). This
 stops a web page on the LAN from opening a socket to the daemon. Origin matching
 is case-insensitive on the normalised value. `*` is not a wildcard.
 
-JSON examples below use the package version in this tree, `0.3.25`.
-`pi/wmr_bridge/__version__` reports `0.3.25`. The `v0.3.12` release shipped
+JSON examples below use the package version in this tree, `0.3.26`.
+`pi/wmr_bridge/__version__` reports `0.3.26`. The `v0.3.12` release shipped
 the `0.2.4` package, `v0.3.13` shipped the `0.3.13` package, `v0.3.14`
 shipped the `0.3.14` package, `v0.3.15` shipped the `0.3.15` package,
 `v0.3.16` shipped the `0.3.16` package, `v0.3.17` shipped the `0.3.17`
 package, `v0.3.18` shipped the `0.3.18` package, `v0.3.19` shipped the
 `0.3.19` package, `v0.3.20` shipped the `0.3.20` package, `v0.3.21` shipped
 the `0.3.21` package, `v0.3.22` shipped the `0.3.22` package, and `v0.3.23`
-shipped the `0.3.23` package, `v0.3.24` shipped the `0.3.24` package; `v0.3.25` ships this package.
+shipped the `0.3.23` package, `v0.3.24` shipped the `0.3.24` package, and `v0.3.25` shipped the `0.3.25` package; `v0.3.26` ships this package.
 
 ```json
 {
@@ -596,7 +596,7 @@ shipped the `0.3.23` package, `v0.3.24` shipped the `0.3.24` package; `v0.3.25` 
   "transport": "ethernet",
   "device": "wmr-pi",
   "bridge_id": "wmr-pi-0123456789",
-  "version": "0.3.25",
+  "version": "0.3.26",
   "handFilter": ["LEFT", "RIGHT"],
   "hostname": "wmr-pi",
   "authRequired": true,
@@ -669,7 +669,7 @@ Each bridge that hears it replies by unicast to the sender with one JSON object:
   "port": 8765,
   "path": "/wmr",
   "hands": ["LEFT", "RIGHT"],
-  "version": "0.3.25",
+  "version": "0.3.26",
   "authMode": "token",
   "nonce": "<nonce from the probe>"
 }
@@ -980,7 +980,7 @@ header-only window until an ingest layer fills the cache.
 ```json
 {
   "type": "status",
-  "version": "0.3.25",
+  "version": "0.3.26",
   "handFilter": ["LEFT", "RIGHT"],
   "uptimeS": 42.5,
   "hostTimeUs": 123456789,
@@ -1319,7 +1319,7 @@ INFO/WARNING:
 - No controller: a one-time warning `no WMR controllers found; put one in pairing mode and keep it near the Pi, then check...`.
 - Auto-pair: one `auto-pair: scanning...` line per attempt (at most every 30 s while a hand is missing), then `found`, `pairing`, `paired`, `trusting`, `connecting`, and `connected` lines for the controller it hears. A failed attempt logs `pairing <MAC> failed: <BlueZ error>`. `wmr-bridge status` prints the same state without reading the journal.
 - Status monitor line: `left=up/1234(1200) right=down/0(0)` (`up`/`down` is connection state, then reports(delivered)).
-- `hello.version` reports the package version (`0.3.25`; `0.1.0` before PR #78 merged).
+- `hello.version` reports the package version (`0.3.26`; `0.1.0` before PR #78 merged).
 
 ## Troubleshooting
 
@@ -1327,7 +1327,7 @@ INFO/WARNING:
 | --- | --- |
 | `no /dev/hidraw nodes` | `systemctl status bluetooth`, `lsmod \| grep hidp`, controller paired/trusted/connected |
 | `bluetoothctl show` says `Powered: no`, `Pairable: no`, Class 0 | adapter firmware crashed or the UART attach failed; `btmon` showing `HCI Reset` answered by `Hardware Error` (0x10, code 0x00) is the crashed-controller signature. The daemon first tries `Adapter1.Powered=True`, then asks `wmr-bridge-bt-recover.service` (root) to restart `hciuart` and `bluetooth.service` and start the bridge again, at most once per cooldown. If `Powered` still reads no after that, reboot the Pi; if the error survives the reboot, power-cycle the board |
-| Phone will not re-pair after the upgrade; adapter `pairable=no` | a stored LE bond closes pairability. Open a window with `wmr-bridge pair` (180 s), or remove the phone's stale bond with `bluetoothctl remove <MAC>`. v0.3.25 does not touch `/var/lib/bluetooth`; the upgrade scripts now leave bluetoothd alone when `JustWorksRepairing` is already set |
+| Phone will not re-pair after the upgrade; adapter `pairable=no` | a stored LE bond closes pairability. Open a window with `wmr-bridge pair` (180 s), or remove the phone's stale bond with `bluetoothctl remove <MAC>`. v0.3.26 does not touch `/var/lib/bluetooth`; the upgrade scripts now leave bluetoothd alone when `JustWorksRepairing` is already set |
 | Wi-Fi auth fails with Bluetooth off | the shared token is only learned over the BLE FF13 encrypted read; the companion's manual Wi-Fi entry does not persist a token. Copy it from `/etc/wmr-bridge/token` (unchanged across upgrades) or read it over BLE |
 | Node exists but `--list` shows name `-` | custom controller name; use `--left/--right` with the MAC or path |
 | Permission denied opening hidraw | run as root or add the user to `input`; check udev mode |
