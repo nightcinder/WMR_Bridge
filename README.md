@@ -127,9 +127,15 @@ reuse it. The output in `dist/` includes the bootloader, partition table,
 application and merged factory images, plus a browser flasher page. The browser
 manifest writes the three separate images at offsets `0x1000`, `0x8000` and
 `0x10000`. It does not write NVS (`0x9000`-`0xFFFF`), so a reflash with
-"Erase device" unchecked keeps the stored pairings. `0.3.24` is the current
-release. It is the Pi app-triggered upgrade release on top of the 0.3.23 Just
-Works re-pair release: an authenticated WebSocket `{"type":"upgrade"}` asks the
+"Erase device" unchecked keeps the stored pairings. `0.3.25` is the current
+release. It is the Pi installer-and-recovery release on top of 0.3.24: the
+`.deb` post-install script and `install.sh` restart `bluetooth.service` only
+when the `JustWorksRepairing` policy actually changes, so an in-place upgrade
+keeps the stored phone bond and no longer crashes the combo controller into
+`HCI Hardware Error` (0x10); `wmr-bridge status` names the reboot recovery and
+the `wmr-bridge pair` escape hatch (ONY-1290). The 0.3.24 release is the Pi
+app-triggered upgrade release on top of the 0.3.23 Just Works re-pair release:
+an authenticated WebSocket `{"type":"upgrade"}` asks the
 root upgrade unit to install the latest signed release, `hello` advertises
 `upgradeCapable`, and the release checksum list is minisign-signed (ONY-1223,
 ONY-1276). Pis on 0.3.23 or older need one manual `sudo` install first to get
@@ -360,7 +366,7 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 | --- | --- |
 | Firmware build (ESP-IDF v6.1, ESP32) | Passes, no warnings from this code |
 | Host unit tests of the protocol encoder, reassembler and queue (6129 checks) | Pass. Cover fragmented, incomplete, lost, duplicated, interleaved and malformed fragments, and a fixed byte-level example |
-| Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 412 tests) | Pass (host tests only; the real BlueZ pairing path has not been run on a Raspberry Pi or with real controllers) |
+| Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 417 tests) | Pass (host tests only; the real BlueZ pairing path has not been run on a Raspberry Pi or with real controllers) |
 | Flash and boot on a real ESP32 | Passes; advertises; stats print every 5 s; no debug spam |
 | One bench run, about 15 s, both controllers and a phone (log pasted by the user, not instrumented on the phone) | Both controllers connected on their own; ATT MTU went 23 to 517; about 174/s (LEFT) and 154/s (RIGHT); sent = received for both hands; 0 drops, 0 offline, 0 purged, 0 send errors; queue back to 0 after a startup peak of 11; counter accounting added up exactly |
 

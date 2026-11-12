@@ -1,25 +1,29 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-11 (current release 0.3.24: the Pi package in this tree is
-`0.3.24` and adds the app-triggered upgrade path. An authenticated WebSocket
-`{"type":"upgrade"}` writes a trigger that starts the root
-`wmr-bridge-upgrade.path`/`.service`, which runs the installed
-`install.sh --upgrade` with no client-chosen URL, tag or version; `hello`
-advertises `upgradeCapable`. Release checksums are minisign-signed, and the
-installer verifies `SHA256SUMS.minisig` against the pinned public key before the
-`.deb` (ONY-1223, ONY-1276). Releases before 0.3.24 — including 0.3.19 and older
-— ship no upgrade unit and need one manual `sudo` install to get it. The package
-also compares controller activity with a per-hand baseline so a controller
-resting off-centre is not reported as active forever (ONY-1279), and its
-dbus-next GATT notifications no longer raise `SignatureBodyMismatchError`
-(ONY-1270). It keeps the 0.3.23 Just Works re-pair fix (ONY-1253): the installer
-and `.deb` post-install script set `JustWorksRepairing = confirm` in
-`/etc/bluetooth/main.conf`, so bluetoothd sends the kernel's Just Works confirm
-hint to the bridge agent instead of refusing it; since ONY-1290 the scripts
-restart `bluetooth.service` only when that policy actually changes (and stop the
-bridge first), so an in-place upgrade no longer races a live GATT application
-and scan against a bluetoothd restart. The re-pair still needs an open pairing
-window (the 180 s boot window,
+Last updated: 2026-11-11 (current release 0.3.25: the Pi package in this tree is
+`0.3.25` and fixes the in-place-upgrade regression that broke the stored
+Bluetooth connection. The `.deb` post-install script and `install.sh` restart
+`bluetooth.service` only when the `JustWorksRepairing` policy actually changes,
+and stop `wmr-bridge.service` first when it does, so an upgrade no longer
+crashes the Pi's combo controller into `HCI Hardware Error` (0x10) with
+`Powered: no`, which needed `sudo reboot`. The auto-pairer retries a failed scan
+with backoff, `wmr-bridge status` and the warnings name the crashed-controller
+reboot recovery and the `wmr-bridge pair` escape hatch, and an upgrade leaves
+the bond store and the token untouched (ONY-1290). It keeps the 0.3.24
+app-triggered upgrade path: an authenticated WebSocket `{"type":"upgrade"}`
+writes a trigger that starts the root `wmr-bridge-upgrade.path`/`.service`, which
+runs the installed `install.sh --upgrade` with no client-chosen URL, tag or
+version; `hello` advertises `upgradeCapable`; release checksums are
+minisign-signed and the installer verifies `SHA256SUMS.minisig` against the
+pinned public key before the `.deb` (ONY-1223, ONY-1276). Releases before 0.3.24
+— including 0.3.19 and older — ship no upgrade unit and need one manual `sudo`
+install to get it. The package also keeps the per-hand activity baseline
+(ONY-1279) and the dbus-next GATT notification fix (ONY-1270). It keeps the
+0.3.23 Just Works re-pair fix (ONY-1253): the installer and `.deb` post-install
+script set `JustWorksRepairing = confirm` in `/etc/bluetooth/main.conf` and
+restart `bluetooth.service`, so bluetoothd sends the kernel's Just Works confirm
+hint to the bridge agent instead of refusing it. The re-pair still needs an open
+pairing window (the 180 s boot window,
 `wmr-bridge pair`, or `--ble-continuous-pairing`). It keeps the 0.3.22
 bondable-pairing fix (ONY-1249): the adapter is
 pairable whenever BlueZ holds no phone bond; only bonds proven to be the
@@ -98,7 +102,7 @@ maintained at the project's single entry point:
 | Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (ONY-307, PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.11 image has not been run on hardware (internal bench runbook block C) |
 | BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (ONY-438, #88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.11 pairing and encryption run is not yet done (internal bench runbook block B) |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, not run on hardware |
-| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests only (412 tests + loopback replay), the real BlueZ auto-pair path has not been run on Pi hardware or with controllers; the root upgrade unit and minisign verification have not run on Pi hardware; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
+| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests only (417 tests + loopback replay), the real BlueZ auto-pair path has not been run on Pi hardware or with controllers; the root upgrade unit and minisign verification have not run on Pi hardware; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has not been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Console `v` read on the 0.2.4 hardware run (`0.2.4`, ESP-IDF v6.1); the live FF16 phone read on v0.3.11 is open (internal bench runbook block B) |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added by ONY-945 (v0.3.11) | Host tests and firmware build only, never run on a PSVR2 controller |
