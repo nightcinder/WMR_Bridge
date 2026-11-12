@@ -5,6 +5,40 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.26 — 2026-11-11
+
+The Pi adapter-recovery release on top of 0.3.25, shipping the recovery for the
+Bluetooth crash an upgrade could still cause and the pairing and notification
+errors a phone saw afterwards. Firmware payloads are unchanged from 0.3.25:
+FF10–FF17 keep their payloads and companions at 0.2.2 or later continue to work.
+The Pi bridge path is host-tested only; it has not run on Pi hardware. The
+10-minute FF14 field capture (both controllers and a phone subscribed) has not
+been run yet.
+
+### Raspberry Pi bridge
+
+- **Recover a `Powered: no` adapter without a reboot.** bluetoothd can leave
+  `Adapter1.Powered` false after the combo controller's firmware crashes, and
+  the daemon then had no path back. It first tries `Powered=True` itself; if that
+  does not stick it asks the new root `wmr-bridge-bt-recover.path`/`.service`
+  (path-activated by an empty `/var/lib/wmr-bridge/bt-recover.trigger` that the
+  `wmr` user may create) to unblock rfkill, restart `hciuart` and
+  `bluetooth.service` and start the bridge again. The request is rate-limited to
+  one per 300 s, and the daemon retries GATT and advertising after the recovery.
+  `wmr-bridge pair` now fails with a `Powered: no` or not-advertising diagnostic
+  instead of printing a window it never opened.
+- **Stop the `RequestBusy` notification failure during a hand burst.**
+  Re-registering the advertisement on every controller or phone event raced
+  bluetoothd, and the phone then reported `enable notifications failed:
+  BleAdapterException ... descriptor write: RequestBusy`. Re-registration is now
+  coalesced over a 1 s window before it touches `LEAdvertisingManager1`.
+- **One restart per upgrade, and no radio churn on boot.** The `.deb`
+  post-install script restarts `wmr-bridge.service` once on an upgrade, stages
+  the 5 GHz NetworkManager profile and clears rfkill only on a fresh install, and
+  the unit no longer runs `--prefer-5ghz` or `rfkill unblock` on every start. The
+  recovery units ship in the package, the post-install script enables the path
+  unit, and `prerm` stops it on removal.
+
 ## 0.3.25 — 2026-11-11
 
 The Pi installer-and-recovery release on top of 0.3.24, shipping the fix for the
