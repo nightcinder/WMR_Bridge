@@ -437,6 +437,51 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("install bluez", output.getvalue())
 
+    def test_format_status_names_a_crashed_controller(self) -> None:
+        status = BluezStatus(
+            adapter=BluezAdapter(
+                "11:22:33:44:55:66", "wmr-pi", powered=False, pairable=False
+            ),
+            devices=(),
+            hidraw=(),
+        )
+
+        lines = _format_status(status)
+        text = "\n".join(lines)
+        self.assertIn("powered=no", lines[0])
+        self.assertIn("Hardware Error", text)
+        self.assertIn("reboot the Pi", text)
+        self.assertIn("power-cycle", text)
+        self.assertIn("does not reload", text)
+
+    def test_format_status_explains_that_a_stored_le_bond_closes_pairing(self) -> None:
+        status = BluezStatus(
+            adapter=BluezAdapter(
+                "11:22:33:44:55:66", "wmr-pi", powered=True, pairable=False
+            ),
+            devices=(BluezDevice("2C:4D:79:C8:F9:A9", "Pixel 7", paired=True),),
+            hidraw=(),
+        )
+
+        text = "\n".join(_format_status(status))
+        self.assertIn("stored LE bond", text)
+        self.assertIn("wmr-bridge pair", text)
+
+    def test_format_status_does_not_call_a_controller_bond_an_le_bond(self) -> None:
+        status = BluezStatus(
+            adapter=BluezAdapter(
+                "11:22:33:44:55:66", "wmr-pi", powered=True, pairable=False
+            ),
+            devices=(
+                BluezDevice(
+                    "AA:BB:CC:DD:EE:00", "Motion controller - Left", paired=True
+                ),
+            ),
+            hidraw=(),
+        )
+
+        self.assertNotIn("stored LE bond", "\n".join(_format_status(status)))
+
     def test_format_status_reports_wifi_band_and_warning(self) -> None:
         status = BluezStatus(
             adapter=BluezAdapter("11:22:33:44:55:66", "wmr-pi", True, True, False, True),

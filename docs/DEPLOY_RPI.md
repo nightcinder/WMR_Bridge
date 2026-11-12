@@ -295,13 +295,20 @@ After upgrade, confirm the bond, token and environment survived:
 
 ```bash
 bluetoothctl devices Paired
+bluetoothctl show          # Powered: yes; Pairable: no is normal with a stored bond
 ls -la /etc/wmr-bridge/token
 cat /etc/wmr-bridge/wmr-bridge.env      # if customised
 sudo systemctl restart wmr-bridge
 python3 /opt/wmr-bridge/pi/tools/wifi_probe.py --host 127.0.0.1 --token-file /etc/wmr-bridge/token --stream batched --duration 5
 ```
 
-Both controllers should reconnect without re-pairing.
+Both controllers should reconnect without re-pairing. An upgrade that does not
+change the BlueZ repair policy no longer restarts `bluetooth.service`, so a
+working adapter and its bonds stay live. If `bluetoothctl show` reports
+`Powered: no` and `btmon` logs `HCI Reset` answered by `Hardware Error` (0x10),
+the controller firmware crashed; reboot the Pi, and power-cycle the board if the
+error survives the reboot. A phone that lost its side of the bond re-pairs
+through `wmr-bridge pair` while the adapter is pairable.
 
 ## 8. Troubleshooting
 

@@ -126,12 +126,21 @@ configure_bluez() {
     if ! command -v python3 >/dev/null 2>&1 || [ ! -f "$script" ]; then
         return 0
     fi
+    if python3 "$script" --check "$conf"; then
+        echo "install.sh: BlueZ Just Works re-pairing already configured; leaving bluetooth.service running"
+        return 0
+    fi
     if ! python3 "$script" "$conf"; then
         echo "install.sh: could not enable BlueZ Just Works re-pairing (non-fatal)" >&2
         return 0
     fi
-    # bluetoothd reads main.conf once at startup.
+    # bluetoothd reads main.conf once at startup, so a policy change needs a
+    # restart. Stop the bridge first: a live GATT application, advertisement
+    # and Classic scan racing that restart can wedge the Pi's combo controller
+    # (btmon shows HCI Reset answered by Hardware Error 0x00) until the Pi is
+    # rebooted.
     if command -v systemctl >/dev/null 2>&1; then
+        systemctl stop wmr-bridge.service || true
         systemctl restart bluetooth.service || true
     fi
 }

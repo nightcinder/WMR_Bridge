@@ -5,6 +5,31 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## Unreleased
+
+### Raspberry Pi bridge
+
+- **Keep the adapter and the phone bond across an upgrade (ONY-1290).** The
+  `.deb` post-install script and `install.sh` restarted `bluetooth.service` on
+  every install, including an in-place upgrade from a release that already
+  carried the `JustWorksRepairing = confirm` policy. A bluetoothd restart while
+  the daemon holds a GATT application, an LE advertisement and Classic scans can
+  crash the Pi's combo controller: `btmon` then shows every `HCI Reset` answered
+  by `Hardware Error` (0x10), `bluetoothctl show` reports `Powered: no`, and
+  controller/phone page-ins time out until the Pi is rebooted. The scripts now
+  restart bluetoothd only when the policy actually changes, stop
+  `wmr-bridge.service` first when it does, and leave the bond store untouched.
+  The auto-pairer also retries a failed scan with backoff instead of disabling
+  automatic pairing until a daemon restart, and `wmr-bridge status` names both
+  the crashed-controller recovery and the `wmr-bridge pair` escape hatch when a
+  stored LE bond keeps the adapter unpairable. A token is still generated only
+  when `/etc/wmr-bridge/token` is absent or empty; upgrades do not rotate it.
+- The companion still does not persist the token, so with Bluetooth down the
+  manual Wi-Fi entry has no way to learn it. ONY-1291 covers saving the token
+  (and the bridge endpoint it was read with), reconnecting to that saved bridge
+  on launch, and rescanning after a drop without restarting the app. The fix
+  belongs in `wmr-companion`; this repository's token is not rotated on upgrade.
+
 ## 0.3.24 — 2026-11-11
 
 The Pi app-triggered upgrade release on top of 0.3.23, shipping the root upgrade

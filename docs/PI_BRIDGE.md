@@ -155,12 +155,13 @@ journalctl -u wmr-bridge -n 200 --no-pager
 rfkill-blocked or `bluetoothd` is down. A stock Pi OS image soft-blocks
 Bluetooth at boot; the systemd unit clears that block as root before start and
 the pairer retries with a 30 s backoff instead of disabling itself. Check
-`rfkill list bluetooth` and `systemctl status bluetooth`. A
-`pairing is off until restart` line names a scan failure that stopped the
-pairer; fix that and restart the service. A `pairing ... failed:
-org.bluez...` line is the BlueZ error for that attempt. If it says
-`AuthenticationFailed`, remove the controller's old bond on the other host (or
-with `bluetoothctl remove <MAC>`), then put it in pairing mode again.
+`rfkill list bluetooth` and `systemctl status bluetooth`. A `could not scan;
+retrying with backoff` line names a scan failure such as a resetting adapter;
+the pairer re-probes power and retries, so pairing resumes when the adapter
+recovers. A `pairing ... failed: org.bluez...` line is the BlueZ error for that
+attempt. If it says `AuthenticationFailed`, remove the controller's old bond on
+the other host (or with `bluetoothctl remove <MAC>`), then put it in pairing
+mode again.
 
 Check the nodes:
 
@@ -732,9 +733,16 @@ accepted as Just Works instead of being rejected for lack of an agent. The
 agent accepts every device BlueZ presents and exists only for that window; the
 adapter's pairable window is the gate. `install.sh` and the `.deb` post-install
 script set BlueZ's `[General] JustWorksRepairing` to `confirm` and restart
-`bluetooth.service`. Without that, bluetoothd's default `never` answers the
-kernel's Just Works confirm hint `0x01` itself with a negative reply when the
-adapter still holds a bond for the phone, before any `Agent1` callback; the
+`bluetooth.service` **only when that setting actually changes**. An upgrade from
+a release that already carries the policy leaves bluetoothd (and the stored
+bonds) alone; until 0.3.24 every install restarted bluetoothd while the bridge
+held a GATT application, advertisement and Classic scans, which can crash the
+Pi's combo controller into `HCI Hardware Error` (see Troubleshooting). When a
+restart is needed the scripts stop `wmr-bridge.service` first and start it again
+after bluetoothd is up. Without that setting, bluetoothd's default `never`
+answers the kernel's Just Works confirm hint `0x01` itself with a negative reply
+when the adapter still holds a bond for the phone, before any `Agent1` callback;
+the
 phone then shows `Numeric comparison failed`. `confirm` sends that repair to
 the bridge's default agent, which accepts and logs it. This is the lesson from
 the ESP32 firmware's stale-bond handling (ONY-441): a phone that forgot the
@@ -1224,6 +1232,13 @@ whatever BlueZ paired, and assigns hands by HID name.
   not stall the controllers.
 - Wi-Fi power saving, channel congestion and roaming cause latency spikes.
   Measure RTT/jitter with `tools/wifi_probe.py` before drawing conclusions.
+- A loopback replay (`--replay`, client on `127.0.0.1`) measures encoding and
+  socket cost only; it bypasses both the Classic controller link and Wi-Fi. When
+  the phone reports FF14 loss, compare it with the daemon's 5 s
+  `left=up/R(D)` / `right=up/R(D)` counters and `dropped`. A per-hand rate near
+  the expected 150-180 reports/s with `dropped=0` means the bridge ingested and
+  enqueued the stream; the missing records were lost upstream on the controller
+  link or after the socket on Wi-Fi, not in the Pi's encoder or queue.
 - The bridge has no hardware timestamp from the Wi-Fi stack. `rx_time_us` is
   taken when the daemon reads the report. Do not interpret it as an arrival
   timestamp at the adapter.
@@ -1309,6 +1324,9 @@ INFO/WARNING:
 | Symptom | Check |
 | --- | --- |
 | `no /dev/hidraw nodes` | `systemctl status bluetooth`, `lsmod \| grep hidp`, controller paired/trusted/connected |
+| `bluetoothctl show` says `Powered: no`, `Pairable: no`, Class 0 | adapter firmware crashed or the UART attach failed; `btmon` showing `HCI Reset` answered by `Hardware Error` (0x10, code 0x00) is the crashed-controller signature. Reboot the Pi; if the error survives the reboot, power-cycle the board. Restarting only `bluetooth.service` does not reload the firmware |
+| Phone will not re-pair after the upgrade; adapter `pairable=no` | a stored LE bond closes pairability (ONY-1226). Open a window with `wmr-bridge pair` (180 s), or remove the phone's stale bond with `bluetoothctl remove <MAC>`. v0.3.24 does not touch `/var/lib/bluetooth`; the upgrade scripts now leave bluetoothd alone when `JustWorksRepairing` is already set |
+| Wi-Fi auth fails with Bluetooth off | the shared token is only learned over the BLE FF13 encrypted read; the companion's manual Wi-Fi entry does not persist a token. Copy it from `/etc/wmr-bridge/token` (unchanged across upgrades) or read it over BLE |
 | Node exists but `--list` shows name `-` | custom controller name; use `--left/--right` with the MAC or path |
 | Permission denied opening hidraw | run as root or add the user to `input`; check udev mode |
 | Controllers connect to the old ESP32 | power it off or unpair/forget the controller's previous host; pair to the Pi |

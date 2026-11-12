@@ -444,6 +444,8 @@ class BluezAutoPairerTests(unittest.TestCase):
         warnings = [line for line in logs.output if "adapter is not usable" in line]
         self.assertEqual(len(warnings), 1)
         self.assertIn("retrying", warnings[0])
+        self.assertIn("Hardware Error", warnings[0])
+        self.assertIn("reboot the Pi", warnings[0])
 
     def test_soft_blocked_adapter_is_unblocked_then_powered_on(self) -> None:
         calls: list[list[str]] = []
@@ -536,7 +538,7 @@ class BluezAutoPairerTests(unittest.TestCase):
         actions = [call[1:] for call in calls if call[1] in ("pair", "trust", "connect")]
         self.assertEqual(actions, [["trust", self.RIGHT], ["connect", self.RIGHT]])
 
-    def test_scan_failure_logs_once_and_disables_pairing(self) -> None:
+    def test_scan_failure_retries_instead_of_disabling_pairing(self) -> None:
         calls: list[list[str]] = []
 
         def runner(args: list[str], timeout: float):
@@ -550,11 +552,21 @@ class BluezAutoPairerTests(unittest.TestCase):
             self.assertFalse(pairer._tick())
             self.assertFalse(pairer._tick())
 
+        # A failed scan can be a transient adapter reset; the next tick probes
+        # power again and retries instead of disabling pairing until restart.
         self.assertEqual(
             [call[1:] for call in calls],
-            [["power", "on"], ["devices"], ["pairable", "off"]],
+            [
+                ["power", "on"],
+                ["devices"],
+                ["pairable", "off"],
+                ["power", "on"],
+                ["devices"],
+                ["pairable", "off"],
+            ],
         )
         self.assertTrue(any("could not scan" in line for line in logs.output))
+        self.assertTrue(any("retrying" in line for line in logs.output))
 
     def test_pairable_is_cleared_after_a_scan(self) -> None:
         calls: list[list[str]] = []

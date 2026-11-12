@@ -1130,6 +1130,7 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("BLE pairing window closed", output)
         self.assertIn("an LE bond is stored", output)
         self.assertIn("Adapter1.Pairable -> off", output)
+        self.assertIn("wmr-bridge pair", output)
         await peripheral.close()
 
     async def test_manual_window_logs_its_reason_and_turns_bondable_on(self) -> None:
