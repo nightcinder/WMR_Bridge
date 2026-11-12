@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -44,6 +45,7 @@ from wmr_bridge.ble_gatt import (
     RESULT_NOTHING_TO_DO,
     RESULT_NOT_CONNECTED,
     SERVICE_PATH,
+    AdapterRecoveryPending,
     BluezGattPeripheral,
     DbusGattBackend,
     GattApplication,
@@ -93,13 +95,29 @@ class FakeBackend:
         self.agent_reclaims = 0
         self.started = False
         self.app: GattApplication | None = None
+        self.powered = True
+        self.power_on_calls = 0
+        self.recovery_requests = 0
+        self.start_calls = 0
 
     async def start(self, app: GattApplication) -> None:
         self.app = app
         self.started = True
+        self.start_calls += 1
 
     async def stop(self) -> None:
         self.started = False
+
+    async def adapter_powered(self) -> bool:
+        return self.powered
+
+    async def power_on(self) -> bool:
+        self.power_on_calls += 1
+        return self.powered
+
+    def request_recovery(self) -> bool:
+        self.recovery_requests += 1
+        return True
 
     async def set_pairable(self, pairable: bool) -> None:
         self.pairable = pairable
@@ -484,6 +502,126 @@ class AdvertisementRegistrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(manager.attempts, 3)
 
 
+class FakePowerAdapter:
+    def __init__(self, powered: bool, can_power: bool = True) -> None:
+        self.powered = powered
+        self.can_power = can_power
+        self.power_calls: list[bool] = []
+
+    async def get_powered(self) -> bool:
+        return self.powered
+
+    async def set_powered(self, powered: bool) -> None:
+        self.power_calls.append(powered)
+        if self.can_power:
+            self.powered = powered
+
+
+class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_powered_no_is_cleared_without_the_root_unit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            trigger = Path(tmp) / "bt-recover.trigger"
+            backend = DbusGattBackend(recover_trigger=trigger)
+            adapter = FakePowerAdapter(powered=False)
+            backend._adapter_interface = adapter
+
+            self.assertTrue(await backend._ensure_powered())
+            self.assertEqual(adapter.power_calls, [True])
+            self.assertFalse(trigger.exists())
+
+    async def test_a_stuck_adapter_requests_root_recovery_once_per_cooldown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            trigger = Path(tmp) / "bt-recover.trigger"
+            clock = FakeClock()
+            backend = DbusGattBackend(
+                recover_trigger=trigger, recovery_cooldown_s=300.0, clock=clock
+            )
+            adapter = FakePowerAdapter(powered=False, can_power=False)
+            backend._adapter_interface = adapter
+
+            self.assertFalse(await backend._ensure_powered())
+            self.assertTrue(trigger.exists())
+            # The unit removes the trigger; a second request inside the window
+            # must not restart bluetoothd again.
+            trigger.unlink()
+            self.assertFalse(backend.request_recovery())
+            self.assertFalse(trigger.exists())
+            clock.advance(301)
+            self.assertTrue(backend.request_recovery())
+            self.assertTrue(trigger.exists())
+
+    async def test_start_retries_after_the_root_unit_and_advertises(self) -> None:
+        class RecoveringBackend(FakeBackend):
+            first = True
+
+            async def start(self, app: GattApplication) -> None:
+                if self.first:
+                    self.first = False
+                    self.start_calls += 1
+                    raise AdapterRecoveryPending("adapter off", retry_after=0)
+                await super().start(app)
+
+        backend = RecoveringBackend()
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            pairing_window_s=0.0,
+            recovery_wait_s=0.0,
+            power_check_interval_s=3600.0,
+        )
+        await peripheral.start()
+        try:
+            self.assertTrue(peripheral.started)
+            self.assertTrue(peripheral.advertising)
+            self.assertEqual(backend.start_calls, 2)
+        finally:
+            await peripheral.close()
+
+    async def test_a_runtime_power_loss_reregisters_gatt_and_advertising(self) -> None:
+        backend = FakeBackend()
+        backend.powered = False
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            pairing_window_s=0.0,
+            power_check_interval_s=0.01,
+            recovery_wait_s=0.0,
+        )
+        await peripheral.start()
+        try:
+            for _ in range(50):
+                if backend.start_calls >= 2:
+                    break
+                await asyncio.sleep(0.01)
+            self.assertGreaterEqual(backend.start_calls, 2)
+            self.assertTrue(peripheral.advertising)
+            self.assertGreaterEqual(backend.power_on_calls, 1)
+        finally:
+            await peripheral.close()
+
+    async def test_a_burst_of_hand_events_reregisters_the_advertisement_once(self) -> None:
+        backend = FakeBackend()
+        bridge = Bridge()
+        peripheral = BluezGattPeripheral(
+            bridge,
+            backend=backend,
+            hosts=["192.0.2.10"],
+            pairing_window_s=0.0,
+            advertising_debounce_s=0.02,
+            power_check_interval_s=3600.0,
+        )
+        await peripheral.start()
+        try:
+            for connected in (True, False, True, False, True):
+                bridge.set_hand_connected(0, connected, "AA:BB:CC:DD:EE:FF")
+            await asyncio.sleep(0.1)
+            self.assertEqual(backend.advertisement_refreshes, 1)
+        finally:
+            await peripheral.close()
+
+
 @unittest.skipUnless(HAS_DBUS_NEXT, "python3-dbus-next is not installed")
 class DbusNextInterfaceTests(unittest.TestCase):
     """Build the real dbus-next interfaces; a bad annotation fails at class creation."""
@@ -818,6 +956,9 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
             name="WMR Bridge",
             clock=self.clock,
             pairing_window_s=120.0,
+            # These tests assert the coalescing check itself, not the burst
+            # debounce added for bluetoothd RequestBusy.
+            advertising_debounce_s=0.0,
         )
         await self.peripheral.start()
         self.app = self.peripheral.app
@@ -1375,6 +1516,7 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
             hosts=["192.0.2.10"],
             clock=self.clock,
             pairing_window_s=120.0,
+            advertising_debounce_s=0.0,
         )
         await peripheral.start()
         try:

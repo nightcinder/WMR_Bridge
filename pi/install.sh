@@ -101,13 +101,23 @@ case "$SELF" in
 esac
 
 enable_service() {
+    # The package path already restarted the bridge in postinst. Starting an
+    # active unit is a no-op, so an upgrade restarts the daemon once instead of
+    # twice; a checkout install is not run by dpkg and passes "restart".
+    restart="${1:-restart}"
     if [ "${WMR_SKIP_PRIVILEGED:-0}" != "1" ] && command -v systemctl >/dev/null 2>&1; then
         systemctl enable bluetooth.service || true
         systemctl start bluetooth.service || true
         systemctl enable wmr-bridge.service || true
-        systemctl restart wmr-bridge.service || true
+        if [ "$restart" = "restart" ]; then
+            systemctl restart wmr-bridge.service || true
+        else
+            systemctl start wmr-bridge.service || true
+        fi
         systemctl enable wmr-bridge-upgrade.path || true
         systemctl start wmr-bridge-upgrade.path || true
+        systemctl enable wmr-bridge-bt-recover.path || true
+        systemctl start wmr-bridge-bt-recover.path || true
     fi
 }
 
@@ -258,7 +268,8 @@ if [ -z "$SCRIPT_DIR" ] || [ "$UPGRADE" = "1" ]; then
     chmod 0755 "$TMP_DIR"
     chmod 0644 "${TMP_DIR}/${DEB}"
     DEBIAN_FRONTEND=noninteractive apt-get install -y "${TMP_DIR}/${DEB}"
-    enable_service
+    # postinst already restarted wmr-bridge once with the new files.
+    enable_service start
     exit 0
 fi
 
@@ -284,6 +295,13 @@ DEST_ETC="${DESTDIR}${ETC_DIR}"
 DEST_UDEV="${DESTDIR}${UDEV_DIR}"
 DEST_SYSTEMD="${DESTDIR}${SYSTEMD_DIR}"
 DEST_NETWORKMANAGER="${DESTDIR}${NETWORKMANAGER_DIR}"
+
+# Do not repeat the fresh-install Wi-Fi staging on a re-run over an existing
+# bridge: an upgrade must leave the working radio and its links alone.
+FRESH_INSTALL=1
+if [ -f "${DEST_PI}/wmr_bridge/__init__.py" ]; then
+    FRESH_INSTALL=0
+fi
 
 if [ "$SKIP_PRIVILEGED" != "1" ]; then
     # bluez is a .deb dependency, but a checkout/tarball install can run on a
@@ -332,6 +350,8 @@ install -m 0644 "${SCRIPT_DIR}/README.md" "${DEST_PI}/README.md"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.service" "${DEST_PI}/systemd/wmr-bridge.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade.path" "${DEST_PI}/systemd/wmr-bridge-upgrade.path"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade.service" "${DEST_PI}/systemd/wmr-bridge-upgrade.service"
+install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.path" "${DEST_PI}/systemd/wmr-bridge-bt-recover.path"
+install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.service" "${DEST_PI}/systemd/wmr-bridge-bt-recover.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.env.example" "${DEST_PI}/systemd/wmr-bridge.env.example"
 install -m 0644 "${SCRIPT_DIR}/udev/99-wmr-bridge.rules" "${DEST_PI}/udev/99-wmr-bridge.rules"
 
@@ -352,6 +372,8 @@ install -m 0644 "${SCRIPT_DIR}/udev/99-wmr-bridge.rules" "${DEST_UDEV}/99-wmr-br
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.service" "${DEST_SYSTEMD}/wmr-bridge.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade.path" "${DEST_SYSTEMD}/wmr-bridge-upgrade.path"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade.service" "${DEST_SYSTEMD}/wmr-bridge-upgrade.service"
+install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.path" "${DEST_SYSTEMD}/wmr-bridge-bt-recover.path"
+install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.service" "${DEST_SYSTEMD}/wmr-bridge-bt-recover.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.env.example" "${DEST_ETC}/wmr-bridge.env.example"
 install -m 0644 "${SCRIPT_DIR}/networkmanager/99-wmr-bridge-powersave.conf" \
     "${DEST_NETWORKMANAGER}/99-wmr-bridge-powersave.conf"
@@ -382,11 +404,10 @@ if [ "$SKIP_PRIVILEGED" != "1" ]; then
         [ "$SUDO_USER" != "root" ]; then
         usermod -aG "$SERVICE_USER" "$SUDO_USER" 2>/dev/null || true
     fi
-    # Stage the 5 GHz-preferred NetworkManager profile from the installed tree.
-    # --no-reconnect keeps an SSH session on the current link; the unit's own
-    # ExecStartPre applies the preference when the service starts. A missing
-    # nmcli (no NetworkManager) or a 2.4 GHz-only radio is non-fatal.
-    if command -v nmcli >/dev/null 2>&1 &&
+    # Stage the 5 GHz-preferred NetworkManager profile on a fresh install only.
+    # --no-reconnect keeps an SSH session on the current link. A missing nmcli
+    # (no NetworkManager) or a 2.4 GHz-only radio is non-fatal.
+    if [ "$FRESH_INSTALL" = "1" ] && command -v nmcli >/dev/null 2>&1 &&
         [ -f "${DEST_PI}/wmr_bridge/__main__.py" ]; then
         (cd "${DEST_PI}" && python3 -m wmr_bridge --prefer-5ghz --no-reconnect) ||
             echo "install.sh: could not stage the 5 GHz Wi-Fi preference (non-fatal)" >&2

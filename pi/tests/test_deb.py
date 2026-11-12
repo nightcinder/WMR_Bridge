@@ -90,8 +90,12 @@ class DebPackagingTests(unittest.TestCase):
                 "./etc/systemd/system/wmr-bridge.service",
                 "./etc/systemd/system/wmr-bridge-upgrade.path",
                 "./etc/systemd/system/wmr-bridge-upgrade.service",
+                "./etc/systemd/system/wmr-bridge-bt-recover.path",
+                "./etc/systemd/system/wmr-bridge-bt-recover.service",
                 "./opt/wmr-bridge/pi/systemd/wmr-bridge-upgrade.path",
                 "./opt/wmr-bridge/pi/systemd/wmr-bridge-upgrade.service",
+                "./opt/wmr-bridge/pi/systemd/wmr-bridge-bt-recover.path",
+                "./opt/wmr-bridge/pi/systemd/wmr-bridge-bt-recover.service",
                 "./etc/udev/rules.d/99-wmr-bridge.rules",
                 "./etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf",
             ):
@@ -125,6 +129,8 @@ class DebPackagingTests(unittest.TestCase):
             self.assertIn("systemctl restart bluetooth.service", postinst)
             self.assertIn("systemctl enable wmr-bridge-upgrade.path", postinst)
             self.assertIn("systemctl start wmr-bridge-upgrade.path", postinst)
+            self.assertIn("systemctl enable wmr-bridge-bt-recover.path", postinst)
+            self.assertIn("systemctl start wmr-bridge-bt-recover.path", postinst)
             self.assertIn("--prefer-5ghz --no-reconnect", postinst)
             self.assertNotIn(".pyc", contents)
 
@@ -426,6 +432,62 @@ class DebPackagingTests(unittest.TestCase):
             # adapter (and its bonds) alone instead of restarting bluetoothd.
             self.assertNotIn("systemctl restart bluetooth.service", second)
             self.assertIn("systemctl restart wmr-bridge.service", second)
+
+
+    def test_postinst_upgrade_skips_the_wifi_and_rfkill_reset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "dist"
+            subprocess.run(
+                [str(BUILD), "--out", str(out)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            deb = out / f"wmr-bridge_{VERSION}_all.deb"
+            root = Path(tmp) / "rootfs"
+            control = Path(tmp) / "control"
+            subprocess.run(["dpkg-deb", "-x", str(deb), str(root)], check=True)
+            subprocess.run(["dpkg-deb", "-e", str(deb), str(control)], check=True)
+
+            fake_bin = Path(tmp) / "bin"
+            fake_bin.mkdir()
+            calls = Path(tmp) / "calls.log"
+            for name, body in (
+                ("id", "exit 0"),
+                ("useradd", "exit 0"),
+                ("usermod", "exit 0"),
+                ("chown", "exit 0"),
+                ("udevadm", "exit 0"),
+                ("rfkill", f'echo "rfkill $*" >> "{calls}"'),
+                ("nmcli", f'echo "nmcli $*" >> "{calls}"'),
+                ("systemctl", f'echo "systemctl $*" >> "{calls}"'),
+            ):
+                shim = fake_bin / name
+                shim.write_text(f"#!/bin/sh\nset -eu\n{body}\n", encoding="utf-8")
+                shim.chmod(0o755)
+
+            systemd_run = Path(tmp) / "run-systemd"
+            systemd_run.mkdir()
+            env = {
+                **os.environ,
+                "DESTDIR": str(root),
+                "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}",
+                "WMR_SYSTEMD_RUN_DIR": str(systemd_run),
+            }
+            env.pop("WMR_SKIP_PRIVILEGED", None)
+            proc = subprocess.run(
+                ["sh", str(control / "postinst"), "configure", "0.0.1"],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            lines = calls.read_text(encoding="utf-8").splitlines()
+            self.assertFalse([line for line in lines if line.startswith("nmcli ")])
+            self.assertFalse([line for line in lines if line.startswith("rfkill ")])
+            restarts = [line for line in lines if line == "systemctl restart wmr-bridge.service"]
+            self.assertEqual(len(restarts), 1)
 
 
 if __name__ == "__main__":

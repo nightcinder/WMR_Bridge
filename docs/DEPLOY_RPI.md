@@ -91,7 +91,7 @@ If the link is at 2.4 GHz, reconnect to the 5 GHz SSID before continuing.
 
 ### Automatic 5 GHz preference
 
-The package applies a 5 GHz preference during install and on every service start. `postinst` and `install.sh` run `wmr-bridge --prefer-5ghz --no-reconnect`. This saves a profile named `<connection>-5ghz` without moving an active SSH session. The service unit runs `wmr-bridge --prefer-5ghz` before the daemon starts. That command may reconnect to the 5 GHz profile when a 5 GHz BSSID is visible.
+The package applies a 5 GHz preference once on a fresh install. `postinst` and `install.sh` run `wmr-bridge --prefer-5ghz --no-reconnect`. This saves a profile named `<connection>-5ghz` without moving an active SSH session. An upgrade does not repeat the Wi-Fi staging, and the service unit no longer runs `--prefer-5ghz` on every start, so a restart after an upgrade does not re-open or switch the Wi-Fi link while Bluetooth is coming up.
 
 The base connection stays in place as the 2.4 GHz fallback. A 2.4 GHz-only radio, such as the CYW43439 in a Pi Zero 2 W, is a warning-only no-op. The command reports that the adapter has no 5 GHz radio.
 
@@ -306,8 +306,11 @@ Both controllers should reconnect without re-pairing. An upgrade that does not
 change the BlueZ repair policy no longer restarts `bluetooth.service`, so a
 working adapter and its bonds stay live. If `bluetoothctl show` reports
 `Powered: no` and `btmon` logs `HCI Reset` answered by `Hardware Error` (0x10),
-the controller firmware crashed; reboot the Pi, and power-cycle the board if the
-error survives the reboot. A phone that lost its side of the bond re-pairs
+the controller firmware crashed. The daemon tries `Adapter1.Powered=True` and
+then asks the root `wmr-bridge-bt-recover.service` to restart `hciuart` and
+`bluetooth.service` and start the bridge again, at most once per cooldown. If
+the adapter stays off after that, reboot the Pi, and power-cycle the board if
+the error survives the reboot. A phone that lost its side of the bond re-pairs
 through `wmr-bridge pair` while the adapter is pairable.
 
 ## 8. Troubleshooting
