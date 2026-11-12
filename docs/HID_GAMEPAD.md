@@ -494,7 +494,7 @@ The Linux / Raspberry Pi bridge daemon (`pi/wmr_bridge`) exposes the controllers
 
 ### D-Bus GATT layout
 
-The daemon registers the HID service (`0x1812`) and the vendor service (`FF10`) with `org.bluez.GattManager1` under the application path `/org/wmr/bridge`. Every characteristic uses encrypted permissions because Android binds a HOGP device only over a bonded link.
+The daemon registers the HID service (`0x1812`), the vendor service (`FF10`) and the Device Information Service (`0x180A`) with `org.bluez.GattManager1` under the application path `/org/wmr/bridge`. Every HID and FF10 characteristic uses encrypted permissions because Android binds a HOGP device only over a bonded link; DIS stays plaintext-readable like the firmware's.
 
 | Object path | Interface | UUID | Flags | Content |
 |---|---|---|---|---|
@@ -505,8 +505,15 @@ The daemon registers the HID service (`0x1812`) and the vendor service (`FF10`) 
 | `/org/wmr/bridge/service/1812/2a4d` | `org.bluez.GattCharacteristic1` | `0x2A4D` | `read`, `notify`, `encrypt-read`, `encrypt-write` | Report (Input Report ID 1, 9 bytes) |
 | `/org/wmr/bridge/service/1812/2a4d/2908` | `org.bluez.GattDescriptor1` | `0x2908` | `read` | Report Reference descriptor (`0x0101`: Report ID 1, Input Report) |
 | `/org/wmr/bridge/service/1812/2a4e` | `org.bluez.GattCharacteristic1` | `0x2A4E` | `read`, `write`, `encrypt-read`, `encrypt-write` | Protocol Mode (`0x01` Report Protocol) |
+| `/org/wmr/bridge/service/180a` | `org.bluez.GattService1` | `0x180A` | (primary) | Device Information Service |
+| `/org/wmr/bridge/service/180a/2a29` | `org.bluez.GattCharacteristic1` | `0x2A29` | `read` | Manufacturer Name (`WMR Bridge`) |
+| `/org/wmr/bridge/service/180a/2a24` | `org.bluez.GattCharacteristic1` | `0x2A24` | `read` | Model Number (`WMR Bridge`) |
+| `/org/wmr/bridge/service/180a/2a26` | `org.bluez.GattCharacteristic1` | `0x2A26` | `read` | Firmware Revision (daemon version) |
+| `/org/wmr/bridge/service/180a/2a50` | `org.bluez.GattCharacteristic1` | `0x2A50` | `read` | PnP ID (`01 E5 02 01 00 00 01`, same as the firmware) |
 
 BlueZ generates the Report Client Characteristic Configuration Descriptor (`0x2902`) automatically.
+
+The DIS carries the same 7-byte PnP ID as `wmr_bridge.gatt` (vendor ID source `0x01`, vendor `0x02E5`, product and version `0x0001`). It is the stable VID/PID key that PadBridge uses to claim the bridge without matching the advertised device name. DIS values stay readable without a bond.
 
 ### Advertising and appearance
 
@@ -518,14 +525,15 @@ Advertising uses two interval tiers:
 - Idle tier (zero Classic controllers connected): intervals run from 150 to 250 ms. This fast rate lets a phone discover the bridge quickly.
 - Active tier (at least one Classic controller connected): intervals switch to 1000 to 1285 ms. The switch occurs after a controller connects and opens its HID channel. This slower rate preserves radio airtime for the two Classic Bluetooth HID links.
 
-### Stream gating and automatic suppression
+### Stream gating and pacing
 
-The bridge gates HID reports to protect input integrity and avoid duplicate input:
+The bridge gates HID reports to protect input integrity and keep the gamepad available:
 - Zero controllers connected: the bridge sends no HID input reports.
 - Unsubscribed CCCD: the bridge sends no reports until the central enables notifications on the Report characteristic CCCD. When enabled with a connected controller, the bridge sends one neutral report.
-- Active stream suppression: HID notifications pause automatically when a client subscribes to a TCP or WebSocket stream. HID notifications also pause when a central subscribes to GATT notifications on `FF11`, `FF12`, or `FF14`.
-- Neutral report on transition: when suppression starts, the bridge sends one neutral report. The report clears all buttons, centers the hat switch, and sets axes to zero. This releases any held input on the host.
-- Stream clearance: when all stream clients disconnect and all `FF11`, `FF12`, and `FF14` subscriptions stop, suppression ends. Reports resume on the next controller sample.
+- Streams keep HID active: reports continue while a client subscribes to a TCP or WebSocket stream, and while a central subscribes to GATT notifications on `FF11`, `FF12`, or `FF14`.
+- Pacing: without a stream the bridge sends at most one HID report per 10 ms. While any stream is active, including TCP, it uses a 20 ms floor (50 Hz) because Pi Wi-Fi and Bluetooth share one radio.
+- Send slots: while an `FF11`, `FF12`, or `FF14` frame is waiting, HID never takes two send slots in a row, so the stream keeps its share of the BLE link.
+- Stuck input: a hand with no sample for 250 ms is released with one neutral report.
 
 ### Pairing rules and CLI flags
 

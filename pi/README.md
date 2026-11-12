@@ -172,17 +172,22 @@ The BLE peripheral exposes the GATT hierarchy through dbus-next under the applic
 | `/org/wmr/bridge/service/1812/2a4d` | `org.bluez.GattCharacteristic1` | `0x2A4D` | `read`, `notify`, `encrypt-read`, `encrypt-write` | Report (Input Report ID 1, 9 bytes) |
 | `/org/wmr/bridge/service/1812/2a4d/2908` | `org.bluez.GattDescriptor1` | `0x2908` | `read` | Report Reference descriptor (`0x0101`: Report ID 1, Input Report) |
 | `/org/wmr/bridge/service/1812/2a4e` | `org.bluez.GattCharacteristic1` | `0x2A4E` | `read`, `write`, `encrypt-read`, `encrypt-write` | Protocol Mode (`0x01` Report Protocol) |
+| `/org/wmr/bridge/service/180a` | `org.bluez.GattService1` | `0x180A` | (primary) | Device Information Service |
+| `/org/wmr/bridge/service/180a/2a29` | `org.bluez.GattCharacteristic1` | `0x2A29` | `read` | Manufacturer Name (`WMR Bridge`) |
+| `/org/wmr/bridge/service/180a/2a24` | `org.bluez.GattCharacteristic1` | `0x2A24` | `read` | Model Number (`WMR Bridge`) |
+| `/org/wmr/bridge/service/180a/2a26` | `org.bluez.GattCharacteristic1` | `0x2A26` | `read` | Firmware Revision (daemon version) |
+| `/org/wmr/bridge/service/180a/2a50` | `org.bluez.GattCharacteristic1` | `0x2A50` | `read` | PnP ID (`01 E5 02 01 00 00 01`, same as the firmware) |
 
-All HID characteristics require encryption (`encrypt-read`, `encrypt-write`) because HOGP requires a bonded link. BlueZ creates the Report CCCD (`0x2902`) automatically. For report byte layouts and mapping rules, read [`docs/HID_GAMEPAD.md`](../docs/HID_GAMEPAD.md).
+All HID characteristics require encryption (`encrypt-read`, `encrypt-write`) because HOGP requires a bonded link. BlueZ creates the Report CCCD (`0x2902`) automatically. The DIS values stay readable without a bond, like the firmware's DIS. The PnP ID is the stable VID/PID key: PadBridge claims the bridge by it instead of matching the advertised name. For report byte layouts and mapping rules, read [`docs/HID_GAMEPAD.md`](../docs/HID_GAMEPAD.md).
 
-### Stream gating and suppression
+### Stream gating and pacing
 
 The bridge applies these rules to HID gamepad reports:
 - The bridge sends no HID reports before a Classic controller connects.
 - The bridge sends no HID reports before the phone enables the Report CCCD. When enabled with a connected controller, the bridge emits one neutral report.
-- When a WebSocket client or an FF11/FF12/FF14 subscriber is active, HID notifications pause automatically.
-- On transitioning to suppressed, the bridge emits one neutral report to release any held buttons or deflections.
-- When stream clients disconnect and FF11/FF12/FF14 subscriptions stop, HID notifications resume with the next controller sample.
+- HID reports keep flowing while a WebSocket/TCP client or an FF11/FF12/FF14 subscriber is active. TCP and BLE share one radio on the Pi, so the bridge paces HID at 20 ms (50 Hz) during a stream; without a stream the floor is 10 ms.
+- While an FF11/FF12/FF14 frame is waiting, HID never takes two send slots in a row, so the stream keeps its share of the BLE link.
+- A hand with no sample for 250 ms is released with one neutral report.
 
 ### BLE CLI flags
 

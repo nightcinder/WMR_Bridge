@@ -401,7 +401,6 @@ class Bridge:
         self.subscribers: set[Subscriber] = set()
         self.sinks: list[FrameSink] = []
         self._hand_listeners: list[Callable[[], None]] = []
-        self._stream_listeners: list[Callable[[], None]] = []
         self.started_us = time.monotonic_ns() // 1000
         self.stats_dropped = 0
         self.stats_batches = 0
@@ -438,30 +437,11 @@ class Bridge:
         except ValueError:
             pass
 
-    def add_stream_listener(self, listener: Callable[[], None]) -> None:
-        """Watch TCP subscribe/unsubscribe events (for BLE HID suppression)."""
-
-        if listener not in self._stream_listeners:
-            self._stream_listeners.append(listener)
-
-    def remove_stream_listener(self, listener: Callable[[], None]) -> None:
-        try:
-            self._stream_listeners.remove(listener)
-        except ValueError:
-            pass
-
     @property
     def stream_client_active(self) -> bool:
         """True while a WebSocket client is subscribed to any stream."""
 
         return any(subscriber.stream for subscriber in self.subscribers)
-
-    def _note_stream_state(self) -> None:
-        for listener in tuple(self._stream_listeners):
-            try:
-                listener()
-            except Exception:
-                LOG.exception("stream listener failed")
 
     def ingest(
         self,
@@ -869,7 +849,6 @@ class Bridge:
         finally:
             subscriber.close()
             self.subscribers.discard(subscriber)
-            self._note_stream_state()
             LOG.info("client disconnected: %s", peer)
             if not websocket.closed:
                 await websocket.close()
@@ -912,7 +891,6 @@ class Bridge:
                 await subscriber.send_json({"type": "subscribed", "stream": stream})
                 return True
             subscriber.stream = stream
-            self._note_stream_state()
             await subscriber.send_json(
                 {
                     "type": "subscribed",
@@ -927,7 +905,6 @@ class Bridge:
 
         if kind == "unsubscribe":
             subscriber.reset_stream()
-            self._note_stream_state()
             await subscriber.send_json({"type": "unsubscribed"})
             LOG.info("client %s unsubscribed", subscriber.websocket.peer)
             return True
