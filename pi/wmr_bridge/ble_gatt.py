@@ -1866,6 +1866,10 @@ class BluezGattPeripheral:
             await self.backend.stop()
         except Exception as exc:
             LOG.debug("could not tear down the stopped BlueZ backend: %s", exc)
+        else:
+            # Nothing is registered now; keep `advertising` honest if the
+            # re-registration below fails and the watchdog retries later.
+            self._advertised_tier = None
         try:
             await self._connect_backend()
         except Exception as exc:

@@ -153,8 +153,10 @@ journalctl -u wmr-bridge -n 200 --no-pager
 
 `auto-pair: Bluetooth adapter is not usable yet` means the adapter is still
 rfkill-blocked or `bluetoothd` is down. A stock Pi OS image soft-blocks
-Bluetooth at boot; the systemd unit clears that block as root before start and
-the pairer retries with a 30 s backoff instead of disabling itself. Check
+Bluetooth at boot; the bridge reports `Powered: no`, the root
+`wmr-bridge-bt-recover.service` unblocks it and restarts `hciuart` and
+`bluetooth`, and the pairer retries with a 30 s backoff instead of disabling
+itself. Check
 `rfkill list bluetooth` and `systemctl status bluetooth`. A `could not scan;
 retrying with backoff` line names a scan failure such as a resetting adapter;
 the pairer re-probes power and retries, so pairing resumes when the adapter

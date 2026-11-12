@@ -601,6 +601,35 @@ class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await peripheral.close()
 
+    async def test_a_failed_reregistration_does_not_report_advertising(self) -> None:
+        class FlakyBackend(FakeBackend):
+            fail_start = False
+
+            async def start(self, app: GattApplication) -> None:
+                if self.fail_start:
+                    self.start_calls += 1
+                    raise RuntimeError("bluez unavailable")
+                await super().start(app)
+
+        backend = FlakyBackend()
+        peripheral = BluezGattPeripheral(
+            Bridge(),
+            backend=backend,
+            hosts=["192.0.2.10"],
+            pairing_window_s=0.0,
+            power_check_interval_s=3600.0,
+            recovery_wait_s=0.0,
+        )
+        await peripheral.start()
+        try:
+            self.assertTrue(peripheral.advertising)
+            backend.powered = False
+            backend.fail_start = True
+            await peripheral._recover_adapter_power()
+            self.assertFalse(peripheral.advertising)
+        finally:
+            await peripheral.close()
+
     async def test_a_burst_of_hand_events_reregisters_the_advertisement_once(self) -> None:
         backend = FakeBackend()
         bridge = Bridge()
