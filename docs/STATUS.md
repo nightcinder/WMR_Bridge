@@ -21,7 +21,8 @@ install to get it. The package also keeps the per-hand activity baseline
 (ONY-1279) and the dbus-next GATT notification fix (ONY-1270). It keeps the
 0.3.23 Just Works re-pair fix (ONY-1253): the installer and `.deb` post-install
 script set `JustWorksRepairing = confirm` in `/etc/bluetooth/main.conf` and
-restart `bluetooth.service`, so bluetoothd sends the kernel's Just Works confirm
+restart `bluetooth.service` only when that policy changes, so bluetoothd sends
+the kernel's Just Works confirm
 hint to the bridge agent instead of refusing it. The re-pair still needs an open
 pairing window (the 180 s boot window,
 `wmr-bridge pair`, or `--ble-continuous-pairing`). It keeps the 0.3.22
