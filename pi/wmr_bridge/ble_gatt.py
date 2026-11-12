@@ -29,9 +29,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import struct
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from . import __version__
@@ -119,7 +121,7 @@ HID_MIN_INTERVAL_S = 0.010
 # shared Pi Wi-Fi/BT radio keeps room for the stream.
 HID_STREAM_MIN_INTERVAL_S = 0.020
 # Same 7-byte PnP ID as wmr_bridge.gatt: vendor ID source 1 (Bluetooth SIG),
-# vendor 0x02E5 (Espressif), product 0x0001, version 0x0001. PadBridge claims
+# vendor 0x02E5 (Espressif), product 0x0001, version 0x0100. PadBridge claims
 # the bridge by this stable key instead of its advertised name.
 DIS_PNP_ID_VALUE = bytes((0x01, 0xE5, 0x02, 0x01, 0x00, 0x00, 0x01))
 # A hand with no sample for this long is released, matching WMR_HID_STALE_MS.
@@ -142,6 +144,24 @@ DEFAULT_PAIRING_WINDOW_S = 180.0
 # the HID report, so closing the window on the first bond check can release the
 # agent while the phone is still using it.
 PAIRING_AGENT_GRACE_S = 10.0
+# A connect/disconnect sometimes lands in a burst (hidraw probe, reconnect,
+# HiD teardown). Re-registering the advertisement on every event races
+# bluetoothd and surfaces as "descriptor write: RequestBusy" on the phone, so
+# coalesce the burst before touching LEAdvertisingManager1.
+ADVERTISING_DEBOUNCE_S = 1.0
+# Adapter1.Powered can go False after a controller firmware crash. The daemon
+# first tries to set it back itself, then asks the root recovery unit to
+# reload the UART attach and bluetoothd. Check at this interval while running.
+ADAPTER_POWER_CHECK_INTERVAL_S = 30.0
+# How long to give the root unit (hciuart + bluetoothd restart) before the
+# daemon reconnects and re-registers GATT/advertising.
+ADAPTER_RECOVERY_WAIT_S = 6.0
+# At most one root recovery request per window even if the adapter stays off:
+# a crash loop must not restart bluetoothd forever.
+ADAPTER_RECOVERY_COOLDOWN_S = 300.0
+DEFAULT_BT_RECOVER_TRIGGER = "/var/lib/wmr-bridge/bt-recover.trigger"
+# One self-power attempt, then the root unit, then one reconnect attempt.
+ADAPTER_RECOVERY_ATTEMPTS = 2
 # Classic HID profile UUID. A Device1 entry that lists it is a BR/EDR bond
 # (the WMR controllers), never an LE central's bond.
 CLASSIC_HID_UUID = "00001124-0000-1000-8000-00805f9b34fb"
@@ -342,6 +362,14 @@ def log_just_works_repairing(
         )
 
 
+class AdapterRecoveryPending(RuntimeError):
+    """The adapter is off and the root recovery unit was asked to restart it."""
+
+    def __init__(self, message: str, retry_after: float = ADAPTER_RECOVERY_WAIT_S) -> None:
+        super().__init__(message)
+        self.retry_after = max(0.0, retry_after)
+
+
 class GattBackend(Protocol):
     """The BlueZ side of the peripheral, kept injectable for the host tests."""
 
@@ -356,6 +384,12 @@ class GattBackend(Protocol):
     async def has_le_bond(self) -> bool: ...
 
     async def refresh_advertisement(self) -> None: ...
+
+    async def adapter_powered(self) -> bool: ...
+
+    async def power_on(self) -> bool: ...
+
+    def request_recovery(self) -> bool: ...
 
     def notify(self, uuid: str, value: bytes) -> None: ...
 
@@ -1361,7 +1395,14 @@ def export_gatt_application(
 class DbusGattBackend:
     """``org.bluez.GattManager1`` / ``LEAdvertisingManager1`` implementation."""
 
-    def __init__(self, adapter: str = "hci0") -> None:
+    def __init__(
+        self,
+        adapter: str = "hci0",
+        *,
+        recover_trigger: str | Path | None = None,
+        recovery_cooldown_s: float = ADAPTER_RECOVERY_COOLDOWN_S,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self.adapter = adapter
         self._bus: Any = None
         self._advertisement: Any = None
@@ -1373,6 +1414,13 @@ class DbusGattBackend:
         self._agent_default = False
         self._exported: list[Any] = []
         self._characteristics: dict[str, Any] = {}
+        self._recover_trigger = Path(
+            recover_trigger
+            or os.environ.get("WMR_BRIDGE_BT_RECOVER_TRIGGER", DEFAULT_BT_RECOVER_TRIGGER)
+        )
+        self._recovery_cooldown_s = max(0.0, recovery_cooldown_s)
+        self._last_recovery_request: float | None = None
+        self._clock = clock
 
     async def start(self, app: GattApplication) -> None:
         log_just_works_repairing()
@@ -1402,6 +1450,11 @@ class DbusGattBackend:
             self._bus = None
             raise RuntimeError(f"BlueZ adapter {self.adapter} is not available: {exc}") from exc
 
+        if not await self._ensure_powered():
+            await self.stop()
+            raise AdapterRecoveryPending(
+                f"BlueZ adapter {self.adapter} reports Powered=no"
+            )
 
         self._advertisement = interfaces["Advertisement"]()
         bus.export(ADVERTISEMENT_PATH, self._advertisement)
@@ -1430,6 +1483,82 @@ class DbusGattBackend:
         except Exception:
             await self.stop()
             raise
+
+    async def adapter_powered(self) -> bool:
+        """Read ``Adapter1.Powered``; an unreadable adapter counts as off."""
+
+        if self._adapter_interface is None:
+            return False
+        try:
+            return bool(await self._adapter_interface.get_powered())
+        except Exception as exc:
+            LOG.warning("could not read Adapter1.Powered: %s", exc)
+            return False
+
+    async def power_on(self) -> bool:
+        """Set ``Adapter1.Powered=True`` and report whether it stuck."""
+
+        if self._adapter_interface is None:
+            return False
+        try:
+            await self._adapter_interface.set_powered(True)
+        except Exception as exc:
+            LOG.warning("could not set Adapter1.Powered=True: %s", exc)
+            return False
+        powered = await self.adapter_powered()
+        if powered:
+            LOG.info("Bluetooth adapter %s Powered -> yes", self.adapter)
+        return powered
+
+    def request_recovery(self) -> bool:
+        """Ask the root unit to restart hciuart/bluetoothd, at most once per window.
+
+        The service user cannot restart system units. The path unit watches this
+        empty trigger file, exactly like the daemon's upgrade trigger, so the
+        unprivileged daemon has no way to pass a command or argument to root.
+        """
+
+        now = self._clock()
+        if (
+            self._last_recovery_request is not None
+            and now - self._last_recovery_request < self._recovery_cooldown_s
+        ):
+            LOG.warning(
+                "Bluetooth adapter %s still reports Powered=no; recovery cooldown "
+                "active for another %.0f s",
+                self.adapter,
+                self._recovery_cooldown_s - (now - self._last_recovery_request),
+            )
+            return False
+        try:
+            self._recover_trigger.parent.mkdir(parents=True, exist_ok=True)
+            self._recover_trigger.unlink(missing_ok=True)
+            self._recover_trigger.write_text("", encoding="utf-8")
+        except OSError as exc:
+            LOG.warning(
+                "could not request Bluetooth recovery via %s: %s",
+                self._recover_trigger,
+                exc,
+            )
+            return False
+        self._last_recovery_request = now
+        LOG.warning(
+            "Bluetooth adapter %s reports Powered=no; triggered "
+            "wmr-bridge-bt-recover.service (hciuart + bluetooth restart)",
+            self.adapter,
+        )
+        return True
+
+    async def _ensure_powered(self) -> bool:
+        """Power the adapter on, or ask root to reload the controller attach."""
+
+        if await self.adapter_powered():
+            return True
+        LOG.warning("Bluetooth adapter %s reports Powered=no; powering it on", self.adapter)
+        if await self.power_on():
+            return True
+        self.request_recovery()
+        return False
 
     async def _claim_agent(self) -> None:
         """Register the Just Works agent and make it the adapter default.
@@ -1657,6 +1786,9 @@ class BluezGattPeripheral:
         fragment_capacity: int = DEFAULT_FRAGMENT_CAPACITY,
         control_handler: Callable[[int, int | None], int] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        advertising_debounce_s: float = ADVERTISING_DEBOUNCE_S,
+        power_check_interval_s: float = ADAPTER_POWER_CHECK_INTERVAL_S,
+        recovery_wait_s: float = ADAPTER_RECOVERY_WAIT_S,
     ) -> None:
         self.app = GattApplication(
             bridge,
@@ -1682,8 +1814,12 @@ class BluezGattPeripheral:
         self._bond_task: asyncio.Task[None] | None = None
         self._advertising_task: asyncio.Task[None] | None = None
         self._agent_task: asyncio.Task[None] | None = None
+        self._power_task: asyncio.Task[None] | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._advertising_dirty = False
+        self._advertising_debounce_s = max(0.0, advertising_debounce_s)
+        self._power_check_interval_s = max(0.001, power_check_interval_s)
+        self._recovery_wait_s = max(0.0, recovery_wait_s)
         self._advertised_tier = self.app.advertising_tier
         self._pairable_applied: bool | None = None
         self._pairable_reason = "not started"
@@ -1691,6 +1827,21 @@ class BluezGattPeripheral:
     @property
     def started(self) -> bool:
         return self._started
+
+    @property
+    def advertising(self) -> bool:
+        """True when the advertisement is registered with BlueZ."""
+
+        return self._started and self._advertised_tier is not None
+
+    async def adapter_powered(self) -> bool:
+        """Adapter power state for diagnostics; unknown counts as on."""
+
+        try:
+            return await self.backend.adapter_powered()
+        except Exception as exc:
+            LOG.debug("could not read the adapter power state: %s", exc)
+            return True
 
     def pairing_window_open(self) -> bool:
         """True while the adapter is pairable."""
@@ -1717,7 +1868,7 @@ class BluezGattPeripheral:
         if self._started:
             return
         self._loop = asyncio.get_running_loop()
-        await self.backend.start(self.app)
+        await self._connect_backend()
         self.app.set_emitter(self.backend.notify)
         self.app.bridge.add_sink(self.app)
         self.app.bridge.add_hand_listener(self._on_hand_state_changed)
@@ -1734,11 +1885,85 @@ class BluezGattPeripheral:
         self._pairable_applied = None
         await self.refresh_pairing_state()
         self._schedule_pairing_refresh()
+        self._power_task = asyncio.create_task(self._watch_adapter_power())
         LOG.info(
             "BLE fallback advertising FF10 as %s (bridge_id %s)",
             self.app.name,
             self.app.bridge.bridge_id,
         )
+
+    async def _connect_backend(self) -> None:
+        """Start BlueZ, retrying once after the root unit restarts bluetoothd."""
+
+        attempts = ADAPTER_RECOVERY_ATTEMPTS
+        for attempt in range(attempts):
+            try:
+                await self.backend.start(self.app)
+                return
+            except AdapterRecoveryPending as exc:
+                if attempt + 1 >= attempts:
+                    raise
+                wait = max(self._recovery_wait_s, exc.retry_after)
+                LOG.warning(
+                    "BLE adapter is not ready (%s); retrying in %.1f s", exc, wait
+                )
+                await asyncio.sleep(wait)
+
+    async def _watch_adapter_power(self) -> None:
+        """Reconnect GATT/advertising if the adapter powers off while running."""
+
+        try:
+            while self._started:
+                await asyncio.sleep(self._power_check_interval_s)
+                if not self._started:
+                    return
+                try:
+                    if await self.backend.adapter_powered():
+                        continue
+                except Exception as exc:
+                    LOG.debug("could not read the adapter power state: %s", exc)
+                    continue
+                await self._recover_adapter_power()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # keep the daemon alive; the next start retries
+            LOG.warning("BLE adapter power watchdog stopped: %s", exc)
+
+    async def _recover_adapter_power(self) -> None:
+        LOG.warning("Bluetooth adapter reports Powered=no while running; recovering")
+        recovered = False
+        try:
+            recovered = await self.backend.power_on()
+        except Exception as exc:
+            LOG.warning("could not power the adapter back on: %s", exc)
+        if not recovered:
+            if not self.backend.request_recovery():
+                LOG.warning(
+                    "Bluetooth adapter recovery skipped (cooldown or no trigger path)"
+                )
+            await asyncio.sleep(self._recovery_wait_s)
+        try:
+            await self.backend.stop()
+        except Exception as exc:
+            LOG.debug("could not tear down the stopped BlueZ backend: %s", exc)
+        else:
+            # Nothing is registered now; keep `advertising` honest if the
+            # re-registration below fails and the watchdog retries later.
+            self._advertised_tier = None
+        try:
+            await self._connect_backend()
+        except Exception as exc:
+            LOG.warning(
+                "could not re-register BLE after adapter recovery: %s; "
+                "the next power check retries",
+                exc,
+            )
+            return
+        # A fresh backend registration must not trust the old tier shadow.
+        self._advertised_tier = self.app.advertising_tier
+        self._pairable_applied = None
+        await self.refresh_pairing_state()
+        LOG.info("BLE GATT and advertising re-registered after adapter recovery")
 
     # ---- advertising interval -------------------------------------------
 
@@ -1747,17 +1972,32 @@ class BluezGattPeripheral:
         # Coalesce rather than drop: a connect/disconnect that lands while a
         # tier switch is in flight must still be applied afterwards.
         self._advertising_dirty = True
+        self._schedule_advertising()
+
+    def _schedule_advertising(self) -> None:
         if self._advertising_task is not None and not self._advertising_task.done():
             return
         self._advertising_task = asyncio.create_task(self._drain_advertising())
 
     async def _drain_advertising(self) -> None:
+        cancelled = False
         try:
-            while self._advertising_dirty:
+            while True:
+                # Let a burst of hand events settle before re-registering; the
+                # phone sees RequestBusy when BlueZ is mid-unregister.
+                if self._advertising_debounce_s > 0:
+                    await asyncio.sleep(self._advertising_debounce_s)
+                if not self._advertising_dirty:
+                    return
                 self._advertising_dirty = False
                 await self.refresh_advertising()
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
         finally:
             self._advertising_task = None
+            if not cancelled and self._advertising_dirty and self._started:
+                self._schedule_advertising()
 
     async def refresh_advertising(self) -> None:
         """Re-register until the advertisement matches the current tier.
@@ -1953,12 +2193,18 @@ class BluezGattPeripheral:
 
     def _cancel_tasks(self) -> None:
         self._cancel_pairing_task()
-        for task in (self._bond_task, self._advertising_task, self._agent_task):
+        for task in (
+            self._bond_task,
+            self._advertising_task,
+            self._agent_task,
+            self._power_task,
+        ):
             if task is not None:
                 task.cancel()
         self._bond_task = None
         self._advertising_task = None
         self._agent_task = None
+        self._power_task = None
 
     async def close(self) -> None:
         if self._started:

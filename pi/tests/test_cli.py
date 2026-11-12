@@ -720,6 +720,73 @@ class PairCommandTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await server.close()
 
+    async def test_pair_exits_one_when_the_adapter_is_powered_off(self) -> None:
+        args = _build_parser().parse_args(
+            ["pair", "--port", str(self.server.port), "--token", "secret"]
+        )
+        with redirect_stdout(io.StringIO()) as out:
+            code = await _pair_window(
+                args,
+                adapter_reader=lambda: BluezAdapter(
+                    "11:22:33:44:55:66", "wmr-pi", powered=False
+                ),
+            )
+        self.assertEqual(code, 1)
+        self.assertIn("Powered: no", out.getvalue())
+        self.assertIn("wmr-bridge-bt-recover.service", out.getvalue())
+        self.assertEqual(self.calls, [])
+
+    async def test_pair_exits_one_when_the_daemon_reports_no_power(self) -> None:
+        async def unpowered(action: str, seconds: float | None) -> dict:
+            return {
+                "open": False,
+                "manual": False,
+                "reason": "adapter powered off",
+                "powered": False,
+                "advertising": False,
+                "seconds": seconds,
+            }
+
+        bridge = Bridge(token="secret")
+        bridge.pairing_handler = unpowered
+        server = BridgeServer(bridge, host="127.0.0.1", port=0)
+        await server.start()
+        try:
+            args = _build_parser().parse_args(
+                ["pair", "--port", str(server.port), "--token", "secret"]
+            )
+            with redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(await _pair_window(args), 1)
+            self.assertIn("Powered: no", out.getvalue())
+            self.assertIn("wmr-bridge-bt-recover.service", out.getvalue())
+        finally:
+            await server.close()
+
+    async def test_pair_exits_one_when_the_daemon_is_not_advertising(self) -> None:
+        async def no_advertisement(action: str, seconds: float | None) -> dict:
+            return {
+                "open": False,
+                "manual": False,
+                "reason": "advertisement not registered",
+                "powered": True,
+                "advertising": False,
+                "seconds": seconds,
+            }
+
+        bridge = Bridge(token="secret")
+        bridge.pairing_handler = no_advertisement
+        server = BridgeServer(bridge, host="127.0.0.1", port=0)
+        await server.start()
+        try:
+            args = _build_parser().parse_args(
+                ["pair", "--port", str(server.port), "--token", "secret"]
+            )
+            with redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(await _pair_window(args), 1)
+            self.assertIn("not advertising", out.getvalue())
+        finally:
+            await server.close()
+
     async def test_pair_close_succeeds_while_the_stored_bond_rule_stays_pairable(
         self,
     ) -> None:

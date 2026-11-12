@@ -97,9 +97,8 @@ is in use, and moving that encoder to the same table is a companion follow-up.
 - **No app needed:** HID is generated from every controller report, before and
   independently of the FF10 stream mode. A phone with no FF10 subscription
   still gets input.
-- **Coalescing:** samples between pump ticks are collapsed. At most one HID
-  report is sent per 10 ms, an unchanged report is not resent, and while a
-  FF10 stream frame waits the pump alternates HID and stream sends.
+- **Coalescing:** samples between pump ticks are collapsed. An unchanged
+  report is not resent. At most one HID report is sent per 10 ms.
 - **Stuck input:** a hand with no sample for 250 ms is released, and a neutral
   report is sent once. The report history and both hands are cleared on BLE
   connect and disconnect, so neither a controller reconnect nor a phone
@@ -143,10 +142,12 @@ is in use, and moving that encoder to the same table is a companion follow-up.
   link (`ENCRYPTION_KEY_SIZE_16`), so Android pairs before subscribing.
 - **Device Information Service:** `wmr_bridge.gatt` exposes DIS `0x180A` with
   manufacturer, model, firmware revision (the `PROJECT_VER` string) and a
-  7-byte PnP ID. Android reads the PnP ID while it opens a HOGP device. The
-  `0.2.4-25` trace's last read-by-type was first taken for that lookup, but the
-  UUID-printing `0.2.4-29` trace showed it was `0x2A04`, not `0x2A50`. DIS is
-  harmless metadata; it was not the cause of the drop.
+  7-byte PnP ID (`0x2A50`). Android reads the PnP ID while it opens a HOGP
+  device. The PnP ID stays fixed (VID `0x02E5`, PID `0x0001`) so a host can
+  claim the device by VID/PID. The `0.2.4-25` trace's last read-by-type was
+  first taken for that lookup, but the UUID-printing `0.2.4-29` trace showed
+  it was `0x2A04`, not `0x2A50`. DIS is harmless metadata; it was not the
+  cause of the drop.
 - **Peripheral preferred connection parameters:** the `0.2.4-29` trace ends
   with `read-by-type 0x0001 .. 0xffff type=0x2a04 uuid_len=2`, answered
   `attribute not found`. Android's GAP client reads `0x2A04` after service
@@ -513,7 +514,7 @@ The daemon registers the HID service (`0x1812`), the vendor service (`FF10`) and
 
 BlueZ generates the Report Client Characteristic Configuration Descriptor (`0x2902`) automatically.
 
-The DIS carries the same 7-byte PnP ID as `wmr_bridge.gatt` (vendor ID source `0x01`, vendor `0x02E5`, product and version `0x0001`). It is the stable VID/PID key that PadBridge uses to claim the bridge without matching the advertised device name. DIS values stay readable without a bond.
+The DIS carries the same 7-byte PnP ID as `wmr_bridge.gatt` (vendor ID source `0x01`, vendor `0x02E5`, product `0x0001`, product version `0x0100`). It is the stable VID/PID key that PadBridge uses to claim the bridge without matching the advertised device name. DIS values stay readable without a bond.
 
 ### Advertising and appearance
 
@@ -534,6 +535,9 @@ The bridge gates HID reports to protect input integrity and keep the gamepad ava
 - Pacing: without a stream the bridge sends at most one HID report per 10 ms. While any stream is active, including TCP, it uses a 20 ms floor (50 Hz) because Pi Wi-Fi and Bluetooth share one radio.
 - Send slots: while an `FF11`, `FF12`, or `FF14` frame is waiting, HID never takes two send slots in a row, so the stream keeps its share of the BLE link.
 - Stuck input: a hand with no sample for 250 ms is released with one neutral report.
+- Duplicate input: DroidDeck removes duplicate input in-app with
+  `PadBridge.setExcluded()`. The DIS PnP ID (`0x2A50`) stays fixed (VID
+  `0x02E5`, PID `0x0001`) so a host can claim the device by VID/PID.
 
 ### Pairing rules and CLI flags
 

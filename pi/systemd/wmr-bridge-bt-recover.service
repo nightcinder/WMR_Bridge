@@ -1,0 +1,29 @@
+[Unit]
+Description=Recover a powered-off WMR Bridge Bluetooth adapter
+Documentation=file:/opt/wmr-bridge/docs/PI_BRIDGE.md
+# hciuart attaches the Pi's UART Bluetooth controller; restarting bluetoothd
+# alone does not reload a crashed Broadcom/Cypress firmware. Rate-limit
+# repeated triggers from a still-dead adapter.
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+User=root
+# Root-owned lock directory. The state directory is writable by the service
+# user, and root's flock would follow a symlink planted at the lock name, so
+# the lock must live in a directory only root can create or rename.
+RuntimeDirectory=wmr-bridge-bt-recover
+# The trigger file is intentionally ignored as input. Remove it before running
+# so a failed recovery cannot re-trigger itself and nothing written to it can
+# reach a shell command.
+ExecStartPre=/bin/rm -f /var/lib/wmr-bridge/bt-recover.trigger
+# Stop the daemon before touching bluetoothd: a live GATT application,
+# advertisement and Classic scan racing the restart can wedge the combo
+# controller. rfkill clears the boot-time soft block that the unprivileged
+# daemon cannot clear. hciuart reloads the UART attach, then bluetoothd
+# rediscovers the adapter. Start the daemon again afterwards; it re-registers
+# GATT and advertising.
+ExecStart=/usr/bin/flock -n /run/wmr-bridge-bt-recover/recover.lock /bin/sh -c "systemctl stop wmr-bridge.service || true; rfkill unblock bluetooth 2>/dev/null || true; systemctl restart hciuart.service 2>/dev/null || true; systemctl restart bluetooth.service || true; systemctl start wmr-bridge.service || true"
+TimeoutStartSec=120
+Nice=10

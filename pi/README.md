@@ -137,7 +137,7 @@ and owned by `wmr:wmr`.
 
 ## Wi-Fi uplink preference
 
-The service runs `wmr-bridge --prefer-5ghz` before the daemon starts. The command clones the active NetworkManager connection into `<connection>-5ghz`. It restricts the clone to 5 GHz. It sets the clone's autoconnect priority to 50. The base profile stays as the 2.4 GHz fallback. The command switches only when a 5 GHz BSSID is visible. A failed switch leaves the current connection in place. Pass `--no-reconnect` to save the profile without switching.
+The installer runs `wmr-bridge --prefer-5ghz` once on a fresh install; the service does not repeat it on every start. The command clones the active NetworkManager connection into `<connection>-5ghz`. It restricts the clone to 5 GHz. It sets the clone's autoconnect priority to 50. The base profile stays as the 2.4 GHz fallback. The command switches only when a 5 GHz BSSID is visible. A failed switch leaves the current connection in place. Pass `--no-reconnect` to save the profile without switching.
 
 `prefer_5ghz` also lowers the route metric of the wired profile, so an Ethernet uplink wins over 5 GHz Wi-Fi and 5 GHz Wi-Fi wins over 2.4 GHz Wi-Fi. It uses route metrics (IPv4 and IPv6), not only autoconnect priority.
 
@@ -188,6 +188,7 @@ The bridge applies these rules to HID gamepad reports:
 - HID reports keep flowing while a WebSocket/TCP client or an FF11/FF12/FF14 subscriber is active. TCP and BLE share one radio on the Pi, so the bridge paces HID at 20 ms (50 Hz) during a stream; without a stream the floor is 10 ms.
 - While an FF11/FF12/FF14 frame is waiting, HID never takes two send slots in a row, so the stream keeps its share of the BLE link.
 - A hand with no sample for 250 ms is released with one neutral report.
+- The DIS PnP ID (`0x2A50`) stays fixed (VID `0x02E5`, PID `0x0001`) so a host can claim the device by VID/PID.
 
 ### BLE CLI flags
 

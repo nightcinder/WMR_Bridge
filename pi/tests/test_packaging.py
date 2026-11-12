@@ -16,6 +16,8 @@ INSTALL_SH = PI_DIR / "install.sh"
 SERVICE_FILE = PI_DIR / "systemd" / "wmr-bridge.service"
 UPGRADE_SERVICE_FILE = PI_DIR / "systemd" / "wmr-bridge-upgrade.service"
 UPGRADE_PATH_FILE = PI_DIR / "systemd" / "wmr-bridge-upgrade.path"
+BT_RECOVER_SERVICE_FILE = PI_DIR / "systemd" / "wmr-bridge-bt-recover.service"
+BT_RECOVER_PATH_FILE = PI_DIR / "systemd" / "wmr-bridge-bt-recover.path"
 ENV_EXAMPLE = PI_DIR / "systemd" / "wmr-bridge.env.example"
 UDEV_RULES = PI_DIR / "udev" / "99-wmr-bridge.rules"
 POWERSAVE_CONF = PI_DIR / "networkmanager" / "99-wmr-bridge-powersave.conf"
@@ -123,14 +125,12 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("--advertise-mdns", unit_text)
         self.assertIn("User=wmr", unit_text)
         self.assertIn("SupplementaryGroups=input bluetooth", unit_text)
-        # The service user cannot clear a boot-time rfkill soft block itself.
-        self.assertIn("ExecStartPre=-+", unit_text)
-        self.assertIn("rfkill unblock bluetooth", unit_text)
-        # The unit stages a 5 GHz-preferred profile before the bridge starts.
-        self.assertIn(
-            "ExecStartPre=-+/usr/bin/python3 -m wmr_bridge --prefer-5ghz",
-            unit_text,
-        )
+        # An upgrade restarts this unit; an unconditional rfkill poke or a
+        # NetworkManager switch here delays Bluetooth. Both moved to the
+        # fresh-install path and wmr-bridge-bt-recover.service.
+        self.assertNotIn("ExecStartPre=", unit_text)
+        self.assertNotIn("rfkill unblock bluetooth", unit_text)
+        self.assertNotIn("--prefer-5ghz", unit_text)
         # rfkill uses /dev/rfkill; AF_NETLINK supports iw cfg80211 queries and
         # route/interface checks.
         self.assertIn(
@@ -171,6 +171,35 @@ class PackagingTests(unittest.TestCase):
         self.assertNotIn("/var/lib/wmr-bridge/upgrade.lock", service)
         self.assertIn("StartLimitIntervalSec=600", service)
         self.assertIn("StartLimitBurst=3", service)
+
+    def test_bt_recover_units_run_hciuart_and_bluetooth_as_root(self) -> None:
+        path = BT_RECOVER_PATH_FILE.read_text(encoding="utf-8")
+        service = BT_RECOVER_SERVICE_FILE.read_text(encoding="utf-8")
+        self.assertIn("PathExists=/var/lib/wmr-bridge/bt-recover.trigger", path)
+        self.assertIn("Unit=wmr-bridge-bt-recover.service", path)
+        self.assertIn("/bin/rm -f /var/lib/wmr-bridge/bt-recover.trigger", service)
+        self.assertIn("User=root", service)
+        self.assertIn("Type=oneshot", service)
+        self.assertIn("RuntimeDirectory=wmr-bridge-bt-recover", service)
+        self.assertIn("systemctl restart hciuart.service", service)
+        self.assertIn("systemctl restart bluetooth.service", service)
+        self.assertIn("rfkill unblock bluetooth", service)
+        self.assertIn("StartLimitIntervalSec=600", service)
+        self.assertIn("StartLimitBurst=3", service)
+        # The daemon's trigger path must be the same file the unit watches.
+        self.assertIn(
+            "DEFAULT_BT_RECOVER_TRIGGER = \"/var/lib/wmr-bridge/bt-recover.trigger\"",
+            (PI_DIR / "wmr_bridge" / "ble_gatt.py").read_text(encoding="utf-8"),
+        )
+
+    def test_upgrade_install_does_not_repeat_the_wifi_staging(self) -> None:
+        installer = INSTALL_SH.read_text(encoding="utf-8")
+        self.assertIn("FRESH_INSTALL=1", installer)
+        self.assertIn('[ "$FRESH_INSTALL" = "1" ]', installer)
+        # The package path restarts in postinst; install.sh only starts it.
+        self.assertIn("enable_service start", installer)
+        self.assertIn("systemctl enable wmr-bridge-bt-recover.path", installer)
+        self.assertIn("systemctl start wmr-bridge-bt-recover.path", installer)
 
     def test_installer_stages_into_destdir_without_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

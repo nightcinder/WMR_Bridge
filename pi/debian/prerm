@@ -13,6 +13,8 @@ case "$1" in
             systemctl disable wmr-bridge.service || true
             systemctl stop wmr-bridge-upgrade.path || true
             systemctl disable wmr-bridge-upgrade.path || true
+            systemctl stop wmr-bridge-bt-recover.path || true
+            systemctl disable wmr-bridge-bt-recover.path || true
         fi
         ;;
     upgrade|failed-upgrade)

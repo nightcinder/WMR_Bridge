@@ -14,17 +14,14 @@ EnvironmentFile=-/etc/wmr-bridge/wmr-bridge.env
 # /var/lib/wmr-bridge holds the upgrade trigger. StateDirectory makes it
 # writable by wmr despite ProtectSystem=strict below.
 StateDirectory=wmr-bridge
-# A stock Pi OS image soft-blocks Bluetooth via rfkill, and the service runs as
-# wmr, which cannot clear it. Run this as root (the "+" prefix) before start.
-# rfkill writes to /dev/rfkill, a character device, so it needs no extra
-# address family. The daemon uses AF_INET/AF_INET6/AF_UNIX, and AF_NETLINK for
-# `iw` cfg80211 queries and route/interface inspection.
-ExecStartPre=-+/bin/sh -c 'command -v rfkill >/dev/null 2>&1 && rfkill unblock bluetooth'
-# Bluetooth Classic shares the 2.4 GHz radio, so save a 5 GHz-preferred
-# NetworkManager profile before the bridge starts. "+" runs this as root
-# outside the wmr/NoNewPrivileges restrictions so nmcli can write the profile;
-# "-" keeps a 2.4 GHz-only or unconfigured radio non-fatal.
-ExecStartPre=-+/usr/bin/python3 -m wmr_bridge --prefer-5ghz
+# The daemon uses AF_INET/AF_INET6/AF_UNIX, and AF_NETLINK for `iw` cfg80211
+# queries and route/interface inspection.
+#
+# Do not run rfkill or the 5 GHz profile here. An upgrade restarts this unit;
+# an unconditional nmcli switch or rfkill poke on every start competes with the
+# radio and delays Bluetooth. rfkill runs in wmr-bridge-bt-recover.service when
+# the daemon reports Adapter1.Powered=no, and the installer stages the 5 GHz
+# profile once on a fresh install.
 ExecStart=/usr/bin/python3 -m wmr_bridge --bind 0.0.0.0 --port 8765 --token-file /etc/wmr-bridge/token --advertise-mdns $WMR_BRIDGE_ARGS
 Restart=on-failure
 RestartSec=2
