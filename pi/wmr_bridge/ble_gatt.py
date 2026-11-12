@@ -74,6 +74,11 @@ HID_CONTROL_POINT = "00002a4c-0000-1000-8000-00805f9b34fb"
 HID_REPORT = "00002a4d-0000-1000-8000-00805f9b34fb"
 HID_PROTOCOL_MODE = "00002a4e-0000-1000-8000-00805f9b34fb"
 HID_REPORT_REFERENCE = "00002908-0000-1000-8000-00805f9b34fb"
+DIS_SERVICE = "0000180a-0000-1000-8000-00805f9b34fb"
+DIS_MANUFACTURER_NAME = "00002a29-0000-1000-8000-00805f9b34fb"
+DIS_MODEL_NUMBER = "00002a24-0000-1000-8000-00805f9b34fb"
+DIS_FIRMWARE_REVISION = "00002a26-0000-1000-8000-00805f9b34fb"
+DIS_PNP_ID = "00002a50-0000-1000-8000-00805f9b34fb"
 FF11_RAW = "0000ff11-0000-1000-8000-00805f9b34fb"
 FF12_DECODED = "0000ff12-0000-1000-8000-00805f9b34fb"
 FF14_BATCHED = "0000ff14-0000-1000-8000-00805f9b34fb"
@@ -85,6 +90,7 @@ FF17_CONTROL = "0000ff17-0000-1000-8000-00805f9b34fb"
 APP_PATH = "/org/wmr/bridge"
 SERVICE_PATH = f"{APP_PATH}/service/ff10"
 HID_SERVICE_PATH = f"{APP_PATH}/service/1812"
+DIS_SERVICE_PATH = f"{APP_PATH}/service/180a"
 ADVERTISEMENT_PATH = f"{APP_PATH}/advertisement"
 AGENT_PATH = f"{APP_PATH}/agent"
 
@@ -111,6 +117,13 @@ HID_INFORMATION_VALUE = bytes((0x11, 0x01, 0x00, 0x02))
 HID_PROTOCOL_REPORT = 0x01
 # At most one HID input report per interval; samples in between are coalesced.
 HID_MIN_INTERVAL_S = 0.010
+# While TCP or a FF1x CCCD carries the same input, pace HID at 50 Hz so the
+# shared Pi Wi-Fi/BT radio keeps room for the stream.
+HID_STREAM_MIN_INTERVAL_S = 0.020
+# Same 7-byte PnP ID as wmr_bridge.gatt: vendor ID source 1 (Bluetooth SIG),
+# vendor 0x02E5 (Espressif), product 0x0001, version 0x0100. PadBridge claims
+# the bridge by this stable key instead of its advertised name.
+DIS_PNP_ID_VALUE = bytes((0x01, 0xE5, 0x02, 0x01, 0x00, 0x00, 0x01))
 # A hand with no sample for this long is released, matching WMR_HID_STALE_MS.
 HID_STALE_S = 0.250
 # Gamepad appearance (GAP 0x03C4): the icon Android shows for the LE entry.
@@ -233,6 +246,18 @@ HID_CHARACTERISTICS = (
 
 HID_CHARACTERISTIC_BY_UUID = {spec.uuid: spec for spec in HID_CHARACTERISTICS}
 
+# Device Information Service (0x180A), mirroring the firmware's DIS. Every
+# value stays readable without a bond, like wmr_bridge.gatt: the host reads the
+# PnP ID while it opens the HOGP device, before it can rely on encryption.
+DIS_CHARACTERISTICS = (
+    GattCharacteristicSpec(DIS_MANUFACTURER_NAME, ("read",), DIS_SERVICE),
+    GattCharacteristicSpec(DIS_MODEL_NUMBER, ("read",), DIS_SERVICE),
+    GattCharacteristicSpec(DIS_FIRMWARE_REVISION, ("read",), DIS_SERVICE),
+    GattCharacteristicSpec(DIS_PNP_ID, ("read",), DIS_SERVICE),
+)
+
+DIS_CHARACTERISTIC_BY_UUID = {spec.uuid: spec for spec in DIS_CHARACTERISTICS}
+
 
 def characteristic_path(uuid: str) -> str:
     """Stable object path for one FF10 characteristic."""
@@ -246,6 +271,13 @@ def hid_characteristic_path(uuid: str) -> str:
 
     short = uuid[4:8]
     return f"{HID_SERVICE_PATH}/{short}"
+
+
+def dis_characteristic_path(uuid: str) -> str:
+    """Stable object path for one Device Information characteristic."""
+
+    short = uuid[4:8]
+    return f"{DIS_SERVICE_PATH}/{short}"
 
 
 def descriptor_path(characteristic: str, uuid: str) -> str:
@@ -393,13 +425,13 @@ class GattApplication:
         self.control_handler = control_handler
         self.pairing_open = False
         self.pairing_listener: Callable[[str], None] | None = None
-        self.hid_suppressed = False
         self.hid_protocol_mode = HID_PROTOCOL_REPORT
         self._hid_hands = [HandInput(), HandInput()]
         self._hid_history = HidHistory()
         self._hid_last_sample = [float("-inf"), float("-inf")]
         self._hid_last_report: bytes | None = None
         self._hid_last_send = float("-inf")
+        self._hid_last_slot_hid = False
         self._mtu = DEFAULT_MTU
         self._subscribed: set[str] = set()
         self._last_value: dict[str, bytes] = {}
@@ -424,6 +456,10 @@ class GattApplication:
         return HID_CHARACTERISTICS
 
     @property
+    def dis_characteristics(self) -> tuple[GattCharacteristicSpec, ...]:
+        return DIS_CHARACTERISTICS
+
+    @property
     def hid_enabled(self) -> bool:
         """True once the phone enables the input report's CCCD."""
 
@@ -441,6 +477,23 @@ class GattApplication:
             HID_REPORT in self._subscribed
             or FF12_DECODED in self._subscribed
             or FF14_BATCHED in self._subscribed
+        )
+
+    @property
+    def hid_stream_active(self) -> bool:
+        """True while TCP or a FF1x CCCD already carries the same input.
+
+        This only chooses the HID pacing floor: reports keep flowing during a
+        stream, so a phone that drops TCP or its BLE subscription still has the
+        gamepad without a reconnect.
+        """
+
+        return self.bridge.stream_client_active or self._ble_stream_active
+
+    @property
+    def _ble_stream_active(self) -> bool:
+        return any(
+            uuid in self._subscribed for uuid in (FF11_RAW, FF12_DECODED, FF14_BATCHED)
         )
 
     @property
@@ -591,6 +644,14 @@ class GattApplication:
             return bytes((self.hid_protocol_mode,))
         if uuid == HID_CONTROL_POINT:
             return b""
+        if uuid == DIS_MANUFACTURER_NAME:
+            return self.name.encode("utf-8")
+        if uuid == DIS_MODEL_NUMBER:
+            return self.name.encode("utf-8")
+        if uuid == DIS_FIRMWARE_REVISION:
+            return self.version.encode("utf-8")
+        if uuid == DIS_PNP_ID:
+            return DIS_PNP_ID_VALUE
         if uuid == FF11_RAW:
             return self.ff11_status()
         if uuid == FF16_VERSION:
@@ -734,53 +795,38 @@ class GattApplication:
         self._emitter = emit
 
     def deliver(self, frame: Frame, record: DecodedRecord | None = None) -> None:
-        if self.is_notifying(FF11_RAW):
+        """Send the FF10 streams first, then the HID report.
+
+        The stream goes out first so the HID path sees whether a FF1x frame
+        took this send slot: while a BLE stream waits, HID never takes two
+        slots in a row (the firmware pump's rule).
+        """
+
+        stream_ready = self.is_notifying(FF11_RAW)
+        if stream_ready:
             for fragment in encode_raw_messages(frame, self.fragment_size):
                 self._notify(FF11_RAW, fragment)
-        self._deliver_hid(frame, record)
-        if record is None:
-            return
-        packed = pack_record(record)
-        if self.is_notifying(FF12_DECODED):
-            if len(packed) <= self.notification_limit:
-                self._notify(FF12_DECODED, packed)
-            else:
-                self.dropped_records += 1
-        if self.is_notifying(FF14_BATCHED):
-            if self.batch_max_count:
-                self._queue_batch(packed)
-            else:
-                self.dropped_records += 1
+        if record is not None:
+            packed = pack_record(record)
+            if self.is_notifying(FF12_DECODED):
+                if len(packed) <= self.notification_limit:
+                    self._notify(FF12_DECODED, packed)
+                    stream_ready = True
+                else:
+                    self.dropped_records += 1
+            if self.is_notifying(FF14_BATCHED):
+                if self.batch_max_count:
+                    # A queued batch is also a frame waiting for a send slot.
+                    stream_ready = True
+                    self._queue_batch(packed)
+                else:
+                    self.dropped_records += 1
+        self._deliver_hid(frame, record, stream_ready=stream_ready)
 
     # ---- HID-over-GATT ---------------------------------------------------
 
-    def _hid_stream_active(self) -> bool:
-        """True while TCP or an FF11/FF12/FF14 CCCD already carries the stream."""
-
-        return self.bridge.stream_client_active or any(
-            uuid in self._subscribed for uuid in (FF11_RAW, FF12_DECODED, FF14_BATCHED)
-        )
-
     def _hid_hand_connected(self) -> bool:
         return any(hand.connected for hand in self._hid_hands)
-
-    def sync_hid_suppression(self) -> None:
-        """Pause HID reports while another transport carries the stream.
-
-        The phone must not get the same input twice on the same link. One
-        neutral report is emitted on the transition so a button or stick held
-        at the switch is released on the host.
-        """
-
-        suppressed = self._hid_stream_active()
-        if suppressed == self.hid_suppressed:
-            return
-        self.hid_suppressed = suppressed
-        if suppressed:
-            self._emit_hid_neutral()
-        else:
-            # Resume with the next sample rather than a half-updated report.
-            self._hid_last_send = float("-inf")
 
     def note_hand_state(self) -> None:
         """Mirror controller connect/disconnect into the HID hands."""
@@ -811,7 +857,9 @@ class GattApplication:
             expired = True
         return expired
 
-    def _deliver_hid(self, frame: Frame, record: DecodedRecord | None) -> None:
+    def _deliver_hid(
+        self, frame: Frame, record: DecodedRecord | None, *, stream_ready: bool = False
+    ) -> None:
         if not 0 <= frame.hand < 2:
             return
         now = self._clock()
@@ -841,15 +889,18 @@ class GattApplication:
             clamp(record.trackpad[1] / 32767.0, -1.0, 1.0),
         )
         self._hid_last_sample[frame.hand] = now
-        self.sync_hid_suppression()
-        if self.hid_suppressed:
-            return
-        self._flush_hid(now)
+        self._flush_hid(now, stream_ready=stream_ready)
 
-    def _flush_hid(self, now: float) -> None:
+    def _flush_hid(self, now: float, *, stream_ready: bool = False) -> None:
         if not self.hid_enabled or not self._hid_hand_connected():
             return
-        if now - self._hid_last_send < HID_MIN_INTERVAL_S:
+        if stream_ready and self._hid_last_slot_hid:
+            # A FF1x frame is waiting for the link: let it take the next slot.
+            return
+        interval = (
+            HID_STREAM_MIN_INTERVAL_S if self.hid_stream_active else HID_MIN_INTERVAL_S
+        )
+        if now - self._hid_last_send < interval:
             return
         report = build_report(
             self._hid_hands[0], self._hid_hands[1], history=self._hid_history
@@ -861,7 +912,7 @@ class GattApplication:
         self._notify(HID_REPORT, report)
 
     def _emit_hid_neutral(self) -> None:
-        """Release held inputs once, even while the stream suppresses HID."""
+        """Release held inputs once (controller or phone disconnected)."""
 
         if not self.hid_enabled or self._hid_last_report in (None, NEUTRAL_REPORT):
             return
@@ -873,6 +924,12 @@ class GattApplication:
         if uuid not in self._subscribed:
             return
         self._last_value[uuid] = value
+        # Only FF1x stream frames and the HID report compete for a send slot;
+        # remember which one went last for the alternation rule.
+        if uuid == HID_REPORT:
+            self._hid_last_slot_hid = True
+        elif uuid in (FF11_RAW, FF12_DECODED, FF14_BATCHED):
+            self._hid_last_slot_hid = False
         try:
             self._emitter(uuid, value)
         except Exception:  # a closed bus must not take the TCP path down
@@ -888,19 +945,15 @@ class GattApplication:
             self._hid_history = HidHistory()
             self._hid_last_report = None
             self._hid_last_send = float("-inf")
-            self.sync_hid_suppression()
-            if not self.hid_suppressed and self._hid_hand_connected():
+            self._hid_last_slot_hid = False
+            if self._hid_hand_connected():
                 self._hid_last_report = NEUTRAL_REPORT
                 self._notify(HID_REPORT, NEUTRAL_REPORT)
-        elif uuid in (FF11_RAW, FF12_DECODED, FF14_BATCHED):
-            self.sync_hid_suppression()
 
     def stop_notify(self, uuid: str) -> None:
         self._subscribed.discard(uuid)
         if uuid == FF14_BATCHED:
             self._discard_batch()
-        elif uuid == HID_REPORT or uuid in (FF11_RAW, FF12_DECODED, FF14_BATCHED):
-            self.sync_hid_suppression()
 
     def _queue_batch(self, packed: bytes) -> None:
         self._batch.append(packed)
@@ -1036,6 +1089,22 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
         def Characteristics(self) -> "ao":
             return [hid_characteristic_path(spec.uuid) for spec in HID_CHARACTERISTICS]
 
+    class DisService(ServiceInterface):
+        def __init__(self) -> None:
+            super().__init__("org.bluez.GattService1")
+
+        @dbus_property(access=PropertyAccess.READ)
+        def UUID(self) -> "s":
+            return DIS_SERVICE
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Primary(self) -> "b":
+            return True
+
+        @dbus_property(access=PropertyAccess.READ)
+        def Characteristics(self) -> "ao":
+            return [dis_characteristic_path(spec.uuid) for spec in DIS_CHARACTERISTICS]
+
     class Characteristic(ServiceInterface):
         def __init__(self, spec: GattCharacteristicSpec) -> None:
             super().__init__("org.bluez.GattCharacteristic1")
@@ -1052,6 +1121,8 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
             # not its UUID. The spec keeps the UUID for grouping.
             if self.spec.service == HID_SERVICE:
                 return HID_SERVICE_PATH
+            if self.spec.service == DIS_SERVICE:
+                return DIS_SERVICE_PATH
             return SERVICE_PATH
 
         @dbus_property(access=PropertyAccess.READ)
@@ -1265,6 +1336,7 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
     return {
         "Service": Service,
         "HidService": HidService,
+        "DisService": DisService,
         "Characteristic": Characteristic,
         "Descriptor": Descriptor,
         "Advertisement": Advertisement,
@@ -1275,7 +1347,7 @@ def build_dbus_interfaces(app: GattApplication) -> dict[str, type[Any]]:
 def export_gatt_application(
     bus: Any, interfaces: dict[str, type[Any]]
 ) -> tuple[dict[str, Any], list[str]]:
-    """Export the FF10 and HID-over-GATT services for ``GetManagedObjects``.
+    """Export the FF10, HID-over-GATT and DIS services for ``GetManagedObjects``.
 
     Returns the characteristic interfaces by UUID (for notifications) and the
     exported object paths (for ``unexport``). dbus-next derives the
@@ -1308,6 +1380,15 @@ def export_gatt_application(
             descriptor_obj_path = descriptor_path(path, descriptor.uuid)
             bus.export(descriptor_obj_path, descriptor_obj)
             exported.append(descriptor_obj_path)
+
+    bus.export(DIS_SERVICE_PATH, interfaces["DisService"]())
+    exported.append(DIS_SERVICE_PATH)
+    for spec in DIS_CHARACTERISTICS:
+        path = dis_characteristic_path(spec.uuid)
+        characteristic = interfaces["Characteristic"](spec)
+        bus.export(path, characteristic)
+        exported.append(path)
+        characteristics[spec.uuid] = characteristic
     return characteristics, exported
 
 
@@ -1791,7 +1872,6 @@ class BluezGattPeripheral:
         self.app.set_emitter(self.backend.notify)
         self.app.bridge.add_sink(self.app)
         self.app.bridge.add_hand_listener(self._on_hand_state_changed)
-        self.app.bridge.add_stream_listener(self.app.sync_hid_suppression)
         self.app.pairing_listener = self._on_pairing_request
         self._started = True
         self._boot_deadline = (
@@ -2129,7 +2209,6 @@ class BluezGattPeripheral:
     async def close(self) -> None:
         if self._started:
             self.app.bridge.remove_hand_listener(self._on_hand_state_changed)
-            self.app.bridge.remove_stream_listener(self.app.sync_hid_suppression)
             self.app.pairing_listener = None
             self._cancel_tasks()
             self._bond_grace_deadline = None

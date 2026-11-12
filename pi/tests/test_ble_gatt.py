@@ -27,6 +27,14 @@ from wmr_bridge.ble_gatt import (
     FF15_ECHO,
     FF16_VERSION,
     FF17_CONTROL,
+    DIS_CHARACTERISTICS,
+    DIS_FIRMWARE_REVISION,
+    DIS_MANUFACTURER_NAME,
+    DIS_MODEL_NUMBER,
+    DIS_PNP_ID,
+    DIS_PNP_ID_VALUE,
+    DIS_SERVICE,
+    DIS_SERVICE_PATH,
     GAMEPAD_APPEARANCE,
     HID_CHARACTERISTICS,
     HID_CHARACTERISTIC_BY_UUID,
@@ -53,6 +61,7 @@ from wmr_bridge.ble_gatt import (
     build_dbus_interfaces,
     characteristic_path,
     descriptor_path,
+    dis_characteristic_path,
     export_gatt_application,
     hid_characteristic_path,
 )
@@ -209,6 +218,36 @@ class RegistrationTests(unittest.TestCase):
     def test_hid_information_matches_the_firmware(self) -> None:
         self.assertEqual(HID_INFORMATION_VALUE, bytes((0x11, 0x01, 0x00, 0x02)))
         self.assertEqual(len(REPORT_MAP), 91)
+
+    def test_dis_carries_the_firmware_pnp_id_and_stays_plaintext(self) -> None:
+        self.assertEqual(
+            {spec.uuid for spec in DIS_CHARACTERISTICS},
+            {
+                DIS_MANUFACTURER_NAME,
+                DIS_MODEL_NUMBER,
+                DIS_FIRMWARE_REVISION,
+                DIS_PNP_ID,
+            },
+        )
+        for spec in DIS_CHARACTERISTICS:
+            self.assertEqual(spec.service, DIS_SERVICE)
+            self.assertEqual(spec.flags, ("read",))
+        self.assertEqual(
+            DIS_PNP_ID_VALUE, bytes((0x01, 0xE5, 0x02, 0x01, 0x00, 0x00, 0x01))
+        )
+        paths = [dis_characteristic_path(spec.uuid) for spec in DIS_CHARACTERISTICS]
+        self.assertEqual(len(paths), len(set(paths)))
+        self.assertTrue(all(path.startswith(DIS_SERVICE_PATH + "/") for path in paths))
+
+    def test_dis_reads_expose_the_bridge_identity(self) -> None:
+        application = _application()
+        self.assertEqual(application.read_value(DIS_MANUFACTURER_NAME), b"WMR Bridge")
+        self.assertEqual(application.read_value(DIS_MODEL_NUMBER), b"WMR Bridge")
+        self.assertEqual(
+            application.read_value(DIS_FIRMWARE_REVISION),
+            application.version.encode("utf-8"),
+        )
+        self.assertEqual(application.read_value(DIS_PNP_ID), DIS_PNP_ID_VALUE)
 
     def test_advertisement_is_a_gamepad_and_carries_the_bridge_id_prefix(self) -> None:
         bridge = Bridge(bridge_id="wmr-pi-abc12345")
@@ -677,6 +716,13 @@ class DbusNextInterfaceTests(unittest.TestCase):
             hid_service.Characteristics,
             [hid_characteristic_path(spec.uuid) for spec in HID_CHARACTERISTICS],
         )
+        dis_service = self.interfaces["DisService"]()
+        self.assertEqual(dis_service.UUID, DIS_SERVICE)
+        self.assertTrue(dis_service.Primary)
+        self.assertEqual(
+            dis_service.Characteristics,
+            [dis_characteristic_path(spec.uuid) for spec in DIS_CHARACTERISTICS],
+        )
         advertisement = self.interfaces["Advertisement"]()
         for spec in CHARACTERISTICS:
             characteristic = self.interfaces["Characteristic"](spec)
@@ -710,6 +756,11 @@ class DbusNextInterfaceTests(unittest.TestCase):
                     {method.name for method in interface.introspect().methods},
                     {"ReadValue"},
                 )
+        for spec in DIS_CHARACTERISTICS:
+            characteristic = self.interfaces["Characteristic"](spec)
+            self.assertEqual(characteristic.UUID, spec.uuid)
+            self.assertEqual(characteristic.Service, DIS_SERVICE_PATH)
+            self.assertEqual(characteristic.Flags, list(spec.flags))
         self.assertEqual(advertisement.Type, "peripheral")
         self.assertTrue(advertisement.Discoverable)
         self.assertEqual(advertisement.Appearance, GAMEPAD_APPEARANCE)
@@ -896,6 +947,22 @@ class ManagedObjectsTests(unittest.TestCase):
             self.assertEqual(properties["Service"].value, HID_SERVICE_PATH)
             self.assertEqual(properties["Flags"].value, list(spec.flags))
 
+    def test_get_managed_objects_exposes_the_dis_service(self) -> None:
+        objects = self._managed_objects()
+        service = objects[DIS_SERVICE_PATH]["org.bluez.GattService1"]
+        self.assertEqual(service["UUID"].value, DIS_SERVICE)
+        self.assertIs(service["Primary"].value, True)
+        self.assertEqual(
+            service["Characteristics"].value,
+            [dis_characteristic_path(spec.uuid) for spec in DIS_CHARACTERISTICS],
+        )
+        for spec in DIS_CHARACTERISTICS:
+            path = dis_characteristic_path(spec.uuid)
+            properties = objects[path]["org.bluez.GattCharacteristic1"]
+            self.assertEqual(properties["UUID"].value, spec.uuid)
+            self.assertEqual(properties["Service"].value, DIS_SERVICE_PATH)
+            self.assertEqual(properties["Flags"].value, list(spec.flags))
+
     def test_app_exports_the_report_reference_but_no_cccd(self) -> None:
         objects = self._managed_objects()
         descriptors = [
@@ -1032,7 +1099,7 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(values[0]), REPORT_SIZE)
         self.assertEqual(values[0], self._expected_hid_report(SAMPLE_DATA))
 
-    async def test_tcp_stream_suppresses_hid_after_one_neutral_report(self) -> None:
+    async def test_tcp_stream_keeps_hid_active_at_50_hz(self) -> None:
         pressed = self._sample(0x08)  # squeeze -> R1
         self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
         self.app.start_notify(HID_REPORT)
@@ -1041,25 +1108,20 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         before = len(self.backend.values(HID_REPORT))
         self.assertEqual(self.backend.values(HID_REPORT)[-1], self._expected_hid_report(pressed))
 
+        # A TCP subscriber changes the pacing floor to 20 ms; it does not stop
+        # the HID report, so the phone keeps its gamepad if TCP drops.
         self.bridge.subscribers.add(FakeSubscriber())  # type: ignore[arg-type]
-        self.bridge._note_stream_state()
-        after = self.backend.values(HID_REPORT)
-        self.assertEqual(len(after), before + 1)
-        self.assertEqual(after[-1], NEUTRAL_REPORT)
-
-        # While TCP is active a new input must not reach the HID host.
-        self.clock.advance(0.02)
+        self.clock.advance(0.019)
         self.bridge.ingest(0, self._sample(0x02))
-        self.assertEqual(len(self.backend.values(HID_REPORT)), before + 1)
+        self.assertEqual(len(self.backend.values(HID_REPORT)), before)
 
-        # Removing the TCP client resumes with the next sample.
-        self.bridge.subscribers.clear()
-        self.bridge._note_stream_state()
-        self.clock.advance(0.02)
-        self.bridge.ingest(0, self._sample(0x02))
-        self.assertGreater(len(self.backend.values(HID_REPORT)), before + 1)
+        self.clock.advance(0.002)
+        self.bridge.ingest(0, self._sample(0x04))
+        values = self.backend.values(HID_REPORT)
+        self.assertEqual(len(values), before + 1)
+        self.assertEqual(values[-1], self._expected_hid_report(self._sample(0x04)))
 
-    async def test_ff11_cccd_suppresses_hid_until_released(self) -> None:
+    async def test_ff11_cccd_keeps_hid_active_at_50_hz(self) -> None:
         self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
         self.app.start_notify(HID_REPORT)
         self.clock.advance(0.02)
@@ -1067,18 +1129,76 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         before = len(self.backend.values(HID_REPORT))
 
         self.app.start_notify(FF11_RAW)
+        self.clock.advance(0.021)
+        self.bridge.ingest(0, self._sample(0x02))
         values = self.backend.values(HID_REPORT)
         self.assertEqual(len(values), before + 1)
-        self.assertEqual(values[-1], NEUTRAL_REPORT)
+        self.assertEqual(values[-1], self._expected_hid_report(self._sample(0x02)))
 
-        self.clock.advance(0.02)
-        self.bridge.ingest(0, self._sample(0x02))
+        # Still paced at 20 ms while the FF11 CCCD is subscribed.
+        self.clock.advance(0.019)
+        self.bridge.ingest(0, self._sample(0x08))
         self.assertEqual(len(self.backend.values(HID_REPORT)), before + 1)
+        self.clock.advance(0.002)
+        self.bridge.ingest(0, self._sample(0x04))
+        self.assertEqual(len(self.backend.values(HID_REPORT)), before + 2)
 
+        # Releasing FF11 drops the floor back to 10 ms.
         self.app.stop_notify(FF11_RAW)
+        self.clock.advance(0.011)
+        self.bridge.ingest(0, self._sample(0x08))
+        self.assertEqual(len(self.backend.values(HID_REPORT)), before + 3)
+
+    async def test_ff12_cccd_keeps_hid_active_at_50_hz(self) -> None:
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+        self.app.start_notify(HID_REPORT)
         self.clock.advance(0.02)
+        self.bridge.ingest(0, self._sample(0x08))
+        before = len(self.backend.values(HID_REPORT))
+
+        self.app.start_notify(FF12_DECODED)
+        self.clock.advance(0.021)
         self.bridge.ingest(0, self._sample(0x02))
-        self.assertGreater(len(self.backend.values(HID_REPORT)), before + 1)
+        values = self.backend.values(HID_REPORT)
+        self.assertEqual(len(values), before + 1)
+        self.assertEqual(values[-1], self._expected_hid_report(self._sample(0x02)))
+
+        # Still paced at 20 ms while the FF12 CCCD is subscribed.
+        self.clock.advance(0.019)
+        self.bridge.ingest(0, self._sample(0x08))
+        self.assertEqual(len(self.backend.values(HID_REPORT)), before + 1)
+        self.clock.advance(0.002)
+        self.bridge.ingest(0, self._sample(0x04))
+        self.assertEqual(len(self.backend.values(HID_REPORT)), before + 2)
+
+        # Releasing FF12 drops the floor back to 10 ms.
+        self.app.stop_notify(FF12_DECODED)
+        self.clock.advance(0.011)
+        self.bridge.ingest(0, self._sample(0x08))
+        self.assertEqual(len(self.backend.values(HID_REPORT)), before + 3)
+
+    async def test_hid_does_not_take_two_slots_while_an_ff14_batch_waits(self) -> None:
+        self.app.read_value(FF16_VERSION, {"mtu": 517})
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+        self.app.start_notify(HID_REPORT)
+        self.app.start_notify(FF14_BATCHED)
+        self.clock.advance(0.02)
+        self.bridge.ingest(0, self._sample(0x08))
+        self.assertEqual(len(self.backend.values(HID_REPORT)), 2)  # neutral + report
+        self.assertEqual(len(self.backend.values(FF14_BATCHED)), 1)
+
+        # The next samples queue behind the 20 ms batch window, so no FF1x
+        # frame went out: HID gives the next slot to the waiting batch.
+        self.clock.advance(0.005)
+        self.bridge.ingest(0, self._sample(0x02))
+        self.bridge.ingest(0, self._sample(0x04))
+        self.assertEqual(len(self.backend.values(HID_REPORT)), 2)
+
+        # At the next batch slot the batch goes first, then HID.
+        self.clock.advance(0.016)
+        self.bridge.ingest(0, self._sample(0x01))
+        self.assertEqual(len(self.backend.values(FF14_BATCHED)), 2)
+        self.assertEqual(len(self.backend.values(HID_REPORT)), 3)
 
     async def test_hid_reads_follow_hogp(self) -> None:
         self.assertEqual(self.app.read_value(HID_INFORMATION), HID_INFORMATION_VALUE)

@@ -14,9 +14,8 @@ routing between BLE and Wi-Fi.
 
 BLE HIDS (`0x1812`/`0x2A4D`) stays connected at all times. HID report
 delivery follows the stream-gating rules in [HID_GAMEPAD.md](HID_GAMEPAD.md):
-reports pause while a stream is active. The report is paced at 10 ms.
-
-Removal of stream suppression is tracked in ONY-1319.
+reports continue while a stream is active, paced at 20 ms (50 Hz) so the
+shared Wi-Fi/Bluetooth radio keeps room for the stream.
 
 ## GATT identifiers
 

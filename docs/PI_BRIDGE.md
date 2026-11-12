@@ -788,12 +788,12 @@ Report Reference descriptor. `wmr_bridge/hid_gamepad.py` ports the
 report byte-identical to the firmware. A HOGP host therefore binds the
 controllers as a gamepad with no app. The bridge sends no HID report until a
 Classic controller is connected and the phone enables the Report CCCD. After
-that, HID notifications pause automatically while a WebSocket client or an
-FF11/FF12/FF14 subscriber is active, emitting one neutral report on the
-transition; they resume with the next controller sample once all stream
-clients disconnect and all subscriptions stop. The report is paced at 10 ms.
-A neutral report is still sent on BLE connect and disconnect, and a hand with
-no sample for 250 ms is released once.
+that, HID reports keep flowing while a WebSocket/TCP client or an
+FF11/FF12/FF14 subscriber is active. TCP and BLE share one radio on the Pi,
+so the bridge paces HID at 20 ms (50 Hz) during a stream; without a stream
+the floor is 10 ms. While an FF1x frame is waiting, HID never takes two send
+slots in a row. A neutral report is still sent on BLE connect and disconnect,
+and a hand with no sample for 250 ms is released once.
 
 Discovery and identity:
 
@@ -822,8 +822,6 @@ The bridge keeps the BLE HIDS link up at all times and routes data by type:
 HID report delivery follows the stream-gating rules above. The DIS PnP ID
 (`0x2A50`) stays fixed (VID `0x02E5`, PID `0x0001`) so a host can claim the
 device by VID/PID.
-
-Removal of stream suppression and the 20 ms pacing floor are tracked in ONY-1319.
 
 Per-client gating:
 
