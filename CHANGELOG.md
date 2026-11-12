@@ -5,7 +5,15 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
-## Unreleased
+## 0.3.25 — 2026-11-11
+
+The Pi installer-and-recovery release on top of 0.3.24, shipping the fix for the
+in-place upgrade that broke the stored Bluetooth connection, plus status and
+warning text that names the crashed-controller recovery. Firmware payloads are
+unchanged from 0.3.24: FF10–FF17 keep their payloads and companions at 0.2.2 or
+later continue to work. The Pi installer path is host-tested only; it has not
+run on Pi hardware. The 10-minute FF14 field capture (both controllers and a
+phone subscribed) has not been run yet.
 
 ### Raspberry Pi bridge
 
@@ -24,8 +32,9 @@ This file records what each release contains; hardware evidence stays in
   the crashed-controller recovery and the `wmr-bridge pair` escape hatch when a
   stored LE bond keeps the adapter unpairable. A token is still generated only
   when `/etc/wmr-bridge/token` is absent or empty; upgrades do not rotate it.
-- The companion still does not persist the token, so with Bluetooth down the
-  manual Wi-Fi entry has no way to learn it. ONY-1291 covers saving the token
+- **Still open (ONY-1291): the companion does not persist the token.** With
+  Bluetooth down the manual Wi-Fi entry has no way to learn it. ONY-1291 covers
+  saving the token
   (and the bridge endpoint it was read with), reconnecting to that saved bridge
   on launch, and rescanning after a drop without restarting the app. The fix
   belongs in `wmr-companion`; this repository's token is not rotated on upgrade.
