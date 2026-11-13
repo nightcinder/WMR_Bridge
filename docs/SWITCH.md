@@ -111,10 +111,10 @@ samples, oldest first, 5 ms apart.
 
 Every report produces three FF12 records (and up to three records in an FF14
 batch). All three carry the raw frame's `sequence`; `rx_time_us` steps back
-5 ms per older sample. `device_ticks` is 0 because the controller exposes only an
-8-bit packet timer, not a usable tick counter. That is the behaviour of the
-code today; it violates the receiver's timing rules and is replaced by the
-"Timing contract" below (specified, not implemented).
+5 ms per older sample. The current decoder sends `device_ticks = 0` because the
+controller exposes only an 8-bit packet timer, not a usable tick counter. That
+is the behaviour of the code today; it is not conforming and is replaced by
+the "Timing contract" below (specified, not implemented).
 
 An FF14 notification needs an ATT MTU of 173 to carry all three records at once
 (`3` ATT bytes + `2` batch header + `3 x 56` record bytes). Below that the newest
@@ -145,8 +145,9 @@ than origin, min >= centre >= max) are treated as absent rather than guessed.
 
 ## Timing contract (specified, not implemented)
 
-Status: **specified, not implemented.** Secondary priority: the WMR path on
-the Pi bridge comes first. Nothing here has been run on a controller.
+Status: **specified, not implemented.** Approved doc-first on 2026-11-13; the
+firmware and app change together in one flag-gated revision, held out of the
+rc.2 cuts. Nothing here has been run on a controller.
 Protocol summary: [PROTOCOL.md](PROTOCOL.md), "Proposals", P1 and P4.
 
 Why. Receivers take `dt` from `device_ticks` (PROTOCOL.md, "Timing"). With
@@ -163,8 +164,11 @@ Contract, per Switch hand:
 1. `device_ticks` MUST advance from every record to the next one of the same
    hand, by at least 1 ms (10000 ticks), in units of 100 ns, modulo 2^32. It
    is never constant and never goes backwards within one boot of the bridge.
+   This is the per-hand sample clock every model must carry: a model whose
+   controller has a usable counter passes it through unmarked (PROTOCOL.md,
+   "Timing"), and Switch is the model that needs the bridge to generate it.
 2. The ticks are synthetic: they are derived from the bridge's receive clock,
-   the one `rx_time_us` uses. Every Switch record sets `TICKS_SYNTHETIC`
+   the one `rx_time_us` uses. Every Switch record sets `SYNTHETIC_TICKS`
    (`flags` bit 1).
 3. Let `rx` be the receive time of the report in microseconds, `prev_rx` the
    receive time of the previous report of this hand, and `last` the synthetic
@@ -220,13 +224,22 @@ Worked example (`interval`, times in microseconds; the fourth report arrives
 | 1054000 | 2666 | 2 | 1054000 | 10540000 | 1054000 | `0x02` |
 
 The table was computed from the rules above with a script, not taken from a
-device. It is the first test vector for an implementation (`tests/test_switch.c`).
+device. It is also the shared golden-vector case `switch_synthetic_ticks`:
+`tests/vectors/wmr_golden_v1.json` in this repository and
+`packages/wmr_core/test/fixtures/wmr_golden_v1.json` in wmr-companion, whose
+README describes the format. The 15 ms and 8 ms inputs are the last two reports
+in the table (`rx` 1046000 and 1054000): `interval` 5000 and 2666, strictly
+increasing ticks, and within-report deltas of 5 ms and 2.666 ms. The case and
+its tests land with the implementation, not with this spec change, because the
+tests are part of the same flag-gated revision.
 
 Receiver side. A bridge that implements this sets `SWITCH_SYNTHETIC_TICKS` in
-`features` (PROTOCOL.md P2). The app's `SwitchBurstTimestamps` already keeps
-the spacing a bridge supplies ("the supplied offset wins"), so it needs no
-change for such a bridge; against a bridge without the feature bit it keeps
-its own spacing and should also keep the tick clock from running backwards
+`features` (PROTOCOL.md P2). The revision is flag-gated: the firmware and app
+change together, and a companion without the feature bit keeps its current
+behaviour, so older companions see no change. The app's `SwitchBurstTimestamps`
+already keeps the spacing a bridge supplies ("the supplied offset wins"), so it
+needs no change for such a bridge; against a bridge without the feature bit it
+keeps its own spacing and should also keep the tick clock from running backwards
 between reports. The Pi host bridge has no Switch support (`pi/` decodes only
 the 46-byte WMR report), so this contract applies to the ESP32 firmware until
 that changes.
