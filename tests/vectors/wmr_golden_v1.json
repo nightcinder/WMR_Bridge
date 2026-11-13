@@ -1,0 +1,3217 @@
+{
+ "format": "wmr-golden",
+ "version": 1,
+ "generated_by": "scratch generator gen_golden.py running pi/wmr_bridge/decode.py, protocol.py and ble_gatt.py at WMR_Bridge c7fa4ce",
+ "notes": [
+  "All hex strings are lowercase, no separators, bytes in wire order.",
+  "All integers are below 2^53 so any JSON reader keeps them exact.",
+  "Floats are the exact binary32 values widened to binary64; *_f32_hex gives the 4 wire bytes (little-endian).",
+  "Synthetic inputs. Nothing in this file was captured from hardware."
+ ],
+ "ff11_frames": [
+  {
+   "name": "neutral_centered_stick",
+   "hand": 0,
+   "sequence": 1,
+   "rx_time_us": 1000000,
+   "frame_hex": "a10100fff77f00ffff00000000000000000000000000000000000000000000100000000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 4096
+   },
+   "record": {
+    "version": 1,
+    "hand": 0,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 1,
+    "rx_time_us": 1000000,
+    "device_ticks": 4096,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "010000000100000040420f000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+   "name": "stick_full_scale_max",
+   "hand": 1,
+   "sequence": 2,
+   "rx_time_us": 1005000,
+   "frame_hex": "a10100ffffff00ffff00000000000000000000000000000000000000000050d30000000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 1.0,
+    "thumbstick_y": 1.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 54096
+   },
+   "record": {
+    "version": 1,
+    "hand": 1,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 2,
+    "rx_time_us": 1005000,
+    "device_ticks": 54096,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     32767,
+     32767
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "0101000002000000c8550f000000000050d300000000000000000000000000000000000000000000000000000000ff7fff7f000000000000"
+  },
+  {
+   "name": "stick_raw_zero_min",
+   "hand": 0,
+   "sequence": 3,
+   "rx_time_us": 1010000,
+   "frame_hex": "a1010000000000ffff000000000000000000000000000000000000000000a0960100000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": -1.0,
+    "thumbstick_y": -1.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 104096
+   },
+   "record": {
+    "version": 1,
+    "hand": 0,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 3,
+    "rx_time_us": 1010000,
+    "device_ticks": 104096,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     -32767,
+     -32767
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "010000000300000050690f0000000000a0960100000000000000000000000000000000000000000000000000000001800180000000000000"
+  },
+  {
+   "name": "stick_mixed_x_max_y_min",
+   "hand": 1,
+   "sequence": 4,
+   "rx_time_us": 1015000,
+   "frame_hex": "a10100ff0f0000ffff000000000000000000000000000000000000000000f0590200000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 1.0,
+    "thumbstick_y": -1.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 154096
+   },
+   "record": {
+    "version": 1,
+    "hand": 1,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 4,
+    "rx_time_us": 1015000,
+    "device_ticks": 154096,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     32767,
+     -32767
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "0101000004000000d87c0f0000000000f05902000000000000000000000000000000000000000000000000000000ff7f0180000000000000"
+  },
+  {
+   "name": "stick_one_count_off_centre",
+   "hand": 0,
+   "sequence": 5,
+   "rx_time_us": 1020000,
+   "frame_hex": "a1010000e87f00ffff000000000000000000000000000000000000000000401d0300000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 0.0004885197849944234,
+    "thumbstick_y": -0.0004885197849944234,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 204096
+   },
+   "record": {
+    "version": 1,
+    "hand": 0,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 5,
+    "rx_time_us": 1020000,
+    "device_ticks": 204096,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     16,
+     -16
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "010000000500000060900f0000000000401d030000000000000000000000000000000000000000000000000000001000f0ff000000000000"
+  },
+  {
+   "name": "trigger_full",
+   "hand": 1,
+   "sequence": 6,
+   "rx_time_us": 1025000,
+   "frame_hex": "a10108fff77fffffff00000000000000000000000000000000000000000090e00300000000000000000000000000",
+   "state": {
+    "buttons": 8,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 1.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 254096
+   },
+   "record": {
+    "version": 1,
+    "hand": 1,
+    "flags": 0,
+    "buttons": 8,
+    "sequence": 6,
+    "rx_time_us": 1025000,
+    "device_ticks": 254096,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 255,
+    "battery": 0
+   },
+   "record_hex": "0101000806000000e8a30f000000000090e0030000000000000000000000000000000000000000000000000000000000000000000000ff00"
+  },
+  {
+   "name": "trigger_half",
+   "hand": 0,
+   "sequence": 7,
+   "rx_time_us": 1030000,
+   "frame_hex": "a10100fff77f80ffff000000000000000000000000000000000000000000e0a30400000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.501960813999176,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 304096
+   },
+   "record": {
+    "version": 1,
+    "hand": 0,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 7,
+    "rx_time_us": 1030000,
+    "device_ticks": 304096,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 128,
+    "battery": 0
+   },
+   "record_hex": "010000000700000070b70f0000000000e0a30400000000000000000000000000000000000000000000000000000000000000000000008000"
+  },
+  {
+   "name": "trackpad_untouched_ff",
+   "hand": 1,
+   "sequence": 8,
+   "rx_time_us": 1035000,
+   "frame_hex": "a10100fff77f00ffff64000000000000000000000000000000000000000030670500000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 100,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 354096
+   },
+   "record": {
+    "version": 1,
+    "hand": 1,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 8,
+    "rx_time_us": 1035000,
+    "device_ticks": 354096,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 100
+   },
+   "record_hex": "0101000008000000f8ca0f000000000030670500000000000000000000000000000000000000000000000000000000000000000000000064"
+  },
+  {
+   "name": "trackpad_touch_centre",
+   "hand": 0,
+   "sequence": 9,
+   "rx_time_us": 1040000,
+   "frame_hex": "a10140fff77f003232000000000000000000000000000000000000000000802a0600000000000000000000000000",
+   "state": {
+    "buttons": 64,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 404096
+   },
+   "record": {
+    "version": 1,
+    "hand": 0,
+    "flags": 0,
+    "buttons": 64,
+    "sequence": 9,
+    "rx_time_us": 1040000,
+    "device_ticks": 404096,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "010000400900000080de0f0000000000802a0600000000000000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+   "name": "trackpad_touch_click_edges",
+   "hand": 1,
+   "sequence": 10,
+   "rx_time_us": 1045000,
+   "frame_hex": "a10150fff77f000064000000000000000000000000000000000000000000d0ed0600000000000000000000000000",
+   "state": {
+    "buttons": 80,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": -1.0,
+    "trackpad_y": 1.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 454096
+   },
+   "record": {
+    "version": 1,
+    "hand": 1,
+    "flags": 0,
+    "buttons": 80,
+    "sequence": 10,
+    "rx_time_us": 1045000,
+    "device_ticks": 454096,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     -32767,
+     32767
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "010100500a00000008f20f0000000000d0ed06000000000000000000000000000000000000000000000000000000000000000180ff7f0000"
+  },
+  {
+   "name": "buttons_all_seven",
+   "hand": 0,
+   "sequence": 11,
+   "rx_time_us": 1050000,
+   "frame_hex": "a1017ffff77f00ffff00000000000000000000000000000000000000000020b10700000000000000000000000000",
+   "state": {
+    "buttons": 127,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 504096
+   },
+   "record": {
+    "version": 1,
+    "hand": 0,
+    "flags": 0,
+    "buttons": 127,
+    "sequence": 11,
+    "rx_time_us": 1050000,
+    "device_ticks": 504096,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "0100007f0b000000900510000000000020b10700000000000000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+   "name": "buttons_home_menu",
+   "hand": 1,
+   "sequence": 12,
+   "rx_time_us": 1055000,
+   "frame_hex": "a10106fff77f00ffff00000000000000000000000000000000000000000070740800000000000000000000000000",
+   "state": {
+    "buttons": 6,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 554096
+   },
+   "record": {
+    "version": 1,
+    "hand": 1,
+    "flags": 0,
+    "buttons": 6,
+    "sequence": 12,
+    "rx_time_us": 1055000,
+    "device_ticks": 554096,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "010100060c000000181910000000000070740800000000000000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+   "name": "imu_accel_max_gyro_min",
+   "hand": 0,
+   "sequence": 13,
+   "rx_time_us": 1060000,
+   "frame_hex": "a10100fff77f00ffff00ffff7fffff7fffff7f0000000080000080000080c0370900000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     8388607,
+     8388607,
+     8388607
+    ],
+    "accel": [
+     171.19606018066406,
+     171.19606018066406,
+     171.19606018066406
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     -8388608,
+     -8388608,
+     -8388608
+    ],
+    "gyro": [
+     -83.88607788085938,
+     -83.88607788085938,
+     -83.88607788085938
+    ],
+    "ticks": 604096
+   },
+   "record": {
+    "version": 1,
+    "hand": 0,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 13,
+    "rx_time_us": 1060000,
+    "device_ticks": 604096,
+    "gyro": [
+     -83.88607788085938,
+     -83.88607788085938,
+     -83.88607788085938
+    ],
+    "gyro_f32_hex": [
+     "acc5a7c2",
+     "acc5a7c2",
+     "acc5a7c2"
+    ],
+    "accel": [
+     171.19606018066406,
+     171.19606018066406,
+     171.19606018066406
+    ],
+    "accel_f32_hex": [
+     "31322b43",
+     "31322b43",
+     "31322b43"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "010000000d000000a02c100000000000c0370900acc5a7c2acc5a7c2acc5a7c231322b4331322b4331322b43000000000000000000000000"
+  },
+  {
+   "name": "imu_accel_min_gyro_max",
+   "hand": 1,
+   "sequence": 14,
+   "rx_time_us": 1065000,
+   "frame_hex": "a10100fff77f00ffff000000800000800000800000ffff7fffff7fffff7f10fb0900000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     -8388608,
+     -8388608,
+     -8388608
+    ],
+    "accel": [
+     -171.19607543945312,
+     -171.19607543945312,
+     -171.19607543945312
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     8388607,
+     8388607,
+     8388607
+    ],
+    "gyro": [
+     83.88607025146484,
+     83.88607025146484,
+     83.88607025146484
+    ],
+    "ticks": 654096
+   },
+   "record": {
+    "version": 1,
+    "hand": 1,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 14,
+    "rx_time_us": 1065000,
+    "device_ticks": 654096,
+    "gyro": [
+     83.88607025146484,
+     83.88607025146484,
+     83.88607025146484
+    ],
+    "gyro_f32_hex": [
+     "abc5a742",
+     "abc5a742",
+     "abc5a742"
+    ],
+    "accel": [
+     -171.19607543945312,
+     -171.19607543945312,
+     -171.19607543945312
+    ],
+    "accel_f32_hex": [
+     "32322bc3",
+     "32322bc3",
+     "32322bc3"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "010100000e000000284010000000000010fb0900abc5a742abc5a742abc5a74232322bc332322bc332322bc3000000000000000000000000"
+  },
+  {
+   "name": "imu_rest_one_g_small_gyro",
+   "hand": 0,
+   "sequence": 15,
+   "rx_time_us": 1070000,
+   "frame_hex": "a10100fff77f00ffff55107a07ffffff0100002efb400600c0f9ff01000060be0a00000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 85,
+    "accel_raw": [
+     490000,
+     -1,
+     1
+    ],
+    "accel": [
+     10.0,
+     -2.0408162527019158e-05,
+     2.0408162527019158e-05
+    ],
+    "temperature_raw": -1234,
+    "gyro_raw": [
+     1600,
+     -1600,
+     1
+    ],
+    "gyro": [
+     0.01599999889731407,
+     -0.01599999889731407,
+     9.999999747378752e-06
+    ],
+    "ticks": 704096
+   },
+   "record": {
+    "version": 1,
+    "hand": 0,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 15,
+    "rx_time_us": 1070000,
+    "device_ticks": 704096,
+    "gyro": [
+     0.01599999889731407,
+     -0.01599999889731407,
+     9.999999747378752e-06
+    ],
+    "gyro_f32_hex": [
+     "6e12833c",
+     "6e1283bc",
+     "acc52737"
+    ],
+    "accel": [
+     10.0,
+     -2.0408162527019158e-05,
+     2.0408162527019158e-05
+    ],
+    "accel_f32_hex": [
+     "00002041",
+     "3232abb7",
+     "3232ab37"
+    ],
+    "temperature_raw": -1234,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 85
+   },
+   "record_hex": "010000000f000000b05310000000000060be0a006e12833c6e1283bcacc52737000020413232abb73232ab372efb00000000000000000055"
+  },
+  {
+   "name": "imu_plus_minus_one_count",
+   "hand": 1,
+   "sequence": 16,
+   "rx_time_us": 1075000,
+   "frame_hex": "a10100fff77f00ffff00010000ffffff68bf00ff7fffffff010000a08601b0810b00000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     1,
+     -1,
+     49000
+    ],
+    "accel": [
+     2.0408162527019158e-05,
+     -2.0408162527019158e-05,
+     1.0
+    ],
+    "temperature_raw": 32767,
+    "gyro_raw": [
+     -1,
+     1,
+     100000
+    ],
+    "gyro": [
+     -9.999999747378752e-06,
+     9.999999747378752e-06,
+     1.0
+    ],
+    "ticks": 754096
+   },
+   "record": {
+    "version": 1,
+    "hand": 1,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 16,
+    "rx_time_us": 1075000,
+    "device_ticks": 754096,
+    "gyro": [
+     -9.999999747378752e-06,
+     9.999999747378752e-06,
+     1.0
+    ],
+    "gyro_f32_hex": [
+     "acc527b7",
+     "acc52737",
+     "0000803f"
+    ],
+    "accel": [
+     2.0408162527019158e-05,
+     -2.0408162527019158e-05,
+     1.0
+    ],
+    "accel_f32_hex": [
+     "3232ab37",
+     "3232abb7",
+     "0000803f"
+    ],
+    "temperature_raw": 32767,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "01010000100000003867100000000000b0810b00acc527b7acc527370000803f3232ab373232abb70000803fff7f00000000000000000000"
+  },
+  {
+   "name": "ticks_before_wrap",
+   "hand": 0,
+   "sequence": 4294967294,
+   "rx_time_us": 4822678189205111,
+   "frame_hex": "a10100fff77f00ffffff0000000000000000000080000000000000000000f0ffffff000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 255,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": -32768,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 4294967280
+   },
+   "record": {
+    "version": 1,
+    "hand": 0,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 4294967294,
+    "rx_time_us": 4822678189205111,
+    "device_ticks": 4294967280,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": -32768,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 255
+   },
+   "record_hex": "01000000feffffff7766554433221100f0ffffff0000000000000000000000000000000000000000000000000080000000000000000000ff"
+  },
+  {
+   "name": "ticks_max",
+   "hand": 0,
+   "sequence": 4294967295,
+   "rx_time_us": 4822678189205112,
+   "frame_hex": "a10100fff77f00ffff000000000000000000000000000000000000000000ffffffff000000000000000000000000",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 4294967295
+   },
+   "record": {
+    "version": 1,
+    "hand": 0,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 4294967295,
+    "rx_time_us": 4822678189205112,
+    "device_ticks": 4294967295,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "01000000ffffffff7866554433221100ffffffff000000000000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+   "name": "ticks_after_wrap",
+   "hand": 0,
+   "sequence": 0,
+   "rx_time_us": 4822678189210111,
+   "frame_hex": "a10100fff77f00ffff00000000000000000000000000000000000000000040c300000102030405060708090a0b0c",
+   "state": {
+    "buttons": 0,
+    "thumbstick_x": 0.0,
+    "thumbstick_y": 0.0,
+    "trigger": 0.0,
+    "trackpad_x": 0.0,
+    "trackpad_y": 0.0,
+    "battery": 0,
+    "accel_raw": [
+     0,
+     0,
+     0
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "temperature_raw": 0,
+    "gyro_raw": [
+     0,
+     0,
+     0
+    ],
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "ticks": 49984
+   },
+   "record": {
+    "version": 1,
+    "hand": 0,
+    "flags": 0,
+    "buttons": 0,
+    "sequence": 0,
+    "rx_time_us": 4822678189210111,
+    "device_ticks": 49984,
+    "gyro": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "gyro_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "accel": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "accel_f32_hex": [
+     "00000000",
+     "00000000",
+     "00000000"
+    ],
+    "temperature_raw": 0,
+    "stick": [
+     0,
+     0
+    ],
+    "trackpad": [
+     0,
+     0
+    ],
+    "trigger": 0,
+    "battery": 0
+   },
+   "record_hex": "0100000000000000ff7955443322110040c30000000000000000000000000000000000000000000000000000000000000000000000000000"
+  }
+ ],
+ "ff11_invalid_frames": [
+  {
+   "name": "too_short_45",
+   "frame_hex": "a10100fff77f00ffff000000000000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+   "name": "too_long_47",
+   "frame_hex": "a10100fff77f00ffff0000000000000000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+   "name": "wrong_hid_header",
+   "frame_hex": "a20100fff77f00ffff00000000000000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+   "name": "wrong_report_id",
+   "frame_hex": "a10200fff77f00ffff00000000000000000000000000000000000000000000000000000000000000000000000000"
+  }
+ ],
+ "ff11_fragments": {
+  "frame_index": 1,
+  "capacity_244": [
+   "5201020000002e0000002e00a10100ffffff00ffff00000000000000000000000000000000000000000050d30000000000000000000000000000"
+  ],
+  "capacity_44": [
+   "5201020000002e0000002000a10100ffffff00ffff00000000000000000000000000000000000000000050d3",
+   "5201020000002e0020000e000000000000000000000000000000"
+  ]
+ },
+ "ff12_invalid_records": [
+  {
+   "name": "length_55",
+   "hex": "010000000100000040420f0000000000001000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "dart_error": "wrongLength"
+  },
+  {
+   "name": "length_57",
+   "hex": "010000000100000040420f00000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "dart_error": "wrongLength"
+  },
+  {
+   "name": "version_2",
+   "hex": "020000000100000040420f000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "dart_error": "unknownVersion"
+  },
+  {
+   "name": "hand_2",
+   "hex": "010200000100000040420f000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "dart_error": "badHand"
+  }
+ ],
+ "ff14_batch": {
+  "version": 2,
+  "count": 3,
+  "record_indices": [
+   0,
+   5,
+   14
+  ],
+  "length": 170,
+  "batch_hex": "0203010000000100000040420f0000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000101000806000000e8a30f000000000090e0030000000000000000000000000000000000000000000000000000000000000000000000ff00010000000f000000b05310000000000060be0a006e12833c6e1283bcacc52737000020413232abb73232ab372efb00000000000000000055",
+  "invalid": [
+   {
+    "name": "too_short",
+    "hex": "0203010000000100000040420f0000000000001000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "dart_error": "tooShort"
+   },
+   {
+    "name": "unknown_version",
+    "hex": "0103010000000100000040420f0000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000101000806000000e8a30f000000000090e0030000000000000000000000000000000000000000000000000000000000000000000000ff00010000000f000000b05310000000000060be0a006e12833c6e1283bcacc52737000020413232abb73232ab372efb00000000000000000055",
+    "dart_error": "unknownVersion"
+   },
+   {
+    "name": "count_zero",
+    "hex": "0200010000000100000040420f0000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000101000806000000e8a30f000000000090e0030000000000000000000000000000000000000000000000000000000000000000000000ff00010000000f000000b05310000000000060be0a006e12833c6e1283bcacc52737000020413232abb73232ab372efb00000000000000000055",
+    "dart_error": "emptyBatch"
+   },
+   {
+    "name": "length_mismatch",
+    "hex": "0202010000000100000040420f0000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000101000806000000e8a30f000000000090e0030000000000000000000000000000000000000000000000000000000000000000000000ff00010000000f000000b05310000000000060be0a006e12833c6e1283bcacc52737000020413232abb73232ab372efb00000000000000000055",
+    "dart_error": "wrongLength"
+   }
+  ]
+ },
+ "ff15_echo": {
+  "request_size": 4,
+  "answer_size": 20,
+  "examples": [
+   {
+    "name": "protocol_md_golden",
+    "source": "ESP32 layout, docs/PROTOCOL.md golden example",
+    "ping_id": 4660,
+    "request_hex": "01003412",
+    "answer_hex": "010034127766554433221100dc05000002010000",
+    "rx_time_us": 4822678189205111,
+    "turnaround_us": 1500,
+    "queue_depth": 258
+   },
+   {
+    "name": "pi_zero_fields",
+    "source": "Pi GattApplication._echo, clock pinned to 123456789 us",
+    "ping_id": 48879,
+    "request_hex": "0100efbe",
+    "answer_hex": "0100efbe15cd5b07000000000000000000000000",
+    "rx_time_us": 123456789,
+    "turnaround_us": 0,
+    "queue_depth": 0
+   },
+   {
+    "name": "saturated_fields",
+    "source": "struct pack of the same layout",
+    "ping_id": 65535,
+    "request_hex": "0100ffff",
+    "answer_hex": "0100ffff0100000000000000ffffffffffff0000",
+    "rx_time_us": 1,
+    "turnaround_us": 4294967295,
+    "queue_depth": 65535
+   }
+  ],
+  "invalid_answers": [
+   {
+    "name": "length_19",
+    "hex": "010034127766554433221100dc050000020100",
+    "dart_error": "wrongLength"
+   },
+   {
+    "name": "version_2",
+    "hex": "020034127766554433221100dc05000002010000",
+    "dart_error": "unknownVersion"
+   }
+  ]
+ },
+ "timing": {
+  "tick_ns": 100,
+  "discontinuity_tolerance_us": 100000,
+  "max_delta_ticks": 50000000,
+  "window": 256,
+  "warmup": 16,
+  "refresh": 32,
+  "sequences": [
+   {
+    "name": "u32_tick_wrap",
+    "note": "steady 5 ms steps across the 2^32 tick wrap; every dt stays 50000 ticks",
+    "samples": [
+     {
+      "device_ticks": 4294842296,
+      "rx_time_us": 2000000
+     },
+     {
+      "device_ticks": 4294892296,
+      "rx_time_us": 2005000
+     },
+     {
+      "device_ticks": 4294942296,
+      "rx_time_us": 2010000
+     },
+     {
+      "device_ticks": 25000,
+      "rx_time_us": 2015000
+     },
+     {
+      "device_ticks": 75000,
+      "rx_time_us": 2020000
+     },
+     {
+      "device_ticks": 125000,
+      "rx_time_us": 2025000
+     },
+     {
+      "device_ticks": 175000,
+      "rx_time_us": 2030000
+     },
+     {
+      "device_ticks": 225000,
+      "rx_time_us": 2035000
+     }
+    ],
+    "expected_steps": [
+     {
+      "kind": "baseline",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     }
+    ],
+    "expected_totals": {
+     "steps": 7,
+     "discontinuities": 0,
+     "long_gaps": 0,
+     "missing": 0,
+     "period_ticks": null
+    },
+    "expected_ticks64": [
+     4294842296,
+     4294892296,
+     4294942296,
+     4294992296,
+     4295042296,
+     4295092296,
+     4295142296,
+     4295192296
+    ]
+   },
+   {
+    "name": "discontinuity_over_100ms",
+    "note": "rx_time_us jumps 250 ms while ticks advance 5 ms: |5 ms - 250 ms| > 100 ms",
+    "samples": [
+     {
+      "device_ticks": 1000000,
+      "rx_time_us": 5000000
+     },
+     {
+      "device_ticks": 1050000,
+      "rx_time_us": 5005000
+     },
+     {
+      "device_ticks": 1100000,
+      "rx_time_us": 5010000
+     },
+     {
+      "device_ticks": 1150000,
+      "rx_time_us": 5015000
+     },
+     {
+      "device_ticks": 1200000,
+      "rx_time_us": 5020000
+     },
+     {
+      "device_ticks": 1250000,
+      "rx_time_us": 5270000
+     },
+     {
+      "device_ticks": 1300000,
+      "rx_time_us": 5275000
+     },
+     {
+      "device_ticks": 1350000,
+      "rx_time_us": 5280000
+     },
+     {
+      "device_ticks": 1400000,
+      "rx_time_us": 5285000
+     }
+    ],
+    "expected_steps": [
+     {
+      "kind": "baseline",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "discontinuity",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     }
+    ],
+    "expected_totals": {
+     "steps": 7,
+     "discontinuities": 1,
+     "long_gaps": 0,
+     "missing": 0,
+     "period_ticks": null
+    }
+   },
+   {
+    "name": "tolerance_edge",
+    "note": "difference of exactly 100 ms is a step (rule is strictly greater), 100.001 ms and rx going backwards are discontinuities",
+    "samples": [
+     {
+      "device_ticks": 7000000,
+      "rx_time_us": 9000000
+     },
+     {
+      "device_ticks": 7050000,
+      "rx_time_us": 9005000
+     },
+     {
+      "device_ticks": 7100000,
+      "rx_time_us": 9110000
+     },
+     {
+      "device_ticks": 7150000,
+      "rx_time_us": 9115000
+     },
+     {
+      "device_ticks": 7200000,
+      "rx_time_us": 9220001
+     },
+     {
+      "device_ticks": 7250000,
+      "rx_time_us": 9225001
+     },
+     {
+      "device_ticks": 7300000,
+      "rx_time_us": 9225000
+     },
+     {
+      "device_ticks": 7350000,
+      "rx_time_us": 9230000
+     }
+    ],
+    "expected_steps": [
+     {
+      "kind": "baseline",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "discontinuity",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "discontinuity",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     }
+    ],
+    "expected_totals": {
+     "steps": 5,
+     "discontinuities": 2,
+     "long_gaps": 0,
+     "missing": 0,
+     "period_ticks": null
+    }
+   },
+   {
+    "name": "reconnect_tick_restart",
+    "note": "controller reconnects 2 s later and its tick counter restarts near zero",
+    "samples": [
+     {
+      "device_ticks": 3000000000,
+      "rx_time_us": 60000000
+     },
+     {
+      "device_ticks": 3000050000,
+      "rx_time_us": 60005000
+     },
+     {
+      "device_ticks": 3000100000,
+      "rx_time_us": 60010000
+     },
+     {
+      "device_ticks": 3000150000,
+      "rx_time_us": 60015000
+     },
+     {
+      "device_ticks": 3000200000,
+      "rx_time_us": 60020000
+     },
+     {
+      "device_ticks": 3000250000,
+      "rx_time_us": 60025000
+     },
+     {
+      "device_ticks": 1234,
+      "rx_time_us": 62025000
+     },
+     {
+      "device_ticks": 51234,
+      "rx_time_us": 62030000
+     },
+     {
+      "device_ticks": 101234,
+      "rx_time_us": 62035000
+     },
+     {
+      "device_ticks": 151234,
+      "rx_time_us": 62040000
+     },
+     {
+      "device_ticks": 201234,
+      "rx_time_us": 62045000
+     }
+    ],
+    "expected_steps": [
+     {
+      "kind": "baseline",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "discontinuity",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     }
+    ],
+    "expected_totals": {
+     "steps": 9,
+     "discontinuities": 1,
+     "long_gaps": 0,
+     "missing": 0,
+     "period_ticks": null
+    }
+   },
+   {
+    "name": "gap_missing_after_warmup",
+    "note": "20 steady deltas, a 4-period delta (3 missing), 5 steady, a 2-period delta (1 missing), 3 steady",
+    "samples": [
+     {
+      "device_ticks": 500000,
+      "rx_time_us": 10000000
+     },
+     {
+      "device_ticks": 550000,
+      "rx_time_us": 10005000
+     },
+     {
+      "device_ticks": 600000,
+      "rx_time_us": 10010000
+     },
+     {
+      "device_ticks": 650000,
+      "rx_time_us": 10015000
+     },
+     {
+      "device_ticks": 700000,
+      "rx_time_us": 10020000
+     },
+     {
+      "device_ticks": 750000,
+      "rx_time_us": 10025000
+     },
+     {
+      "device_ticks": 800000,
+      "rx_time_us": 10030000
+     },
+     {
+      "device_ticks": 850000,
+      "rx_time_us": 10035000
+     },
+     {
+      "device_ticks": 900000,
+      "rx_time_us": 10040000
+     },
+     {
+      "device_ticks": 950000,
+      "rx_time_us": 10045000
+     },
+     {
+      "device_ticks": 1000000,
+      "rx_time_us": 10050000
+     },
+     {
+      "device_ticks": 1050000,
+      "rx_time_us": 10055000
+     },
+     {
+      "device_ticks": 1100000,
+      "rx_time_us": 10060000
+     },
+     {
+      "device_ticks": 1150000,
+      "rx_time_us": 10065000
+     },
+     {
+      "device_ticks": 1200000,
+      "rx_time_us": 10070000
+     },
+     {
+      "device_ticks": 1250000,
+      "rx_time_us": 10075000
+     },
+     {
+      "device_ticks": 1300000,
+      "rx_time_us": 10080000
+     },
+     {
+      "device_ticks": 1350000,
+      "rx_time_us": 10085000
+     },
+     {
+      "device_ticks": 1400000,
+      "rx_time_us": 10090000
+     },
+     {
+      "device_ticks": 1450000,
+      "rx_time_us": 10095000
+     },
+     {
+      "device_ticks": 1500000,
+      "rx_time_us": 10100000
+     },
+     {
+      "device_ticks": 1700000,
+      "rx_time_us": 10120000
+     },
+     {
+      "device_ticks": 1750000,
+      "rx_time_us": 10125000
+     },
+     {
+      "device_ticks": 1800000,
+      "rx_time_us": 10130000
+     },
+     {
+      "device_ticks": 1850000,
+      "rx_time_us": 10135000
+     },
+     {
+      "device_ticks": 1900000,
+      "rx_time_us": 10140000
+     },
+     {
+      "device_ticks": 1950000,
+      "rx_time_us": 10145000
+     },
+     {
+      "device_ticks": 2050000,
+      "rx_time_us": 10155000
+     },
+     {
+      "device_ticks": 2100000,
+      "rx_time_us": 10160000
+     },
+     {
+      "device_ticks": 2150000,
+      "rx_time_us": 10165000
+     },
+     {
+      "device_ticks": 2200000,
+      "rx_time_us": 10170000
+     }
+    ],
+    "expected_steps": [
+     {
+      "kind": "baseline",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 200000,
+      "dt_us": 20000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 100000,
+      "dt_us": 10000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     }
+    ],
+    "expected_totals": {
+     "steps": 30,
+     "discontinuities": 0,
+     "long_gaps": 0,
+     "missing": 4,
+     "period_ticks": 50000
+    },
+    "expected_ticks64": [
+     500000,
+     550000,
+     600000,
+     650000,
+     700000,
+     750000,
+     800000,
+     850000,
+     900000,
+     950000,
+     1000000,
+     1050000,
+     1100000,
+     1150000,
+     1200000,
+     1250000,
+     1300000,
+     1350000,
+     1400000,
+     1450000,
+     1500000,
+     1700000,
+     1750000,
+     1800000,
+     1850000,
+     1900000,
+     1950000,
+     2050000,
+     2100000,
+     2150000,
+     2200000
+    ]
+   },
+   {
+    "name": "gap_during_warmup",
+    "note": "a 3-period delta inside the first 16 deltas is counted retroactively (2 missing)",
+    "samples": [
+     {
+      "device_ticks": 500000,
+      "rx_time_us": 10000000
+     },
+     {
+      "device_ticks": 550000,
+      "rx_time_us": 10005000
+     },
+     {
+      "device_ticks": 600000,
+      "rx_time_us": 10010000
+     },
+     {
+      "device_ticks": 650000,
+      "rx_time_us": 10015000
+     },
+     {
+      "device_ticks": 700000,
+      "rx_time_us": 10020000
+     },
+     {
+      "device_ticks": 750000,
+      "rx_time_us": 10025000
+     },
+     {
+      "device_ticks": 900000,
+      "rx_time_us": 10040000
+     },
+     {
+      "device_ticks": 950000,
+      "rx_time_us": 10045000
+     },
+     {
+      "device_ticks": 1000000,
+      "rx_time_us": 10050000
+     },
+     {
+      "device_ticks": 1050000,
+      "rx_time_us": 10055000
+     },
+     {
+      "device_ticks": 1100000,
+      "rx_time_us": 10060000
+     },
+     {
+      "device_ticks": 1150000,
+      "rx_time_us": 10065000
+     },
+     {
+      "device_ticks": 1200000,
+      "rx_time_us": 10070000
+     },
+     {
+      "device_ticks": 1250000,
+      "rx_time_us": 10075000
+     },
+     {
+      "device_ticks": 1300000,
+      "rx_time_us": 10080000
+     },
+     {
+      "device_ticks": 1350000,
+      "rx_time_us": 10085000
+     },
+     {
+      "device_ticks": 1400000,
+      "rx_time_us": 10090000
+     },
+     {
+      "device_ticks": 1450000,
+      "rx_time_us": 10095000
+     },
+     {
+      "device_ticks": 1500000,
+      "rx_time_us": 10100000
+     }
+    ],
+    "expected_steps": [
+     {
+      "kind": "baseline",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 150000,
+      "dt_us": 15000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     }
+    ],
+    "expected_totals": {
+     "steps": 18,
+     "discontinuities": 0,
+     "long_gaps": 0,
+     "missing": 2,
+     "period_ticks": 50000
+    },
+    "expected_ticks64": [
+     500000,
+     550000,
+     600000,
+     650000,
+     700000,
+     750000,
+     900000,
+     950000,
+     1000000,
+     1050000,
+     1100000,
+     1150000,
+     1200000,
+     1250000,
+     1300000,
+     1350000,
+     1400000,
+     1450000,
+     1500000
+    ]
+   },
+   {
+    "name": "long_gap_over_5s",
+    "note": "a 6 s delta with matching rx time is a step, counted in longGaps, not in missing",
+    "samples": [
+     {
+      "device_ticks": 500000,
+      "rx_time_us": 10000000
+     },
+     {
+      "device_ticks": 550000,
+      "rx_time_us": 10005000
+     },
+     {
+      "device_ticks": 600000,
+      "rx_time_us": 10010000
+     },
+     {
+      "device_ticks": 650000,
+      "rx_time_us": 10015000
+     },
+     {
+      "device_ticks": 700000,
+      "rx_time_us": 10020000
+     },
+     {
+      "device_ticks": 750000,
+      "rx_time_us": 10025000
+     },
+     {
+      "device_ticks": 800000,
+      "rx_time_us": 10030000
+     },
+     {
+      "device_ticks": 850000,
+      "rx_time_us": 10035000
+     },
+     {
+      "device_ticks": 900000,
+      "rx_time_us": 10040000
+     },
+     {
+      "device_ticks": 950000,
+      "rx_time_us": 10045000
+     },
+     {
+      "device_ticks": 1000000,
+      "rx_time_us": 10050000
+     },
+     {
+      "device_ticks": 1050000,
+      "rx_time_us": 10055000
+     },
+     {
+      "device_ticks": 1100000,
+      "rx_time_us": 10060000
+     },
+     {
+      "device_ticks": 1150000,
+      "rx_time_us": 10065000
+     },
+     {
+      "device_ticks": 1200000,
+      "rx_time_us": 10070000
+     },
+     {
+      "device_ticks": 1250000,
+      "rx_time_us": 10075000
+     },
+     {
+      "device_ticks": 1300000,
+      "rx_time_us": 10080000
+     },
+     {
+      "device_ticks": 1350000,
+      "rx_time_us": 10085000
+     },
+     {
+      "device_ticks": 1400000,
+      "rx_time_us": 10090000
+     },
+     {
+      "device_ticks": 61400000,
+      "rx_time_us": 16090000
+     },
+     {
+      "device_ticks": 61450000,
+      "rx_time_us": 16095000
+     },
+     {
+      "device_ticks": 61500000,
+      "rx_time_us": 16100000
+     },
+     {
+      "device_ticks": 61550000,
+      "rx_time_us": 16105000
+     }
+    ],
+    "expected_steps": [
+     {
+      "kind": "baseline",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 60000000,
+      "dt_us": 6000000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 50000,
+      "dt_us": 5000.0
+     }
+    ],
+    "expected_totals": {
+     "steps": 22,
+     "discontinuities": 0,
+     "long_gaps": 1,
+     "missing": 0,
+     "period_ticks": 50000
+    },
+    "expected_ticks64": [
+     500000,
+     550000,
+     600000,
+     650000,
+     700000,
+     750000,
+     800000,
+     850000,
+     900000,
+     950000,
+     1000000,
+     1050000,
+     1100000,
+     1150000,
+     1200000,
+     1250000,
+     1300000,
+     1350000,
+     1400000,
+     61400000,
+     61450000,
+     61500000,
+     61550000
+    ]
+   },
+   {
+    "name": "zero_delta_and_jitter",
+    "note": "58800-tick nominal period with jitter, one repeated tick value (dt 0, ignored) and a 3-period delta (2 missing)",
+    "samples": [
+     {
+      "device_ticks": 4000000000,
+      "rx_time_us": 30000000
+     },
+     {
+      "device_ticks": 4000057500,
+      "rx_time_us": 30005750
+     },
+     {
+      "device_ticks": 4000117000,
+      "rx_time_us": 30011700
+     },
+     {
+      "device_ticks": 4000175800,
+      "rx_time_us": 30017580
+     },
+     {
+      "device_ticks": 4000236700,
+      "rx_time_us": 30023670
+     },
+     {
+      "device_ticks": 4000295100,
+      "rx_time_us": 30029510
+     },
+     {
+      "device_ticks": 4000354800,
+      "rx_time_us": 30035480
+     },
+     {
+      "device_ticks": 4000411400,
+      "rx_time_us": 30041140
+     },
+     {
+      "device_ticks": 4000470500,
+      "rx_time_us": 30047050
+     },
+     {
+      "device_ticks": 4000528000,
+      "rx_time_us": 30052800
+     },
+     {
+      "device_ticks": 4000587500,
+      "rx_time_us": 30058750
+     },
+     {
+      "device_ticks": 4000646300,
+      "rx_time_us": 30064630
+     },
+     {
+      "device_ticks": 4000707200,
+      "rx_time_us": 30070720
+     },
+     {
+      "device_ticks": 4000765600,
+      "rx_time_us": 30076560
+     },
+     {
+      "device_ticks": 4000825300,
+      "rx_time_us": 30082530
+     },
+     {
+      "device_ticks": 4000881900,
+      "rx_time_us": 30088190
+     },
+     {
+      "device_ticks": 4000941000,
+      "rx_time_us": 30094100
+     },
+     {
+      "device_ticks": 4000998500,
+      "rx_time_us": 30099850
+     },
+     {
+      "device_ticks": 4001058000,
+      "rx_time_us": 30105800
+     },
+     {
+      "device_ticks": 4001116800,
+      "rx_time_us": 30111680
+     },
+     {
+      "device_ticks": 4001177700,
+      "rx_time_us": 30117770
+     },
+     {
+      "device_ticks": 4001236100,
+      "rx_time_us": 30123610
+     },
+     {
+      "device_ticks": 4001295800,
+      "rx_time_us": 30129580
+     },
+     {
+      "device_ticks": 4001352400,
+      "rx_time_us": 30135240
+     },
+     {
+      "device_ticks": 4001411500,
+      "rx_time_us": 30141150
+     },
+     {
+      "device_ticks": 4001411500,
+      "rx_time_us": 30146150
+     },
+     {
+      "device_ticks": 4001587900,
+      "rx_time_us": 30163790
+     },
+     {
+      "device_ticks": 4001645400,
+      "rx_time_us": 30169540
+     },
+     {
+      "device_ticks": 4001704900,
+      "rx_time_us": 30175490
+     },
+     {
+      "device_ticks": 4001763700,
+      "rx_time_us": 30181370
+     },
+     {
+      "device_ticks": 4001824600,
+      "rx_time_us": 30187460
+     },
+     {
+      "device_ticks": 4001883000,
+      "rx_time_us": 30193300
+     },
+     {
+      "device_ticks": 4001942700,
+      "rx_time_us": 30199270
+     },
+     {
+      "device_ticks": 4001999300,
+      "rx_time_us": 30204930
+     },
+     {
+      "device_ticks": 4002058400,
+      "rx_time_us": 30210840
+     },
+     {
+      "device_ticks": 4002115900,
+      "rx_time_us": 30216590
+     },
+     {
+      "device_ticks": 4002175400,
+      "rx_time_us": 30222540
+     }
+    ],
+    "expected_steps": [
+     {
+      "kind": "baseline",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 57500,
+      "dt_us": 5750.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59500,
+      "dt_us": 5950.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 58800,
+      "dt_us": 5880.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 60900,
+      "dt_us": 6090.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 58400,
+      "dt_us": 5840.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59700,
+      "dt_us": 5970.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 56600,
+      "dt_us": 5660.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59100,
+      "dt_us": 5910.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 57500,
+      "dt_us": 5750.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59500,
+      "dt_us": 5950.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 58800,
+      "dt_us": 5880.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 60900,
+      "dt_us": 6090.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 58400,
+      "dt_us": 5840.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59700,
+      "dt_us": 5970.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 56600,
+      "dt_us": 5660.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59100,
+      "dt_us": 5910.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 57500,
+      "dt_us": 5750.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59500,
+      "dt_us": 5950.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 58800,
+      "dt_us": 5880.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 60900,
+      "dt_us": 6090.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 58400,
+      "dt_us": 5840.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59700,
+      "dt_us": 5970.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 56600,
+      "dt_us": 5660.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59100,
+      "dt_us": 5910.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 0,
+      "dt_us": 0.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 176400,
+      "dt_us": 17640.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 57500,
+      "dt_us": 5750.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59500,
+      "dt_us": 5950.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 58800,
+      "dt_us": 5880.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 60900,
+      "dt_us": 6090.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 58400,
+      "dt_us": 5840.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59700,
+      "dt_us": 5970.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 56600,
+      "dt_us": 5660.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59100,
+      "dt_us": 5910.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 57500,
+      "dt_us": 5750.0
+     },
+     {
+      "kind": "step",
+      "dt_ticks": 59500,
+      "dt_us": 5950.0
+     }
+    ],
+    "expected_totals": {
+     "steps": 36,
+     "discontinuities": 0,
+     "long_gaps": 0,
+     "missing": 2,
+     "period_ticks": 58950
+    },
+    "expected_ticks64": [
+     4000000000,
+     4000057500,
+     4000117000,
+     4000175800,
+     4000236700,
+     4000295100,
+     4000354800,
+     4000411400,
+     4000470500,
+     4000528000,
+     4000587500,
+     4000646300,
+     4000707200,
+     4000765600,
+     4000825300,
+     4000881900,
+     4000941000,
+     4000998500,
+     4001058000,
+     4001116800,
+     4001177700,
+     4001236100,
+     4001295800,
+     4001352400,
+     4001411500,
+     4001411500,
+     4001587900,
+     4001645400,
+     4001704900,
+     4001763700,
+     4001824600,
+     4001883000,
+     4001942700,
+     4001999300,
+     4002058400,
+     4002115900,
+     4002175400
+    ]
+   }
+  ]
+ }
+}

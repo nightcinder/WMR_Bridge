@@ -82,6 +82,13 @@ The blob is not the Microsoft JSON block and carries no extra version byte; the
 FF13 header already identifies the window format. A Switch hand never runs the
 Microsoft block read.
 
+This 42-byte blob is what the firmware publishes today
+(`WMR_SWITCH_CAL_SIZE`). The companion app's `SwitchCalibration.parse`
+accepts only a 44-byte blob that starts with a version and a device-type
+byte, so today's firmware and today's app do not interoperate on Switch
+calibration. The 44-byte layout is the contract going forward; see
+"Calibration blob version 1, 44 bytes" below.
+
 ## Input report `0x30`
 
 A captured frame is `A1 30...` and is exactly 50 bytes (49-byte report plus the
@@ -105,7 +112,9 @@ samples, oldest first, 5 ms apart.
 Every report produces three FF12 records (and up to three records in an FF14
 batch). All three carry the raw frame's `sequence`; `rx_time_us` steps back
 5 ms per older sample. `device_ticks` is 0 because the controller exposes only an
-8-bit packet timer, not a usable tick counter.
+8-bit packet timer, not a usable tick counter. That is the behaviour of the
+code today; it violates the receiver's timing rules and is replaced by the
+"Timing contract" below (specified, not implemented).
 
 An FF14 notification needs an ATT MTU of 173 to carry all three records at once
 (`3` ATT bytes + `2` batch header + `3 x 56` record bytes). Below that the newest
@@ -134,6 +143,125 @@ Without calibration the decoder uses the documented default scales
 `CALIBRATED` clear. Values that fail the sanity checks (sensitivity not greater
 than origin, min >= centre >= max) are treated as absent rather than guessed.
 
+## Timing contract (specified, not implemented)
+
+Status: **specified, not implemented.** Secondary priority: the WMR path on
+the Pi bridge comes first. Nothing here has been run on a controller.
+Protocol summary: [PROTOCOL.md](PROTOCOL.md), "Proposals", P1 and P4.
+
+Why. Receivers take `dt` from `device_ticks` (PROTOCOL.md, "Timing"). With
+`device_ticks` fixed at 0 a receiver gets `dt = 0` for every record. The app
+works around it by spacing the three records of a report itself
+(`SwitchBurstTimestamps`), but each new report then starts again from tick 0,
+so its tick clock runs backwards once per report and the 100 ms discontinuity
+rule fires (read from the app's `switch_burst.dart` and `tick_timer.dart`,
+not run). The bridge has the only usable clock, so the bridge generates the
+ticks.
+
+Contract, per Switch hand:
+
+1. `device_ticks` MUST advance from every record to the next one of the same
+   hand, by at least 1 ms (10000 ticks), in units of 100 ns, modulo 2^32. It
+   is never constant and never goes backwards within one boot of the bridge.
+2. The ticks are synthetic: they are derived from the bridge's receive clock,
+   the one `rx_time_us` uses. Every Switch record sets `TICKS_SYNTHETIC`
+   (`flags` bit 1).
+3. Let `rx` be the receive time of the report in microseconds, `prev_rx` the
+   receive time of the previous report of this hand, and `last` the synthetic
+   time of the newest sample already emitted for this hand.
+   - `interval = 5000` for the first report after the controller connects;
+     otherwise `interval = clamp((rx - prev_rx) / 3, 1000, 5000)` (integer
+     division, microseconds: 1 ms to 5 ms).
+   - `newest = rx` for the first report; otherwise
+     `newest = max(rx, last + 1000 + 2 * interval)`.
+   - Sample `k` (0 = oldest, 2 = newest) has synthetic time
+     `t_k = newest - (2 - k) * interval` and
+     `device_ticks = (t_k * 10) mod 2^32`.
+   - Then `last = newest`, `prev_rx = rx`.
+4. `rx_time_us` of sample 2 is `rx`, the real stamp. Samples 0 and 1 carry
+   `rx - (2 - k) * interval` (not below 0) and set `RX_TIME_SYNTHETIC`
+   (`flags` bit 2). The fixed 5 ms step of today's decoder is replaced by
+   `interval`.
+5. A controller reconnect does not restart the synthetic clock, because it is
+   the bridge's clock. `TICK_RESET` is therefore not set for a Switch hand;
+   `controller_epoch` still increments. A bridge restart changes `boot_id`.
+6. All three records keep the raw frame's `sequence`, as today.
+7. A long gap between reports (lost reports) needs no special case: the
+   interval clamps at 5 ms and the tick difference across the gap is the real
+   elapsed time on the bridge clock.
+
+The `max` in step 3 only matters when two reports are delivered less than
+3 ms apart (a radio stall released them together). The samples of the late
+report are then placed 1 ms after the previous ones instead of on top of
+them, and the offset is gone at the next normally spaced report.
+
+Worked example (`interval`, times in microseconds; the fourth report arrives
+1 ms after the third, the sixth 8 ms after the fifth):
+
+| `rx` | `interval` | `k` | `t_k` | `device_ticks` | `rx_time_us` | `flags` (no calibration) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1000000 | 5000 | 0 | 990000 | 9900000 | 990000 | `0x06` |
+| 1000000 | 5000 | 1 | 995000 | 9950000 | 995000 | `0x06` |
+| 1000000 | 5000 | 2 | 1000000 | 10000000 | 1000000 | `0x02` |
+| 1015000 | 5000 | 0 | 1005000 | 10050000 | 1005000 | `0x06` |
+| 1015000 | 5000 | 1 | 1010000 | 10100000 | 1010000 | `0x06` |
+| 1015000 | 5000 | 2 | 1015000 | 10150000 | 1015000 | `0x02` |
+| 1030000 | 5000 | 0 | 1020000 | 10200000 | 1020000 | `0x06` |
+| 1030000 | 5000 | 1 | 1025000 | 10250000 | 1025000 | `0x06` |
+| 1030000 | 5000 | 2 | 1030000 | 10300000 | 1030000 | `0x02` |
+| 1031000 | 1000 | 0 | 1031000 | 10310000 | 1029000 | `0x06` |
+| 1031000 | 1000 | 1 | 1032000 | 10320000 | 1030000 | `0x06` |
+| 1031000 | 1000 | 2 | 1033000 | 10330000 | 1031000 | `0x02` |
+| 1046000 | 5000 | 0 | 1036000 | 10360000 | 1036000 | `0x06` |
+| 1046000 | 5000 | 1 | 1041000 | 10410000 | 1041000 | `0x06` |
+| 1046000 | 5000 | 2 | 1046000 | 10460000 | 1046000 | `0x02` |
+| 1054000 | 2666 | 0 | 1048668 | 10486680 | 1048668 | `0x06` |
+| 1054000 | 2666 | 1 | 1051334 | 10513340 | 1051334 | `0x06` |
+| 1054000 | 2666 | 2 | 1054000 | 10540000 | 1054000 | `0x02` |
+
+The table was computed from the rules above with a script, not taken from a
+device. It is the first test vector for an implementation (`tests/test_switch.c`).
+
+Receiver side. A bridge that implements this sets `SWITCH_SYNTHETIC_TICKS` in
+`features` (PROTOCOL.md P2). The app's `SwitchBurstTimestamps` already keeps
+the spacing a bridge supplies ("the supplied offset wins"), so it needs no
+change for such a bridge; against a bridge without the feature bit it keeps
+its own spacing and should also keep the tick clock from running backwards
+between reports. The Pi host bridge has no Switch support (`pi/` decodes only
+the 46-byte WMR report), so this contract applies to the ESP32 firmware until
+that changes.
+
+## Calibration blob version 1, 44 bytes (specified, not implemented)
+
+Status: **specified, not implemented** in the firmware (the app parser for it
+exists). Secondary priority. Not run on a controller.
+
+The blob gains a 2-byte prefix so the phone can tell the layout and the
+controller type without the Bluetooth name. The 42 bytes that follow are the
+bytes the firmware publishes today, unchanged and in the same order:
+
+| Blob offset | Size | Content |
+| --- | --- | --- |
+| 0 | 1 | version, `1` |
+| 1 | 1 | device type: `1` Joy-Con (L), `2` Joy-Con (R), `3` Pro Controller |
+| 2 | 24 | SPI `0x6020`: 6-axis factory calibration, 12 x int16 LE (accel origin XYZ, accel sensitivity XYZ, gyro origin XYZ, gyro sensitivity XYZ) |
+| 26 | 9 | SPI `0x603D`: left stick factory calibration |
+| 35 | 9 | SPI `0x6046`: right stick factory calibration |
+
+The single 18-byte read at `0x603D` in the handshake covers both stick blocks
+(`0x603D + 9 = 0x6046`), so no extra SPI read is needed. The FF13 window
+header is unchanged: `total_len` is 44 and `crc32` covers the 44 bytes. A
+phone identifies a Switch blob by `total_len == 44`, `blob[0] == 1` and
+`blob[1]` in 1 .. 3, and falls back to the Microsoft JSON path otherwise. A
+bridge that serves this layout sets `SWITCH_BLOB_V1` in `features`
+(PROTOCOL.md P2).
+
+Open point to settle before either side's calibrated values are trusted: the
+firmware's calibrated gyro formula uses the factor 816
+(`src/wmr_switch.c`), the app's `SwitchCalibration` uses 936
+(`switch_calibration.dart`). Which one matches a controller has not been
+checked here.
+
 ## What is not verified
 
 - The exact output report length and the counter/rumble byte order on this
@@ -144,7 +272,9 @@ than origin, min >= centre >= max) are treated as absent rather than guessed.
   not apply a per-hand axis transform yet.
 - Button and stick direction after the WMR mapping, and the Pro Controller's
   right-stick-as-trackpad choice.
-- The FF13 blob offsets against the companion app; the app currently expects the
-  Microsoft JSON block.
+- The FF13 blob against the companion app. The app has a Switch parser, but
+  for the 44-byte layout above, not for the 42 bytes sent today.
+- Everything in "Timing contract" and "Calibration blob version 1" (specified,
+  not implemented).
 
 These are the first items for the hardware sheet.

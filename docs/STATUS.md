@@ -72,8 +72,19 @@ with the Switch hardware check tracked in GitHub #145. The Pi pairs controllers
 through BlueZ automatically (the `v0.3.12` release shipped `0.2.4`) and does not
 yet read FF13 calibration from controllers. FF10–FF17 payloads otherwise match
 0.3.15, so companions at 0.2.2 or later continue to work. The Pi BLE gamepad,
-advertising and pairing path has not run on hardware; the three-state jitter
-check is pending. ESP32-over-BLE is
+advertising and pairing path has no recorded hardware run (no run sheet); the
+three-state jitter check is pending.
+The changelog entries for 0.3.19 to 0.3.26 describe faults seen with a Pi and a
+Pixel phone (the bridge missing from the phone's scan list, `Numeric comparison
+failed (0x0c)` on re-pairing, `HCI Hardware Error` with `Powered: no` after an
+upgrade, `descriptor write: RequestBusy`), so parts of the install,
+advertising and pairing path have been exercised on hardware. Those are
+user-reported fault reports with no run sheet in this repository.
+Two Pi changes are in review as separate PRs and not merged: a non-blocking
+`0x06` enable and a faster bit-exact frame decoder.
+The shared golden vectors (`tests/vectors/wmr_golden_v1.json`) and the
+protocol proposals in [`docs/PROTOCOL.md`](PROTOCOL.md) ("Proposals":
+specified, not implemented) are documentation and host tests only. ESP32-over-BLE is
 the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the
 second supported first-class target; Pi is host-tests-only until the Pi sitting
 runs, see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md) and
@@ -314,7 +325,9 @@ However:
 - No two-bridge run has happened. The sitting procedure is in the removed
   multi-bridge sheet (see git history). LEFT at
   most 3 % on its own bridge is the pass bar.
-- No Raspberry Pi Wi-Fi bridge hardware run has happened. The second supported
+- No Raspberry Pi Wi-Fi bridge hardware run is recorded (no P1-P14 result, no
+  probe output; the 0.3.19 to 0.3.26 changelog entries report pairing and
+  adapter faults seen on a Pi, user-reported, without figures). The second supported
   target (`pi/`, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)) moves the phone link off
   2.4 GHz BLE onto 5 GHz Wi-Fi WebSocket. It is host-tests-only until Sitting P
   in `docs/PI_BRIDGE.md` runs.

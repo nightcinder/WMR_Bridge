@@ -17,9 +17,20 @@ firmware sent. The refactor deliberately did not change it. A test
 | Device name (GAP 0x2A00) | - | read, value `WMR Bridge` |
 | Service | `0000FF10-0000-1000-8000-00805F9B34FB` | primary |
 | Characteristic | `0000FF11-0000-1000-8000-00805F9B34FB` | read, notify |
+| Characteristic | `0000FF12-0000-1000-8000-00805F9B34FB` | notify |
+| Characteristic | `0000FF14-0000-1000-8000-00805F9B34FB` | notify |
+| Characteristic | `0000FF15-0000-1000-8000-00805F9B34FB` | write without response, notify |
+| Characteristic | `0000FF13-0000-1000-8000-00805F9B34FB` | read, write, notify |
 | Characteristic | `0000FF16-0000-1000-8000-00805F9B34FB` | read (firmware version) |
 | Characteristic | `0000FF17-0000-1000-8000-00805F9B34FB` | read, write, notify (control & status v2) |
 | Client Characteristic Configuration (0x2902) | - | read/write |
+
+The rows are in `wmr_bridge.gatt` order. Each characteristic has its own
+section below: raw stream and status (this section and the next ones), decoded
+stream, batched stream, echo, config block, firmware version, control. Access:
+the firmware-version value is the only one readable on an unencrypted link.
+Every other value, and every CCC descriptor in the service, needs an encrypted
+and bonded link with a 16-byte key (see "Security and pairing").
 
 Advertising: flags `0x06` (LE general discoverable, BR/EDR not supported),
 complete local name `WMR Bridge`, complete list of 16-bit service UUIDs `0x1812`
@@ -125,12 +136,21 @@ byte 0 = `0xA1` (HID DATA/input transaction header), byte 1 = report ID, then
 the payload. A WMR report is report ID `0x01` with 44 payload bytes, 46 bytes
 in total. A PSVR2 Sense report is report ID `0x31` with 77 payload bytes,
 79 bytes in total. A Switch report is report ID `0x30` with 48 payload bytes,
-49 bytes in total (the 50-byte frame adds the `0xA1` header). The raw stream
+50 bytes in total (Switch references and `WMR_SWITCH_REPORT_SIZE` count the
+49-byte report without the `0xA1` header). The raw stream
 carries any frame unchanged; FF12/FF14
 apply the model's decoder (see [PSVR2.md](PSVR2.md), [SWITCH.md](SWITCH.md)).
 PSVR2 and Switch names are searched for by default alongside the WMR names from
 0.2 onward. The 12-byte fragment
 header is identical for both.
+
+Byte-count convention. Every frame length in this document (`total_len`, and
+the figures 46, 79 and 50) counts the frame as BTstack delivers it: the `0xA1`
+header byte, the report ID byte, then the payload. The HID report without the
+`0xA1` byte is one byte shorter (45, 78, 49); other references, including
+[SWITCH.md](SWITCH.md) in places and the Nintendo notes, use that count. The
+Pi host bridge prepends `0xA1` to what hidraw returns so its frames follow the
+same convention.
 
 Example (RIGHT, sequence `0x01020304`, 46-byte frame, notification capacity 44
 bytes), first fragment header then second fragment header:
@@ -175,6 +195,12 @@ For a valid fragment of hand h:
 An invalid fragment is counted as an error and also abandons the frame in
 progress for its hand (if its `hand` field is valid).
 
+The limit 80 is the spec value (`WMR_CFG_MAX_FRAME` in the firmware,
+`MAX_FRAME` in `pi/wmr_bridge/protocol.py`). A receiver MUST accept every
+`total_len` from 1 to 80. A receiver with a smaller limit drops PSVR2 frames
+(79 bytes) as malformed; the companion app's reassembler currently uses 64
+(`wmrMaxFrame`), which is a known app-side deviation, not a second spec value.
+
 Tests: `tests/test_protocol.c` covers fragmented, incomplete, lost,
 duplicated, interleaved and malformed fragments.
 
@@ -197,8 +223,12 @@ duplicated, interleaved and malformed fragments.
 
 # Decoded stream, FF12 (version 1; implemented in firmware, run on hardware: user-reported)
 
-Status: approved. Firmware implemented on branch `ff12-decoded-stream`. Host-tested
-and built, but never run on hardware (checklist in [TESTING.md](TESTING.md)).
+Status: approved. Firmware implemented and merged (first on branch
+`ff12-decoded-stream`). Host-tested and built. Run on hardware with two WMR
+controllers and an Android phone, user-reported (figures in
+[STATUS.md](STATUS.md) and [DECODING.md](DECODING.md)); the remaining
+checklist items are in [TESTING.md](TESTING.md). PSVR2 and Switch decoding
+have never run on a controller.
 The reference pack/unpack is `src/wmr_decoded.{h,c}`, pinned by the
 "decoded frame (FF12) golden packet" test in `tests/test_protocol.c`, so the
 Android app can build and test against exact bytes. The raw FF11 stream above is
@@ -254,7 +284,7 @@ integers are little-endian. Floats are IEEE 754 binary32, little-endian.
 | --- | --- | --- | --- |
 | 0 | u8 | `version` | `1`. A receiver must ignore records with an unknown version |
 | 1 | u8 | `hand` | 0 = LEFT, 1 = RIGHT |
-| 2 | u8 | `flags` | bit0 `CALIBRATED`. Always 0 in version 1 (see below). Other bits 0 |
+| 2 | u8 | `flags` | bit0 `CALIBRATED`: 0 for WMR and PSVR2 records, set for a Switch record decoded with a valid factory calibration (see below). Other bits 0 today; bits 1-3 are proposed in "Proposals" |
 | 3 | u8 | `buttons` | bit0 thumbstick click, bit1 home, bit2 menu, bit3 squeeze click, bit4 trackpad click, bit5 BT pairing, bit6 trackpad touch, bit7 0 |
 | 4 | u32 | `sequence` | The same per-hand sequence number as the raw FF11 frame this sample was decoded from. Gaps = loss before transmission |
 | 8 | u64 | `rx_time_us` | ESP32 `esp_timer_get_time()` when the HID report was received, microseconds since ESP32 boot. For latency and jitter diagnostics only; not a sensor clock |
@@ -314,14 +344,22 @@ button bits; the D-pad and face buttons do not. A Pro Controller pairs as LEFT
 and exposes its right stick as the `trackpad` pair. Full field table and open
 questions: [SWITCH.md](SWITCH.md).
 
+A constant `device_ticks` of 0 breaks the "Timing" rules below for every
+receiver that takes `dt` from the ticks. The replacement, the Switch timing
+contract, is specified in [SWITCH.md](SWITCH.md#timing-contract-specified-not-implemented)
+and summarised under "Proposals" (specified, not implemented).
+
 ### Calibration is done on the phone
 
-FF12 carries uncalibrated values: `flags` bit 0 is 0. Each sample is in the
+For WMR and PSVR2 hands FF12 carries uncalibrated values: `flags` bit 0 is 0.
+The one exception today is a Switch hand on the ESP32, whose decoder applies
+the SPI factory calibration and sets bit 0 (`wmr_switch.c`, "Switch `0x30`
+frames" above). Each WMR sample is in the
 controller's raw sensor axes, only scaled to physical units. The phone applies
 the per-device mix matrix, bias and pose from the controller's firmware config
-block, which the bridge exposes unmodified on FF13 (below). Bit 0 is kept so a
-later version can set it without changing the layout. A receiver must read
-`flags` and not assume. Axis directions and signs of the raw axes are unverified
+block, which the bridge exposes unmodified on FF13 (below). A receiver must
+read `flags` per record and not assume: a record with bit 0 set must not get
+the FF13 calibration applied a second time. Axis directions and signs of the raw axes are unverified
 until the rotation capture in [DECODING.md](DECODING.md) is done.
 
 ## Timing
@@ -332,10 +370,11 @@ until the rotation capture in [DECODING.md](DECODING.md) is done.
   `WMR_MOTION_CONTROLLER_NS_PER_TICK` is 100 and
   `wmr_controller_base_handle_imu_sample` computes
   `sample_time_ns = timestamp_ticks * 100`
-  (monado commit `f50c796c32c811f5fd371f77fd8a749d2ad7df08`). Confirmed from
-  Monado's code only. Not yet measured on hardware. The capture procedure in
-  [DECODING.md](DECODING.md) checks it two ways: elapsed ticks against elapsed
-  wall-clock time, and the gyro integral over a known rotation.
+  (monado commit `f50c796c32c811f5fd371f77fd8a749d2ad7df08`). Measured on
+  hardware, user-reported: ticks over wall-clock 1.0016 (RIGHT) and 1.0083
+  (LEFT), median report period about 4.99 ms ([DECODING.md](DECODING.md)).
+  The capture procedure there checks it two ways: elapsed ticks against
+  elapsed wall-clock time, and the gyro integral over a known rotation.
 - Wrap. The counter is an unsigned 32-bit value and wraps at 2^32 ticks, which
   is 429.4967296 s (about 7 min 9.5 s) at 100 ns. Compute
   `dt_ticks = (uint32_t)(ticks - prev_ticks)` (unsigned modulo arithmetic,
@@ -354,6 +393,10 @@ until the rotation capture in [DECODING.md](DECODING.md) is done.
   through lost samples, so `dt_ticks` is still the true elapsed time.
 - `rx_time_us` (ESP32 receive time) includes Bluetooth scheduling jitter and is
   only for measuring latency and jitter, for example against a phone-side clock.
+  On the Pi host bridge it is weaker still: a user-space stamp taken when the
+  daemon reads the report from hidraw, so reports read in one burst get nearly
+  identical stamps (see "Linux/Pi host bridge differences"). Receivers must
+  take sample timing from `device_ticks` on both bridges.
   It answers the one-way part of issue #1 (closed). The round trip is the
   [FF15 echo](#echo-ff15-version-1-approved-implemented-in-firmware-run-on-hardware-user-reported),
   whose answer carries a timestamp on the same clock.
@@ -405,8 +448,11 @@ until the rotation capture in [DECODING.md](DECODING.md) is done.
 
 # Batched decoded stream, FF14 (version 2; implemented in firmware, run on hardware: user-reported)
 
-Status: firmware implemented on branch `ff14-batching`. Host-tested and built,
-never run on hardware (checklist in [TESTING.md](TESTING.md)). Reference code:
+Status: firmware implemented and merged (first on branch `ff14-batching`).
+Host-tested and built. Run on hardware, user-reported: it is the default
+stream of the recorded two-controller runs ([STATUS.md](STATUS.md),
+[`runs/roundtrip/`](runs/roundtrip/README.md)). Checklist items without a
+recorded run stay open in [TESTING.md](TESTING.md). Reference code:
 `src/wmr_batch.{h,c}`. FF11 and FF12 are unchanged. FF14 is an additional
 notify-only characteristic that carries the same 56-byte FF12 version 1 records,
 several per notification.
@@ -551,13 +597,17 @@ FF12.
 
 See [TESTING.md](TESTING.md): FF14 on a phone at MTU 517 and 247, the three
 ordered exclusion cases, MTU below 61, and the A/B/A comparison of FF12 and
-FF14 at one fixed position. None has been run.
+FF14 at one fixed position. Runs that exist are recorded in
+[STATUS.md](STATUS.md) and under [`runs/`](runs/README.md) as user-reported;
+an item with no record there has not been run.
 
 # Echo, FF15 (version 1; approved, implemented in firmware, run on hardware: user-reported)
 
 Status: layout approved by the project owner (2026-10-22, issue #1). Firmware
-implemented and host-tested, never run on hardware (checklist in
-[TESTING.md](TESTING.md)). Reference code: `src/wmr_echo.{h,c}`, pinned by the
+implemented and host-tested. Run on hardware, user-reported: the round-trip
+runs of 2026-10-22 and later are in
+[`runs/roundtrip/`](runs/roundtrip/README.md). Open checklist items are in
+[TESTING.md](TESTING.md). Reference code: `src/wmr_echo.{h,c}`, pinned by the
 golden-bytes tests in `tests/test_echo.c`. FF11, FF12 and FF14 are unchanged, and
 no existing handle moves (FF15 is appended after FF14 in `wmr_bridge.gatt`).
 
@@ -670,7 +720,9 @@ cancelled= ... ` on the periodic line ([COUNTERS.md](COUNTERS.md)). Identity:
 
 ## Bench-test items
 
-See [TESTING.md](TESTING.md), "FF15 echo". None has been run.
+See [TESTING.md](TESTING.md), "FF15 echo". The round-trip runs that exist are
+in [`runs/roundtrip/`](runs/roundtrip/README.md) (user-reported); an item with
+no record there has not been run.
 
 # Controller config block, FF13 (APPROVED layout, implemented in firmware, read run on hardware: user-reported)
 
@@ -679,16 +731,17 @@ in (WMR_Bridge #17, #21). The wire formats, the block-read state machine and
 the FF13 window are a pure-C module (`src/wmr_cfg.c`, `tests/test_cfg.c`,
 host-tested). The BTstack side is wired in: `src/wmr_cfgmgr.c` (cache, timers,
 sending), report-ID routing in `wmr_controller.c`, the characteristic in
-`wmr_transport.c` and `wmr_bridge.gatt`. That wiring has not been compiled
-against BTstack or the ESP-IDF build and nothing has run on an ESP32, a
-controller or a phone. The UUID and layout below were approved on 2026-10-22.
-They are still unverified on hardware.
+`wmr_transport.c` and `wmr_bridge.gatt`. The UUID and layout below were
+approved on 2026-10-22. The block read ran on hardware the same day
+(user-reported, see "As implemented" and "Input stream stops after the read"
+below); the items under "Still unverified" remain open.
 
 Design basis. The commands below are what Monado does (commit
 `f50c796c32c811f5fd371f77fd8a749d2ad7df08`, `wmr_controller_base.c`,
-`wmr_controller_protocol.h`). They have never been tried through this bridge.
-Every item marked "unverified" must be checked on hardware before relying on
-it.
+`wmr_controller_protocol.h`). When this design was written they had never
+been tried through this bridge; the block read and the enable pair have since
+run (user-reported). Every item still marked "unverified" must be checked on
+hardware before relying on it.
 
 WMR hands only. The descriptor-available handler sends the block read only to a
 `WMR_MODEL_WMR` hand. A PSVR2 hand gets the Feature Report `0x05` wake read
@@ -853,7 +906,7 @@ BSL-1.0). If it is copied into the app, its notice must travel with it.
 FF13 is independent of the FF11/FF12 exclusivity and is expected to be used
 alongside FF12, with negligible traffic.
 
-## Golden bytes (host-tested; not yet run on hardware)
+## Golden bytes (host-tested)
 
 All integers little-endian. CRC-32 check value: CRC-32 of the ASCII bytes
 `123456789` is `0xCBF43926`. Of four zero bytes `0x2144DF1C`.
@@ -948,9 +1001,15 @@ report. Bench items: [TESTING.md](TESTING.md), "FF13 config block".
 
 ## Security note
 
-The config block is device-specific data (it may contain identifiers). Like the
-rest of the BLE service, FF13 has no authentication or encryption (see
-[SECURITY.md](SECURITY.md)). Anyone in range can read it.
+The config block is device-specific data (it may contain identifiers). Since
+firmware 0.3.5 FF13 is readable and writable only on an encrypted, bonded link
+(`wmr_bridge.gatt`, "Security and pairing" above). Pairing is Just Works, so
+the link is not MITM-protected and any central that completes pairing while
+the bridge accepts a new bond can read the block. See
+[SECURITY.md](SECURITY.md) for the residual risk. (Before 0.3.0 the service
+had no encryption and anyone in range could read it. Firmware 0.3.0-0.3.4
+declared the encryption flags but did not enforce them; 0.3.5 added the
+16-byte key-size enforcement, see CHANGELOG.md.)
 
 ## Not decided here
 
@@ -1122,9 +1181,225 @@ loss or latency jitter may increase on running controller streams. The client UI
 should display a temporary notice (for example "Scanning ... stream may stutter")
 while `discovery_state` is non-zero.
 
-# Proposals (NOT decided, NOT implemented, NOT part of the spec above)
+# Linux/Pi host bridge differences (implemented in `pi/`)
 
-None at present. The FF12 version 2 batching sketch that was here is now the
-implemented [FF14](#batched-decoded-stream-ff14-version-2-implemented-in-firmware-run-on-hardware-user-reported)
-section above. FF13 (controller config block) is implemented and approved. See
-its section above.
+The Pi host bridge ([PI_BRIDGE.md](PI_BRIDGE.md)) serves the same FF10 service
+through BlueZ as a fallback next to its WebSocket. The stream payloads are
+byte-identical to the firmware's (`pi/tests/test_protocol.py`,
+`pi/tests/test_golden_vectors.py`). The values below differ from the ESP32 and
+a client must tell the two bridges apart before it interprets them. This
+section describes the code in `pi/wmr_bridge/ble_gatt.py` and
+`pi/wmr_bridge/bridge.py` as it is; it has host tests only.
+
+## Firmware-version value: a JSON endpoint document
+
+On the ESP32 this value is a plain version string of at most 31 bytes. On the
+Pi it is a UTF-8 JSON object with no whitespace, readable without a bond:
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `type` | string | `"wmr_ble_endpoint"`. A client that sees a value starting with `{` parses JSON and checks this |
+| `protocol` | number | `1` |
+| `bridge_id` | string | The same identity as `hello.bridge_id` on the WebSocket and the `WMB1` service data in the advertisement |
+| `name` | string | Advertised name, default `WMR Bridge` |
+| `version` | string | Package version, the string an ESP32 would return bare |
+| `hosts` | array of strings | LAN addresses of the TCP listener, preferred uplink first (wired, then Wi-Fi) |
+| `port` | number | TCP port, default 8765 |
+| `path` | string | WebSocket path, default `/wmr` |
+| `authRequired` | boolean | True when the listener requires a token |
+
+It never carries the token. The document is longer than 31 bytes, so a client
+must not apply the ESP32 length limit to the whole value, only to `version`.
+
+## Config-block value: session document and calibration windows
+
+The Pi uses the same characteristic for two things, selected by the cursor:
+
+- Before any cursor write on the connection, or after a zero-length write, a
+  read returns the session document: a UTF-8 JSON object with `type`
+  `"wmr_ble_session"`, `protocol` `1`, `bridge_id`, `version`, `port`, `path`,
+  `authRequired`, `pairingOpen` (boolean: the bridge currently accepts a new
+  bond) and, only when a token is configured, `token` (the WebSocket session
+  token). This is why the value is readable only on an encrypted link. A
+  client must never log or display the document.
+- After a 5-byte cursor write (`hand` u8, `offset` u32 LE, as on the ESP32) a
+  read returns the calibration window with the 16-byte header described in
+  "Controller config block". A cursor write of another length, or a hand
+  other than 0 or 1, is refused. The Pi does not read the block from the
+  controller yet, so a fresh daemon serves header-only `NOT_READ` windows.
+
+An ESP32 never returns JSON here, and its default cursor is `(hand 0,
+offset 0)`. A client detects the session document by the first byte `{`; a
+calibration window starts with the version byte `0x01`.
+
+## Echo answer: zero fields
+
+The Pi answers a valid 4-byte request at once from the write handler with the
+same 20-byte layout, but:
+
+| Field | ESP32 | Pi |
+| --- | --- | --- |
+| `rx_time_us` | `esp_timer_get_time()` in the ATT write callback | Linux `CLOCK_MONOTONIC` in microseconds when the BlueZ write handler runs in the daemon (user space, after D-Bus delivery) |
+| `turnaround_us` | time until the answer is handed to the stack | always 0 |
+| `queue_depth` | stream frames queued at arrival | always 0 |
+
+So on a Pi `t3 = t2`, the `rtt` formula of "Using it" degenerates to `t4 - t1`,
+and a zero turnaround or depth means "not measured", not "instant" or "empty".
+There is no `busy` state. The WebSocket analogue is the JSON `ping`/`pong`
+pair with `serverTimeUs`. Golden bytes for both layouts are in
+`tests/vectors/wmr_golden_v1.json` (`ff15_echo`).
+
+## `rx_time_us` in records is a user-space read stamp
+
+The Pi stamps a report with `time.monotonic_ns() // 1000` when the daemon
+reads it from hidraw (`HidrawManager._on_readable`, `Bridge.ingest`), not when
+the Bluetooth controller received it. The reader drains up to 32 reports per
+wake-up, so reports that arrived while the event loop was busy get stamps a
+few microseconds apart, and the stamp includes kernel and scheduler delay. Its
+origin is system boot, unrelated to an ESP32's.
+
+Consequences for a receiver, on both bridges but mandatory on the Pi:
+
+- Take `dt` and all sample timing from `device_ticks`.
+- Use `rx_time_us` only for the 100 ms discontinuity check and as a noisy
+  anchor for clock alignment (take the minimum delay over a window, never a
+  single record).
+- Do not compare `rx_time_us` across bridges.
+
+## Batched stream pacing on the Pi's BLE fallback
+
+On the Pi's BLE fallback a full batch is sent at once, and a partial batch is
+sent when at least `1 / batch_hz` (default 50 Hz, so 20 ms) has passed since
+the previous batch. That is a pacing interval for partial batches, not a cap on
+the record rate. On the WebSocket the hold is `--batch-hold-ms` (default 5 ms).
+
+# Proposals (specified, NOT implemented, NOT part of the spec above)
+
+Status of every item in this section: **specified, not implemented.** No
+firmware, Pi or app code does any of this at the time of writing. The text is
+here so the wire change is reviewed before code is written. Nothing below has
+been run on hardware. When an item is implemented, move it into the section it
+belongs to and delete it here.
+
+The FF12 version 2 batching sketch that used to be here is the implemented
+[FF14](#batched-decoded-stream-ff14-version-2-implemented-in-firmware-run-on-hardware-user-reported)
+section above.
+
+## P1. Record flag bits 1-3
+
+Status: specified, not implemented.
+
+The record stays version 1 and 56 bytes. Three more bits of `flags` (offset 2)
+get a meaning. Neither the app's parser, the Pi's `unpack_record` nor
+`wmr_decoded_unpack` rejects a record for having them set, so no version bump
+is needed; a bridge that sets them announces it in `features` (P2).
+
+| Bit | Mask | Name | Set by the bridge when |
+| --- | --- | --- | --- |
+| 0 | `0x01` | `CALIBRATED` | (existing) sensor values already have calibration applied |
+| 1 | `0x02` | `TICKS_SYNTHETIC` | `device_ticks` of this record was not read from the controller's own counter but generated by the bridge from its receive clock (Switch today; any model without a usable tick counter) |
+| 2 | `0x04` | `RX_TIME_SYNTHETIC` | `rx_time_us` of this record was not stamped at the receipt of its own report: it was derived (the two older samples of a Switch report), or the bridge knows the stamp is shared with other reports of one burst read |
+| 3 | `0x08` | `TICK_RESET` | this is the first record the bridge numbered after the tick epoch of this hand changed: a new Classic connection of the controller, or a restart of the synthetic tick generator |
+| 4-7 | | reserved | 0; a receiver ignores them |
+
+Receiver rules:
+
+- `TICKS_SYNTHETIC`: `dt` is still `(ticks - prev) mod 2^32` at 100 ns, and the
+  ticks are still monotonic per hand. The receiver must treat the timing as
+  bridge-clock quality (it carries the bridge's receive jitter) and must not
+  use `ticks` against `rx_time_us` as a clock-rate check, since both come from
+  one clock.
+- `RX_TIME_SYNTHETIC`: exclude the record from delay, jitter and clock-offset
+  estimation. It still takes part in the 100 ms discontinuity rule.
+- `TICK_RESET`: start a new epoch for the hand (re-baseline, reset the
+  filter's internal state) without waiting for the 100 ms rule. The marked
+  record can be lost before delivery, so the 100 ms rule stays in force as the
+  fallback and `controller_epoch` (P2) is the authoritative signal.
+- A bridge that cannot know (`TICK_RESET` on a bridge that does not see the
+  reconnect) leaves the bit clear. Clear never means "no reset happened".
+
+## P2. `boot_id`, `controller_epoch` and `features` in the status
+
+Status: specified, not implemented.
+
+Problem: a receiver cannot tell an ESP32 or daemon restart (sequence numbers
+and `rx_time_us` start over) from reordering, and cannot tell a controller
+reconnect (ticks may restart) from a long gap, except by heuristics.
+
+Status read, version 2 (24 bytes; the first 16 bytes keep the version 1
+layout, so a version 1 parser that accepts a longer value still works; the
+app's `BridgeStatus.parse` does):
+
+| Offset | Size | Field | Meaning |
+| --- | --- | --- | --- |
+| 0 | u8 | version | `2` |
+| 1-15 | | | as version 1 |
+| 16 | u32 LE | `boot_id` | Random, non-zero, chosen once per boot (ESP32) or per daemon start (Pi). A change means sequence numbers and `rx_time_us` started over |
+| 20 | u8 | `left_controller_epoch` | Starts at 0; incremented (mod 256) each time a new Classic connection of the LEFT controller starts delivering reports |
+| 21 | u8 | `right_controller_epoch` | Same for RIGHT |
+| 22 | u16 LE | `features` | bit0 `FLAG_BITS` (P1 implemented), bit1 `ECHO_V2` (P3), bit2 `SWITCH_SYNTHETIC_TICKS` (P4), bit3 `SWITCH_BLOB_V1` (P5). Other bits 0 |
+
+The control status (20 bytes) mirrors the two epochs in its reserved bytes so
+a subscribed client is notified when one changes: offset 7 `reserved0`
+becomes `left_controller_epoch`, offset 14 `reserved1` becomes
+`right_controller_epoch`. The version byte stays 1; a client reads the epochs
+there only when the status read reported version 2.
+
+WebSocket (Pi): `hello` and `status` gain `"bootId"` (number, same value as
+above), `"features"` (array of the names above in lower case) and each entry
+of `hands` gains `"controllerEpoch"` (number).
+
+Receiver rules: a changed `boot_id` re-baselines sequence accounting and the
+bridge-clock alignment for both hands; a changed `controller_epoch` starts a
+new tick epoch for that hand. Both are logged as events by the raw IMU
+recorder (wmr-companion `docs/IMU_LOG.md`).
+
+## P3. Echo version 2: transmit time
+
+Status: specified, not implemented.
+
+Version 1 carries `rx_time_us` and a relative `turnaround_us`, and the Pi
+fills the second with 0. Version 2 carries an absolute transmit stamp and says
+which fields are real.
+
+Request: the same 4 bytes with `version` = `2`. A version 1 bridge ignores it
+(`bad`), so a client sends version 2 only when `features` has `ECHO_V2`, and a
+client that gets no answer falls back to version 1.
+
+Answer, 28 bytes (needs ATT MTU 31 or more; at a smaller MTU the bridge
+answers a version 2 request with a version 1 answer):
+
+| Offset | Size | Field | Meaning |
+| --- | --- | --- | --- |
+| 0 | u8 | `version` | `2` |
+| 1 | u8 | `flags` | bit0 `TX_TIME_VALID`, bit1 `QUEUE_DEPTH_VALID`, bit2 `USER_SPACE_CLOCK` (stamps taken in a user-space process, as on the Pi) |
+| 2 | u16 | `ping_id` | From the request |
+| 4 | u64 | `rx_time_us` | As version 1: bridge clock when the request was received |
+| 12 | u64 | `tx_time_us` | Bridge clock just before the answer was handed to the stack (restamped on a retry). Valid only with `TX_TIME_VALID` |
+| 20 | u16 | `queue_depth` | As version 1. Valid only with `QUEUE_DEPTH_VALID` |
+| 22 | u16 | reserved | 0 |
+| 24 | u32 | `boot_id` | As P2, so an offset estimate is never carried across a restart |
+
+Phone side: `t2 = rx_time_us`, `t3 = tx_time_us`; the formulas of "Using it"
+are unchanged. The WebSocket `pong` gains `serverRxTimeUs` and keeps
+`serverTimeUs` as the transmit stamp.
+
+## P4. Switch timing contract (summary)
+
+Status: specified, not implemented. Secondary priority (after the WMR path).
+Full text: [SWITCH.md](SWITCH.md#timing-contract-specified-not-implemented).
+
+- `device_ticks` MUST advance for every record of a hand; the constant 0 the
+  decoder sends today is replaced by synthetic ticks generated from the
+  frame's receive time, with `TICKS_SYNTHETIC` set.
+- Sample interval within a report: `clamp((rx - prev_rx) / 3, 1 ms, 5 ms)`,
+  5 ms for the first report of an epoch.
+- The two older samples carry `RX_TIME_SYNTHETIC`.
+
+## P5. Switch calibration blob, 44 bytes (summary)
+
+Status: specified, not implemented. Secondary priority. The firmware
+publishes 42 bytes today and the app's `SwitchCalibration.parse` accepts only
+the 44-byte layout, so the two do not interoperate yet. The 44-byte layout is
+the contract; full text in
+[SWITCH.md](SWITCH.md#calibration-blob-version-1-44-bytes-specified-not-implemented).
