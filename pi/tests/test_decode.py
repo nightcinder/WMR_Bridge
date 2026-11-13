@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import dataclasses
+import random
+import struct
 import unittest
 
 from wmr_bridge.decode import (
     BTN_MENU,
     BTN_SQUEEZE,
     ControllerState,
+    _decode_frame_reference,
+    _record_from_state_reference,
     decode_frame,
     extend_ticks,
     record_from_frame,
@@ -123,6 +128,134 @@ class DecoderTests(unittest.TestCase):
         )
         with self.assertRaises(Exception):
             state.ticks = 1  # type: ignore[misc]
+
+
+def _report(payload: bytes = b"") -> bytearray:
+    """A valid 46-byte input report with ``payload`` at report offset 2."""
+
+    frame = bytearray(46)
+    frame[0] = 0xA1
+    frame[1] = 0x01
+    frame[2 : 2 + len(payload)] = payload
+    return frame
+
+
+def _stick_report(raw: int) -> bytes:
+    """Put the same 12-bit raw value in both sticks, plus trackpad/trigger bytes."""
+
+    frame = _report()
+    frame[2 + 1] = raw & 0xFF
+    frame[2 + 2] = ((raw >> 8) & 0x0F) | ((raw & 0x0F) << 4)
+    frame[2 + 3] = raw >> 4
+    frame[2 + 4] = raw & 0xFF  # trigger
+    frame[2 + 5] = raw & 0xFF  # trackpad x
+    frame[2 + 6] = (raw >> 4) & 0xFF  # trackpad y
+    return bytes(frame)
+
+
+def _random_reports(seed: int, count: int) -> list[bytes]:
+    rng = random.Random(seed)
+    reports = []
+    for _ in range(count):
+        frame = bytearray(rng.randbytes(46))
+        frame[0] = 0xA1
+        frame[1] = 0x01
+        reports.append(bytes(frame))
+    return reports
+
+
+def _float_fields(state: ControllerState) -> list[float]:
+    return [
+        state.thumbstick_x,
+        state.thumbstick_y,
+        state.trigger,
+        state.trackpad_x,
+        state.trackpad_y,
+        *state.accel,
+        *state.gyro,
+    ]
+
+
+class FastDecodeParityTests(unittest.TestCase):
+    """The fast binary32 path must match the Fraction reference bit for bit."""
+
+    def assertSameFrame(self, frame: bytes) -> None:
+        fast = decode_frame(frame)
+        reference = _decode_frame_reference(frame)
+        self.assertEqual(fast, reference)
+        if fast is None:
+            return
+        fast_record = record_from_state(fast, 0, 7, 99)
+        reference_record = _record_from_state_reference(reference, 0, 7, 99)
+        self.assertEqual(fast_record, reference_record)
+        self.assertEqual(pack_record(fast_record), pack_record(reference_record))
+
+    def test_exhaustive_stick_raw_values(self) -> None:
+        for raw in range(4096):
+            with self.subTest(raw=raw):
+                self.assertSameFrame(_stick_report(raw))
+
+    def test_random_reports(self) -> None:
+        for frame in _random_reports(1, 3000):
+            self.assertSameFrame(frame)
+
+    def test_imu_edge_values(self) -> None:
+        edges = [0, 1, -1, 0x7FFFFF, -0x800000, 49000, -49000]
+        # Offsets of the three accel and three gyro 24-bit fields in the payload.
+        offsets = [8, 11, 14, 19, 22, 25]
+        for value in edges:
+            encoded = (value & 0xFFFFFF).to_bytes(3, "little")
+            for offset in offsets:
+                with self.subTest(value=value, offset=offset):
+                    frame = _report()
+                    frame[2 + offset : 2 + offset + 3] = encoded
+                    self.assertSameFrame(bytes(frame))
+            with self.subTest(value=value, offset="all"):
+                frame = _report()
+                for offset in offsets:
+                    frame[2 + offset : 2 + offset + 3] = encoded
+                self.assertSameFrame(bytes(frame))
+
+    def test_arbitrary_states_match_reference(self) -> None:
+        base = decode_frame(bytes(_report()))
+        rng = random.Random(2)
+        y_edges = [0.5, -0.5, 0.49999997, -0.49999997, 1.5, -1.5]
+        multipliers = [1.0, 1.0 + 1e-7, 1.0 - 1e-7]
+        for _ in range(20000):
+            state = dataclasses.replace(
+                base,
+                thumbstick_x=rng.uniform(-1.2, 1.2),
+                thumbstick_y=rng.choice(y_edges) / 32767 * rng.choice(multipliers),
+                trackpad_x=rng.uniform(-1e-4, 1e-4),
+                trackpad_y=rng.uniform(-1, 1),
+                trigger=rng.uniform(0, 1),
+            )
+            self.assertEqual(
+                record_from_state(state, 1, 3, 5),
+                _record_from_state_reference(state, 1, 3, 5),
+            )
+
+    def test_explicit_pins(self) -> None:
+        full = decode_frame(bytes(_stick_report(4095)))
+        self.assertEqual(full.thumbstick_x, 1.0)
+        self.assertEqual(record_from_state(full, 0, 0, 0).stick[0], 32767)
+
+        zero = decode_frame(bytes(_stick_report(0)))
+        self.assertEqual(zero.thumbstick_x, -1.0)
+        self.assertEqual(record_from_state(zero, 0, 0, 0).stick[0], -32767)
+
+        trackpad_off = decode_frame(bytes(_report(bytes([0, 0, 0, 0, 0, 0xFF, 0xFF]))))
+        self.assertEqual(trackpad_off.trackpad_x, 0.0)
+        self.assertEqual(trackpad_off.trackpad_y, 0.0)
+
+        trigger = decode_frame(bytes(_report(bytes([0, 0, 0, 0, 0x80]))))
+        self.assertEqual(record_from_state(trigger, 0, 0, 0).trigger, 0x80)
+
+    def test_outputs_are_binary32_exact(self) -> None:
+        for frame in _random_reports(3, 200) + [_stick_report(raw) for raw in range(0, 4096, 37)]:
+            state = decode_frame(frame)
+            for value in _float_fields(state):
+                self.assertEqual(struct.unpack("<f", struct.pack("<f", value))[0], value)
 
 
 if __name__ == "__main__":

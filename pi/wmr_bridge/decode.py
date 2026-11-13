@@ -13,6 +13,13 @@ because calibration is applied by the companion app, exactly as for FF12.
 The integer/float conversions mirror the C reference, including float32
 rounding and round-half-away-from-zero for Q15. ``pi/tests/test_decode.py``
 pins the result against records produced by the C implementation.
+
+The fast path works in binary64 and rounds to binary32 once per stored value.
+That is bit-exact with the C code because every operation there is a single
+binary32 operation on exactly representable operands, and binary64 has enough
+precision (53 >= 2 * 24 + 2) that the double rounding is harmless. The
+``_*_reference`` functions keep the exact-rational (Fraction) arithmetic as the
+oracle the tests compare against.
 """
 
 from __future__ import annotations
@@ -57,8 +64,8 @@ def _f32_fraction(value: Fraction) -> float:
     """Round an exact rational to binary32 (round to nearest, ties to even).
 
     Python's float is binary64, and rounding a binary64 quotient to binary32
-    can round twice. The decoder must match the C reference bit for bit, so
-    the arithmetic is done on exact rationals and rounded once.
+    can round twice. The reference decoder must match the C code bit for bit,
+    so the arithmetic is done on exact rationals and rounded once.
     """
 
     if value == 0:
@@ -101,6 +108,13 @@ _TRIGGER_DIVISOR = 255.0
 _TRACKPAD_CENTRE = 0x32
 _TRACKPAD_DIVISOR = 0x32
 
+# Fast path layouts. _IN covers the whole 46-byte report (header skipped):
+# buttons, stick bytes s0/s1/s2, trigger, trackpad x/y, battery, accel (3 x
+# 24-bit), temperature (int16), gyro (3 x 24-bit), ticks (uint32), reserved.
+_F11 = struct.Struct("<11f")
+_F5 = struct.Struct("<5f")
+_IN = struct.Struct("<2x8B9sh9sI12x")
+
 
 def _read24s(payload: bytes, offset: int) -> int:
     value = payload[offset] | (payload[offset + 1] << 8) | (payload[offset + 2] << 16)
@@ -113,7 +127,7 @@ def _clamp_max1(value: float) -> float:
     return 1.0 if value > 1.0 else value
 
 
-def _q15(value: float) -> int:
+def _q15_reference(value: float) -> int:
     value = min(1.0, max(-1.0, value))
     scaled = _f32_fraction(Fraction(value) * 32767)
     if scaled >= 0.0:
@@ -171,6 +185,56 @@ def decode_frame(frame: bytes) -> ControllerState | None:
 
     if len(frame) != FRAME_LENGTH or frame[0] != 0xA1 or frame[1] != REPORT_ID:
         return None
+    (buttons, s0, s1, s2, trg, tx, ty, battery, accel9, temp, gyro9, ticks) = _IN.unpack(
+        frame
+    )
+
+    ar0 = int.from_bytes(accel9[0:3], "little", signed=True)
+    ar1 = int.from_bytes(accel9[3:6], "little", signed=True)
+    ar2 = int.from_bytes(accel9[6:9], "little", signed=True)
+    gr0 = int.from_bytes(gyro9[0:3], "little", signed=True)
+    gr1 = int.from_bytes(gyro9[3:6], "little", signed=True)
+    gr2 = int.from_bytes(gyro9[6:9], "little", signed=True)
+
+    # Each value is one binary32 operation on exact operands; see module doc.
+    sx, sy, t, px, py, ax, ay, az, gx, gy, gz = _F11.unpack(
+        _F11.pack(
+            ((s0 | ((s1 & 0x0F) << 8)) - 2047) / 2047.0,
+            (((s1 >> 4) | (s2 << 4)) - 2047) / 2047.0,
+            trg / 255.0,
+            0.0 if tx == 0xFF else (tx - 50) / 50.0,
+            0.0 if ty == 0xFF else (ty - 50) / 50.0,
+            ar0 / 49000.0,
+            ar1 / 49000.0,
+            ar2 / 49000.0,
+            gr0 * _GYRO_SCALE,
+            gr1 * _GYRO_SCALE,
+            gr2 * _GYRO_SCALE,
+        )
+    )
+
+    return ControllerState(
+        buttons=buttons,
+        thumbstick_x=1.0 if sx > 1.0 else sx,
+        thumbstick_y=1.0 if sy > 1.0 else sy,
+        trigger=t,
+        trackpad_x=px,
+        trackpad_y=py,
+        battery=battery,
+        accel_raw=(ar0, ar1, ar2),
+        accel=(ax, ay, az),
+        temperature_raw=temp,
+        gyro_raw=(gr0, gr1, gr2),
+        gyro=(gx, gy, gz),
+        ticks=ticks,
+    )
+
+
+def _decode_frame_reference(frame: bytes) -> ControllerState | None:
+    """Exact-rational reference for :func:`decode_frame` (test oracle)."""
+
+    if len(frame) != FRAME_LENGTH or frame[0] != 0xA1 or frame[1] != REPORT_ID:
+        return None
     p = frame[2:]
 
     stick_x_raw = p[1] | ((p[2] & 0x0F) << 8)
@@ -208,6 +272,12 @@ def decode_frame(frame: bytes) -> ControllerState | None:
     )
 
 
+def _half_away(value: float) -> float:
+    """Bias for round-half-away-from-zero before truncation (Q15 and trigger)."""
+
+    return value + 0.5 if value >= 0.0 else value - 0.5
+
+
 def record_from_state(
     state: ControllerState,
     hand: int,
@@ -215,6 +285,20 @@ def record_from_state(
     rx_time_us: int,
 ) -> DecodedRecord:
     """Build the FF12 record from a decoded state (as the C helper does)."""
+
+    # Two binary32 round-trips, as in the C code: scale, then bias.
+    a, b, c, d, e = _F5.unpack(
+        _F5.pack(
+            min(1.0, max(-1.0, state.thumbstick_x)) * 32767.0,
+            min(1.0, max(-1.0, state.thumbstick_y)) * 32767.0,
+            min(1.0, max(-1.0, state.trackpad_x)) * 32767.0,
+            min(1.0, max(-1.0, state.trackpad_y)) * 32767.0,
+            state.trigger * 255.0,
+        )
+    )
+    a, b, c, d, e = _F5.unpack(
+        _F5.pack(_half_away(a), _half_away(b), _half_away(c), _half_away(d), e + 0.5)
+    )
 
     return DecodedRecord(
         hand=hand,
@@ -224,8 +308,33 @@ def record_from_state(
         gyro=state.gyro,
         accel=state.accel,
         temperature_raw=state.temperature_raw,
-        stick=(_q15(state.thumbstick_x), _q15(state.thumbstick_y)),
-        trackpad=(_q15(state.trackpad_x), _q15(state.trackpad_y)),
+        stick=(int(a), int(b)),
+        trackpad=(int(c), int(d)),
+        trigger=int(e) & 0xFF,
+        battery=state.battery,
+        buttons=state.buttons,
+        flags=0,
+    )
+
+
+def _record_from_state_reference(
+    state: ControllerState,
+    hand: int,
+    sequence: int,
+    rx_time_us: int,
+) -> DecodedRecord:
+    """Exact-rational reference for :func:`record_from_state` (test oracle)."""
+
+    return DecodedRecord(
+        hand=hand,
+        sequence=sequence,
+        rx_time_us=rx_time_us,
+        device_ticks=state.ticks,
+        gyro=state.gyro,
+        accel=state.accel,
+        temperature_raw=state.temperature_raw,
+        stick=(_q15_reference(state.thumbstick_x), _q15_reference(state.thumbstick_y)),
+        trackpad=(_q15_reference(state.trackpad_x), _q15_reference(state.trackpad_y)),
         trigger=int(
             _f32_fraction(
                 Fraction(_f32_fraction(Fraction(state.trigger) * 255)) + Fraction(1, 2)

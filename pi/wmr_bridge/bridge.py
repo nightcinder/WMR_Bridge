@@ -454,7 +454,8 @@ class Bridge:
         """Assign a sequence number and fan one report out to subscribers.
 
         ``state`` may carry an already-decoded frame so a transport that needs
-        the activity flag does not force a second Fraction-based decode.
+        the activity flag does not force a second decode. The decoder is the
+        fast binary32-exact path; its Fraction reference is only a test oracle.
         """
 
         if not 0 <= hand < 2:
