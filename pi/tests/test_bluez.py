@@ -301,13 +301,30 @@ class HidrawReaderAsyncEnableTests(unittest.IsolatedAsyncioTestCase):
 
 
 class _Hand:
-    def __init__(self, connected: bool) -> None:
+    def __init__(self, connected: bool, reports: int = 0, last_rx_us: int = 0) -> None:
         self.connected = connected
+        self.reports = reports
+        self.last_rx_us = last_rx_us
 
 
 class _Bridge:
-    def __init__(self, left: bool = False, right: bool = False) -> None:
-        self.hands = (_Hand(left), _Hand(right))
+    def __init__(
+        self,
+        left: bool = False,
+        right: bool = False,
+        *,
+        reports: int = 0,
+        last_rx_us: int = 0,
+        now_us: int = 1_000_000,
+    ) -> None:
+        self.hands = (
+            _Hand(left, reports, last_rx_us),
+            _Hand(right, reports, last_rx_us),
+        )
+        self._now_us = now_us
+
+    def now_us(self) -> int:
+        return self._now_us
 
 
 def _completed(args: list[str], stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess[str]:
@@ -449,6 +466,7 @@ class BluezAutoPairerTests(unittest.TestCase):
                     scan_seconds: float = 1.0,
                     pairing_window_open=None,
                     on_scan_end=None,
+                    ble_central_subscribed=None,
                     rfkill_root="/nonexistent/rfkill"):
         return BluezAutoPairer(
             bridge,
@@ -457,6 +475,7 @@ class BluezAutoPairerTests(unittest.TestCase):
             session=session or (lambda _seconds, _should_pair: []),
             pairing_window_open=pairing_window_open,
             on_scan_end=on_scan_end,
+            ble_central_subscribed=ble_central_subscribed,
             which=which,
             scan_seconds=scan_seconds,
             poll_interval=1.0,
@@ -877,6 +896,69 @@ class BluezAutoPairerTests(unittest.TestCase):
         self.assertEqual(scans, [2.0])
         self.assertEqual(pairer._next_delay(0), 60.0)
         self.assertEqual(pairer._next_delay(10), 60.0)
+
+    def test_scan_pauses_while_a_controller_streams_to_a_ble_central(self) -> None:
+        scans: list[float] = []
+
+        def runner(args: list[str], timeout: float):
+            if args[1] in ("power", "devices"):
+                return _completed(args)
+            raise AssertionError(f"unexpected bluetoothctl call: {args}")
+
+        pairer = self.make_pairer(
+            _Bridge(left=True, reports=5, last_rx_us=1_000_000),
+            runner,
+            session=lambda seconds, _should_pair: scans.append(seconds) or [],
+            scan_seconds=10.0,
+            ble_central_subscribed=lambda: True,
+        )
+        with self.assertLogs("wmr_bridge.bluez", level="INFO") as logs:
+            self.assertFalse(pairer._tick())
+            self.assertFalse(pairer._tick())
+
+        # The inquiry would share the combo radio with the live Classic and LE
+        # ACL links, so it waits instead of running a short scan.
+        self.assertEqual(scans, [])
+        self.assertEqual(
+            sum("pausing the controller scan" in line for line in logs.output), 1
+        )
+
+    def test_scan_resumes_when_the_controller_goes_idle(self) -> None:
+        scans: list[float] = []
+
+        def runner(args: list[str], timeout: float):
+            if args[1] in ("power", "devices", "pairable"):
+                return _completed(args)
+            raise AssertionError(f"unexpected bluetoothctl call: {args}")
+
+        pairer = self.make_pairer(
+            # The last report is nineteen seconds old: no longer streaming.
+            _Bridge(left=True, reports=5, last_rx_us=1_000_000, now_us=20_000_000),
+            runner,
+            session=lambda seconds, _should_pair: scans.append(seconds) or [],
+            scan_seconds=10.0,
+            ble_central_subscribed=lambda: True,
+        )
+        self.assertFalse(pairer._tick())
+        self.assertEqual(scans, [2.0])
+
+    def test_scan_runs_when_no_ble_central_is_subscribed(self) -> None:
+        scans: list[float] = []
+
+        def runner(args: list[str], timeout: float):
+            if args[1] in ("power", "devices", "pairable"):
+                return _completed(args)
+            raise AssertionError(f"unexpected bluetoothctl call: {args}")
+
+        pairer = self.make_pairer(
+            _Bridge(left=True, reports=5, last_rx_us=1_000_000),
+            runner,
+            session=lambda seconds, _should_pair: scans.append(seconds) or [],
+            scan_seconds=10.0,
+            ble_central_subscribed=lambda: False,
+        )
+        self.assertFalse(pairer._tick())
+        self.assertEqual(scans, [2.0])
 
     def test_missing_bluetoothctl_disables_pairing_without_raising(self) -> None:
         calls: list[list[str]] = []

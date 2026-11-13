@@ -13,9 +13,14 @@ CONF_MODULE = PI_DIR / "wmr_bridge" / "bluez_conf.py"
 
 from wmr_bridge.bluez_conf import (  # noqa: E402
     JUST_WORKS_REPAIRING,
+    LE_MAX_CONNECTION_INTERVAL,
+    LE_MIN_CONNECTION_INTERVAL,
+    ensure_bluez_config,
     ensure_just_works_repairing,
     read_just_works_repairing,
+    read_le_connection_intervals,
     set_just_works_repairing,
+    set_le_connection_intervals,
 )
 
 STOCK = """[General]
@@ -65,6 +70,47 @@ class RepairPolicyTextTests(unittest.TestCase):
         )
 
 
+class LeIntervalTextTests(unittest.TestCase):
+    def test_the_bridge_asks_for_the_esp32_15_ms_link(self) -> None:
+        self.assertEqual(LE_MIN_CONNECTION_INTERVAL, 12)
+        self.assertEqual(LE_MAX_CONNECTION_INTERVAL, 15)
+
+    def test_stock_le_comments_are_replaced_in_place(self) -> None:
+        updated = set_le_connection_intervals(STOCK)
+        self.assertIn("MinConnectionInterval = 12\n", updated)
+        self.assertIn("MaxConnectionInterval = 15\n", updated)
+        self.assertNotIn("#MinConnectionInterval", updated)
+
+    def test_a_missing_le_section_is_appended(self) -> None:
+        updated = set_le_connection_intervals("[General]\nJustWorksRepairing = confirm\n")
+        self.assertIn("[LE]\nMinConnectionInterval = 12\n", updated)
+        self.assertIn("MaxConnectionInterval = 15\n", updated)
+
+    def test_the_le_rewrite_is_idempotent(self) -> None:
+        once = set_le_connection_intervals(STOCK)
+        self.assertEqual(set_le_connection_intervals(once), once)
+
+    def test_reading_intervals_ignores_the_stock_comments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "main.conf"
+            path.write_text(STOCK, encoding="utf-8")
+            self.assertIsNone(read_le_connection_intervals(path))
+            path.write_text(set_le_connection_intervals(STOCK), encoding="utf-8")
+            self.assertEqual(read_le_connection_intervals(path), (12, 15))
+
+    def test_ensure_applies_both_settings_and_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "main.conf"
+            path.write_text(STOCK, encoding="utf-8")
+
+            self.assertTrue(ensure_bluez_config(path))
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("JustWorksRepairing = confirm", text)
+            self.assertIn("MinConnectionInterval = 12", text)
+            self.assertIn("MaxConnectionInterval = 15", text)
+            self.assertFalse(ensure_bluez_config(path))
+
+
 def read_just_works_repairing_text(text: str) -> str:
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "main.conf"
@@ -112,7 +158,10 @@ class EnsureFileTests(unittest.TestCase):
             )
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
             self.assertIn("JustWorksRepairing", proc.stdout)
-            self.assertIn("JustWorksRepairing = confirm", path.read_text(encoding="utf-8"))
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("JustWorksRepairing = confirm", text)
+            self.assertIn("MinConnectionInterval = 12", text)
+            self.assertIn("MaxConnectionInterval = 15", text)
 
     def test_the_cli_check_says_when_a_bluetooth_restart_is_needed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -136,7 +185,7 @@ class EnsureFileTests(unittest.TestCase):
             )
             self.assertEqual(needs_rewrite.returncode, 1)
 
-            ensure_just_works_repairing(path)
+            ensure_bluez_config(path)
             configured = subprocess.run(
                 [sys.executable, str(CONF_MODULE), "--check", str(path)],
                 capture_output=True,

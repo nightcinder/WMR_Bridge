@@ -325,7 +325,9 @@ that bond in `bluetoothctl` or open a new window. With a window open, the phone
 that owns the stored bond may forget the bridge and pair again from its
 Bluetooth settings: the
 installer sets `JustWorksRepairing = confirm` so BlueZ asks the bridge's agent
-instead of rejecting the Just Works confirmation. If the journal shows
+instead of rejecting the Just Works confirmation. It also sets
+`[LE] MinConnectionInterval = 12` and `MaxConnectionInterval = 15` (a 15-20 ms
+link) so BLE HID and FF1x notifications keep their slots. If the journal shows
 `BlueZ JustWorksRepairing = never`, re-run the installer to apply that setting.
 
 If the log says `auto-pair: Bluetooth adapter is not usable yet`, check that

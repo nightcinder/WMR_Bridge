@@ -734,8 +734,10 @@ open, and unregistered again when the window closes, so a phone's LE bond is
 accepted as Just Works instead of being rejected for lack of an agent. The
 agent accepts every device BlueZ presents and exists only for that window; the
 adapter's pairable window is the gate. `install.sh` and the `.deb` post-install
-script set BlueZ's `[General] JustWorksRepairing` to `confirm` and restart
-`bluetooth.service` **only when that setting actually changes**. An upgrade from
+script set BlueZ's `[General] JustWorksRepairing` to `confirm` and its `[LE]`
+`MinConnectionInterval`/`MaxConnectionInterval` bounds to 12/15 (BlueZ's
+1.25 ms units, so a 15-20 ms link), then restart `bluetooth.service` **only
+when one of those settings actually changes**. An upgrade from
 a release that already carries the policy leaves bluetoothd (and the stored
 bonds) alone; until 0.3.24 every install restarted bluetoothd while the bridge
 held a GATT application, advertisement and Classic scans, which can crash the
