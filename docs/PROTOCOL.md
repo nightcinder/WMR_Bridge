@@ -1002,7 +1002,7 @@ report. Bench items: [TESTING.md](TESTING.md), "FF13 config block".
 ## Security note
 
 The config block is device-specific data (it may contain identifiers). Since
-firmware 0.3.0 FF13 is readable and writable only on an encrypted, bonded link
+firmware 0.3.5 FF13 is readable and writable only on an encrypted, bonded link
 (`wmr_bridge.gatt`, "Security and pairing" above). Pairing is Just Works, so
 the link is not MITM-protected and any central that completes pairing while
 the bridge accepts a new bond can read the block. See
