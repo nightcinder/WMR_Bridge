@@ -1,10 +1,12 @@
 # Linux / Raspberry Pi host bridge over Wi-Fi
 
-Status: the second supported first-class target (ESP32-over-BLE is the default),
-host-tested in this repository. No run of the hardware checklist (P1-P14
+Status: the second supported first-class target (ESP32-over-BLE is the default).
+The last Pi run on hardware used v0.3.23; the path has changed since
+(0.3.24 through 0.3.27-rc.2), and none of those changes has run on a Pi.
+No run of the hardware checklist (P1-P14
 below) is recorded, and no streaming figure (rate, loss, latency, CPU) has
 been measured on a Raspberry Pi with real controllers.
-The changelog entries for 0.3.19 to 0.3.26 describe faults seen with a Pi and a
+The changelog entries describe faults seen with a Pi and a
 Pixel phone (the bridge missing from the phone's scan list, `Numeric comparison
 failed (0x0c)` on re-pairing, `HCI Hardware Error` with `Powered: no` after an
 upgrade, `descriptor write: RequestBusy`), so parts of the install,
@@ -13,12 +15,6 @@ user-reported fault reports with no run sheet in this repository.
 Everything below is the design and the bench plan, not a hardware
 result. The bring-up run sheet for the first sitting is
 `docs/runs/sheets/bench.md` (Part A).
-
-In review, not merged (separate PRs; the text below describes the code
-without them): a non-blocking `0x06` enable, which removes the 10 ms
-`time.sleep` between the two enable reports from the event loop
-(`HidrawReader.send_enable` in `pi/wmr_bridge/bluez.py`), and a faster
-bit-exact `decode_frame`/`record_from_state`.
 
 This document specifies a second bridge implementation for any Linux machine
 with Bluetooth Classic and a 5 GHz Wi-Fi adapter. A Raspberry Pi 4 or 5 is the
@@ -1261,12 +1257,13 @@ whatever BlueZ paired, and assigns hands by HID name.
 - The Pi link removes BLE notification airtime from the phone path. It cannot
   remove Classic Bluetooth loss between controllers and the Pi.
 - One Python process handles both hands. Encoding a decoded record is cheap;
-  decoding the 46-byte frame is the costly step in the current code, because
-  `decode_frame` does exact `Fraction` arithmetic per report to match the C
-  reference bit for bit. Its cost has not been measured on a Pi (a faster
-  bit-exact decoder is in review, see "Status"). The `0x06` enable pair also
-  holds the event loop for 10 ms each time it is sent (at connect and at every
-  10 s keep-alive per hand) until the non-blocking enable in review merges.
+  decoding the 46-byte frame is the costly step. `decode_frame` computes in
+  binary64 and rounds once to binary32, which is bit-identical to the C
+  reference and about 20x faster than the exact-`Fraction` implementation kept
+  as the test oracle (`pi/wmr_bridge/decode.py`). Its cost has not been measured
+  on a Pi. The `0x06` enable pair does not hold the event loop: `send_enable`
+  writes the first report and schedules the second after `WMR_ENABLE_SPACING`
+  (10 ms) with `loop.call_later`, and sleeps only when no loop is running.
   The event loop should keep up with 2 x about 180 reports/s on a Pi 4; that
   is an expectation, not a measurement.
   Batching reduces WebSocket writes but adds at most the hold time (5 ms
@@ -1327,12 +1324,11 @@ is not loss. Use sequence gaps and `dropped` to judge loss.
 
 ### Hardware checklist (not yet run)
 
-First target: **Raspberry Pi 3 Model B+**. The bench was planned for
-2026-11-07; as of 2026-11-13 no result of that sitting is recorded in this
+First target: **Raspberry Pi 3 Model B+**. No result is recorded in this
 repository (no filled run sheet, no probe output), so every row below is
 still open. The
 tester checklist and pinned image/package checksums are in
-[DEPLOY_RPI.md](DEPLOY_RPI.md#0-bench-checklist-for-2026-11-07-raspberry-pi-3b).
+[DEPLOY_RPI.md](DEPLOY_RPI.md#0-bench-checklist-raspberry-pi-3b).
 
 | ID | Check | Pass criterion |
 | --- | --- | --- |

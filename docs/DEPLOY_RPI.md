@@ -12,7 +12,7 @@ supported (2.4 GHz only).
 controller pairing. Use the package or installer so bonds, tokens and local
 config survive updates.
 
-## 0. Bench checklist for 2026-11-07 (Raspberry Pi 3B+)
+## 0. Bench checklist (Raspberry Pi 3B+)
 
 - [ ] Flash Raspberry Pi OS Lite **64-bit**.
 - [ ] Use a 5 V / 2.5 A micro-USB supply; `vcgencmd get_throttled` prints
@@ -69,7 +69,7 @@ systemctl is-active bluetooth # active
 If `uname -m` is `armv7l`, the 32-bit image was flashed; re-flash 64-bit. If
 Bluetooth is inactive: `sudo systemctl enable --now bluetooth`.
 
-Pinned images for 2026-11-07:
+Pinned images for the bench:
 
 | Release | SHA-256 (`.img.xz`) |
 |---|---|
