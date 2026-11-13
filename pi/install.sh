@@ -19,6 +19,13 @@
 # version:
 #   WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_TAG=v<version> sh install.sh
 #   WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_RELEASE_BASE_URL=https://example/pkg sh install.sh
+# A pre-release is not returned by releases/latest, so pin its tag and version
+# too. dpkg reads its "-rc.2" as a package revision and ranks it above the
+# plain release, so the installer compares the tilde form instead and lets
+# apt-get replace that revision when semver still ranks the target newer:
+#   curl -fsSL \
+#     https://github.com/nightcinder/WMR_Bridge/releases/download/v<version>/install.sh \
+#     | WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_TAG=v<version> sudo -E bash
 #
 # The installed copy is also the root upgrade path for the daemon:
 #   /opt/wmr-bridge/pi/install.sh --upgrade
@@ -183,29 +190,41 @@ if [ -z "$SCRIPT_DIR" ] || [ "$UPGRADE" = "1" ]; then
         fi
     fi
 
-    # The daemon-triggered upgrade must not reinstall or downgrade. Read the
-    # version from the installed files first (a checkout install may be newer
-    # than the last .deb dpkg knows), and fall back to the package database.
+    # dpkg reads the "-rc.2" of a semver pre-release as a package revision and
+    # ranks it *above* the plain release (dpkg: 0.3.27-rc.2 > 0.3.27), the
+    # reverse of semver. Compare the tilde form (0.3.27~rc.2 < 0.3.27) so the
+    # install decisions agree with semver.
+    debian_version() {
+        printf '%s\n' "$1" | sed 's/-\([A-Za-z][0-9A-Za-z.+]*\)$/~\1/'
+    }
+
+    # Read the installed version once, for both the upgrade no-op check and the
+    # apt-get downgrade decision below. Prefer the installed files (a checkout
+    # install may be newer than the last .deb dpkg knows), then the package
+    # database.
+    INSTALLED_VERSION=""
+    if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/wmr_bridge/__init__.py" ] &&
+        command -v python3 >/dev/null 2>&1; then
+        INSTALLED_VERSION="$(
+            PYTHONPATH="$SCRIPT_DIR" python3 -c \
+                'import wmr_bridge; print(wmr_bridge.__version__)' 2>/dev/null || true
+        )"
+    fi
+    if [ -z "$INSTALLED_VERSION" ] && command -v dpkg-query >/dev/null 2>&1; then
+        INSTALLED_VERSION="$(
+            dpkg-query -W -f='${Version}' wmr-bridge 2>/dev/null || true
+        )"
+    fi
+
+    # The daemon-triggered upgrade must not reinstall or downgrade.
     if [ "$UPGRADE" = "1" ]; then
         command -v apt-get >/dev/null 2>&1 ||
             die "the upgrade path needs apt-get"
         command -v dpkg >/dev/null 2>&1 ||
             die "the upgrade path needs dpkg"
-        INSTALLED_VERSION=""
-        if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/wmr_bridge/__init__.py" ] &&
-            command -v python3 >/dev/null 2>&1; then
-            INSTALLED_VERSION="$(
-                PYTHONPATH="$SCRIPT_DIR" python3 -c \
-                    'import wmr_bridge; print(wmr_bridge.__version__)' 2>/dev/null || true
-            )"
-        fi
-        if [ -z "$INSTALLED_VERSION" ] && command -v dpkg-query >/dev/null 2>&1; then
-            INSTALLED_VERSION="$(
-                dpkg-query -W -f='${Version}' wmr-bridge 2>/dev/null || true
-            )"
-        fi
         if [ -n "$INSTALLED_VERSION" ] &&
-            dpkg --compare-versions "$VERSION" le "$INSTALLED_VERSION"; then
+            dpkg --compare-versions \
+                "$(debian_version "$VERSION")" le "$(debian_version "$INSTALLED_VERSION")"; then
             echo "install.sh: wmr-bridge ${INSTALLED_VERSION} is current (latest ${VERSION}); nothing to do"
             exit 0
         fi
@@ -269,7 +288,17 @@ if [ -z "$SCRIPT_DIR" ] || [ "$UPGRADE" = "1" ]; then
     # performs the download unsandboxed.
     chmod 0755 "$TMP_DIR"
     chmod 0644 "${TMP_DIR}/${DEB}"
-    DEBIAN_FRONTEND=noninteractive apt-get install -y "${TMP_DIR}/${DEB}"
+    # apt-get refuses to replace a version dpkg ranks higher even when semver
+    # says the fetched build is newer (0.3.27 over an installed 0.3.27-rc.2).
+    # Accept exactly that case; a real semver downgrade still stops here.
+    ALLOW_DOWNGRADES=""
+    if [ -n "$INSTALLED_VERSION" ] && command -v dpkg >/dev/null 2>&1 &&
+        dpkg --compare-versions \
+            "$(debian_version "$VERSION")" gt "$(debian_version "$INSTALLED_VERSION")" &&
+        dpkg --compare-versions "$VERSION" lt "$INSTALLED_VERSION"; then
+        ALLOW_DOWNGRADES="--allow-downgrades"
+    fi
+    DEBIAN_FRONTEND=noninteractive apt-get install -y $ALLOW_DOWNGRADES "${TMP_DIR}/${DEB}"
     # postinst already restarted wmr-bridge once with the new files.
     enable_service start
     exit 0
