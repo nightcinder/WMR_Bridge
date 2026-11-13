@@ -107,6 +107,57 @@ def _stage_signed_release(directory: Path) -> tuple[Path, str]:
     return release, bare_key
 
 
+def _run_upgrade_install(
+    directory: Path, installed: str, target: str
+) -> tuple[subprocess.CompletedProcess[str], str]:
+    """Run `install.sh --upgrade` against a staged release and a fake install.
+
+    The installer copy has no sibling `wmr_bridge` tree, so the installed
+    version comes from the dpkg-query stub and the release is fetched from the
+    staged directory. minisign is stubbed: these tests cover version ordering,
+    not signature verification (which has its own tests).
+    """
+    installer = directory / "install.sh"
+    shutil.copy(INSTALL_SH, installer)
+
+    release = directory / "release"
+    release.mkdir()
+    (release / f"wmr-bridge_{target}_all.deb").write_bytes(b"fake deb\n")
+    sums = subprocess.run(
+        ["/bin/sh", str(MAKE_SUMS), str(release)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if sums.returncode != 0:
+        raise AssertionError(sums.stderr)
+    (release / "SHA256SUMS.minisig").write_text("signature\n", encoding="ascii")
+
+    bin_dir = directory / "bin"
+    bin_dir.mkdir()
+    calls = directory / "calls.log"
+    calls.write_text("", encoding="utf-8")
+    _write_stub(bin_dir, "minisign", "exit 0")
+    _write_stub(bin_dir, "dpkg-query", f'echo "{installed}"')
+    _write_stub(bin_dir, "apt-get", f'echo "apt-get $*" >> "{calls}"')
+    _write_stub(bin_dir, "systemctl", "exit 0")
+
+    env = {
+        **os.environ,
+        "WMR_BRIDGE_VERSION": target,
+        "WMR_BRIDGE_RELEASE_BASE_URL": release.as_uri(),
+        "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
+    }
+    proc = subprocess.run(
+        ["/bin/sh", str(installer), "--upgrade"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc, calls.read_text(encoding="utf-8")
+
+
 class PackagingTests(unittest.TestCase):
     def test_package_version_matches_root_version(self) -> None:
         self.assertEqual(VERSION, ROOT_VERSION)
@@ -321,6 +372,45 @@ class PackagingTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
             self.assertIn("nothing to do", proc.stdout)
             self.assertFalse(calls.exists(), msg=calls.read_text(encoding="utf-8") if calls.exists() else "")
+
+    def test_upgrade_installs_a_prerelease_over_an_older_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            proc, calls = _run_upgrade_install(Path(tmp), "0.3.26", "0.3.27-rc.2")
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            self.assertIn("installing wmr-bridge_0.3.27-rc.2_all.deb", proc.stdout)
+            self.assertIn("apt-get install -y /", calls)
+            # dpkg already ranks the rc above 0.3.26, so no downgrade is needed.
+            self.assertNotIn("--allow-downgrades", calls)
+
+    def test_upgrade_replaces_an_installed_prerelease_with_the_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            proc, calls = _run_upgrade_install(Path(tmp), "0.3.27-rc.2", "0.3.27")
+            # dpkg ranks 0.3.27-rc.2 above 0.3.27, so the release only installs
+            # when semver decides the ordering and apt-get accepts the replace.
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            self.assertNotIn("nothing to do", proc.stdout)
+            self.assertIn("apt-get install -y --allow-downgrades ", calls)
+            self.assertIn("wmr-bridge_0.3.27_all.deb", calls)
+
+    def test_upgrade_does_not_replace_a_prerelease_with_an_older_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            proc, calls = _run_upgrade_install(Path(tmp), "0.3.27-rc.2", "0.3.26")
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            self.assertIn("nothing to do", proc.stdout)
+            self.assertEqual(calls, "")
+
+    def test_upgrade_of_the_installed_version_is_a_noop(self) -> None:
+        for version in ("0.3.27", "0.3.27-rc.2"):
+            with tempfile.TemporaryDirectory() as tmp:
+                proc, calls = _run_upgrade_install(Path(tmp), version, version)
+                self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+                self.assertIn("nothing to do", proc.stdout)
+                self.assertEqual(calls, "")
+
+    def test_installer_header_documents_the_tag_pinned_prerelease_command(self) -> None:
+        header = INSTALL_SH.read_text(encoding="utf-8").split("set -eu", 1)[0]
+        self.assertIn("releases/download/v<version>/install.sh", header)
+        self.assertIn("WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_TAG=v<version> sudo -E bash", header)
 
     def test_installer_preserves_existing_token_and_env_and_invokes_system_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
