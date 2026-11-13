@@ -1469,6 +1469,10 @@ bytes from a CSPRNG, lowercase hex, fresh per connection; the server nonce is
 single-use and expires with the 5 s authentication bound. The existing
 `{"type":"auth","token":"..."}` remains accepted for older clients until a
 later revision removes it, and `authMode` tells a client which message to send.
+A client that supports this exchange must not fall back to the legacy token
+message when `authMode` is `"token"` or absent over a plaintext non-loopback
+link unless the user explicitly consents to the downgrade: `authMode` is
+unauthenticated and an on-path attacker can forge it to harvest the token.
 No control message other than `auth` is processed before `auth_ok`. HMAC-SHA256
 authenticates both ends but does not encrypt; the stream stays plaintext and
 TLS remains the confidentiality control.

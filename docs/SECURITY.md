@@ -169,7 +169,15 @@ What it does not do:
 - An active on-path relay can forward a handshake between the real client and
   the real bridge and stay in the middle. Challenge-response without channel
   binding or a PAKE cannot detect that. A passive observer, or a spoofed bridge
-  that does not relay, learns nothing and cannot reuse the client's proof.
+  that does not relay, learns nothing from the challenge exchange and cannot
+  reuse the client's proof.
+- Downgrade: `hello.authMode` is unauthenticated (it arrives before the client
+  can verify the bridge) and the legacy token message stays accepted, so an
+  on-path attacker can present `"authMode":"token"` or omit the field and
+  receive the bearer token, which is then replayable. A companion that supports
+  challenge-response must never send the legacy token message over a plaintext
+  non-loopback link unless the user explicitly consents to the downgrade; its
+  proof, not the announcement, is what authenticates the bridge.
 - HMAC makes one captured exchange offline-checkable, so a weak token can be
   guessed offline. Keep the generated 24-byte random token rather than a
   passphrase.
@@ -182,7 +190,9 @@ gains `authMode` with the implementation; a bridge that omits it, or sends
 behaviour. A bridge that reports `"challenge"` accepts the new exchange and
 still accepts the token message until a later revision removes it, so older
 companions are unaffected. The Pi and app changes are held out of the rc.2
-cuts; this page and PROTOCOL.md specify only.
+cuts; this page and PROTOCOL.md specify only. Until the token message is
+removed, the client-side downgrade rule above is the control that keeps the
+token off the wire on a hostile link.
 
 ## Local / physical
 
