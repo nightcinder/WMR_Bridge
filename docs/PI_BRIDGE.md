@@ -1,10 +1,24 @@
 # Linux / Raspberry Pi host bridge over Wi-Fi
 
 Status: the second supported first-class target (ESP32-over-BLE is the default),
-host-tested in this repository but not yet run on a Raspberry Pi or with real
-controllers. Everything below is the design and the bench plan, not a hardware
+host-tested in this repository. No run of the hardware checklist (P1-P14
+below) is recorded, and no streaming figure (rate, loss, latency, CPU) has
+been measured on a Raspberry Pi with real controllers.
+The changelog entries for 0.3.19 to 0.3.26 describe faults seen with a Pi and a
+Pixel phone (the bridge missing from the phone's scan list, `Numeric comparison
+failed (0x0c)` on re-pairing, `HCI Hardware Error` with `Powered: no` after an
+upgrade, `descriptor write: RequestBusy`), so parts of the install,
+advertising and pairing path have been exercised on hardware. Those are
+user-reported fault reports with no run sheet in this repository.
+Everything below is the design and the bench plan, not a hardware
 result. The bring-up run sheet for the first sitting is
 `docs/runs/sheets/bench.md` (Part A).
+
+In review, not merged (separate PRs; the text below describes the code
+without them): a non-blocking `0x06` enable, which removes the 10 ms
+`time.sleep` between the two enable reports from the event loop
+(`HidrawReader.send_enable` in `pi/wmr_bridge/bluez.py`), and a faster
+bit-exact `decode_frame`/`record_from_state`.
 
 This document specifies a second bridge implementation for any Linux machine
 with Bluetooth Classic and a 5 GHz Wi-Fi adapter. A Raspberry Pi 4 or 5 is the
@@ -829,8 +843,12 @@ Per-client gating:
   A phone with notifications enabled keeps receiving FF11, FF12 and FF14 even
   while another client is on TCP. A phone with notifications off receives
   nothing.
-- FF14 is capped at 50 Hz because the Pi shares `hci0` with the two Classic
-  HID controller links.
+- FF14 partial batches are paced at 50 Hz (`DEFAULT_BATCH_HZ`: at most one
+  timed flush per 20 ms) because the Pi shares `hci0` with the two Classic
+  HID controller links. A full batch (as many records as the MTU allows, at
+  most 9) is sent at once, so this is a pacing interval for partial batches,
+  not a cap on the record rate or on notifications per second. No command-line
+  flag changes it.
 - Bonding is accepted only while the adapter is pairable: during the boot
   window (`--ble-pairing-window`), for a manual window opened with
   `wmr-bridge pair`, with `--ble-continuous-pairing`, or while no LE bond is
@@ -1240,8 +1258,15 @@ whatever BlueZ paired, and assigns hands by HID name.
 
 - The Pi link removes BLE notification airtime from the phone path. It cannot
   remove Classic Bluetooth loss between controllers and the Pi.
-- One Python process handles both hands. Encoding one 46-byte frame is cheap.
-  The event loop should keep up with 2 x about 180 reports/s on a Pi 4.
+- One Python process handles both hands. Encoding a decoded record is cheap;
+  decoding the 46-byte frame is the costly step in the current code, because
+  `decode_frame` does exact `Fraction` arithmetic per report to match the C
+  reference bit for bit. Its cost has not been measured on a Pi (a faster
+  bit-exact decoder is in review, see "Status"). The `0x06` enable pair also
+  holds the event loop for 10 ms each time it is sent (at connect and at every
+  10 s keep-alive per hand) until the non-blocking enable in review merges.
+  The event loop should keep up with 2 x about 180 reports/s on a Pi 4; that
+  is an expectation, not a measurement.
   Batching reduces WebSocket writes but adds at most the hold time (5 ms
   default).
 - The Pi 3B+ has less CPU headroom than a Pi 4 (Cortex-A53 at 1.4 GHz, 1 GB
@@ -1280,7 +1305,8 @@ the JSON control protocol, authentication, stream exclusion, batching and
 replay. It also covers the non-loopback-without-token refusal, the loopback
 default, Origin rejection and allow-listing, the handshake timeout, the
 `auth_failed` path for a non-ASCII token, per-hand drop accounting and closing
-active sockets on shutdown, the `handFilter` payload in `hello`/`status`, the
+active sockets on shutdown, the shared golden vectors
+(`tests/vectors/wmr_golden_v1.json`, also read by the companion app's tests), the `handFilter` payload in `hello`/`status`, the
 stable `bridge_id` in `hello`/discovery, UDP probes and rate limiting, and mDNS
 advertisement via avahi/systemd-resolved plus the absent-tool no-op. No hardware
 or third-party packages.
@@ -1299,7 +1325,10 @@ is not loss. Use sequence gaps and `dropped` to judge loss.
 
 ### Hardware checklist (not yet run)
 
-First target: **Raspberry Pi 3 Model B+**, bench scheduled 2026-11-07. The
+First target: **Raspberry Pi 3 Model B+**. The bench was planned for
+2026-11-07; as of 2026-11-13 no result of that sitting is recorded in this
+repository (no filled run sheet, no probe output), so every row below is
+still open. The
 tester checklist and pinned image/package checksums are in
 [DEPLOY_RPI.md](DEPLOY_RPI.md#0-bench-checklist-for-2026-11-07-raspberry-pi-3b).
 
