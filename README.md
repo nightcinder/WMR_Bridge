@@ -16,7 +16,8 @@ while sending the same FF11/FF12/FF14 payloads. See
 [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) (P1-P14) and the 12-step run sheet
 docs/runs/sheets/bench.md. Both the ESP32-over-BLE
 firmware (default) and the Pi-over-Wi-Fi daemon are supported first-class bridge
-targets. The Pi bridge is host-tests-only until the Pi sitting runs. The ESP32
+targets. The Pi bridge last ran on hardware at v0.3.23; the Pi path has changed
+since and none of the later changes has run on a Pi. The ESP32
 firmware has the bench runs recorded below.
 
 ```
@@ -351,8 +352,8 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
   decoder are host-tested and build-tested but have never run on a Switch
   controller. Hardware may need axis/button corrections
   ([docs/SWITCH.md](docs/SWITCH.md)).
-- Linux / Raspberry Pi Wi-Fi host bridge (`pi/`). Second supported target, but
-  host-tests-only until the Pi sitting runs
+- Linux / Raspberry Pi Wi-Fi host bridge (`pi/`). Second supported target; its
+  last hardware run used v0.3.23 and the path has changed since
   ([docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) P1-P14,
   docs/runs/sheets/bench.md).
 - Known oddity, not investigated: each controller logs `SET_PROTOCOL handshake
@@ -466,8 +467,14 @@ The Linux/Pi host bridge has its own standard-library Python suite:
 
 ## License
 
-Derived from BlueKitchen BTstack. Every source file keeps the BlueKitchen copyright
-and license notice (see `license_header.txt`). That license permits redistribution
-and modification only for personal, non-commercial use. Commercial use needs a
-license from BlueKitchen GmbH (contact@bluekitchen-gmbh.com). The same terms apply
-to this repository.
+The documentation and the host, test and tooling code that are original to this
+project are MIT-licensed; see [`LICENSE`](LICENSE) (Copyright (c) 2026 Nick
+Adamany).
+
+The firmware is derived from BlueKitchen BTstack. Every source file that carries
+the BlueKitchen copyright and license notice keeps that notice, and
+`license_header.txt` is its reference copy. That license permits redistribution
+and modification only for personal, non-commercial use; commercial use needs a
+license from BlueKitchen GmbH (contact@bluekitchen-gmbh.com). The same terms
+cover ports of those files into the Pi bridge, such as
+`pi/wmr_bridge/decode.py`.

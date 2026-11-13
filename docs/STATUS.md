@@ -76,23 +76,21 @@ with the Switch hardware check tracked in GitHub #145. The Pi pairs controllers
 through BlueZ automatically (the `v0.3.12` release shipped `0.2.4`) and does not
 yet read FF13 calibration from controllers. FF10–FF17 payloads otherwise match
 0.3.15, so companions at 0.2.2 or later continue to work. The Pi BLE gamepad,
-advertising and pairing path has no recorded hardware run (no run sheet); the
-three-state jitter check is pending.
-The changelog entries for 0.3.19 to 0.3.26 describe faults seen with a Pi and a
+advertising and pairing path has no run sheet (the last hardware run used
+v0.3.23); the three-state jitter check is pending.
+The changelog entries describe faults seen with a Pi and a
 Pixel phone (the bridge missing from the phone's scan list, `Numeric comparison
 failed (0x0c)` on re-pairing, `HCI Hardware Error` with `Powered: no` after an
 upgrade, `descriptor write: RequestBusy`), so parts of the install,
 advertising and pairing path have been exercised on hardware. Those are
 user-reported fault reports with no run sheet in this repository.
-Two Pi changes are in review as separate PRs and not merged: a non-blocking
-`0x06` enable and a faster bit-exact frame decoder.
 The shared golden vectors (`tests/vectors/wmr_golden_v1.json`) and the
 protocol proposals in [`docs/PROTOCOL.md`](PROTOCOL.md) ("Proposals":
 specified, not implemented) are documentation and host tests only. ESP32-over-BLE is
 the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the
-second supported first-class target; Pi is host-tests-only until the Pi sitting
-runs, see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md) and
-`docs/PI_BRIDGE.md`). Firmware and Pi
+second supported first-class target; the last Pi hardware run used v0.3.23 and
+the path has changed since, see [`docs/PI_BRIDGE.md`](PI_BRIDGE.md).
+Firmware and Pi
 hardware runs remain unverified unless a run sheet proves otherwise.
 
 This document tracks firmware and host-bridge capabilities and empirical
@@ -105,7 +103,7 @@ maintained here:
 - Linux / Raspberry Pi-over-Wi-Fi (`pi/`, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)):
   BlueZ Classic Bluetooth HID host forwarding the same `FF11`/`FF12`/`FF14`
   payloads over a 5 GHz Wi-Fi WebSocket (`wmr-wifi-v1`). Second supported
-  target, but host-tests-only until the Pi sitting runs
+  target; its last hardware run used v0.3.23 and the path has changed since
   (`docs/PI_BRIDGE.md`).
 
 The overall project status, milestones, roadmap, and companion Flutter app state
@@ -129,7 +127,7 @@ maintained at the project's single entry point:
 | Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.11 image has not been run on hardware (internal bench runbook block C) |
 | BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (#88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.11 pairing and encryption run is not yet done (internal bench runbook block B) |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, not run on hardware |
-| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests only (429 tests + loopback replay), the real BlueZ auto-pair path has not been run on Pi hardware or with controllers; the root upgrade unit and minisign verification have not run on Pi hardware; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
+| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests (471 tests + loopback replay) and a v0.3.23 hardware run (user-reported); the 0.3.24 through 0.3.27-rc.2 path, including the root upgrade unit and minisign verification, has not run on Pi hardware; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has not been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Console `v` read on the 0.2.4 hardware run (`0.2.4`, ESP-IDF v6.1); the live FF16 phone read on v0.3.11 is open (internal bench runbook block B) |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added in v0.3.11 | Host tests and firmware build only, never run on a PSVR2 controller |
@@ -329,12 +327,11 @@ However:
 - No two-bridge run has happened. The sitting procedure is in the removed
   multi-bridge sheet (see git history). LEFT at
   most 3 % on its own bridge is the pass bar.
-- No Raspberry Pi Wi-Fi bridge hardware run is recorded (no P1-P14 result, no
-  probe output; the 0.3.19 to 0.3.26 changelog entries report pairing and
-  adapter faults seen on a Pi, user-reported, without figures). The second supported
+- The last Raspberry Pi Wi-Fi bridge hardware run used v0.3.23; no P1-P14
+  result is recorded for any version (no filled run sheet, no probe output),
+  and the 0.3.24 through 0.3.27-rc.2 changes have not run on a Pi. The second supported
   target (`pi/`, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)) moves the phone link off
-  2.4 GHz BLE onto 5 GHz Wi-Fi WebSocket. It is host-tests-only until Sitting P
-  in `docs/PI_BRIDGE.md` runs.
+  2.4 GHz BLE onto 5 GHz Wi-Fi WebSocket.
   `pi/tools/wifi_probe.py` sends a UDP discovery probe, prints the `hello`
   `uplink` object, writes `--json-out`, and enforces the Sitting P criteria with
   `--assert-gates`; that is host-tested tooling, not a hardware result.

@@ -269,11 +269,14 @@ phone identifies a Switch blob by `total_len == 44`, `blob[0] == 1` and
 bridge that serves this layout sets `SWITCH_BLOB_V1` in `features`
 (PROTOCOL.md P2).
 
-Open point to settle before either side's calibrated values are trusted: the
-firmware's calibrated gyro formula uses the factor 816
-(`src/wmr_switch.c`), the app's `SwitchCalibration` uses 936
-(`switch_calibration.dart`). Which one matches a controller has not been
-checked here.
+Provenance of the two calibrated gyro constants, without choosing between
+them: the firmware uses 816 (`src/wmr_switch.c`), the "accurate ±2000 dps"
+(61 mdps/digit) branch of `imu_sensor_notes.md` in
+`dekuNukem/Nintendo_Switch_Reverse_Engineering`, which divides by
+`gyro_sensitivity - gyro_origin`. The app's `SwitchCalibration` uses 936
+(`switch_calibration.dart`), the "saturation-free LSM6DS3 ±2000 dps"
+(70 mdps/digit) branch of the same note. Both are documented there; which one
+matches a controller has not been checked in this repository.
 
 ## What is not verified
 

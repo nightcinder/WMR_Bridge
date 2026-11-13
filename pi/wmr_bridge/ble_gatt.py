@@ -11,8 +11,9 @@ Two rules from the transport review shape the implementation:
 * The stream is gated per central by BlueZ's CCCD state, not per bridge. A
   phone with notifications enabled keeps receiving FF11/FF12/FF14 even while
   another client is on TCP; a phone with notifications off receives nothing.
-* FF14 is capped at 50 Hz because the Pi shares ``hci0`` with the two Classic
-  HID controller links.
+* FF14 partial batches are paced at 50 Hz because the Pi shares ``hci0`` with
+  the two Classic HID controller links. The pacing sets when a partial batch
+  flushes, not how many records it carries; a full batch still goes at once.
 
 FF16 carries the plaintext LAN endpoint and ``bridge_id`` so a central can
 upgrade to TCP without bonding. FF13 carries the session token and therefore
