@@ -1257,12 +1257,13 @@ whatever BlueZ paired, and assigns hands by HID name.
 - The Pi link removes BLE notification airtime from the phone path. It cannot
   remove Classic Bluetooth loss between controllers and the Pi.
 - One Python process handles both hands. Encoding a decoded record is cheap;
-  decoding the 46-byte frame is the costly step in the current code, because
-  `decode_frame` does exact `Fraction` arithmetic per report to match the C
-  reference bit for bit. Its cost has not been measured on a Pi (a faster
-  bit-exact decoder is in review, see "Status"). The `0x06` enable pair also
-  holds the event loop for 10 ms each time it is sent (at connect and at every
-  10 s keep-alive per hand) until the non-blocking enable in review merges.
+  decoding the 46-byte frame is the costly step. `decode_frame` computes in
+  binary64 and rounds once to binary32, which is bit-identical to the C
+  reference and about 20x faster than the exact-`Fraction` implementation kept
+  as the test oracle (`pi/wmr_bridge/decode.py`). Its cost has not been measured
+  on a Pi. The `0x06` enable pair does not hold the event loop: `send_enable`
+  writes the first report and schedules the second after `WMR_ENABLE_SPACING`
+  (10 ms) with `loop.call_later`, and sleeps only when no loop is running.
   The event loop should keep up with 2 x about 180 reports/s on a Pi 4; that
   is an expectation, not a measurement.
   Batching reduces WebSocket writes but adds at most the hold time (5 ms
