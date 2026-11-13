@@ -431,7 +431,6 @@ class GattApplication:
         self._hid_last_sample = [float("-inf"), float("-inf")]
         self._hid_last_report: bytes | None = None
         self._hid_last_send = float("-inf")
-        self._hid_last_slot_hid = False
         self._mtu = DEFAULT_MTU
         self._subscribed: set[str] = set()
         self._last_value: dict[str, bytes] = {}
@@ -797,13 +796,13 @@ class GattApplication:
     def deliver(self, frame: Frame, record: DecodedRecord | None = None) -> None:
         """Send the FF10 streams first, then the HID report.
 
-        The stream goes out first so the HID path sees whether a FF1x frame
-        took this send slot: while a BLE stream waits, HID never takes two
-        slots in a row (the firmware pump's rule).
+        The stream goes out first so a FF1x notification always gets the send
+        slot before HID. Only a notification that actually fires counts as
+        framed traffic: a batch merely queued for a later 20 ms window must
+        not hold HID back.
         """
 
-        stream_ready = self.is_notifying(FF11_RAW)
-        if stream_ready:
+        if self.is_notifying(FF11_RAW):
             for fragment in encode_raw_messages(frame, self.fragment_size):
                 self._notify(FF11_RAW, fragment)
         if record is not None:
@@ -811,17 +810,14 @@ class GattApplication:
             if self.is_notifying(FF12_DECODED):
                 if len(packed) <= self.notification_limit:
                     self._notify(FF12_DECODED, packed)
-                    stream_ready = True
                 else:
                     self.dropped_records += 1
             if self.is_notifying(FF14_BATCHED):
                 if self.batch_max_count:
-                    # A queued batch is also a frame waiting for a send slot.
-                    stream_ready = True
                     self._queue_batch(packed)
                 else:
                     self.dropped_records += 1
-        self._deliver_hid(frame, record, stream_ready=stream_ready)
+        self._deliver_hid(frame, record)
 
     # ---- HID-over-GATT ---------------------------------------------------
 
@@ -858,7 +854,7 @@ class GattApplication:
         return expired
 
     def _deliver_hid(
-        self, frame: Frame, record: DecodedRecord | None, *, stream_ready: bool = False
+        self, frame: Frame, record: DecodedRecord | None
     ) -> None:
         if not 0 <= frame.hand < 2:
             return
@@ -889,13 +885,10 @@ class GattApplication:
             clamp(record.trackpad[1] / 32767.0, -1.0, 1.0),
         )
         self._hid_last_sample[frame.hand] = now
-        self._flush_hid(now, stream_ready=stream_ready)
+        self._flush_hid(now)
 
-    def _flush_hid(self, now: float, *, stream_ready: bool = False) -> None:
+    def _flush_hid(self, now: float) -> None:
         if not self.hid_enabled or not self._hid_hand_connected():
-            return
-        if stream_ready and self._hid_last_slot_hid:
-            # A FF1x frame is waiting for the link: let it take the next slot.
             return
         interval = (
             HID_STREAM_MIN_INTERVAL_S if self.hid_stream_active else HID_MIN_INTERVAL_S
@@ -924,12 +917,6 @@ class GattApplication:
         if uuid not in self._subscribed:
             return
         self._last_value[uuid] = value
-        # Only FF1x stream frames and the HID report compete for a send slot;
-        # remember which one went last for the alternation rule.
-        if uuid == HID_REPORT:
-            self._hid_last_slot_hid = True
-        elif uuid in (FF11_RAW, FF12_DECODED, FF14_BATCHED):
-            self._hid_last_slot_hid = False
         try:
             self._emitter(uuid, value)
         except Exception:  # a closed bus must not take the TCP path down
@@ -945,7 +932,6 @@ class GattApplication:
             self._hid_history = HidHistory()
             self._hid_last_report = None
             self._hid_last_send = float("-inf")
-            self._hid_last_slot_hid = False
             if self._hid_hand_connected():
                 self._hid_last_report = NEUTRAL_REPORT
                 self._notify(HID_REPORT, NEUTRAL_REPORT)

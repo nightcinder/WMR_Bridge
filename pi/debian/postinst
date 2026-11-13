@@ -75,17 +75,18 @@ case "$1" in
             # BlueZ defaults JustWorksRepairing to "never", so bluetoothd
             # rejects a phone's fresh Just Works pairing against a stored bond
             # before our agent is asked ("Numeric comparison failed"). Route the
-            # repair through the agent, as the ESP32 does after a stale bond
+            # repair through the agent, as the ESP32 does after a stale bond.
+            # The same tool sets the [LE] interval bounds to 12/15 (15-20 ms).
             BLUEZ_CONF="${DESTDIR}/etc/bluetooth/main.conf"
             BLUEZ_TOOL="${DESTDIR}/opt/wmr-bridge/pi/wmr_bridge/bluez_conf.py"
             BLUEZ_RESTART=0
             if command -v python3 >/dev/null 2>&1 && [ -f "$BLUEZ_TOOL" ]; then
                 if python3 "$BLUEZ_TOOL" --check "$BLUEZ_CONF"; then
-                    echo "wmr-bridge: BlueZ Just Works re-pairing already configured; leaving bluetooth.service running"
+                    echo "wmr-bridge: BlueZ re-pairing and LE intervals already configured; leaving bluetooth.service running"
                 elif python3 "$BLUEZ_TOOL" "$BLUEZ_CONF"; then
                     BLUEZ_RESTART=1
                 else
-                    echo "wmr-bridge: could not enable BlueZ Just Works re-pairing (non-fatal)" >&2
+                    echo "wmr-bridge: could not configure BlueZ re-pairing and LE intervals (non-fatal)" >&2
                 fi
             fi
             if [ -z "$PREVIOUS_VERSION" ] && command -v rfkill >/dev/null 2>&1; then
@@ -104,8 +105,8 @@ case "$1" in
                     # that restart can wedge the Pi's combo controller (btmon
                     # shows HCI Reset answered by Hardware Error 0x00) until
                     # the Pi is rebooted. An upgrade that does not change the
-                    # policy leaves bluetoothd alone, so the bond and the
-                    # working adapter survive.
+                    # policy or the LE bounds leaves bluetoothd alone, so the
+                    # bond and the working adapter survive.
                     systemctl stop wmr-bridge.service || true
                     systemctl restart bluetooth.service || true
                 fi

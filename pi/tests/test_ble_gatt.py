@@ -1200,6 +1200,38 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.backend.values(FF14_BATCHED)), 2)
         self.assertEqual(len(self.backend.values(HID_REPORT)), 3)
 
+    async def test_hid_keeps_reporting_while_an_ff14_batch_window_waits(self) -> None:
+        # A 5 Hz batch keeps records queued for 200 ms. HID must keep sending
+        # every 20 ms instead of latching behind a batch that has not fired.
+        bridge = Bridge()
+        backend = FakeBackend()
+        app = GattApplication(
+            bridge, hosts=[], port=8765, name="WMR Bridge", batch_hz=5.0,
+            clock=self.clock,
+        )
+        app.set_emitter(backend.notify)
+        bridge.add_sink(app)
+        app.read_value(FF16_VERSION, {"mtu": 517})
+        bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+        app.start_notify(HID_REPORT)
+        app.start_notify(FF14_BATCHED)
+        bridge.subscribers.add(FakeSubscriber())  # type: ignore[arg-type]
+
+        self.clock.advance(0.021)
+        bridge.ingest(0, self._sample(0x08))
+        self.assertEqual(len(backend.values(FF14_BATCHED)), 1)
+        before = len(backend.values(HID_REPORT))
+
+        for buttons in (0x02, 0x04, 0x01):
+            self.clock.advance(0.021)
+            bridge.ingest(0, self._sample(buttons))
+
+        # No batch fired after the first one, yet every paced HID sample went
+        # out instead of the slot latching on the first report.
+        self.assertEqual(len(backend.values(FF14_BATCHED)), 1)
+        self.assertEqual(len(backend.values(HID_REPORT)), before + 3)
+        app.stop_notify(FF14_BATCHED)
+
     async def test_hid_reads_follow_hogp(self) -> None:
         self.assertEqual(self.app.read_value(HID_INFORMATION), HID_INFORMATION_VALUE)
         self.assertEqual(self.app.read_value(HID_REPORT_MAP), REPORT_MAP)

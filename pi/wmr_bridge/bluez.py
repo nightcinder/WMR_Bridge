@@ -42,6 +42,10 @@ WMR_NAMES = {
     "motion controller - right": 1,
 }
 HAND_NAMES = {0: "LEFT", 1: "RIGHT"}
+# A controller counts as streaming while a report arrived this recently. The
+# scan pause is a sharing rule, not a latch: once the controller goes idle the
+# background inquiry resumes so a missing hand can still be paired.
+STREAM_ACTIVE_WINDOW_S = 3.0
 
 _HIDRAW_RE = re.compile(r"^hidraw\d+$")
 _ADDRESS_RE = re.compile(r"^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}$")
@@ -872,6 +876,7 @@ class BluezAutoPairer:
         session: Session | None = None,
         pairing_window_open: Callable[[], bool] | None = None,
         on_scan_end: Callable[[], None] | None = None,
+        ble_central_subscribed: Callable[[], bool] | None = None,
         which: Callable[[str], str | None] = shutil.which,
         rfkill_root: str = RFKILL_ROOT,
     ) -> None:
@@ -887,6 +892,8 @@ class BluezAutoPairer:
         self._session = session
         self._pairing_window_open = pairing_window_open
         self._on_scan_end = on_scan_end
+        self._ble_central_subscribed = ble_central_subscribed
+        self._scan_pause_logged = False
         self._which = which
         self._rfkill_root = rfkill_root
         self._task: asyncio.Task[None] | None = None
@@ -902,6 +909,44 @@ class BluezAutoPairer:
 
     def _any_hand_connected(self) -> bool:
         return any(self._hand_connected(hand) for hand in self.allowed_hands)
+
+    def _hand_streaming(self, hand: int) -> bool:
+        """True while *hand* is connected and recently delivered a report."""
+
+        if not self._hand_connected(hand):
+            return False
+        try:
+            stats = getattr(self.bridge, "hands")[hand]
+        except (IndexError, KeyError, TypeError):
+            return False
+        if getattr(stats, "reports", 0) <= 0:
+            return False
+        last_rx_us = getattr(stats, "last_rx_us", 0)
+        if not last_rx_us:
+            # A test bridge or an older caller only exposes the report count.
+            return True
+        now_us = getattr(self.bridge, "now_us", None)
+        now = now_us() if callable(now_us) else time.monotonic_ns() // 1000
+        return now - last_rx_us <= STREAM_ACTIVE_WINDOW_S * 1_000_000
+
+    def _scan_paused_by_ble(self) -> bool:
+        """True when a Classic inquiry would steal radio time from live BLE.
+
+        A phone's LE link carries the HID gamepad and telemetry while a
+        Classic controller streams. StartDiscovery then shares the combo
+        radio with both ACL links, so the background scan waits until either
+        the BLE central goes away or the controller stops streaming.
+        """
+
+        if not any(self._hand_streaming(hand) for hand in self.allowed_hands):
+            return False
+        if self._ble_central_subscribed is None:
+            return False
+        try:
+            return bool(self._ble_central_subscribed())
+        except Exception:
+            LOG.debug("BLE central subscription probe failed", exc_info=True)
+            return False
 
     def start(self) -> None:
         self._task = asyncio.create_task(self._loop(), name="bluez-auto-pair")
@@ -995,6 +1040,15 @@ class BluezAutoPairer:
 
         if not scan_hands:
             return acted
+        if self._scan_paused_by_ble():
+            if not self._scan_pause_logged:
+                LOG.info(
+                    "auto-pair: pausing the controller scan while a controller "
+                    "streams and a BLE central is subscribed"
+                )
+                self._scan_pause_logged = True
+            return acted
+        self._scan_pause_logged = False
         scan_seconds = self.scan_seconds
         if self._any_hand_connected():
             scan_seconds = min(scan_seconds, self.active_scan_seconds)

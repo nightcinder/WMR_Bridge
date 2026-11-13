@@ -748,10 +748,12 @@ open, and unregistered again when the window closes, so a phone's LE bond is
 accepted as Just Works instead of being rejected for lack of an agent. The
 agent accepts every device BlueZ presents and exists only for that window; the
 adapter's pairable window is the gate. `install.sh` and the `.deb` post-install
-script set BlueZ's `[General] JustWorksRepairing` to `confirm` and restart
-`bluetooth.service` **only when that setting actually changes**. An upgrade from
-a release that already carries the policy leaves bluetoothd (and the stored
-bonds) alone; until 0.3.24 every install restarted bluetoothd while the bridge
+script set BlueZ's `[General] JustWorksRepairing` to `confirm` and its `[LE]`
+`MinConnectionInterval`/`MaxConnectionInterval` bounds to 12/15 (BlueZ's
+1.25 ms units, so a 15-20 ms link), then restart `bluetooth.service` **only
+when one of those settings actually changes**. An upgrade from
+a release that already carries the policy and the LE bounds leaves bluetoothd
+(and the stored bonds) alone; until 0.3.24 every install restarted bluetoothd while the bridge
 held a GATT application, advertisement and Classic scans, which can crash the
 Pi's combo controller into `HCI Hardware Error` (see Troubleshooting). When a
 restart is needed the scripts stop `wmr-bridge.service` first and start it again
@@ -1375,7 +1377,7 @@ INFO/WARNING:
 | --- | --- |
 | `no /dev/hidraw nodes` | `systemctl status bluetooth`, `lsmod \| grep hidp`, controller paired/trusted/connected |
 | `bluetoothctl show` says `Powered: no`, `Pairable: no`, Class 0 | adapter firmware crashed or the UART attach failed; `btmon` showing `HCI Reset` answered by `Hardware Error` (0x10, code 0x00) is the crashed-controller signature. The daemon first tries `Adapter1.Powered=True`, then asks `wmr-bridge-bt-recover.service` (root) to restart `hciuart` and `bluetooth.service` and start the bridge again, at most once per cooldown. If `Powered` still reads no after that, reboot the Pi; if the error survives the reboot, power-cycle the board |
-| Phone will not re-pair after the upgrade; adapter `pairable=no` | a stored LE bond closes pairability. Open a window with `wmr-bridge pair` (180 s), or remove the phone's stale bond with `bluetoothctl remove <MAC>`. v0.3.26 does not touch `/var/lib/bluetooth`; the upgrade scripts now leave bluetoothd alone when `JustWorksRepairing` is already set |
+| Phone will not re-pair after the upgrade; adapter `pairable=no` | a stored LE bond closes pairability. Open a window with `wmr-bridge pair` (180 s), or remove the phone's stale bond with `bluetoothctl remove <MAC>`. v0.3.26 does not touch `/var/lib/bluetooth`; the upgrade scripts now leave bluetoothd alone when both `JustWorksRepairing` and the `[LE]` interval bounds are already set |
 | Wi-Fi auth fails with Bluetooth off | the shared token is only learned over the BLE FF13 encrypted read; the companion's manual Wi-Fi entry does not persist a token. Copy it from `/etc/wmr-bridge/token` (unchanged across upgrades) or read it over BLE |
 | Node exists but `--list` shows name `-` | custom controller name; use `--left/--right` with the MAC or path |
 | Permission denied opening hidraw | run as root or add the user to `input`; check udev mode |
