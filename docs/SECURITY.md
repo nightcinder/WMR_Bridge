@@ -130,6 +130,70 @@ mechanical safeguards were added in #47:
   devices paired there and assigns LEFT/RIGHT by HID name, which is not
   authentication.
 
+## Pi challenge-response authentication (specified, not implemented)
+
+Status: specified for decision (g) of the 2026-11-13 review; no Pi or app code
+does this yet. The wire exchange and exact HMAC inputs are in
+[PROTOCOL.md](PROTOCOL.md#p6-pi-challenge-response-authentication-summary);
+this section records what the change protects and what it does not.
+
+Today the Pi's shared token is a bearer secret. A client sends it in the
+WebSocket `auth` message (plaintext unless TLS terminates the socket), and the
+daemon serves it in the BLE FF13 session document. An on-path observer on the
+LAN therefore reads a replayable credential (T5). Challenge-response keeps the
+token as the shared secret but never puts it on the wire:
+
+- The bridge sends a fresh 32-byte `authNonce` in `hello`. The client sends a
+  second 32-byte nonce and an HMAC-SHA256 proof keyed by the token over a
+  transcript containing both nonces and `bridge_id`.
+- The bridge verifies the proof in constant time and answers with its own
+  domain-separated HMAC over the same transcript. The client verifies that
+  before it treats the bridge as authentic.
+- Both nonces are single-use and CSPRNG-derived; the server nonce expires with
+  the existing 5 s authentication bound. A recorded proof cannot be replayed
+  because the next connection uses a new server nonce, and it cannot be
+  reflected as the other side's answer because the direction labels and nonce
+  order differ.
+- `bridge_id` is in the transcript, so a proof made for one bridge is not valid
+  at another. The client's existing check that `hello.bridge_id` matches the
+  discovered identity binds the exchange to the intended device.
+- Failed proofs are compared in constant time, answer `auth_failed`, close with
+  `4401`, and must count against a per-source attempt limit. The WebSocket
+  daemon has no rate limiting today; the implementation adds the auth limit.
+
+What it does not do:
+
+- It does not encrypt. The stream stays plaintext on the LAN; TLS remains the
+  confidentiality control. `wss` by default is still deferred (item h), so
+  challenge-response is authentication only.
+- An active on-path relay can forward a handshake between the real client and
+  the real bridge and stay in the middle. Challenge-response without channel
+  binding or a PAKE cannot detect that. A passive observer, or a spoofed bridge
+  that does not relay, learns nothing from the challenge exchange and cannot
+  reuse the client's proof.
+- Downgrade: `hello.authMode` is unauthenticated (it arrives before the client
+  can verify the bridge) and the legacy token message stays accepted, so an
+  on-path attacker can present `"authMode":"token"` or omit the field and
+  receive the bearer token, which is then replayable. A companion that supports
+  challenge-response must never send the legacy token message over a plaintext
+  non-loopback link unless the user explicitly consents to the downgrade; its
+  proof, not the announcement, is what authenticates the bridge.
+- HMAC makes one captured exchange offline-checkable, so a weak token can be
+  guessed offline. Keep the generated 24-byte random token rather than a
+  passphrase.
+- A compromised phone or Pi still holds the token and can authenticate. This
+  adds no per-user identity or revocation beyond rotating the token.
+
+Rollout: the UDP discovery reply already reports `"authMode":"token"`. `hello`
+gains `authMode` with the implementation; a bridge that omits it, or sends
+`"token"`, uses the current message and a companion keeps its current
+behaviour. A bridge that reports `"challenge"` accepts the new exchange and
+still accepts the token message until a later revision removes it, so older
+companions are unaffected. The Pi and app changes are held out of the rc.2
+cuts; this page and PROTOCOL.md specify only. Until the token message is
+removed, the client-side downgrade rule above is the control that keeps the
+token off the wire on a hostile link.
+
 ## Local / physical
 
 - Link keys and the stored controller addresses are in NVS without flash
