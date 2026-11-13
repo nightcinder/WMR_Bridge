@@ -140,6 +140,20 @@ class EnsureFileTests(unittest.TestCase):
             self.assertFalse(ensure_just_works_repairing(path))
             self.assertEqual(path.read_text(encoding="utf-8"), text)
 
+    def test_an_explicit_always_survives_a_bounds_only_rewrite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "main.conf"
+            path.write_text("[General]\nJustWorksRepairing = always\n", encoding="utf-8")
+
+            # A prior release carried the policy but not the LE bounds.
+            self.assertTrue(ensure_bluez_config(path))
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("JustWorksRepairing = always", text)
+            self.assertNotIn("JustWorksRepairing = confirm", text)
+            self.assertIn("MinConnectionInterval = 12", text)
+            self.assertIn("MaxConnectionInterval = 15", text)
+            self.assertFalse(ensure_bluez_config(path))
+
     def test_a_missing_bluetooth_directory_is_left_alone(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "missing" / "main.conf"

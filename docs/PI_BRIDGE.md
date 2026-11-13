@@ -738,8 +738,8 @@ script set BlueZ's `[General] JustWorksRepairing` to `confirm` and its `[LE]`
 `MinConnectionInterval`/`MaxConnectionInterval` bounds to 12/15 (BlueZ's
 1.25 ms units, so a 15-20 ms link), then restart `bluetooth.service` **only
 when one of those settings actually changes**. An upgrade from
-a release that already carries the policy leaves bluetoothd (and the stored
-bonds) alone; until 0.3.24 every install restarted bluetoothd while the bridge
+a release that already carries the policy and the LE bounds leaves bluetoothd
+(and the stored bonds) alone; until 0.3.24 every install restarted bluetoothd while the bridge
 held a GATT application, advertisement and Classic scans, which can crash the
 Pi's combo controller into `HCI Hardware Error` (see Troubleshooting). When a
 restart is needed the scripts stop `wmr-bridge.service` first and start it again

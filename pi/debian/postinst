@@ -105,8 +105,8 @@ case "$1" in
                     # that restart can wedge the Pi's combo controller (btmon
                     # shows HCI Reset answered by Hardware Error 0x00) until
                     # the Pi is rebooted. An upgrade that does not change the
-                    # policy leaves bluetoothd alone, so the bond and the
-                    # working adapter survive.
+                    # policy or the LE bounds leaves bluetoothd alone, so the
+                    # bond and the working adapter survive.
                     systemctl stop wmr-bridge.service || true
                     systemctl restart bluetooth.service || true
                 fi

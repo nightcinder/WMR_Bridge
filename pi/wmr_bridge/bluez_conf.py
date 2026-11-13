@@ -28,8 +28,9 @@ script from the package maintainer scripts:
 ``--check`` exits 0 when the policy and interval already match (or the file is
 absent, so there is nothing to apply) and 1 when ``main.conf`` needs rewriting.
 The maintainer scripts use it to avoid restarting ``bluetooth.service`` on an
-upgrade that does not change the policy: a bluetoothd restart while the bridge
-holds a GATT application and Classic scans can wedge the Pi's combo controller.
+upgrade that does not change the policy or the interval bounds: a bluetoothd
+restart while the bridge holds a GATT application and Classic scans can wedge
+the Pi's combo controller.
 """
 
 from __future__ import annotations
@@ -301,13 +302,18 @@ def ensure_bluez_config(
             return False
         text = ""
 
-    policy_ok = _value_from_text(text) in _ACCEPTED
+    current = _value_from_text(text)
+    policy_ok = current in _ACCEPTED
     intervals_ok = read_le_connection_intervals(path) == (minimum, maximum)
     if policy_ok and intervals_ok:
         return False
 
+    # Keep an accepted value (an admin's ``always``) when only the LE bounds
+    # are missing; rewriting it to ``confirm`` would silently regress the
+    # upgrade path from a release that already carries the policy.
+    policy = current if policy_ok else JUST_WORKS_REPAIRING
     updated = set_le_connection_intervals(
-        set_just_works_repairing(text), minimum, maximum
+        set_just_works_repairing(text, policy), minimum, maximum
     )
     _write_config(path, updated)
     return True
