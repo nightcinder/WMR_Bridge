@@ -1,7 +1,9 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-11 (current release 0.3.26: the Pi package in this tree is
-`0.3.26` and recovers a powered-off Bluetooth adapter. bluetoothd can leave
+Last updated: 2026-11-12 (current pre-release 0.3.27-rc.1, on top of the latest
+full release 0.3.26: the Pi package in this tree is `0.3.27-rc.1`, which keeps
+the BLE HID gamepad reporting while a stream runs and recovers a powered-off
+Bluetooth adapter. bluetoothd can leave
 `Adapter1.Powered` false after the combo controller's firmware crashes; the
 daemon first tries `Powered=True` itself, then asks the root
 `wmr-bridge-bt-recover.path`/`.service` to unblock rfkill, restart `hciuart` and

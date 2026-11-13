@@ -5,6 +5,31 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.27-rc.1 — 2026-11-12
+
+The pre-release candidate for the Pixel + Pi hardware check, cut from `main`
+with the always-on BLE HID gamepad from #233 on top of 0.3.26. It is a
+prerelease: GitHub does not offer it as "Latest", and `releases/latest` still
+returns `v0.3.26`. Firmware payloads are unchanged from 0.3.26: FF10–FF17 keep
+their payloads and companions at 0.2.2 or later continue to work, and the tag
+only changes the version FF16 reports. The Pi bridge path is host-tested only;
+it has not run on Pi hardware. The 10-minute FF14 field capture (both
+controllers and a phone subscribed) has not been run yet.
+
+### Raspberry Pi bridge
+
+- **Keep the phone's gamepad live while a stream runs.** HID reports no longer
+  pause while a WebSocket/TCP client or an FF11/FF12/FF14 subscriber is active,
+  so Android keeps receiving input on report `0x2A4D` as the bridge sends the
+  same input over Wi-Fi. TCP and BLE share one radio on the Pi, so HID is paced
+  at 20 ms (50 Hz) while a stream is active and keeps the 10 ms idle floor
+  otherwise; while an FF1x frame is waiting, HID never takes two send slots in a
+  row. A hand with no sample for 250 ms still gets one neutral report.
+- **Stable VID/PID for the bridge.** The GATT application also exports the
+  Device Information Service (`0x180A`) with the firmware's PnP ID
+  (`01 E5 02 01 00 00 01`), so a host can claim the bridge by VID/PID instead of
+  matching the advertised name. Its values stay readable without a bond.
+
 ## 0.3.26 — 2026-11-11
 
 The Pi adapter-recovery release on top of 0.3.25, shipping the recovery for the
