@@ -206,6 +206,7 @@ class HidrawReader:
         self._fd: int | None = None
         self._writable = False
         self._last_keep_alive: float | None = None
+        self._pending_enable: asyncio.TimerHandle | None = None
 
     @property
     def writable(self) -> bool:
@@ -230,21 +231,50 @@ class HidrawReader:
             self.send_enable()
         return self._fd
 
+    def _write_enable(self, index: int) -> bool:
+        report = WMR_ENABLE_REPORTS[index].ljust(WMR_OUTPUT_REPORT_SIZE, b"\x00")
+        try:
+            os.write(self._fd, report)
+        except OSError as exc:
+            LOG.warning("%s: 0x06 enable write failed: %s", self.path, exc)
+            return False
+        return True
+
+    def _send_second_enable(self) -> None:
+        """Timer callback: send the second 0x06 report once the spacing has elapsed."""
+
+        self._pending_enable = None
+        if self._fd is None or not self._writable:
+            return
+        if not self._write_enable(1):
+            # Clear the keep-alive stamp so keep_alive() retries on its next tick.
+            self._last_keep_alive = None
+
     def send_enable(self) -> bool:
-        """Write both 0x06 streaming-enable reports; report whether they went out."""
+        """Write both 0x06 streaming-enable reports; report whether they went out.
+
+        Inside a running event loop the second report is scheduled after
+        WMR_ENABLE_SPACING instead of blocking the loop. Without a running loop
+        the call falls back to a blocking sleep.
+        """
 
         if self._fd is None or not self._writable:
             return False
-        sent = True
-        for index, command in enumerate(WMR_ENABLE_REPORTS):
-            if index:
-                time.sleep(WMR_ENABLE_SPACING)
-            report = command.ljust(WMR_OUTPUT_REPORT_SIZE, b"\x00")
-            try:
-                os.write(self._fd, report)
-            except OSError as exc:
-                LOG.warning("%s: 0x06 enable write failed: %s", self.path, exc)
-                sent = False
+        if self._pending_enable is not None:
+            # The pair is already in flight; coalesce this request.
+            return True
+        try:
+            loop: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        sent = self._write_enable(0)
+        if loop is None:
+            time.sleep(WMR_ENABLE_SPACING)
+            sent = self._write_enable(1) and sent
+        else:
+            self._pending_enable = loop.call_later(
+                WMR_ENABLE_SPACING, self._send_second_enable
+            )
         if sent:
             self._last_keep_alive = self._clock()
         return sent
@@ -285,6 +315,10 @@ class HidrawReader:
 
     def close(self) -> None:
         if self._fd is not None:
+            if self._pending_enable is not None:
+                # Drop the scheduled second write so it cannot hit a reused fd.
+                self._pending_enable.cancel()
+                self._pending_enable = None
             try:
                 os.close(self._fd)
             finally:

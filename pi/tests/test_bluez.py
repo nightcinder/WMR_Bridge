@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import os
 import pty
 import subprocess
@@ -192,6 +194,110 @@ class HidrawReaderTests(unittest.TestCase):
                 [call.args[1][:5] for call in written.call_args_list],
                 [self.LEFT_ENABLE, self.RIGHT_ENABLE],
             )
+
+
+class HidrawReaderAsyncEnableTests(unittest.IsolatedAsyncioTestCase):
+    LEFT_ENABLE = bytes.fromhex("0603010002")
+    RIGHT_ENABLE = bytes.fromhex("060302e102")
+
+    @contextlib.contextmanager
+    def _io(self, side_effect=None):
+        with mock.patch("wmr_bridge.bluez.os.open", return_value=7), \
+             mock.patch("wmr_bridge.bluez.os.write", side_effect=side_effect) as written, \
+             mock.patch("wmr_bridge.bluez.os.close") as closed, \
+             mock.patch("wmr_bridge.bluez.time.sleep") as slept:
+            yield written, closed, slept
+
+    async def test_open_in_loop_defers_second_enable_without_blocking(self) -> None:
+        loop = asyncio.get_running_loop()
+        writes: list[tuple[float, int, bytes]] = []
+
+        def record(fd: int, report: bytes) -> None:
+            writes.append((loop.time(), fd, bytes(report)))
+
+        with self._io(side_effect=record) as (written, closed, slept):
+            reader = HidrawReader("/dev/hidraw0", clock=lambda: 100.0)
+            self.assertEqual(reader.open(), 7)
+            self.assertEqual(len(writes), 1)
+            self.assertEqual(writes[0][2][:5], self.LEFT_ENABLE)
+            slept.assert_not_called()
+
+            await asyncio.sleep(0.05)
+            self.assertEqual(len(writes), 2)
+            self.assertEqual(writes[1][2][:5], self.RIGHT_ENABLE)
+            self.assertTrue(all(len(report) == 64 for _, _, report in writes))
+            self.assertTrue(all(fd == 7 for _, fd, _ in writes))
+            self.assertGreaterEqual(writes[1][0] - writes[0][0], 0.009)
+            slept.assert_not_called()
+            reader.close()
+            self.assertEqual(closed.call_count, 1)
+
+    async def test_send_enable_while_pair_in_flight_coalesces(self) -> None:
+        with self._io() as (written, closed, slept):
+            reader = HidrawReader("/dev/hidraw0", clock=lambda: 100.0)
+            reader.open()
+            self.assertEqual(written.call_count, 1)
+
+            self.assertTrue(reader.send_enable())
+            self.assertEqual(written.call_count, 1)
+
+            await asyncio.sleep(0.05)
+            self.assertEqual(written.call_count, 2)
+            self.assertEqual(
+                [call.args[1][:5] for call in written.call_args_list],
+                [self.LEFT_ENABLE, self.RIGHT_ENABLE],
+            )
+            reader.close()
+
+    async def test_close_cancels_pending_second_enable(self) -> None:
+        with self._io() as (written, closed, slept):
+            reader = HidrawReader("/dev/hidraw0", clock=lambda: 100.0)
+            reader.open()
+            reader.close()
+
+            await asyncio.sleep(0.05)
+            self.assertEqual(written.call_count, 1)
+            self.assertIsNone(reader._pending_enable)
+
+    async def test_failed_second_write_clears_keep_alive_for_retry(self) -> None:
+        with self._io(side_effect=[None, OSError(5, "io"), None, None]) as (
+            written, closed, slept,
+        ):
+            reader = HidrawReader("/dev/hidraw0", clock=lambda: 100.0)
+            reader.open()
+
+            await asyncio.sleep(0.05)
+            self.assertEqual(written.call_count, 2)
+            self.assertIsNone(reader._last_keep_alive)
+
+            self.assertTrue(reader.keep_alive())
+            self.assertEqual(written.call_count, 3)
+            self.assertEqual(reader._last_keep_alive, 100.0)
+
+            await asyncio.sleep(0.05)
+            self.assertEqual(written.call_count, 4)
+            self.assertEqual(
+                [call.args[1][:5] for call in written.call_args_list[2:]],
+                [self.LEFT_ENABLE, self.RIGHT_ENABLE],
+            )
+            reader.close()
+
+    async def test_enable_after_completed_pair_sends_a_new_pair_in_order(self) -> None:
+        with self._io() as (written, closed, slept):
+            reader = HidrawReader("/dev/hidraw0", clock=lambda: 100.0)
+            reader.open()
+            await asyncio.sleep(0.05)
+            self.assertEqual(written.call_count, 2)
+
+            self.assertTrue(reader.send_enable())
+            self.assertEqual(written.call_count, 3)
+            self.assertEqual(written.call_args_list[2].args[1][:5], self.LEFT_ENABLE)
+
+            await asyncio.sleep(0.05)
+            self.assertEqual(written.call_count, 4)
+            self.assertEqual(written.call_args_list[3].args[1][:5], self.RIGHT_ENABLE)
+            self.assertIsNone(reader._pending_enable)
+            reader.close()
 
 
 class _Hand:
