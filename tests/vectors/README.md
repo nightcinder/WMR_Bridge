@@ -82,8 +82,8 @@ sample.
 
 ## What each side checks
 
-- Python (`cd pi && python3 -m pytest tests/test_golden_vectors.py -q`, or
-  `./run_tests.sh`): `decode_frame` against `state`, `record_from_state` +
+- Python (`cd pi && ./run_tests.sh`, or
+  `cd pi && python3 -m pytest tests/test_golden_vectors.py -q`): `decode_frame` against `state`, `record_from_state` +
   `pack_record` against `record_hex`, `unpack_record` against `record`,
   fragments, the batch, the echo layout and the Pi echo handler, the step
   kinds by the PROTOCOL.md rule, `extend_ticks` against `expected_ticks64`,

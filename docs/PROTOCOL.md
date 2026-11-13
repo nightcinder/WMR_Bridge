@@ -1007,7 +1007,9 @@ firmware 0.3.5 FF13 is readable and writable only on an encrypted, bonded link
 the link is not MITM-protected and any central that completes pairing while
 the bridge accepts a new bond can read the block. See
 [SECURITY.md](SECURITY.md) for the residual risk. (Before 0.3.0 the service
-had no encryption and anyone in range could read it.)
+had no encryption and anyone in range could read it. Firmware 0.3.0-0.3.4
+declared the encryption flags but did not enforce them; 0.3.5 added the
+16-byte key-size enforcement, see CHANGELOG.md.)
 
 ## Not decided here
 
