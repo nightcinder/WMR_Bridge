@@ -1,9 +1,13 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-12 (current pre-release 0.3.27-rc.1, on top of the latest
-full release 0.3.26: the Pi package in this tree is `0.3.27-rc.1`, which keeps
-the BLE HID gamepad reporting while a stream runs and recovers a powered-off
-Bluetooth adapter. bluetoothd can leave
+Last updated: 2026-11-13 (current pre-release 0.3.27-rc.2, on top of the latest
+full release 0.3.26: the Pi package in this tree is `0.3.27-rc.2`, which keeps
+the BLE HID gamepad reporting while a stream runs without latching its send slot
+behind a queued FF14 batch, sets the LE connection-interval bounds to 15-20 ms,
+pauses the Classic inquiry while a BLE central is subscribed and a controller
+streams, no longer sleeps the event loop between the two FF13 `0x06` enable
+writes, decodes frames about 20x faster in a bit-exact rewrite, and recovers a
+powered-off Bluetooth adapter. bluetoothd can leave
 `Adapter1.Powered` false after the combo controller's firmware crashes; the
 daemon first tries `Powered=True` itself, then asks the root
 `wmr-bridge-bt-recover.path`/`.service` to unblock rfkill, restart `hciuart` and
