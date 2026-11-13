@@ -5,6 +5,49 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.27-rc.2 — 2026-11-13
+
+The second pre-release candidate for the Pixel + Pi hardware check, cut from
+`main` on top of 0.3.27-rc.1 with the BLE HID and timing fixes from #236, #237
+and #239. It is a prerelease: GitHub does not offer it as "Latest", and
+`releases/latest` still returns `v0.3.26`. Firmware payloads are unchanged from
+0.3.27-rc.1: FF10–FF17 keep their payloads and companions at 0.2.2 or later
+continue to work, and the tag only changes the version FF16 reports. The Pi
+bridge path is host-tested only; it has not run on Pi hardware. The 10-minute
+FF14 field capture (both controllers and a phone subscribed) has not been run
+yet.
+
+### Raspberry Pi bridge
+
+- **The HID path no longer latches behind a queued FF1x batch.** FF1x
+  notifications are written before the HID report without letting a queued FF14
+  batch block the HID send slot, so the gamepad keeps its 20 ms pacing while a
+  TCP or BLE stream is active instead of going quiet after the first reports.
+- **Tighter LE connection interval.** The installer and `.deb` post-install
+  tool set `[LE] MinConnectionInterval = 12` and `MaxConnectionInterval = 15`
+  in `/etc/bluetooth/main.conf` (BlueZ's 1.25 ms units, a 15-20 ms link), the
+  interval the ESP32 also requests for its HID gamepad. BlueZ's longer default
+  starved BLE HID and FF11/FF12/FF14 notifications under load. An admin's
+  `JustWorksRepairing = always` is preserved when the bounds are added.
+- **Classic inquiry pauses during BLE streams.** While a controller is
+  streaming and a BLE central stays subscribed, the background inquiry waits
+  and resumes when either condition clears, so discovery does not take radio
+  time from the phone's HID link.
+- **No event-loop sleep between the FF13 `0x06` enable writes.** The second
+  enable report is scheduled with `call_later` instead of sleeping 10 ms on the
+  loop at open, every 10 s per hand and on wake, so both hands and the
+  WebSocket keep running. A pending second write is coalesced and cancelled in
+  `close()` (from #236).
+- **Bit-exact decode about 20x faster.** `decode_frame` and
+  `record_from_state` compute in binary64 and round once through `<f`, which is
+  bit-identical to the per-step C reference; the `Fraction` implementation is
+  kept as the test oracle (from #237).
+
+### Docs
+
+- The protocol docs are reconciled with the code, the Pi/WMR timing proposals
+  are spec'd and golden vectors are added for the decoder (#238).
+
 ## 0.3.27-rc.1 — 2026-11-12
 
 The pre-release candidate for the Pixel + Pi hardware check, cut from `main`
