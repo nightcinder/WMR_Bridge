@@ -4,10 +4,13 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-  # No paths filter: `Build firmware` is a required check on every PR, and a
-  # required check that is filtered out can never report, so the PR can never
-  # merge. A docs-only PR costs one firmware build and Actions minutes are free
-  # on a public repo.
+  # `Build firmware` is a required check on every PR, and a required check that
+  # a paths filter removes can never report, so the PR can never merge. The
+  # filter therefore gates the *build* job and a small `Build firmware` gate
+  # job reports the result instead (see `changes` and `firmware` below): every
+  # PR still gets the check, and a PR that cannot change the firmware image
+  # (pi/, tests/, docs/ outside docs/flasher) skips the 75 s container pull and
+  # the compile.
   pull_request:
   workflow_dispatch:
 
@@ -25,9 +28,43 @@ jobs:
   # request must never execute code on that host — so PRs keep building in the
   # pinned ESP-IDF container on a GitHub-hosted runner. `Build firmware` stays
   # the required PR check.
-  build:
-    name: Build firmware
+  changes:
+    # Which pull requests this workflow can actually test. Anything that can
+    # change the compiled image or the Pages payload the build asserts:
+    # the ESP-IDF project at the root (CMakeLists.txt, src/), the pinned
+    # version the manifest records, the build/package tooling, and the two
+    # files the flasher page is assembled from. A change to pi/ (the Python
+    # bridge), tests/, or fuzz/ cannot, and those PRs were paying the full
+    # build.
     if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      firmware: ${{ steps.filter.outputs.firmware }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            firmware:
+              - 'src/**'
+              - 'CMakeLists.txt'
+              - 'VERSION'
+              - 'wmr_bridge.gatt'
+              - 'integration/**'
+              - 'tools/firmware/**'
+              - 'docs/flasher/**'
+              - 'pi/install.sh'
+              - '.github/workflows/firmware.yml'
+
+  build:
+    name: Build firmware (container)
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.firmware == 'true'
     runs-on: ubuntu-latest
     container:
       image: espressif/idf:v6.1
@@ -159,6 +196,37 @@ jobs:
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-idf-v6.1-${{ github.sha }}
+
+  firmware:
+    # The required check, and the reason the build above can be filtered at
+    # all. Green when the filter skipped the build, or when the build ran and
+    # succeeded; red when `changes` itself failed, so a broken filter cannot
+    # report green.
+    name: Build firmware
+    needs: [changes, build]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Gate on the path filter and the firmware build
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          BUILD: ${{ needs.build.result }}
+        run: |
+          set -eu
+          echo "changes: $CHANGES"
+          echo "build: $BUILD"
+          case "$BUILD" in
+            success | skipped) ;;
+            *)
+              echo "::error::Build firmware (container) did not succeed ($BUILD)."
+              exit 1
+              ;;
+          esac
+          if [ "$CHANGES" != "success" ]; then
+            echo "::error::changes did not succeed ($CHANGES); refusing to report Build firmware green."
+            exit 1
+          fi
 
   build-liesa:
     name: Build firmware (self-hosted)
