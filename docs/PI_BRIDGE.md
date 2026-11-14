@@ -597,7 +597,7 @@ shipped the `0.3.14` package, `v0.3.15` shipped the `0.3.15` package,
 package, `v0.3.18` shipped the `0.3.18` package, `v0.3.19` shipped the
 `0.3.19` package, `v0.3.20` shipped the `0.3.20` package, `v0.3.21` shipped
 the `0.3.21` package, `v0.3.22` shipped the `0.3.22` package, and `v0.3.23`
-shipped the `0.3.23` package, `v0.3.24` shipped the `0.3.24` package, `v0.3.25` shipped the `0.3.25` package, and `v0.3.26` shipped the `0.3.26` package; `v0.3.27-rc.1` shipped the `0.3.27-rc.1` package, `v0.3.27-rc.3` shipped the `0.3.27-rc.3` package, and `v0.3.27-rc.3` ships this package.
+shipped the `0.3.23` package, `v0.3.24` shipped the `0.3.24` package, `v0.3.25` shipped the `0.3.25` package, and `v0.3.26` shipped the `0.3.26` package; `v0.3.27-rc.1` shipped the `0.3.27-rc.1` package, `v0.3.27-rc.2` shipped the `0.3.27-rc.2` package, and `v0.3.27-rc.3` ships this package.
 
 ```json
 {
