@@ -1,13 +1,14 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-13 (current pre-release 0.3.27-rc.2, on top of the latest
-full release 0.3.26: the Pi package in this tree is `0.3.27-rc.2`, which keeps
+Last updated: 2026-11-14 (current pre-release 0.3.27-rc.3, on top of the latest
+full release 0.3.26: the Pi package in this tree is `0.3.27-rc.3`, which keeps
 the BLE HID gamepad reporting while a stream runs without latching its send slot
 behind a queued FF14 batch, sets the LE connection-interval bounds to 15-20 ms,
 pauses the Classic inquiry while a BLE central is subscribed and a controller
 streams, no longer sleeps the event loop between the two FF13 `0x06` enable
-writes, decodes frames about 20x faster in a bit-exact rewrite, and recovers a
-powered-off Bluetooth adapter. bluetoothd can leave
+writes, decodes frames about 20x faster in a bit-exact rewrite, compares the
+dpkg tilde form of a pre-release version so an upgrade no longer reads as a
+downgrade, and recovers a powered-off Bluetooth adapter. bluetoothd can leave
 `Adapter1.Powered` false after the combo controller's firmware crashes; the
 daemon first tries `Powered=True` itself, then asks the root
 `wmr-bridge-bt-recover.path`/`.service` to unblock rfkill, restart `hciuart` and
@@ -127,7 +128,7 @@ maintained at the project's single entry point:
 | Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.11 image has not been run on hardware (internal bench runbook block C) |
 | BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (#88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.11 pairing and encryption run is not yet done (internal bench runbook block B) |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, not run on hardware |
-| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests (471 tests + loopback replay) and a v0.3.23 hardware run (user-reported); the 0.3.24 through 0.3.27-rc.2 path, including the root upgrade unit and minisign verification, has not run on Pi hardware; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
+| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests (471 tests + loopback replay) and a v0.3.23 hardware run (user-reported); the 0.3.24 through 0.3.27-rc.3 path, including the root upgrade unit and minisign verification, has not run on Pi hardware; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has not been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Console `v` read on the 0.2.4 hardware run (`0.2.4`, ESP-IDF v6.1); the live FF16 phone read on v0.3.11 is open (internal bench runbook block B) |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added in v0.3.11 | Host tests and firmware build only, never run on a PSVR2 controller |
@@ -329,7 +330,7 @@ However:
   most 3 % on its own bridge is the pass bar.
 - The last Raspberry Pi Wi-Fi bridge hardware run used v0.3.23; no P1-P14
   result is recorded for any version (no filled run sheet, no probe output),
-  and the 0.3.24 through 0.3.27-rc.2 changes have not run on a Pi. The second supported
+  and the 0.3.24 through 0.3.27-rc.3 changes have not run on a Pi. The second supported
   target (`pi/`, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)) moves the phone link off
   2.4 GHz BLE onto 5 GHz Wi-Fi WebSocket.
   `pi/tools/wifi_probe.py` sends a UDP discovery probe, prints the `hello`
