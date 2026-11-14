@@ -5,6 +5,34 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.27-rc.3 — 2026-11-14
+
+The third pre-release candidate for the Pixel + Pi hardware check, cut from
+`main` on top of 0.3.27-rc.2 with the installer version-ordering fix from #243
+and the documentation pass from #242. It is a prerelease: GitHub does not offer
+it as "Latest", and `releases/latest` still returns `v0.3.26`. Firmware payloads
+are unchanged from 0.3.27-rc.2: FF10–FF17 keep their payloads and companions at
+0.2.2 or later continue to work, and the tag only changes the version FF16
+reports. The Pi bridge path is host-tested only; it has not run on Pi hardware.
+The 10-minute FF14 field capture (both controllers and a phone subscribed) has
+not been run yet.
+
+### Raspberry Pi bridge
+
+- **An upgrade from a pre-release no longer reads as current or as a
+  downgrade.** dpkg reads the `-rc.2` in a semver pre-release as a package
+  revision and ranks `0.3.27-rc.2` above `0.3.27`, the reverse of semver, so the
+  `--upgrade` no-op check treated the plain release as already installed and
+  apt-get refused the fetched build. The installer compares the tilde form
+  (`0.3.27~rc.2`) for the no-op decision and passes `--allow-downgrades` only
+  when semver ranks the fetched build newer while dpkg ranks it lower; a real
+  semver downgrade still stops (from #243).
+
+### Docs
+
+- The repository ships the MIT `LICENSE`, the Pi hardware status is restated
+  and the stale bench/ACL/Switch notes are corrected (#242).
+
 ## 0.3.27-rc.2 — 2026-11-13
 
 The second pre-release candidate for the Pixel + Pi hardware check, cut from
