@@ -69,13 +69,13 @@ DEFAULT_UPGRADE_LOCK = Path("/run/wmr-bridge-upgrade/upgrade.lock")
 # path unit stopped after a refused start), so it must not pin the bridge in
 # "busy" for every later request.
 UPGRADE_TRIGGER_TTL_S = 120.0
-# Stay below the root unit's StartLimitBurst=3 / StartLimitIntervalSec=600:
-# a refused start stops wmr-bridge-upgrade.path and nothing consumes the
-# trigger again. The window carries a margin over the unit's interval, and the
-# times are persisted so a daemon restart (the install restarts it) does not
-# forget earlier starts.
-UPGRADE_RATE_WINDOW_S = 660.0
-UPGRADE_RATE_BURST = 3
+# Stay below the root units' StartLimitBurst=3 / StartLimitIntervalSec=600:
+# a refused start stops the path unit and nothing consumes the trigger again.
+# Stable and pre-release requests share one history, and the times are
+# persisted so a daemon restart (the install restarts it) does not forget
+# earlier starts.
+UPGRADE_RATE_WINDOW_S = 600.0
+UPGRADE_RATE_BURST = 2
 # `inspect_wifi()`/`inspect_uplink()` shell out to `iw`/NetworkManager with
 # subprocess timeouts, so re-sample at most this often and off the event loop.
 NETWORK_REFRESH_INTERVAL_S = 10.0
@@ -606,6 +606,18 @@ class Bridge:
         return self.upgrade_dir / "upgrade.trigger"
 
     @property
+    def upgrade_prerelease_trigger(self) -> Path:
+        return self.upgrade_dir / "upgrade-prerelease.trigger"
+
+    def _upgrade_trigger_for(self, channel: str) -> Path:
+        if channel == "prerelease":
+            return self.upgrade_prerelease_trigger
+        return self.upgrade_trigger
+
+    def _upgrade_triggers(self) -> tuple[Path, Path]:
+        return self.upgrade_trigger, self.upgrade_prerelease_trigger
+
+    @property
     def upgrade_capable(self) -> bool:
         """True only when the daemon may ask root to upgrade.
 
@@ -622,15 +634,27 @@ class Bridge:
             return False
 
     @property
+    def upgrade_prerelease_capable(self) -> bool:
+        """True when the daemon can queue a pre-release channel upgrade.
+
+        Both channels travel through the same installed root units, so the
+        capability matches ``upgrade_capable``. The separate hello flag lets a
+        companion omit ``channel`` for bridges that predate it.
+        """
+
+        return self.upgrade_capable
+
+    @property
     def upgrade_attempts(self) -> Path:
         return self.upgrade_dir / "upgrade.attempts"
 
     def upgrade_busy(self) -> bool:
-        """True while a fresh trigger is pending or root holds the lock."""
+        """True while either channel's trigger is fresh or root holds the lock."""
 
-        age = self._trigger_age()
-        if age is not None and age < UPGRADE_TRIGGER_TTL_S:
-            return True
+        for trigger in self._upgrade_triggers():
+            age = self._trigger_age(trigger)
+            if age is not None and age < UPGRADE_TRIGGER_TTL_S:
+                return True
         try:
             fd = os.open(self.upgrade_lock, os.O_RDWR | os.O_CREAT, 0o600)
         except OSError:
@@ -652,35 +676,36 @@ class Bridge:
             os.close(fd)
 
     def upgrade_rate_limited(self) -> bool:
-        """True when another trigger would exhaust the root unit's start limit.
+        """True when another trigger would exhaust the root units' start limit.
 
-        systemd counts service starts, so the daemon keeps its own persisted
-        history and stays one below ``StartLimitBurst``. A refused start would
-        stop ``wmr-bridge-upgrade.path`` and leave the trigger unconsumed.
+        Both channels share one persisted history, so alternating channels
+        cannot bypass the budget. A refused start would stop a path unit and
+        leave the trigger unconsumed.
         """
 
         return len(self._recent_upgrade_starts()) >= UPGRADE_RATE_BURST
 
-    def _trigger_age(self) -> float | None:
-        """Age of the pending trigger in seconds, or ``None`` when there is none."""
+    def _trigger_age(self, trigger: Path) -> float | None:
+        """Age of a pending trigger in seconds, or ``None`` when there is none."""
 
         try:
-            return time.time() - self.upgrade_trigger.stat().st_mtime
+            return time.time() - trigger.stat().st_mtime
         except OSError:
             return None
 
-    def _clear_stale_trigger(self) -> None:
-        age = self._trigger_age()
-        if age is None or age < UPGRADE_TRIGGER_TTL_S:
-            return
-        try:
-            self.upgrade_trigger.unlink()
-        except FileNotFoundError:
-            return
-        except OSError:
-            LOG.warning("could not remove stale upgrade trigger %s", self.upgrade_trigger)
-        else:
-            LOG.warning("removed stale upgrade trigger (%.0f s old)", age)
+    def _clear_stale_triggers(self) -> None:
+        for trigger in self._upgrade_triggers():
+            age = self._trigger_age(trigger)
+            if age is None or age < UPGRADE_TRIGGER_TTL_S:
+                continue
+            try:
+                trigger.unlink()
+            except FileNotFoundError:
+                continue
+            except OSError:
+                LOG.warning("could not remove stale upgrade trigger %s", trigger)
+            else:
+                LOG.warning("removed stale upgrade trigger %s (%.0f s old)", trigger, age)
 
     def _load_upgrade_starts(self) -> list[float]:
         try:
@@ -720,24 +745,27 @@ class Bridge:
             except OSError:
                 pass
 
-    def request_upgrade(self) -> str:
+    def request_upgrade(self, channel: str = "stable") -> str:
         """Write the argument-free trigger, returning ``started`` or ``error``.
 
-        The trigger file is always empty: the root oneshot deletes it before
+        ``channel`` selects the empty ``upgrade.trigger`` or
+        ``upgrade-prerelease.trigger``; the filename is the only thing the
+        privileged units read. The root oneshot deletes the trigger before
         running the installed installer, so nothing a client sends can reach
-        the privileged process. A trigger root never picked up is removed
-        first, so a stale file cannot be mistaken for a queued upgrade.
+        that process. A trigger root never picked up is removed first, so a
+        stale file cannot be mistaken for a queued upgrade.
         """
 
-        self._clear_stale_trigger()
-        temp = self.upgrade_dir / ".upgrade.trigger.tmp"
+        trigger = self._upgrade_trigger_for(channel)
+        self._clear_stale_triggers()
+        temp = self.upgrade_dir / f".{trigger.name}.tmp"
         try:
             fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             try:
                 os.fsync(fd)
             finally:
                 os.close(fd)
-            os.replace(temp, self.upgrade_trigger)
+            os.replace(temp, trigger)
             dir_fd = os.open(self.upgrade_dir, os.O_RDONLY)
             try:
                 os.fsync(dir_fd)
@@ -755,7 +783,7 @@ class Bridge:
                 pass
             return "error"
         self._record_upgrade_start()
-        LOG.info("upgrade trigger written to %s", self.upgrade_trigger)
+        LOG.info("upgrade trigger written to %s", trigger)
         return "started"
 
     def status(self) -> dict[str, Any]:
@@ -803,6 +831,7 @@ class Bridge:
             "hostname": socket.gethostname(),
             "authRequired": self.token is not None,
             "upgradeCapable": self.upgrade_capable,
+            "upgradePreReleaseCapable": self.upgrade_prerelease_capable,
             "streams": list(STREAMS),
             "recordSize": DECODED_SIZE,
             "batchMax": BATCH_MAX_COUNT,
@@ -998,6 +1027,18 @@ class Bridge:
                     {"type": "upgrade_status", "state": "error", "code": "auth_failed"}
                 )
                 return True
+            channel = message.get("channel", "stable")
+            if channel not in ("stable", "prerelease"):
+                # Validate before the busy/rate checks so a malformed request
+                # neither writes a trigger nor spends the shared start budget.
+                await subscriber.send_json(
+                    {
+                        "type": "upgrade_status",
+                        "state": "error",
+                        "code": "invalid_channel",
+                    }
+                )
+                return True
             if not self.upgrade_capable:
                 await subscriber.send_json(
                     {"type": "upgrade_status", "state": "error", "code": "unavailable"}
@@ -1006,7 +1047,7 @@ class Bridge:
             if self.upgrade_busy() or self.upgrade_rate_limited():
                 await subscriber.send_json({"type": "upgrade_status", "state": "busy"})
                 return True
-            state = self.request_upgrade()
+            state = self.request_upgrade(channel)
             reply: dict[str, Any] = {"type": "upgrade_status", "state": state}
             if state == "error":
                 reply["code"] = "unavailable"

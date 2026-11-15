@@ -6,6 +6,7 @@ import asyncio
 import base64
 import fcntl
 import os
+import stat
 import tempfile
 import time
 import unittest
@@ -13,7 +14,6 @@ from pathlib import Path
 
 from wmr_bridge import ws as wsmod
 from wmr_bridge.bridge import (
-    UPGRADE_RATE_BURST,
     UPGRADE_TRIGGER_TTL_S,
     Bridge,
 )
@@ -451,7 +451,9 @@ class UpgradeControlTests(unittest.IsolatedAsyncioTestCase):
     async def test_hello_advertises_upgrade_capability(self) -> None:
         _client, hello = await self.connect()
         self.assertTrue(hello["upgradeCapable"])
+        self.assertTrue(hello["upgradePreReleaseCapable"])
         self.assertFalse(self.bridge.upgrade_trigger.exists())
+        self.assertFalse(self.bridge.upgrade_prerelease_trigger.exists())
 
     async def test_upgrade_writes_an_argument_free_trigger(self) -> None:
         client, _hello = await self.connect()
@@ -459,44 +461,113 @@ class UpgradeControlTests(unittest.IsolatedAsyncioTestCase):
         reply = await asyncio.wait_for(client.recv_json(), 2)
         self.assertEqual(reply, {"type": "upgrade_status", "state": "started"})
         self.assertEqual(self.bridge.upgrade_trigger.read_bytes(), b"")
+        self.assertEqual(
+            stat.S_IMODE(self.bridge.upgrade_trigger.stat().st_mode), 0o600
+        )
         self.assertFalse((self.state_dir / ".upgrade.trigger.tmp").exists())
+
+    async def test_stable_channel_writes_the_stable_trigger(self) -> None:
+        client, _hello = await self.connect()
+        await client.send_json({"type": "upgrade", "channel": "stable"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "upgrade_status", "state": "started"})
+        self.assertEqual(self.bridge.upgrade_trigger.read_bytes(), b"")
+        self.assertFalse(self.bridge.upgrade_prerelease_trigger.exists())
+
+    async def test_prerelease_channel_writes_the_prerelease_trigger(self) -> None:
+        client, _hello = await self.connect()
+        await client.send_json({"type": "upgrade", "channel": "prerelease"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "upgrade_status", "state": "started"})
+        self.assertEqual(self.bridge.upgrade_prerelease_trigger.read_bytes(), b"")
+        self.assertEqual(
+            stat.S_IMODE(self.bridge.upgrade_prerelease_trigger.stat().st_mode),
+            0o600,
+        )
+        self.assertFalse(self.bridge.upgrade_trigger.exists())
+
+    async def test_invalid_channel_is_rejected_without_spending_the_budget(
+        self,
+    ) -> None:
+        client, _hello = await self.connect()
+        for channel in ("beta", None, 1):
+            await client.send_json({"type": "upgrade", "channel": channel})
+            reply = await asyncio.wait_for(client.recv_json(), 2)
+            self.assertEqual(
+                reply,
+                {
+                    "type": "upgrade_status",
+                    "state": "error",
+                    "code": "invalid_channel",
+                },
+            )
+        self.assertFalse(self.bridge.upgrade_trigger.exists())
+        self.assertFalse(self.bridge.upgrade_prerelease_trigger.exists())
+        self.assertFalse(self.bridge.upgrade_attempts.exists())
+        await client.send_json({"type": "upgrade"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "upgrade_status", "state": "started"})
 
     async def test_pending_trigger_reports_busy(self) -> None:
         self.bridge.upgrade_trigger.write_bytes(b"")
         client, _hello = await self.connect()
-        await client.send_json({"type": "upgrade"})
+        await client.send_json({"type": "upgrade", "channel": "prerelease"})
         reply = await asyncio.wait_for(client.recv_json(), 2)
         self.assertEqual(reply, {"type": "upgrade_status", "state": "busy"})
+        self.assertFalse(self.bridge.upgrade_prerelease_trigger.exists())
+
+    async def test_prerelease_trigger_blocks_stable_upgrade(self) -> None:
+        self.bridge.upgrade_prerelease_trigger.write_bytes(b"")
+        client, _hello = await self.connect()
+        await client.send_json({"type": "upgrade", "channel": "stable"})
+        reply = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(reply, {"type": "upgrade_status", "state": "busy"})
+        self.assertFalse(self.bridge.upgrade_trigger.exists())
 
     async def test_stale_trigger_is_not_busy_and_is_replaced(self) -> None:
-        self.bridge.upgrade_trigger.write_bytes(b"")
-        stale = time.time() - UPGRADE_TRIGGER_TTL_S - 1
-        os.utime(self.bridge.upgrade_trigger, (stale, stale))
+        for trigger in (
+            self.bridge.upgrade_trigger,
+            self.bridge.upgrade_prerelease_trigger,
+        ):
+            trigger.write_bytes(b"")
+            stale = time.time() - UPGRADE_TRIGGER_TTL_S - 1
+            os.utime(trigger, (stale, stale))
         self.assertFalse(self.bridge.upgrade_busy())
         client, _hello = await self.connect()
-        await client.send_json({"type": "upgrade"})
+        await client.send_json({"type": "upgrade", "channel": "stable"})
         reply = await asyncio.wait_for(client.recv_json(), 2)
         self.assertEqual(reply, {"type": "upgrade_status", "state": "started"})
         self.assertEqual(self.bridge.upgrade_trigger.read_bytes(), b"")
         self.assertGreater(self.bridge.upgrade_trigger.stat().st_mtime, stale)
+        self.assertFalse(self.bridge.upgrade_prerelease_trigger.exists())
 
     async def test_repeated_upgrades_stop_below_the_start_limit(self) -> None:
         client, _hello = await self.connect()
-        for _ in range(UPGRADE_RATE_BURST):
-            await client.send_json({"type": "upgrade"})
+        for channel in ("stable", "prerelease"):
+            await client.send_json({"type": "upgrade", "channel": channel})
             reply = await asyncio.wait_for(client.recv_json(), 2)
             self.assertEqual(reply, {"type": "upgrade_status", "state": "started"})
             # systemd's ExecStartPre removes the trigger before the next request.
-            self.bridge.upgrade_trigger.unlink()
-        await client.send_json({"type": "upgrade"})
+            trigger = (
+                self.bridge.upgrade_trigger
+                if channel == "stable"
+                else self.bridge.upgrade_prerelease_trigger
+            )
+            trigger.unlink()
+        await client.send_json({"type": "upgrade", "channel": "stable"})
         reply = await asyncio.wait_for(client.recv_json(), 2)
         self.assertEqual(reply, {"type": "upgrade_status", "state": "busy"})
         self.assertFalse(self.bridge.upgrade_trigger.exists())
 
     def test_start_limit_budget_survives_a_daemon_restart(self) -> None:
-        for _ in range(UPGRADE_RATE_BURST):
-            self.assertEqual(self.bridge.request_upgrade(), "started")
-            self.bridge.upgrade_trigger.unlink()
+        for channel in ("stable", "prerelease"):
+            self.assertEqual(self.bridge.request_upgrade(channel), "started")
+            trigger = (
+                self.bridge.upgrade_trigger
+                if channel == "stable"
+                else self.bridge.upgrade_prerelease_trigger
+            )
+            trigger.unlink()
         restarted = Bridge(
             token="secret",
             upgrade_dir=self.state_dir,
@@ -526,6 +597,7 @@ class UpgradeControlTests(unittest.IsolatedAsyncioTestCase):
         self.bridge.token = None
         client, hello = await self.connect(authenticate=False)
         self.assertFalse(hello["upgradeCapable"])
+        self.assertFalse(hello["upgradePreReleaseCapable"])
         await client.send_json({"type": "upgrade"})
         reply = await asyncio.wait_for(client.recv_json(), 2)
         self.assertEqual(
@@ -538,6 +610,7 @@ class UpgradeControlTests(unittest.IsolatedAsyncioTestCase):
         self.bridge.upgrade_dir = self.state_dir / "missing"
         client, hello = await self.connect()
         self.assertFalse(hello["upgradeCapable"])
+        self.assertFalse(hello["upgradePreReleaseCapable"])
         await client.send_json({"type": "upgrade"})
         reply = await asyncio.wait_for(client.recv_json(), 2)
         self.assertEqual(
