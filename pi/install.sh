@@ -129,6 +129,8 @@ enable_service() {
         fi
         systemctl enable wmr-bridge-upgrade.path || true
         systemctl start wmr-bridge-upgrade.path || true
+        systemctl enable wmr-bridge-upgrade-prerelease.path || true
+        systemctl start wmr-bridge-upgrade-prerelease.path || true
         systemctl enable wmr-bridge-bt-recover.path || true
         systemctl start wmr-bridge-bt-recover.path || true
     fi
@@ -447,6 +449,8 @@ install -m 0644 "${SCRIPT_DIR}/README.md" "${DEST_PI}/README.md"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.service" "${DEST_PI}/systemd/wmr-bridge.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade.path" "${DEST_PI}/systemd/wmr-bridge-upgrade.path"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade.service" "${DEST_PI}/systemd/wmr-bridge-upgrade.service"
+install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade-prerelease.path" "${DEST_PI}/systemd/wmr-bridge-upgrade-prerelease.path"
+install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade-prerelease.service" "${DEST_PI}/systemd/wmr-bridge-upgrade-prerelease.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.path" "${DEST_PI}/systemd/wmr-bridge-bt-recover.path"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.service" "${DEST_PI}/systemd/wmr-bridge-bt-recover.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.env.example" "${DEST_PI}/systemd/wmr-bridge.env.example"
@@ -469,6 +473,8 @@ install -m 0644 "${SCRIPT_DIR}/udev/99-wmr-bridge.rules" "${DEST_UDEV}/99-wmr-br
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.service" "${DEST_SYSTEMD}/wmr-bridge.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade.path" "${DEST_SYSTEMD}/wmr-bridge-upgrade.path"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade.service" "${DEST_SYSTEMD}/wmr-bridge-upgrade.service"
+install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade-prerelease.path" "${DEST_SYSTEMD}/wmr-bridge-upgrade-prerelease.path"
+install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade-prerelease.service" "${DEST_SYSTEMD}/wmr-bridge-upgrade-prerelease.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.path" "${DEST_SYSTEMD}/wmr-bridge-bt-recover.path"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.service" "${DEST_SYSTEMD}/wmr-bridge-bt-recover.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.env.example" "${DEST_ETC}/wmr-bridge.env.example"

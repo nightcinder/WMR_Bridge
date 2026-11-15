@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for a WMR Bridge pre-release upgrade trigger
+
+[Path]
+# The daemon (User=wmr) may only create this empty file. It carries no data,
+# so a client cannot choose a release URL, tag or version.
+PathExists=/var/lib/wmr-bridge/upgrade-prerelease.trigger
+Unit=wmr-bridge-upgrade-prerelease.service
+
+[Install]
+WantedBy=multi-user.target

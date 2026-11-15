@@ -113,9 +113,12 @@ case "$1" in
                 systemctl enable wmr-bridge.service || true
                 systemctl restart wmr-bridge.service || true
                 # Path-activated, root-run self-upgrade requested by the
-                # daemon over an authenticated WebSocket.
+                # daemon over an authenticated WebSocket. Stable and
+                # pre-release triggers have their own units and share a lock.
                 systemctl enable wmr-bridge-upgrade.path || true
                 systemctl start wmr-bridge-upgrade.path || true
+                systemctl enable wmr-bridge-upgrade-prerelease.path || true
+                systemctl start wmr-bridge-upgrade-prerelease.path || true
                 # Path-activated, root-run adapter recovery requested by the
                 # daemon when Adapter1.Powered stays off.
                 systemctl enable wmr-bridge-bt-recover.path || true
