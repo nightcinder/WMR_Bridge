@@ -5,6 +5,55 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.27 — 2026-11-15
+
+The first full release since 0.3.26, cut from `main` on top of the
+`v0.3.27-rc.1`–`v0.3.27-rc.3` pre-releases. Firmware payloads are unchanged
+from 0.3.26: FF10–FF17 keep their payloads, companions at 0.2.2 or later
+continue to work, and the tag only changes the version FF16 reports. The Pi
+bridge path is host-tested only; it has not run on Pi hardware. The 10-minute
+FF14 field capture (both controllers and a phone subscribed) has not been run
+yet.
+
+### Raspberry Pi bridge
+
+- **The phone's gamepad stays live while a stream runs.** HID reports no longer
+  pause while a WebSocket client or an FF11/FF12/FF14 subscriber is active, and
+  the GATT application also exports the Device Information Service (`0x180A`)
+  with the firmware PnP ID so a host can claim the bridge by VID/PID
+  (#233/#235).
+- **BLE HID and timing fixes.** The HID send slot no longer latches behind a
+  queued FF14 batch, the LE connection-interval bounds are 15-20 ms, and the
+  Classic inquiry pauses while a BLE central is subscribed and a controller
+  streams (#239).
+- **No event-loop sleep between the two FF13 `0x06` enable writes** (#236), and
+  `decode_frame`/`record_from_state` are a bit-exact rewrite about 20x faster
+  (#237).
+- **An upgrade from a pre-release no longer reads as current or as a
+  downgrade.** `install.sh` compares the dpkg tilde form (`0.3.27~rc.2`) for the
+  no-op decision and passes `--allow-downgrades` only when semver ranks the
+  fetched build newer while dpkg ranks it lower; a real semver downgrade still
+  stops (#243).
+- **`install.sh --upgrade --prerelease`** selects the highest stable or RC
+  release asset from the newest 20 releases (#246), and the authenticated
+  `{"type":"upgrade","channel":"prerelease"}` command writes
+  `upgrade-prerelease.trigger` for the new root
+  `wmr-bridge-upgrade-prerelease.path`/`.service`, which runs the installer with
+  `--prerelease` under the same lock as the stable unit while the daemon keeps
+  one shared start budget for both channels
+  (#247/#248).
+
+### CI and docs
+
+- `Build firmware` is a small gate job behind a path filter, so a PR that cannot
+  change the image skips the ESP-IDF container and the compile while the
+  required check still reports (#245).
+- The protocol docs are reconciled with the code, the Pi/WMR timing proposals
+  are spec'd and golden vectors are added (#238); the Switch tick semantics and
+  the Pi challenge-response auth are spec'd (#241); the repository ships the
+  MIT `LICENSE` (#242); and `docs/PI_BRIDGE.md` documents the dual-trigger
+  pre-release channel (#249).
+
 ## 0.3.27-rc.3 — 2026-11-14
 
 The third pre-release candidate for the Pixel + Pi hardware check, cut from
