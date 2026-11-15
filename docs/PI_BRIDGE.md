@@ -315,73 +315,73 @@ version comes from `pi/wmr_bridge/__version__`, not from the tag.
 
 ### Version display and app-triggered upgrade
 
-The Pi package version is reported by `wmr-bridge --version`, by
-`hello.version` on every WebSocket handshake, and by `status.version`. The
-companion app shows the received version and compares it with the latest GitHub
-release. The trigger itself is a bridge feature: a companion build has to send
-the command described below, and one that does not yet implement it shows the
-version and an update notice only.
+The command `wmr-bridge --version`, the `hello.version` value on every WebSocket handshake, and `status.version` report the Pi package version. The companion app displays the received version and compares the version with GitHub releases. The upgrade trigger is a bridge feature. The companion app must send the upgrade command to trigger an update. If the app does not support the trigger, the app only displays the version and an update notice.
 
-`hello.upgradeCapable` is `true` only when the daemon has a token and
-`/var/lib/wmr-bridge` exists and is writable by the `wmr` service user. A
-bridge without a token marks every client as authenticated, so it never
-advertises the trigger. A missing or false flag means the app must not send the
-command and should show the one-line installer instead. Releases up to 0.3.23
-omit the field and answer `{"type":"upgrade"}` with
-`{"type":"error","code":"unknown_type"}`.
+The `hello.upgradeCapable` flag reports whether the daemon can queue a stable release upgrade. The `hello.upgradePreReleaseCapable` flag reports whether the daemon can queue a pre-release upgrade. Both flags are true only when the daemon has a token and `/var/lib/wmr-bridge` exists and is writable by the `wmr` user. A bridge without a token treats every client as authenticated, so the bridge never sets either flag to true. If a flag is false or missing, the companion app must not send that upgrade command. Releases up to 0.3.23 omit both flags and reply to `{"type":"upgrade"}` with `{"type":"error","code":"unknown_type"}`.
 
-An authenticated client asks for an upgrade with:
+To request a stable release upgrade, an authenticated client sends:
 
 ```json
 {"type": "upgrade"}
 ```
 
-The reply is `{"type":"upgrade_status","state":"started"}`,
-`{"type":"upgrade_status","state":"busy"}`, or
-`{"type":"upgrade_status","state":"error","code":"auth_failed"|"unavailable"}`.
-The client sends no data. The daemon creates an empty file,
-`/var/lib/wmr-bridge/upgrade.trigger`, and only its name is used.
+or:
 
-The path has four parts:
+```json
+{"type": "upgrade", "channel": "stable"}
+```
 
-1. `wmr-bridge-upgrade.path` watches for the trigger and starts
-   `wmr-bridge-upgrade.service` as root.
-2. The root oneshot deletes the trigger first, so anything written to it is
-   ignored and a failed run cannot re-trigger itself. It runs only the
-   root-owned `/opt/wmr-bridge/pi/install.sh --upgrade`, with
-   `WMR_BRIDGE_REPO`, `WMR_BRIDGE_RELEASE_BASE_URL`, `WMR_BRIDGE_TAG` and
-   `WMR_BRIDGE_VERSION` cleared and no `EnvironmentFile=`, so a client cannot
-   choose a URL, tag or version.
-3. `--upgrade` fetches the latest release, verifies `SHA256SUMS.minisig`
-   against the pinned minisign key, verifies the `.deb` against
-   `SHA256SUMS`, installs it with `apt-get` and restarts the service. When the
-   latest version is not newer than the installed one it exits 0 without
-   reinstalling, so the trigger never downgrades or reinstalls.
-4. `flock` and the unit's `StartLimitBurst=3` / `StartLimitIntervalSec=600`
-   bound repeated requests. The daemon also keeps its own persisted start
-   history and reports `busy` before systemd would refuse a start; a trigger
-   root never picked up expires after 120 seconds.
+To request a pre-release upgrade, an authenticated client sends:
 
-The daemon runs as `wmr` and cannot install packages. This is the only path
-that uses root: an authenticated client can ask for an upgrade, but every
-choice of what to install stays with the root-owned installer and unit. The
-signature check makes a corrupt or tampered download fail closed. It does not
-prove the release author, so TLS to GitHub remains the trust anchor for the
-release contents, the same as the piped bootstrap.
+```json
+{"type": "upgrade", "channel": "prerelease"}
+```
 
-**One-time sudo bootstrap.** Releases up to and including 0.3.23 (0.3.19 and
-older included) ship neither `wmr-bridge-upgrade.path` nor
-`wmr-bridge-upgrade.service`, and their daemon has no `StateDirectory=` and no
-`upgradeCapable` field. A companion build with trigger support treats a missing
-flag as false and shows the installer command; a build without trigger support
-has no upgrade button to show it in place of. Run the command once as root:
+The daemon reports the upgrade status with:
+
+```json
+{"type": "upgrade_status", "state": "started"}
+```
+
+```json
+{"type": "upgrade_status", "state": "busy"}
+```
+
+or:
+
+```json
+{"type": "upgrade_status", "state": "error", "code": "auth_failed"|"unavailable"|"invalid_channel"}
+```
+
+If a client sends an unsupported channel value, the daemon replies with code `invalid_channel`. The daemon checks the channel before the busy check and before the rate check. An invalid channel does not write a trigger file and does not spend the rate budget.
+
+The client sends no files and no payload data. For a stable upgrade, the daemon creates the empty file `/var/lib/wmr-bridge/upgrade.trigger`. For a pre-release upgrade, the daemon creates the empty file `/var/lib/wmr-bridge/upgrade-prerelease.trigger`. The daemon writes each trigger file with mode 0600 through an atomic file replacement. The privileged systemd units read only the file name.
+
+The upgrade path has five parts:
+
+1. `wmr-bridge-upgrade.path` watches for `upgrade.trigger` and starts `wmr-bridge-upgrade.service` as root. `wmr-bridge-upgrade-prerelease.path` watches for `upgrade-prerelease.trigger` and starts `wmr-bridge-upgrade-prerelease.service` as root.
+2. Each service unit removes both trigger files before it runs the installer. This action prevents repeated runs, removes client input, and clears triggers from the other channel. Both service units clear `WMR_BRIDGE_REPO`, `WMR_BRIDGE_RELEASE_BASE_URL`, `WMR_BRIDGE_TAG`, `WMR_BRIDGE_VERSION`, and `WMR_BRIDGE_MINISIGN_PUBKEYS`. The service units load no environment file, so a client cannot choose a URL, tag, or version.
+3. `wmr-bridge-upgrade.service` runs `/usr/bin/flock -n /run/wmr-bridge-upgrade/upgrade.lock /opt/wmr-bridge/pi/install.sh --upgrade`. `wmr-bridge-upgrade-prerelease.service` runs `/usr/bin/flock -n /run/wmr-bridge-upgrade/upgrade.lock /opt/wmr-bridge/pi/install.sh --upgrade --prerelease`. Both services set `RuntimeDirectory=wmr-bridge-upgrade` and `RuntimeDirectoryPreserve=yes` to keep the shared lock file.
+4. `install.sh --upgrade` fetches the latest stable release. `install.sh --upgrade --prerelease` fetches the newest 20 releases and selects the highest version using Debian version comparisons. The installer verifies `SHA256SUMS.minisig` against the pinned minisign key, verifies the `.deb` against `SHA256SUMS`, installs the package, and restarts the service. If the selected release is not newer than the installed version, the installer exits without changes.
+5. Both systemd services enforce `StartLimitBurst=3` and `StartLimitIntervalSec=600`. The daemon keeps a shared history file at `/var/lib/wmr-bridge/upgrade.attempts`. The daemon limits requests across both channels to two starts per 600 seconds. If requests exceed this limit, the daemon reports `busy` before systemd stops a path unit. After 120 seconds, an unconsumed trigger no longer counts as pending. The daemon deletes the trigger when it processes the next upgrade request.
+
+The daemon runs as user `wmr` and cannot install packages. These systemd service units are the only upgrade path that runs as root. An authenticated client can request an upgrade, but the root service selects and verifies the installation package. The minisign signature check causes an invalid download to fail closed. The signature check does not identify the release author, so TLS to GitHub remains the trust anchor for release contents.
+
+#### One-time sudo bootstrap
+
+Releases up to and including 0.3.23 do not include the upgrade path or service units. The daemon in those releases does not define a state directory and does not set `upgradeCapable`. If `upgradeCapable` is missing or false, the companion app displays the manual installation command. To install the upgrade units, run the installation script once as root:
 
 ```bash
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 ```
 
-The release cut from this tree installs and enables both units, so a companion
-build with trigger support can start later upgrades without `sudo`.
+To bootstrap or pin a specific version or pre-release, pass the environment variables with `sudo env`:
+
+```bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v<version>/install.sh | sudo env WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_TAG=v<version> bash
+```
+
+The installation script installs and enables both path units. Later upgrades can then start from the companion app without `sudo`.
 
 ### Verifying a release by hand
 
@@ -611,6 +611,7 @@ shipped the `0.3.23` package, `v0.3.24` shipped the `0.3.24` package, `v0.3.25` 
   "hostname": "wmr-pi",
   "authRequired": true,
   "upgradeCapable": true,
+  "upgradePreReleaseCapable": true,
   "streams": ["raw", "decoded", "batched"],
   "recordSize": 56,
   "batchMax": 9,
@@ -639,21 +640,9 @@ Text messages are JSON control messages. Binary messages from the server are
 stream payloads or tagged FF13 calibration windows. Binary messages from the
 client are rejected with `{"type":"error","code":"binary_not_accepted"}`.
 
-`upgradeCapable` says whether the daemon may accept `{"type":"upgrade"}`; it is
-false when the bridge has no token or when its state directory is missing or not
-writable. `bridge_id` is a stable identity derived from the hostname and
-`/etc/machine-id`; it is the same value advertised by mDNS and UDP discovery,
-and by the BLE GATT peripheral. The BLE address of a Pi may be
-random, so the BLE advertisement carries the first eight bytes of
-`bridge_id` in its service data instead of relying on the address.
-`version` is the bridge's FF16 analogue: the daemon/package version, not the
-controller firmware. `handFilter` is the configured hand selector (`--hand`):
-`["LEFT", "RIGHT"]` for a both-hand daemon, `["LEFT"]` or `["RIGHT"]` for a
-single-hand Pi. A client that expects one hand per bridge can use it to confirm
-the daemon is in the mode the deployment intended. The same two fields are
-present in every `status` reply. `calibration` is present when the daemon runs
-with FF13 forwarding (the default); a daemon started with calibration disabled
-omits it and answers calibration requests with `calibration_unavailable`.
+The `upgradeCapable` flag reports whether the daemon can queue a stable release upgrade. The `upgradePreReleaseCapable` flag reports whether the daemon can queue a pre-release upgrade. Both flags are false when the bridge has no token or when `/var/lib/wmr-bridge` is missing or not writable. `bridge_id` provides a stable identity derived from the host name and `/etc/machine-id`. The daemon advertises the same `bridge_id` in mDNS, UDP discovery, and the BLE GATT peripheral. Because the BLE address of a Pi can change, the BLE advertisement carries the first eight bytes of `bridge_id` in its service data.
+
+The `version` field reports the daemon package version and serves as the FF16 analogue. The `handFilter` field reports the configured hand selector from `--hand`. A client that expects one hand per bridge can read `handFilter` to confirm the daemon mode. Every `status` reply contains both fields. The `calibration` field is present when the daemon runs with default FF13 forwarding. If calibration is disabled, the daemon omits the field and answers calibration requests with `calibration_unavailable`.
 
 ### Service discovery
 
@@ -898,7 +887,7 @@ port can subscribe. With no token on loopback, only local clients can connect.
 | `{"type":"auth","token":"..."}` | `auth_ok` or `auth_failed` |
 | `{"type":"calibration","hand":"LEFT"\|"RIGHT"\|0\|1,"offset":N}` | one tagged binary FF13 window (below) |
 | `{"type":"pairing","action":"open","seconds":N}` or `{"type":"pairing","action":"close"}` | `{"type":"pairing","open":true\|false,"seconds":N\|null}` |
-| `{"type":"upgrade"}` | `{"type":"upgrade_status","state":"started"\|"busy"\|"error","code":...}` |
+| `{"type":"upgrade"}` or `{"type":"upgrade","channel":"stable"\|"prerelease"}` | `{"type":"upgrade_status","state":"started"\|"busy"\|"error","code":...}` |
 | `{"type":"close"}` | close frame, then disconnect |
 
 Rules:
@@ -918,11 +907,14 @@ Rules:
   `pairing_unavailable` when the daemon runs
   with `--no-ble` (or the BLE peripheral failed to start), `bad_action` for an
   unknown action, and `bad_seconds` for an invalid duration.
-- An `upgrade` message requires the token and `upgradeCapable`. Without a
-  token it replies `{"state":"error","code":"auth_failed"}` and writes nothing,
-  even though a tokenless bridge considers the subscriber authenticated. It
-  replies `unavailable` when the state directory is missing or not writable,
-  and `busy` while a trigger is pending or root holds the upgrade lock. See
+- An `upgrade` message requires a token and `upgradeCapable`. Without a token,
+  the daemon replies with `{"state":"error","code":"auth_failed"}` and writes
+  no file. The optional `channel` field accepts `"stable"` or `"prerelease"`,
+  with `"stable"` as the default. An invalid channel returns
+  `{"state":"error","code":"invalid_channel"}`. The daemon replies with
+  `unavailable` when `/var/lib/wmr-bridge` is missing or not writable. The
+  daemon replies with `busy` while a trigger is pending, root holds
+  `upgrade.lock`, or the rate limit is active. See
   [Version display and app-triggered upgrade](#version-display-and-app-triggered-upgrade).
 - An unknown stream is `bad_stream`. Malformed JSON is `bad_json`. An unknown
   `type` is `unknown_type`.
@@ -1127,14 +1119,17 @@ The FF16 analogue is the bridge `version` in `hello` and `status`. FF13 is
 advertised in `hello.calibration`; a bridge with calibration disabled omits the
 field rather than pretending to support it.
 
-7. Show `hello.version` on the Pi connection. Compare it with the latest GitHub
-   release and offer an upgrade when the app is connected and
-   `hello.upgradeCapable` is true. Send `{"type":"upgrade"}`, map `busy` and
-   `error` to a retry/label, and after `started` show that the bridge restarts
-   and reconnect with the normal backoff. When `upgradeCapable` is missing or
-   false, show the one-line `sudo install.sh` command from
-   [Version display and app-triggered upgrade](#version-display-and-app-triggered-upgrade);
-   the app never asks for `sudo` or a release URL.
+7. Display `hello.version` on the Pi connection. Compare the version with GitHub
+   releases. Offer an upgrade when the app is connected and
+   `hello.upgradeCapable` is true. Send `{"type":"upgrade"}` or
+   `{"type":"upgrade","channel":"stable"}` to request a stable upgrade. If
+   `hello.upgradePreReleaseCapable` is true, offer pre-release updates and send
+   `{"type":"upgrade","channel":"prerelease"}`. Map `busy` and `error` states to
+   a retry prompt or status label. When `started` arrives, show that the bridge
+   will restart. Reconnect to the bridge using standard backoff. When
+   `upgradeCapable` is missing or false, display the one-line installer command
+   from [Version display and app-triggered upgrade](#version-display-and-app-triggered-upgrade).
+   The companion app never asks for `sudo` and never requests a release URL.
 
 ## Security
 
@@ -1170,16 +1165,20 @@ safeguards below are enforced by the daemon. The transport is still plaintext.
   controllers deliberately and keep the Pi's Bluetooth adapter trusted-only.
 - Controller motion data can be personal data. Captures and logs should be
   handled accordingly. The repository samples contain no Bluetooth address.
-- The app upgrade trigger is authenticated and carries no input. The daemon
-  runs as `wmr` and can only create the empty
-  `/var/lib/wmr-bridge/upgrade.trigger`. `wmr-bridge-upgrade.path` starts a
-  root oneshot that deletes the file before running the root-owned installed
-  installer with the release-selection variables cleared and no
-  `EnvironmentFile=`, then exits without reinstalling when the release is not
-  newer. A tokenless bridge never advertises `upgradeCapable`; the root unit is
-  `flock`-guarded and rate-limited. The trigger does not change the transport
-  posture: a token holder on the LAN can ask root to install the next signed
-  GitHub release, but cannot choose its contents.
+- The app upgrade trigger is authenticated and carries no input data. The daemon
+  runs as `wmr` and can only create empty trigger files. It writes
+  `/var/lib/wmr-bridge/upgrade.trigger` for stable releases and
+  `/var/lib/wmr-bridge/upgrade-prerelease.trigger` for pre-releases.
+  `wmr-bridge-upgrade.path` or `wmr-bridge-upgrade-prerelease.path` starts a
+  root oneshot service. The service deletes both trigger files before running
+  the root-owned installer. Both units clear release-selection environment
+  variables and load no environment file. If the target release is not newer
+  than the installed version, the installer exits without reinstalling. A
+  tokenless bridge never advertises `upgradeCapable` or
+  `upgradePreReleaseCapable`. The root units share
+  `/run/wmr-bridge-upgrade/upgrade.lock` and rate limits. A token holder on the
+  LAN can ask root to install the next signed release, but cannot choose
+  release contents.
 - WebSocket clients have no rate limit and no authorisation beyond the token,
   and the daemon itself has no TLS. UDP discovery replies are rate-limited per
   source but carry no secret. Treat it as bench equipment with a small, local
