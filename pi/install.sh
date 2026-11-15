@@ -25,30 +25,36 @@
 # apt-get replace that revision when semver still ranks the target newer:
 #   curl -fsSL \
 #     https://github.com/nightcinder/WMR_Bridge/releases/download/v<version>/install.sh \
-#     | WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_TAG=v<version> sudo -E bash
+#     | sudo env WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_TAG=v<version> bash
 #
 # The installed copy is also the root upgrade path for the daemon:
 #   /opt/wmr-bridge/pi/install.sh --upgrade
+#   /opt/wmr-bridge/pi/install.sh --upgrade --prerelease
 # --upgrade forces the signed release fetch even from an installed tree, and
 # exits 0 without reinstalling when the installed version is already current.
+# --prerelease picks the highest stable or RC release asset from the newest 20
+# releases; it needs --upgrade and is ignored when WMR_BRIDGE_VERSION pins one.
 #
 # Test / packaging staging mode (no root required when WMR_SKIP_PRIVILEGED=1):
 #   DESTDIR=/tmp/stage WMR_SKIP_PRIVILEGED=1 ./pi/install.sh
 set -eu
 
 UPGRADE=0
-if [ "$#" -gt 1 ]; then
-    echo "usage: $0 [--upgrade]" >&2
+PRERELEASE=0
+for arg in "$@"; do
+    case "$arg" in
+        --upgrade) UPGRADE=1 ;;
+        --prerelease) PRERELEASE=1 ;;
+        *)
+            echo "usage: $0 [--upgrade [--prerelease]]" >&2
+            exit 64
+            ;;
+    esac
+done
+if [ "$PRERELEASE" = "1" ] && [ "$UPGRADE" != "1" ]; then
+    echo "usage: $0: --prerelease requires --upgrade" >&2
     exit 64
 fi
-case "${1:-}" in
-    "") ;;
-    --upgrade) UPGRADE=1 ;;
-    *)
-        echo "usage: $0 [--upgrade]" >&2
-        exit 64
-        ;;
-esac
 
 REPO="${WMR_BRIDGE_REPO:-nightcinder/WMR_Bridge}"
 
@@ -167,8 +173,74 @@ configure_bluez() {
 if [ -z "$SCRIPT_DIR" ] || [ "$UPGRADE" = "1" ]; then
     PINNED_VERSION="${WMR_BRIDGE_VERSION:-}"
     VERSION="$PINNED_VERSION"
+    SELECTED_TAG=""
+    SELECTED_VERSION=""
 
-    if [ -z "$VERSION" ]; then
+    # dpkg reads the "-rc.2" of a semver pre-release as a package revision and
+    # ranks it *above* the plain release (dpkg: 0.3.27-rc.2 > 0.3.27), the
+    # reverse of semver. Compare the tilde form (0.3.27~rc.2 < 0.3.27) so the
+    # install decisions agree with semver.
+    debian_version() {
+        printf '%s\n' "$1" | sed 's/-\([A-Za-z][0-9A-Za-z.+]*\)$/~\1/'
+    }
+
+    if [ -z "$VERSION" ] && [ "$PRERELEASE" = "1" ]; then
+        command -v python3 >/dev/null 2>&1 ||
+            die "--prerelease needs python3 to read the release list"
+        command -v dpkg >/dev/null 2>&1 ||
+            die "--prerelease needs dpkg to rank pre-releases"
+        release_list="$(fetch_stdout "https://api.github.com/repos/${REPO}/releases?per_page=20")" ||
+            die "could not fetch the release list from GitHub"
+        # Select in two steps: python3 filters drafts, tag shapes and matching
+        # assets without trusting grep; dpkg then ranks the survivors by the
+        # same tilde form used for the install decision below.
+        candidates="$(
+            printf '%s\n' "$release_list" |
+                python3 -c '
+import json
+import re
+import sys
+
+try:
+    releases = json.load(sys.stdin)
+except ValueError:
+    sys.exit(1)
+if not isinstance(releases, list):
+    sys.exit(1)
+tag_pattern = re.compile(r"v\d+\.\d+\.\d+(-rc\.\d+)?")
+for release in releases:
+    if not isinstance(release, dict) or release.get("draft"):
+        continue
+    tag = release.get("tag_name")
+    if not isinstance(tag, str) or not tag_pattern.fullmatch(tag):
+        continue
+    version = tag[1:]
+    asset = "wmr-bridge_%s_all.deb" % version
+    names = [
+        item.get("name")
+        for item in release.get("assets") or []
+        if isinstance(item, dict)
+    ]
+    if asset in names:
+        print(tag, version)
+'
+        )" || die "could not parse the release list from GitHub"
+        while read -r tag version; do
+            [ -n "$tag" ] || continue
+            if [ -z "$SELECTED_TAG" ] ||
+                dpkg --compare-versions \
+                    "$(debian_version "$version")" gt "$(debian_version "$SELECTED_VERSION")"; then
+                SELECTED_TAG="$tag"
+                SELECTED_VERSION="$version"
+            fi
+        done <<EOF
+$candidates
+EOF
+        [ -n "$SELECTED_TAG" ] ||
+            die "no installable pre-release with a matching .deb in the newest 20 releases"
+        VERSION="$SELECTED_VERSION"
+        echo "install.sh: selected pre-release ${SELECTED_TAG}"
+    elif [ -z "$VERSION" ]; then
         release_json="$(fetch_stdout "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null || true)"
         if [ -n "$release_json" ]; then
             VERSION="$(
@@ -183,20 +255,14 @@ if [ -z "$SCRIPT_DIR" ] || [ "$UPGRADE" = "1" ]; then
 
     BASE_URL="${WMR_BRIDGE_RELEASE_BASE_URL:-}"
     if [ -z "$BASE_URL" ]; then
-        if [ -n "$PINNED_VERSION" ]; then
+        if [ -n "$SELECTED_TAG" ]; then
+            BASE_URL="https://github.com/${REPO}/releases/download/${SELECTED_TAG}"
+        elif [ -n "$PINNED_VERSION" ]; then
             BASE_URL="https://github.com/${REPO}/releases/download/${WMR_BRIDGE_TAG:-v${VERSION}}"
         else
             BASE_URL="https://github.com/${REPO}/releases/latest/download"
         fi
     fi
-
-    # dpkg reads the "-rc.2" of a semver pre-release as a package revision and
-    # ranks it *above* the plain release (dpkg: 0.3.27-rc.2 > 0.3.27), the
-    # reverse of semver. Compare the tilde form (0.3.27~rc.2 < 0.3.27) so the
-    # install decisions agree with semver.
-    debian_version() {
-        printf '%s\n' "$1" | sed 's/-\([A-Za-z][0-9A-Za-z.+]*\)$/~\1/'
-    }
 
     # Read the installed version once, for both the upgrade no-op check and the
     # apt-get downgrade decision below. Prefer the installed files (a checkout

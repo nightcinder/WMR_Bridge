@@ -98,7 +98,7 @@ at `/etc/wmr-bridge/token`, and starts `wmr-bridge.service`.
 To pin a release or pre-release, set the version and the tag:
 
 ```bash
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.27-rc.3/install.sh | WMR_BRIDGE_VERSION=0.3.27-rc.3 WMR_BRIDGE_TAG=v0.3.27-rc.3 sudo -E bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.27-rc.3/install.sh | sudo env WMR_BRIDGE_VERSION=0.3.27-rc.3 WMR_BRIDGE_TAG=v0.3.27-rc.3 bash
 ```
 
 The Pi package version matches the repository `VERSION`, and the release
