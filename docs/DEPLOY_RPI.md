@@ -111,7 +111,7 @@ https://nightcinder.github.io/WMR_Bridge/pi.html.
 
 Tags before #104 (such as `v0.3.0`) carry firmware images only. Tags from
 #104 onward also publish `install.sh` and `wmr-bridge_<version>_all.deb`.
-`v0.3.27-rc.3`, `v0.3.26`, `v0.3.25` and `v0.3.24` publish ten files: the three
+`v0.3.27`, `v0.3.26`, `v0.3.25` and `v0.3.24` publish ten files: the three
 merged factory images (`wmr-bridge-factory.bin`, `-left`, `-right`), the three
 application images (`wmr-bridge-app.bin`, `-left`, `-right`), the `.deb`,
 `install.sh`,
@@ -122,9 +122,9 @@ application images). Earlier tags
 such as `v0.3.11` attached the full build output: the factory, application,
 bootloader and partition-table images for all three variants, the three
 manifests, `build-info*.json`, `index.html`, the tarball and per-file `.sha256`
-checksums. The pinned list below is `v0.3.26`.
+checksums. The pinned list below is `v0.3.27`.
 
-Pinned 2026-11-11 assets:
+Pinned 2026-11-15 assets:
 
 | Asset | SHA-256 |
 |---|---|
@@ -155,18 +155,18 @@ sudo apt install ./dist/*.deb
 # latest full release
 curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/latest/download/install.sh | sudo bash
 # pin a release or pre-release
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.27-rc.3/install.sh | sudo env WMR_BRIDGE_VERSION=0.3.27-rc.3 WMR_BRIDGE_TAG=v0.3.27-rc.3 bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.27/install.sh | sudo env WMR_BRIDGE_VERSION=0.3.27 WMR_BRIDGE_TAG=v0.3.27 bash
 ```
 
 A prerelease is not returned by `releases/latest`, so pin both the version and
-the tag as above when installing `v0.3.27-rc.3` and later pre-release builds.
+the tag as above when installing a pre-release build.
 
 **Standalone `.deb`:**
 
 ```bash
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.27-rc.3/wmr-bridge_<version>_all.deb
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.27-rc.3/SHA256SUMS
-wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.27-rc.3/SHA256SUMS.minisig
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.27/wmr-bridge_<version>_all.deb
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.27/SHA256SUMS
+wget https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.27/SHA256SUMS.minisig
 minisign -Vm SHA256SUMS -P RWTL80BhYeTEqPhBvFePoSc/uoC+iJCEa41o1uA3h+t4opQbX0yKCnA6
 sha256sum -c SHA256SUMS --ignore-missing
 sudo apt install ./wmr-bridge_<version>_all.deb
