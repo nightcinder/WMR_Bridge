@@ -277,6 +277,9 @@ class PackagingTests(unittest.TestCase):
             self.assertIn("User=root", text)
             self.assertIn("Type=oneshot", text)
             self.assertIn("RuntimeDirectory=wmr-bridge-upgrade", text)
+            # Both units share the directory, so a stop by either must not
+            # remove the other's lock file and let a third run start.
+            self.assertIn("RuntimeDirectoryPreserve=yes", text)
             self.assertIn("StartLimitIntervalSec=600", text)
             self.assertIn("StartLimitBurst=3", text)
             self.assertNotIn("/var/lib/wmr-bridge/upgrade.lock", text)
