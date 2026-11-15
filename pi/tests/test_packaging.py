@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -108,7 +109,11 @@ def _stage_signed_release(directory: Path) -> tuple[Path, str]:
 
 
 def _run_upgrade_install(
-    directory: Path, installed: str, target: str
+    directory: Path,
+    installed: str,
+    target: str,
+    *,
+    releases_json: str | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], str]:
     """Run `install.sh --upgrade` against a staged release and a fake install.
 
@@ -116,6 +121,10 @@ def _run_upgrade_install(
     version comes from the dpkg-query stub and the release is fetched from the
     staged directory. minisign is stubbed: these tests cover version ordering,
     not signature verification (which has its own tests).
+
+    With `releases_json`, the run uses `--prerelease`: a curl stub serves that
+    list for the GitHub API and maps the tagged download URLs to the staged
+    release, so the selected tag and URL are observable.
     """
     installer = directory / "install.sh"
     shutil.copy(INSTALL_SH, installer)
@@ -142,14 +151,51 @@ def _run_upgrade_install(
     _write_stub(bin_dir, "apt-get", f'echo "apt-get $*" >> "{calls}"')
     _write_stub(bin_dir, "systemctl", "exit 0")
 
+    args = ["/bin/sh", str(installer), "--upgrade"]
     env = {
         **os.environ,
-        "WMR_BRIDGE_VERSION": target,
-        "WMR_BRIDGE_RELEASE_BASE_URL": release.as_uri(),
         "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
     }
+    if releases_json is None:
+        env["WMR_BRIDGE_VERSION"] = target
+        env["WMR_BRIDGE_RELEASE_BASE_URL"] = release.as_uri()
+    else:
+        api = directory / "releases.json"
+        api.write_text(releases_json, encoding="utf-8")
+        url_log = directory / "urls.log"
+        url_log.write_text("", encoding="utf-8")
+        _write_stub(
+            bin_dir,
+            "curl",
+            f'''url=""
+dest=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -o) dest="$2"; shift 2 ;;
+        -*) shift ;;
+        *) url="$1"; shift ;;
+    esac
+done
+[ -n "$url" ] || exit 2
+printf '%s\\n' "$url" >> "{url_log}"
+case "$url" in
+    *"releases?per_page=20"*)
+        if [ -n "$dest" ]; then cp "{api}" "$dest"; else cat "{api}"; fi
+        ;;
+    "https://github.com/nightcinder/WMR_Bridge/releases/download/v"*)
+        name="${{url##*/}}"
+        [ -f "{release}/$name" ] || {{ echo "curl stub: missing $name" >&2; exit 22; }}
+        if [ -n "$dest" ]; then cp "{release}/$name" "$dest"; else cat "{release}/$name"; fi
+        ;;
+    *)
+        echo "curl stub: unexpected URL $url" >&2
+        exit 22
+        ;;
+esac''',
+        )
+        args.append("--prerelease")
     proc = subprocess.run(
-        ["/bin/sh", str(installer), "--upgrade"],
+        args,
         env=env,
         capture_output=True,
         text=True,
@@ -407,10 +453,128 @@ class PackagingTests(unittest.TestCase):
                 self.assertIn("nothing to do", proc.stdout)
                 self.assertEqual(calls, "")
 
+    def test_prerelease_selects_the_highest_ranked_release_with_a_matching_asset(self) -> None:
+        releases = json.dumps(
+            [
+                {
+                    "tag_name": "v0.3.33",
+                    "draft": True,
+                    "assets": [{"name": "wmr-bridge_0.3.33_all.deb"}],
+                },
+                {
+                    "tag_name": "v0.3.32",
+                    "draft": False,
+                    "assets": [{"name": "wmr-bridge_0.3.31_all.deb"}],
+                },
+                {
+                    "tag_name": "release-0.3.99",
+                    "draft": False,
+                    "assets": [{"name": "wmr-bridge_0.3.99_all.deb"}],
+                },
+                {
+                    "tag_name": "v0.3.31-rc.2",
+                    "draft": False,
+                    "assets": [{"name": "wmr-bridge_0.3.31-rc.2_all.deb"}],
+                },
+                {
+                    "tag_name": "v0.3.30",
+                    "draft": False,
+                    "assets": [{"name": "wmr-bridge_0.3.30_all.deb"}],
+                },
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            proc, calls = _run_upgrade_install(
+                directory, "0.3.30", "0.3.31-rc.2", releases_json=releases
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            self.assertIn("installing wmr-bridge_0.3.31-rc.2_all.deb", proc.stdout)
+            self.assertIn("apt-get install -y /", calls)
+            urls = (directory / "urls.log").read_text(encoding="utf-8")
+            self.assertIn(
+                "releases/download/v0.3.31-rc.2/wmr-bridge_0.3.31-rc.2_all.deb",
+                urls,
+            )
+            self.assertNotIn("latest/download", urls)
+
+    def test_prerelease_selects_the_stable_release_over_its_rc(self) -> None:
+        releases = json.dumps(
+            [
+                {
+                    "tag_name": "v0.3.31",
+                    "draft": False,
+                    "assets": [{"name": "wmr-bridge_0.3.31_all.deb"}],
+                },
+                {
+                    "tag_name": "v0.3.31-rc.2",
+                    "draft": False,
+                    "assets": [{"name": "wmr-bridge_0.3.31-rc.2_all.deb"}],
+                },
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            proc, calls = _run_upgrade_install(
+                Path(tmp), "0.3.31-rc.2", "0.3.31", releases_json=releases
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            self.assertIn("installing wmr-bridge_0.3.31_all.deb", proc.stdout)
+            # dpkg ranks the rc above the plain release, so the selected
+            # stable only installs with --allow-downgrades.
+            self.assertIn("apt-get install -y --allow-downgrades ", calls)
+
+    def test_prerelease_fails_when_no_release_has_a_matching_tag_and_asset(self) -> None:
+        releases = json.dumps(
+            [
+                {
+                    "tag_name": "v0.3.32",
+                    "draft": True,
+                    "assets": [{"name": "wmr-bridge_0.3.32_all.deb"}],
+                },
+                {
+                    "tag_name": "v0.3.31",
+                    "draft": False,
+                    "assets": [{"name": "wmr-bridge_0.3.30_all.deb"}],
+                },
+                {
+                    "tag_name": "release-0.3.30",
+                    "draft": False,
+                    "assets": [{"name": "wmr-bridge_0.3.30_all.deb"}],
+                },
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            proc, calls = _run_upgrade_install(
+                Path(tmp), "0.3.30", "0.3.30", releases_json=releases
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("no installable pre-release", proc.stderr)
+            self.assertEqual(calls, "")
+
+    def test_prerelease_fails_on_an_unparseable_release_list(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            proc, calls = _run_upgrade_install(
+                Path(tmp), "0.3.30", "0.3.30", releases_json="not json"
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("could not parse the release list", proc.stderr)
+            self.assertEqual(calls, "")
+
+    def test_prerelease_requires_upgrade(self) -> None:
+        proc = subprocess.run(
+            ["/bin/sh", str(INSTALL_SH), "--prerelease"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 64)
+        self.assertIn("--prerelease requires --upgrade", proc.stderr)
+
     def test_installer_header_documents_the_tag_pinned_prerelease_command(self) -> None:
         header = INSTALL_SH.read_text(encoding="utf-8").split("set -eu", 1)[0]
         self.assertIn("releases/download/v<version>/install.sh", header)
-        self.assertIn("WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_TAG=v<version> sudo -E bash", header)
+        self.assertIn("sudo env WMR_BRIDGE_VERSION=<version> WMR_BRIDGE_TAG=v<version> bash", header)
+        self.assertNotIn("sudo -E", header)
 
     def test_installer_preserves_existing_token_and_env_and_invokes_system_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
