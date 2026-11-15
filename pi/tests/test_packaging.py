@@ -17,6 +17,8 @@ INSTALL_SH = PI_DIR / "install.sh"
 SERVICE_FILE = PI_DIR / "systemd" / "wmr-bridge.service"
 UPGRADE_SERVICE_FILE = PI_DIR / "systemd" / "wmr-bridge-upgrade.service"
 UPGRADE_PATH_FILE = PI_DIR / "systemd" / "wmr-bridge-upgrade.path"
+UPGRADE_PRERELEASE_SERVICE_FILE = PI_DIR / "systemd" / "wmr-bridge-upgrade-prerelease.service"
+UPGRADE_PRERELEASE_PATH_FILE = PI_DIR / "systemd" / "wmr-bridge-upgrade-prerelease.path"
 BT_RECOVER_SERVICE_FILE = PI_DIR / "systemd" / "wmr-bridge-bt-recover.service"
 BT_RECOVER_PATH_FILE = PI_DIR / "systemd" / "wmr-bridge-bt-recover.path"
 ENV_EXAMPLE = PI_DIR / "systemd" / "wmr-bridge.env.example"
@@ -242,32 +244,58 @@ class PackagingTests(unittest.TestCase):
     def test_upgrade_units_take_no_input_and_rate_limit(self) -> None:
         service = UPGRADE_SERVICE_FILE.read_text(encoding="utf-8")
         path = UPGRADE_PATH_FILE.read_text(encoding="utf-8")
-        # The trigger file is the only input; it carries no data.
+        prerelease_service = UPGRADE_PRERELEASE_SERVICE_FILE.read_text(encoding="utf-8")
+        prerelease_path = UPGRADE_PRERELEASE_PATH_FILE.read_text(encoding="utf-8")
+        # Each trigger file is the only input; it carries no data.
         self.assertIn("PathExists=/var/lib/wmr-bridge/upgrade.trigger", path)
         self.assertIn("Unit=wmr-bridge-upgrade.service", path)
-        self.assertIn("ExecStartPre=/bin/rm -f /var/lib/wmr-bridge/upgrade.trigger", service)
         self.assertIn(
-            "Environment=WMR_BRIDGE_REPO= WMR_BRIDGE_RELEASE_BASE_URL= "
-            "WMR_BRIDGE_TAG= WMR_BRIDGE_VERSION=",
-            service,
+            "PathExists=/var/lib/wmr-bridge/upgrade-prerelease.trigger", prerelease_path
         )
-        self.assertFalse(
-            [line for line in service.splitlines() if line.startswith("EnvironmentFile=")]
-        )
-        self.assertNotIn("upgrade.trigger ", service)
-        # Root runs only the root-owned installed copy, under a lock in a
-        # root-owned runtime directory (the state dir is writable by wmr).
-        self.assertIn("User=root", service)
-        self.assertIn("Type=oneshot", service)
-        self.assertIn("RuntimeDirectory=wmr-bridge-upgrade", service)
+        self.assertIn("Unit=wmr-bridge-upgrade-prerelease.service", prerelease_path)
+        for text in (service, prerelease_service):
+            # Each root oneshot clears both triggers before running and clears
+            # every release-selection variable, including the extra key list.
+            self.assertIn(
+                "ExecStartPre=/bin/rm -f /var/lib/wmr-bridge/upgrade.trigger "
+                "/var/lib/wmr-bridge/upgrade-prerelease.trigger",
+                text,
+            )
+            self.assertIn(
+                "Environment=WMR_BRIDGE_REPO= WMR_BRIDGE_RELEASE_BASE_URL= "
+                "WMR_BRIDGE_TAG= WMR_BRIDGE_VERSION= WMR_BRIDGE_MINISIGN_PUBKEYS=",
+                text,
+            )
+            self.assertFalse(
+                [line for line in text.splitlines() if line.startswith("EnvironmentFile=")]
+            )
+            for line in text.splitlines():
+                if line.startswith(("ExecStart=", "Environment=")):
+                    self.assertNotIn("trigger", line)
+            # Root runs only the root-owned installed copy, under a lock in a
+            # root-owned runtime directory (the state dir is writable by wmr).
+            self.assertIn("User=root", text)
+            self.assertIn("Type=oneshot", text)
+            self.assertIn("RuntimeDirectory=wmr-bridge-upgrade", text)
+            # Both units share the directory, so a stop by either must not
+            # remove the other's lock file and let a third run start.
+            self.assertIn("RuntimeDirectoryPreserve=yes", text)
+            self.assertIn("StartLimitIntervalSec=600", text)
+            self.assertIn("StartLimitBurst=3", text)
+            self.assertNotIn("/var/lib/wmr-bridge/upgrade.lock", text)
         self.assertIn(
             "ExecStart=/usr/bin/flock -n /run/wmr-bridge-upgrade/upgrade.lock "
             "/opt/wmr-bridge/pi/install.sh --upgrade",
             service,
         )
-        self.assertNotIn("/var/lib/wmr-bridge/upgrade.lock", service)
-        self.assertIn("StartLimitIntervalSec=600", service)
-        self.assertIn("StartLimitBurst=3", service)
+        # The pre-release unit is a literal ExecStart too: no shell branching,
+        # and the same lock so the two paths cannot upgrade at once.
+        self.assertIn(
+            "ExecStart=/usr/bin/flock -n /run/wmr-bridge-upgrade/upgrade.lock "
+            "/opt/wmr-bridge/pi/install.sh --upgrade --prerelease",
+            prerelease_service,
+        )
+        self.assertNotIn("/bin/sh", prerelease_service)
 
     def test_bt_recover_units_run_hciuart_and_bluetooth_as_root(self) -> None:
         path = BT_RECOVER_PATH_FILE.read_text(encoding="utf-8")
@@ -295,6 +323,10 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('[ "$FRESH_INSTALL" = "1" ]', installer)
         # The package path restarts in postinst; install.sh only starts it.
         self.assertIn("enable_service start", installer)
+        self.assertIn("systemctl enable wmr-bridge-upgrade.path", installer)
+        self.assertIn("systemctl start wmr-bridge-upgrade.path", installer)
+        self.assertIn("systemctl enable wmr-bridge-upgrade-prerelease.path", installer)
+        self.assertIn("systemctl start wmr-bridge-upgrade-prerelease.path", installer)
         self.assertIn("systemctl enable wmr-bridge-bt-recover.path", installer)
         self.assertIn("systemctl start wmr-bridge-bt-recover.path", installer)
 
@@ -349,6 +381,8 @@ class PackagingTests(unittest.TestCase):
             for name, source in (
                 ("wmr-bridge-upgrade.path", UPGRADE_PATH_FILE),
                 ("wmr-bridge-upgrade.service", UPGRADE_SERVICE_FILE),
+                ("wmr-bridge-upgrade-prerelease.path", UPGRADE_PRERELEASE_PATH_FILE),
+                ("wmr-bridge-upgrade-prerelease.service", UPGRADE_PRERELEASE_SERVICE_FILE),
             ):
                 installed = destdir / "etc" / "systemd" / "system" / name
                 self.assertTrue(installed.is_file(), name)

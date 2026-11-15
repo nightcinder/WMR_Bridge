@@ -12,17 +12,20 @@ Type=oneshot
 User=root
 # Root-owned lock directory. The state directory is writable by the service
 # user, and root's flock would follow a symlink planted at the lock name, so
-# the lock must live in a directory only root can create or rename. systemd
-# removes this runtime directory when the oneshot stops.
+# the lock must live in a directory only root can create or rename. Preserve
+# the directory when the oneshot stops: the pre-release unit shares it, and a
+# losing contender's exit must not unlink the winner's lock file.
 RuntimeDirectory=wmr-bridge-upgrade
-# The trigger file is intentionally ignored as input. Remove it before running
-# so a failed upgrade cannot re-trigger itself and nothing written to it can
-# reach the installer.
-ExecStartPre=/bin/rm -f /var/lib/wmr-bridge/upgrade.trigger
+RuntimeDirectoryPreserve=yes
+# Both trigger files are intentionally ignored as input. Remove both before
+# running so a failed upgrade cannot re-trigger itself, nothing written to a
+# trigger can reach the installer, and a pre-release trigger left behind does
+# not start a second upgrade after this one.
+ExecStartPre=/bin/rm -f /var/lib/wmr-bridge/upgrade.trigger /var/lib/wmr-bridge/upgrade-prerelease.trigger
 # install.sh reads these to select a release. Clear them and use no
 # EnvironmentFile= so the daemon-side trigger has no path to a URL, tag or
 # version. The installer falls back to the official latest release.
-Environment=WMR_BRIDGE_REPO= WMR_BRIDGE_RELEASE_BASE_URL= WMR_BRIDGE_TAG= WMR_BRIDGE_VERSION=
+Environment=WMR_BRIDGE_REPO= WMR_BRIDGE_RELEASE_BASE_URL= WMR_BRIDGE_TAG= WMR_BRIDGE_VERSION= WMR_BRIDGE_MINISIGN_PUBKEYS=
 # Run only the root-owned installed copy. --upgrade forces the signed release
 # fetch and exits 0 without reinstalling when the installed version is current
 # (no reinstall or downgrade). The lock makes overlapping runs fail closed.

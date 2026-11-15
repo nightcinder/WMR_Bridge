@@ -90,10 +90,14 @@ class DebPackagingTests(unittest.TestCase):
                 "./etc/systemd/system/wmr-bridge.service",
                 "./etc/systemd/system/wmr-bridge-upgrade.path",
                 "./etc/systemd/system/wmr-bridge-upgrade.service",
+                "./etc/systemd/system/wmr-bridge-upgrade-prerelease.path",
+                "./etc/systemd/system/wmr-bridge-upgrade-prerelease.service",
                 "./etc/systemd/system/wmr-bridge-bt-recover.path",
                 "./etc/systemd/system/wmr-bridge-bt-recover.service",
                 "./opt/wmr-bridge/pi/systemd/wmr-bridge-upgrade.path",
                 "./opt/wmr-bridge/pi/systemd/wmr-bridge-upgrade.service",
+                "./opt/wmr-bridge/pi/systemd/wmr-bridge-upgrade-prerelease.path",
+                "./opt/wmr-bridge/pi/systemd/wmr-bridge-upgrade-prerelease.service",
                 "./opt/wmr-bridge/pi/systemd/wmr-bridge-bt-recover.path",
                 "./opt/wmr-bridge/pi/systemd/wmr-bridge-bt-recover.service",
                 "./etc/udev/rules.d/99-wmr-bridge.rules",
@@ -129,6 +133,11 @@ class DebPackagingTests(unittest.TestCase):
             self.assertIn("systemctl restart bluetooth.service", postinst)
             self.assertIn("systemctl enable wmr-bridge-upgrade.path", postinst)
             self.assertIn("systemctl start wmr-bridge-upgrade.path", postinst)
+            self.assertIn("systemctl enable wmr-bridge-upgrade-prerelease.path", postinst)
+            self.assertIn("systemctl start wmr-bridge-upgrade-prerelease.path", postinst)
+            prerm = (control_dir / "prerm").read_text(encoding="utf-8")
+            self.assertIn("systemctl stop wmr-bridge-upgrade-prerelease.path", prerm)
+            self.assertIn("systemctl disable wmr-bridge-upgrade-prerelease.path", prerm)
             self.assertIn("systemctl enable wmr-bridge-bt-recover.path", postinst)
             self.assertIn("systemctl start wmr-bridge-bt-recover.path", postinst)
             self.assertIn("--prefer-5ghz --no-reconnect", postinst)
