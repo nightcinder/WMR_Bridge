@@ -462,15 +462,15 @@ sudo systemctl enable --now wmr-bridge
 journalctl -u wmr-bridge -f
 ```
 
-The unit runs as `wmr` with `SupplementaryGroups=input bluetooth`, restarts on failure,
-reads the token from `/etc/wmr-bridge/token`, and loads optional flags from
-`/etc/wmr-bridge/wmr-bridge.env` via `WMR_BRIDGE_ARGS` (for example,
-`WMR_BRIDGE_ARGS=--hand left` on a single-hand Pi without editing the unit
-file). The token file must be owned by `wmr` (mode 0640, group `wmr`). Members
-of the `wmr` group (the installer adds the invoking `sudo` user) can read it
-and run `pi/tools/wifi_probe.py` without sudo; group membership applies on the
-next login. A root-owned file is unreadable by the service, which then exits
-with a message naming the path and the uid it runs as.
+The unit runs as `wmr` with `SupplementaryGroups=input bluetooth` and restarts on failure.
+It reads the token from `/etc/wmr-bridge/token`.
+It loads optional flags from `/etc/wmr-bridge/wmr-bridge.env` through `WMR_BRIDGE_ARGS` (`pi/systemd/wmr-bridge.service:13,25`).
+For example, bench runs use `WMR_BRIDGE_ARGS="--idle-sleep-timeout 30 --idle-poweroff-timeout 90"`.
+The token file must have mode 0640 and ownership `wmr:wmr` (`pi/tools/wifi_probe.py:382-393,562`).
+The installed probe path is `/opt/wmr-bridge/pi/tools/wifi_probe.py` (`pi/build_deb.sh:106`, `pi/install.sh:438`).
+Members of the `wmr` group can read the token file and run the probe without `sudo`.
+If your user is not in the `wmr` group, pass `--token-file /etc/wmr-bridge/token` and run with `sudo`.
+A root-owned file is unreadable by the service, and the service exits with an error message.
 
 ### Pre-flight kit (no hardware)
 
@@ -512,16 +512,19 @@ python3 -m wmr_bridge --replay ../samples/controller_frames.txt --bind 127.0.0.1
 python3 tools/wifi_probe.py --stream batched --duration 10
 ```
 
-The probe prints the `hello` Wi-Fi and uplink objects. `--discover` sends a
-`WMR_DISCOVER_V1` probe to UDP port 8765 before connecting. `--json-out PATH`
-writes the final summary as JSON. `--assert-gates` checks the Sitting P pass
-criteria (RTT p50 below 15 ms, tick-based missing-report share at or below 3 %
-per hand, zero sequence gaps) and exits non-zero when any fails. Every hand the
-bridge expects needs at least one record, so a run with no controller frames
-fails the loss and gap gates instead of passing at 0 %:
+The probe prints the `hello` Wi-Fi and uplink objects.
+`--discover` sends a `WMR_DISCOVER_V1` probe to UDP port 8765 before connecting (`pi/wmr_bridge/discovery.py:28`, `pi/tools/wifi_probe.py:48`).
+`--json-out PATH` writes the final summary as JSON.
+`--assert-gates` checks the Sitting P pass criteria and exits non-zero if any check fails (`pi/tools/wifi_probe.py:50-52,575-578`).
+The gates require RTT p50 below 15 ms, tick-based missing reports at or below 3.0% per hand, and zero sequence gaps.
+Every expected hand requires at least one record.
+A run without controller frames fails the loss and gap gates.
+The installed probe path is `/opt/wmr-bridge/pi/tools/wifi_probe.py` (`pi/build_deb.sh:106`, `pi/install.sh:438`).
+Because `/etc/wmr-bridge/token` is mode 0640, pass `--token-file /etc/wmr-bridge/token` with `sudo` if needed (`pi/tools/wifi_probe.py:382-393,562`):
 
 ```bash
-python3 tools/wifi_probe.py --host 192.168.1.10 --discover \
+sudo python3 /opt/wmr-bridge/pi/tools/wifi_probe.py --host 192.168.1.10 --discover \
+    --token-file /etc/wmr-bridge/token \
     --duration 600 --assert-gates --json-out sitting-p.json
 ```
 
@@ -1268,8 +1271,12 @@ whatever BlueZ paired, and assigns hands by HID name.
   Batching reduces WebSocket writes but adds at most the hold time (5 ms
   default).
 - The Pi 3B+ has less CPU headroom than a Pi 4 (Cortex-A53 at 1.4 GHz, 1 GB
-  RAM). The event loop should still fit 2 x about 180 reports/s, but run only
-  the bridge and the probe on the board during P5/P6 and record CPU load and
+  RAM). The event loop must fit 2 x about 180 reports/s. The M2 decode CPU gate
+  requires daemon CPU usage to stay under 25% of one core during two-hand
+  streaming (`pi/wmr_bridge/decode.py:183-230`). Sample CPU usage with:
+  `top -b -n 600 -d 1 -p "$(systemctl show -p MainPID --value wmr-bridge.service)"`
+  Do not use `pgrep -f wmr-bridge`, because `pgrep` matches `avahi-publish-service`
+  arguments (`pi/wmr_bridge/mdns.py:81-90`). Record CPU load and
   `vcgencmd get_throttled` with the results.
 - The default 512-message queue absorbs scheduling hiccups for roughly 1.5 s at
   320 records/s per client. A slower client drops the newest messages. It does
@@ -1342,8 +1349,8 @@ tester checklist and pinned image/package checksums are in
 | P9 | Two clients | raw and batched clients both receive, independent queues |
 | P10 | 8 h soak | no memory growth, no fd leak, no queue drops at idle |
 | P11 | Auto-pair from unpaired | start with both controllers unpaired; put one in pairing mode; unattended pair/trust/connect within 60 s; repeat for the other hand; with `--no-auto-pair` the bridge does not pair and pairing stays with the operator |
-| P12 | TCP-to-BLE failover and jitter | transition time under 2.5 s, inter-frame delivery pause under 3 s, sequence numbers continue, clean upgrade back to TCP when Wi-Fi recovers |
-| P13 | Controller idle sleep and power-off | 0x06 keep-alive pauses at 300 s ± 5 s; motion wakes controller in under 1.0 s; the BlueZ block drops the ACL at 900 s ± 5 s; the controller stays disconnected for the 60 s cooldown, then a button press reconnects it |
+| P12 | TCP-to-BLE failover and recovery | transition under 2.5 s, inter-frame pause under 3 s, sequence numbers continue. Isolate or unplug `eth0` before testing. TCP recovery gate: `T2 - T1 <= 5 s` and `T2 - T0 <= 15 s`, with no app restart (`T0` = `ip link set wlan0 up`, `T1` = first IPv4 on `wlan0`, `T2` = app reports TCP, `ONY-1456`) |
+| P13 | Controller idle sleep and power-off | configure `WMR_BRIDGE_ARGS="--idle-sleep-timeout 30 --idle-poweroff-timeout 90"` in `/etc/wmr-bridge/wmr-bridge.env` (`pi/systemd/wmr-bridge.service:13,25`). Keep-alive pauses at 30 s. Motion wakes controller in under 1.0 s. BlueZ block drops ACL at 90 s. Controller stays disconnected for 60 s cooldown, then a button press reconnects it (`pi/wmr_bridge/inputs.py:418-470`) |
 | P14 | Uplink priority and Sitting P gates | `eth0` route metric 100 preferred over 5 GHz Wi-Fi metric 200; `rttMs.p50` < 15 ms, gaps 0, missing share <= 3.0 %, non-null `serverStatus` with `dropped == 0` |
 
 Record host model, OS, BlueZ/kernel versions, Wi-Fi band/channel, controller
@@ -1381,6 +1388,9 @@ INFO/WARNING:
 | Client gets `stream_active` | send `unsubscribe` before switching streams |
 | High RTT or drops | confirm 5 GHz, disable Wi-Fi power save, check channel congestion, inspect `status.dropped` |
 | Port unreachable | `--bind 0.0.0.0` (plus a token, or the daemon refuses to start), firewall, correct Pi address, same VLAN/client isolation off |
+| `dumpsys input` does not list WMR Bridge | Android requires Bluetooth HID pairing in Android Settings (`docs/HID_GAMEPAD.md:481-523`). The device registers as `Device: wmr-bridge`. Run `adb shell dumpsys input | grep -E -A 25 -i "wmr[- ]bridge"`. Make sure that the phone BLE bond reports `paired=yes` in `wmr-bridge status` (`docs/HID_GAMEPAD.md:542-560`, `pi/wmr_bridge/ble_gatt.py:2121-2144`, `pi/wmr_bridge/__main__.py:591-627`) |
+| `DebugScreen` version or FF17 control | in `wmr_companion_app` (`v0.3.25`, `ONY-1448`), open the `Debug` tab and locate the `Bridge Firmware` card for FF16 (`debug_screen.dart:523-579`, `wmr_ws_transport.dart:285,338-340`). `ControllerPanel` (FF17 disconnect) is hidden on Wi-Fi bridges (`debug_screen.dart:229-235`) and is tested on ESP32 BLE only |
+| Controller does not wake after idle power-off | motion wakes controllers only from stage 1 idle sleep (30 s). After stage 2 idle power-off (90 s), BlueZ blocks reconnects for a 60 s cooldown. Wake the controller with a physical button press after the cooldown expires (`pi/wmr_bridge/inputs.py:418-470`) |
 
 ## Future work
 
