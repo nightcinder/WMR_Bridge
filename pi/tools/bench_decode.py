@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import random
+import statistics
 import sys
 import time
 from pathlib import Path
@@ -49,15 +50,14 @@ def _load_frames(path: Path) -> tuple[list[bytes], str]:
     return frames, f"seeded random ({RANDOM_FALLBACK_COUNT} frames; {path} not usable)"
 
 
-def _best_ns(fn, items: list, repeat: int) -> int:
-    best = None
+def _median_ns(fn, items: list, repeat: int) -> int:
+    samples = []
     for _ in range(repeat):
         start = time.perf_counter_ns()
         for item in items:
             fn(item)
-        elapsed = time.perf_counter_ns() - start
-        best = elapsed if best is None else min(best, elapsed)
-    return best or 0
+        samples.append(time.perf_counter_ns() - start)
+    return int(statistics.median(samples))
 
 
 def _decode_record(frame: bytes):
@@ -94,7 +94,7 @@ def _percent_of_core(us_per_report: float) -> float:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--count", type=int, default=20000, help="decodes per timed run")
-    parser.add_argument("--repeat", type=int, default=5, help="timed runs; best is kept")
+    parser.add_argument("--repeat", type=int, default=5, help="timed runs; median is kept")
     parser.add_argument(
         "--samples",
         type=Path,
@@ -130,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     ]
     results = {}
     for label, fn in stages:
-        ns = _best_ns(fn, items, args.repeat)
+        ns = _median_ns(fn, items, args.repeat)
         results[label] = ns / args.count / 1000
     for label, _fn in stages:
         us = results[label]
@@ -143,8 +143,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.reference:
         ref_count = max(1, args.count // 50)
         ref_items = [frames[i % len(frames)] for i in range(ref_count)]
-        ref_decode = _best_ns(dec._decode_frame_reference, ref_items, args.repeat) / ref_count / 1000
-        ref_record = _best_ns(_reference_record, ref_items, args.repeat) / ref_count / 1000
+        ref_decode = (
+            _median_ns(dec._decode_frame_reference, ref_items, args.repeat) / ref_count / 1000
+        )
+        ref_record = _median_ns(_reference_record, ref_items, args.repeat) / ref_count / 1000
         print(f"reference decode: {ref_decode:.2f} us/report ({ref_count} decodes)")
         print(f"reference decode+record: {ref_record:.2f} us/report ({ref_count} decodes)")
         if results["decode"] > 0:

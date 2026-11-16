@@ -135,7 +135,7 @@ def _q15_reference(value: float) -> int:
     return int(math.ceil(_f32_fraction(Fraction(scaled) - Fraction(1, 2))))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class ControllerState:
     buttons: int
     thumbstick_x: float
@@ -150,6 +150,41 @@ class ControllerState:
     gyro_raw: tuple[int, int, int]
     gyro: tuple[float, float, float]
     ticks: int
+
+    def __init__(
+        self,
+        buttons: int,
+        thumbstick_x: float,
+        thumbstick_y: float,
+        trigger: float,
+        trackpad_x: float,
+        trackpad_y: float,
+        battery: int,
+        accel_raw: tuple[int, int, int],
+        accel: tuple[float, float, float],
+        temperature_raw: int,
+        gyro_raw: tuple[int, int, int],
+        gyro: tuple[float, float, float],
+        ticks: int,
+    ) -> None:
+        # A generated frozen ``__init__`` spends one ``object.__setattr__`` call
+        # per field, which is most of a 400 Hz decode. Writing the instance dict
+        # keeps ``frozen=True`` (and so ``eq``, ``hash`` and
+        # ``dataclasses.replace``) while removing 13 calls per state.
+        fields = self.__dict__
+        fields["buttons"] = buttons
+        fields["thumbstick_x"] = thumbstick_x
+        fields["thumbstick_y"] = thumbstick_y
+        fields["trigger"] = trigger
+        fields["trackpad_x"] = trackpad_x
+        fields["trackpad_y"] = trackpad_y
+        fields["battery"] = battery
+        fields["accel_raw"] = accel_raw
+        fields["accel"] = accel
+        fields["temperature_raw"] = temperature_raw
+        fields["gyro_raw"] = gyro_raw
+        fields["gyro"] = gyro
+        fields["ticks"] = ticks
 
     @property
     def thumbstick_click(self) -> bool:
