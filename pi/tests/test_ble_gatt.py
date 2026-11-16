@@ -8,6 +8,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from wmr_bridge.__main__ import _build_parser
 from wmr_bridge.ble_gatt import (
@@ -1064,6 +1065,42 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_no_cccd_means_no_ble_airtime(self) -> None:
         self.bridge.ingest(0, SAMPLE_DATA)
+        self.assertEqual(self.backend.notifications, [])
+
+    async def test_unsubscribed_cccds_skip_stream_and_hid_work(self) -> None:
+        # A decoded record is available for another sink, so the old deliver()
+        # would pack it and decode the frame again for HID even with no CCCD.
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+
+        class DecodedSink:
+            needs_decoded = True
+            wants_frames = True
+
+            def deliver(self, _frame, _record) -> None:
+                pass
+
+        sink = DecodedSink()
+        self.bridge.add_sink(sink)  # type: ignore[arg-type]
+        try:
+            with (
+                mock.patch("wmr_bridge.ble_gatt.pack_record") as pack_record,
+                mock.patch("wmr_bridge.ble_gatt.build_report") as build_report,
+                mock.patch(
+                    "wmr_bridge.ble_gatt.record_from_frame", return_value=None
+                ) as record_from_frame,
+                mock.patch.object(
+                    self.app, "_deliver_hid", wraps=self.app._deliver_hid
+                ) as deliver_hid,
+            ):
+                for _ in range(8):
+                    self.bridge.ingest(0, SAMPLE_DATA)
+        finally:
+            self.bridge.remove_sink(sink)  # type: ignore[arg-type]
+
+        pack_record.assert_not_called()
+        build_report.assert_not_called()
+        record_from_frame.assert_not_called()
+        deliver_hid.assert_not_called()
         self.assertEqual(self.backend.notifications, [])
 
     # ---- HID-over-GATT ------------------------------------------------
