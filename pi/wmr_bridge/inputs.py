@@ -193,7 +193,7 @@ class HidrawManager:
                 return False
         # A disabled cooldown leaves no deadline; the power-off latch still
         # owns the hand until its own page-in ends the stage.
-        for hand in self._powered_off:
+        for hand in list(self._powered_off):
             if hand in self._powered_off_until_us:
                 continue
             if self._poweroff_address.get(hand, "").upper() == address:
