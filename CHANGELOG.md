@@ -5,6 +5,49 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.28-rc.2 — 2026-11-16
+
+The second pre-release candidate for the Pixel + Pi hardware check, cut from
+`main` on top of 0.3.28-rc.1 with the Pi fixes from #256, #257 and #259 and the
+bench tooling from #258 and #260. It is a prerelease: GitHub does not offer it
+as "Latest", and `releases/latest` still returns `v0.3.27`. Firmware payloads
+are unchanged from 0.3.28-rc.1, and so from 0.3.27: FF10–FF17 keep their
+payloads, companions at 0.2.2 or later continue to work, and the tag only
+changes the version FF16 reports. The Pi bridge path is host-tested only; it
+has not run on Pi hardware. The 10-minute FF14 field capture (both controllers
+and a phone subscribed) has not been run yet.
+
+### Raspberry Pi bridge
+
+- **A bonded controller that drops its link is reconnected.** The auto-pairer
+  used to leave a `Paired: yes`/`Trusted: yes` hand alone and wait for BlueZ to
+  accept the controller's incoming HID connection. It now retries a direct
+  `bluetoothctl connect` once the idle reconnect cooldown expires, so a
+  controller that dropped does not need a Pi reboot. The pairer skips that retry
+  while the hand is still inside the power-off latch, keeps the latch when the
+  open fails, and `--idle-reconnect-cooldown 0` no longer forces a deliberately
+  powered-off hand back on (#257).
+- **The per-frame WebSocket write timer is only armed when it can matter.** At
+  400 Hz the send path built and cancelled an `asyncio.wait_for(drain(),
+  write_timeout)` on every frame even when the frame fit the socket buffer and
+  `drain()` could not block. The timer is now armed only when the transport
+  reports queued bytes; the new `pi/tools/bench_ws.py` measures a 16-20 % drop
+  in median CPU per frame over five runs (#259).
+- **Decode and HID flush cost less.** `ControllerState` and `DecodedRecord` get
+  a typed `__init__` instead of the generated frozen one (one
+  `object.__setattr__` per field), `bench_decode.py` reports 5.24 → 3.68 µs for
+  a decode and 9.72 → 6.60 µs decode plus record (-32 %), and the subscribed
+  HID stage drops 30.43 → 24.63 µs/frame (-19 %) (#256).
+
+### Bench tooling and docs
+
+- `pi/tools/bench_failover.sh` drives bench sheet items 4 and 5 without a local
+  console: it takes `wlan0` down, brings it back up, logs T0/T1 IPv4 recovery to
+  `/tmp/failover.log`, restores the link from an exit trap, and ships in the
+  `.deb`, the tarball and the installer (#258).
+- The bench sheet clarifies steps 4, 5 and 7 and notes the pairer's
+  auto-reconnect after the idle cooldown (#260).
+
 ## 0.3.28-rc.1 — 2026-11-15
 
 The pre-release candidate for the Pixel + Pi hardware check, cut from `main` on
