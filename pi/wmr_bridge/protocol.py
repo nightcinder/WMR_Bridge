@@ -127,7 +127,7 @@ def encode_raw_messages(frame: Frame, capacity: int = DEFAULT_FRAGMENT_CAPACITY)
     return messages
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class DecodedRecord:
     """One FF12 version 1 record (uncalibrated values)."""
 
@@ -145,17 +145,50 @@ class DecodedRecord:
     buttons: int = 0
     flags: int = 0
 
-    def __post_init__(self) -> None:
-        if not 0 <= self.hand < NUM_HANDS:
-            raise ProtocolError(f"hand out of range: {self.hand}")
-        if not 0 <= self.sequence <= 0xFFFFFFFF:
-            raise ProtocolError(f"sequence out of range: {self.sequence}")
-        if not 0 <= self.device_ticks <= 0xFFFFFFFF:
-            raise ProtocolError(f"device_ticks out of range: {self.device_ticks}")
-        if not 0 <= self.trigger <= 0xFF or not 0 <= self.battery <= 0xFF:
+    def __init__(
+        self,
+        hand: int,
+        sequence: int,
+        rx_time_us: int,
+        device_ticks: int,
+        gyro: tuple[float, float, float],
+        accel: tuple[float, float, float],
+        temperature_raw: int,
+        stick: tuple[int, int],
+        trackpad: tuple[int, int],
+        trigger: int,
+        battery: int,
+        buttons: int = 0,
+        flags: int = 0,
+    ) -> None:
+        # The generated frozen ``__init__`` and ``__post_init__`` cost two calls
+        # per field, which dominates an FF12 record at 400 Hz. Validate here and
+        # write the instance dict directly: ``frozen=True``, ``eq``, ``hash`` and
+        # ``dataclasses.replace`` behave as before.
+        if not 0 <= hand < NUM_HANDS:
+            raise ProtocolError(f"hand out of range: {hand}")
+        if not 0 <= sequence <= 0xFFFFFFFF:
+            raise ProtocolError(f"sequence out of range: {sequence}")
+        if not 0 <= device_ticks <= 0xFFFFFFFF:
+            raise ProtocolError(f"device_ticks out of range: {device_ticks}")
+        if not 0 <= trigger <= 0xFF or not 0 <= battery <= 0xFF:
             raise ProtocolError("trigger and battery must be bytes")
-        if not 0 <= self.buttons <= 0xFF or not 0 <= self.flags <= 0xFF:
+        if not 0 <= buttons <= 0xFF or not 0 <= flags <= 0xFF:
             raise ProtocolError("buttons and flags must be bytes")
+        fields = self.__dict__
+        fields["hand"] = hand
+        fields["sequence"] = sequence
+        fields["rx_time_us"] = rx_time_us
+        fields["device_ticks"] = device_ticks
+        fields["gyro"] = gyro
+        fields["accel"] = accel
+        fields["temperature_raw"] = temperature_raw
+        fields["stick"] = stick
+        fields["trackpad"] = trackpad
+        fields["trigger"] = trigger
+        fields["battery"] = battery
+        fields["buttons"] = buttons
+        fields["flags"] = flags
 
 
 _RECORD = struct.Struct("<BBBB I Q I 3f 3f h 4h BB")
