@@ -17,6 +17,7 @@ import base64
 import hashlib
 import json
 import os
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -33,6 +34,9 @@ OP_PONG = 0xA
 DEFAULT_MAX_MESSAGE = 1 << 20
 MAX_HEADER_BYTES = 16 * 1024
 DEFAULT_HANDSHAKE_TIMEOUT = 5.0
+# A writer whose peer stopped reading fills the transport buffer and `drain()`
+# never returns; the send then holds the lock and stalls its subscriber loop.
+DEFAULT_WRITE_TIMEOUT = 10.0
 
 CLOSE_NORMAL = 1000
 CLOSE_GOING_AWAY = 1001
@@ -177,12 +181,16 @@ class WebSocket:
     is_client: bool
     subprotocol: str | None = None
     max_message: int = DEFAULT_MAX_MESSAGE
+    write_timeout: float | None = DEFAULT_WRITE_TIMEOUT
 
     def __post_init__(self) -> None:
         self._send_lock = asyncio.Lock()
         self._closed = False
         self._close_sent = False
         self._peer = self.writer.get_extra_info("peername")
+        # Monotonic time of the last OP_PONG, so the server can tell a quiet
+        # client from one that stopped answering pings.
+        self.last_pong_s = time.monotonic()
 
     @property
     def closed(self) -> bool:
@@ -212,7 +220,17 @@ class WebSocket:
             payload = bytes(byte ^ mask[index & 3] for index, byte in enumerate(payload))
         async with self._send_lock:
             self.writer.write(header + payload)
-            await self.writer.drain()
+            try:
+                if self.write_timeout is None:
+                    await self.writer.drain()
+                else:
+                    await asyncio.wait_for(self.writer.drain(), self.write_timeout)
+            except asyncio.TimeoutError as exc:
+                # The peer stopped reading; close instead of leaving the
+                # caller blocked forever behind a full transport buffer.
+                self._closed = True
+                self.writer.close()
+                raise WebSocketClosed(CLOSE_GOING_AWAY, "write timed out") from exc
 
     async def send_binary(self, payload: bytes) -> None:
         await self._send_frame(OP_BINARY, bytes(payload))
@@ -307,6 +325,7 @@ class WebSocket:
                     pass
                 continue
             if opcode == OP_PONG:
+                self.last_pong_s = time.monotonic()
                 continue
             if opcode not in (OP_TEXT, OP_BINARY, OP_CONT):
                 raise WebSocketError(f"unsupported opcode {opcode:#x}")
