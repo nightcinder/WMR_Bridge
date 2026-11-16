@@ -480,6 +480,15 @@ class GattApplication:
         )
 
     @property
+    def wants_frames(self) -> bool:
+        """True while a central watches FF11/FF12/FF14 or the HID report."""
+
+        return bool(
+            self._subscribed
+            & {FF11_RAW, FF12_DECODED, FF14_BATCHED, HID_REPORT}
+        )
+
+    @property
     def hid_stream_active(self) -> bool:
         """True while TCP or a FF1x CCCD already carries the same input.
 
@@ -801,24 +810,35 @@ class GattApplication:
         slot before HID. Only a notification that actually fires counts as
         framed traffic: a batch merely queued for a later 20 ms window must
         not hold HID back.
+
+        Work no central asked for is skipped before it starts: an unsubscribed
+        FF12/FF14 skips ``pack_record``, and an unsubscribed HID report skips
+        the HID sample path (including its ``record_from_frame`` decode).
         """
 
-        if self.is_notifying(FF11_RAW):
+        wants_raw = self.is_notifying(FF11_RAW)
+        wants_decoded = self.is_notifying(FF12_DECODED)
+        wants_batched = self.is_notifying(FF14_BATCHED)
+        wants_hid = self.is_notifying(HID_REPORT)
+        if not (wants_raw or wants_decoded or wants_batched or wants_hid):
+            return
+        if wants_raw:
             for fragment in encode_raw_messages(frame, self.fragment_size):
                 self._notify(FF11_RAW, fragment)
-        if record is not None:
+        if record is not None and (wants_decoded or wants_batched):
             packed = pack_record(record)
-            if self.is_notifying(FF12_DECODED):
+            if wants_decoded:
                 if len(packed) <= self.notification_limit:
                     self._notify(FF12_DECODED, packed)
                 else:
                     self.dropped_records += 1
-            if self.is_notifying(FF14_BATCHED):
+            if wants_batched:
                 if self.batch_max_count:
                     self._queue_batch(packed)
                 else:
                     self.dropped_records += 1
-        self._deliver_hid(frame, record)
+        if wants_hid:
+            self._deliver_hid(frame, record)
 
     # ---- HID-over-GATT ---------------------------------------------------
 

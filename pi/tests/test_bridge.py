@@ -236,6 +236,7 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
     async def test_sink_receives_frames_without_a_tcp_subscriber(self) -> None:
         class RecordingSink:
             needs_decoded = True
+            wants_frames = True
 
             def __init__(self) -> None:
                 self.items: list[tuple] = []
