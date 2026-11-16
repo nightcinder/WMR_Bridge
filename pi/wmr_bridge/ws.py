@@ -202,6 +202,17 @@ class WebSocket:
 
     # ---- sending ---------------------------------------------------------
 
+    def _write_buffer_size(self) -> int | None:
+        """Bytes the transport still has queued, or ``None`` when unknown."""
+
+        transport = getattr(self.writer, "transport", None)
+        if transport is None:
+            return None
+        try:
+            return transport.get_write_buffer_size()
+        except (AttributeError, NotImplementedError):  # pragma: no cover - stdlib
+            return None
+
     async def _send_frame(self, opcode: int, payload: bytes = b"", fin: bool = True) -> None:
         if self._closed:
             raise WebSocketClosed()
@@ -220,11 +231,20 @@ class WebSocket:
             payload = bytes(byte ^ mask[index & 3] for index, byte in enumerate(payload))
         async with self._send_lock:
             self.writer.write(header + payload)
+            timeout = self.write_timeout
+            queued = self._write_buffer_size()
+            if timeout is None:
+                await self.writer.drain()
+                return
+            if queued == 0:
+                # The frame fit the socket buffer, so drain() cannot block and
+                # needs no timer. A polling writer at 400 Hz otherwise builds
+                # and cancels an asyncio timeout on every frame. Yield once so
+                # the reader task still gets a turn.
+                await asyncio.sleep(0)
+                return
             try:
-                if self.write_timeout is None:
-                    await self.writer.drain()
-                else:
-                    await asyncio.wait_for(self.writer.drain(), self.write_timeout)
+                await asyncio.wait_for(self.writer.drain(), timeout)
             except asyncio.TimeoutError as exc:
                 # The peer stopped reading; close instead of leaving the
                 # caller blocked forever behind a full transport buffer.
