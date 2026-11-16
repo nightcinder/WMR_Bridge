@@ -50,7 +50,6 @@ from .hid_gamepad import (
     HandInput,
     HidHistory,
     build_report,
-    clamp,
 )
 from .protocol import (
     BATCH_HEADER_SIZE,
@@ -896,14 +895,20 @@ class GattApplication:
         hand = self._hid_hands[frame.hand]
         hand.connected = True
         hand.buttons = record.buttons
+        # Q15 fields are ints, so the quotient is always finite: a plain range
+        # clamp is the same result as clamp() without its isfinite() call.
+        stick_x = record.stick[0] / 32767.0
+        stick_y = record.stick[1] / 32767.0
+        trackpad_x = record.trackpad[0] / 32767.0
+        trackpad_y = record.trackpad[1] / 32767.0
         hand.stick = (
-            clamp(record.stick[0] / 32767.0, -1.0, 1.0),
-            clamp(record.stick[1] / 32767.0, -1.0, 1.0),
+            -1.0 if stick_x < -1.0 else 1.0 if stick_x > 1.0 else stick_x,
+            -1.0 if stick_y < -1.0 else 1.0 if stick_y > 1.0 else stick_y,
         )
         hand.trigger = record.trigger
         hand.trackpad = (
-            clamp(record.trackpad[0] / 32767.0, -1.0, 1.0),
-            clamp(record.trackpad[1] / 32767.0, -1.0, 1.0),
+            -1.0 if trackpad_x < -1.0 else 1.0 if trackpad_x > 1.0 else trackpad_x,
+            -1.0 if trackpad_y < -1.0 else 1.0 if trackpad_y > 1.0 else trackpad_y,
         )
         self._hid_last_sample[frame.hand] = now
         self._flush_hid(now)
@@ -911,10 +916,15 @@ class GattApplication:
     def _flush_hid(self, now: float) -> None:
         if not self.hid_enabled or not self._hid_hand_connected():
             return
+        elapsed = now - self._hid_last_send
+        # Both floors reject anything under the shorter one, so the stream
+        # state (three CCCD lookups) is only read for a report that may go out.
+        if elapsed < HID_MIN_INTERVAL_S:
+            return
         interval = (
             HID_STREAM_MIN_INTERVAL_S if self.hid_stream_active else HID_MIN_INTERVAL_S
         )
-        if now - self._hid_last_send < interval:
+        if elapsed < interval:
             return
         report = build_report(
             self._hid_hands[0], self._hid_hands[1], history=self._hid_history
