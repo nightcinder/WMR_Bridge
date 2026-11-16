@@ -350,6 +350,8 @@ class PackagingTests(unittest.TestCase):
             opt_pi = destdir / "opt" / "wmr-bridge" / "pi"
             self.assertTrue((opt_pi / "wmr_bridge" / "__main__.py").is_file())
             self.assertTrue((opt_pi / "tools" / "wifi_probe.py").is_file())
+            self.assertTrue((opt_pi / "tools" / "bench_failover.sh").is_file())
+            self.assertTrue(os.access(opt_pi / "tools" / "bench_failover.sh", os.X_OK))
             self.assertTrue((opt_pi / "install.sh").is_file())
             self.assertTrue((opt_pi / "minisign.pub").is_file())
             self.assertTrue((destdir / "opt" / "wmr-bridge" / "docs" / "PI_BRIDGE.md").is_file())

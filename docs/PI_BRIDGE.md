@@ -1417,6 +1417,7 @@ INFO/WARNING:
 | `pi/build_deb.sh` | builds `dist/wmr-bridge_<version>_all.deb` and its `.sha256` (no root; maintainer scripts in `pi/debian/`) |
 | `pi/tools/verify_package.sh` | checks package layout, version and checksum |
 | `pi/tools/dry_run.sh` | stages the `.deb`, checks reinstall/remove, runs replay (no hardware) |
+| `pi/tools/bench_failover.sh` | headless `wlan0` down/up for bench sheet items 4 and 5; restores the link on every exit and logs T0/T1 IPv4 recovery |
 | `pi/install.sh` | unattended installer; piped mode fetches and verifies the release `.deb` |
 | `pi/systemd/` | service unit and environment example (`WMR_BRIDGE_ARGS`) |
 | `pi/udev/` | udev rule (`99-wmr-bridge.rules`) granting `input` group access to `/dev/hidraw*` |

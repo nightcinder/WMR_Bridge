@@ -218,6 +218,7 @@ The bridge applies these rules to HID gamepad reports:
 | `debian/` | Debian control, conffiles and `postinst`/`prerm`/`postrm` templates |
 | `tools/verify_package.sh` | checks package layout, version and checksum |
 | `tools/dry_run.sh` | .deb install/reinstall/remove + replay dry run, no hardware |
+| `tools/bench_failover.sh` | headless `wlan0` down/up for bench sheet items 4 and 5; restores the link on every exit and logs T0/T1 IPv4 recovery |
 | `install.sh` | unattended installer; also works piped by fetching and verifying the release `.deb` |
 | `wmr-bridge.in` | `/usr/bin/wmr-bridge` launcher template installed by the `.deb` and `install.sh` |
 | `systemd/wmr-bridge.service` | unit file for an unattended bridge (`WMR_BRIDGE_ARGS` via `/etc/wmr-bridge/wmr-bridge.env`) |
