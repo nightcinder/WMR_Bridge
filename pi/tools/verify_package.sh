@@ -33,6 +33,7 @@ for path in \
     "${PREFIX}pi/wmr-bridge.in" \
     "${PREFIX}pi/wmr_bridge/__main__.py" \
     "${PREFIX}pi/tools/wifi_probe.py" \
+    "${PREFIX}pi/tools/bench_failover.sh" \
     "${PREFIX}pi/systemd/wmr-bridge.service" \
     "${PREFIX}pi/systemd/wmr-bridge.env.example" \
     "${PREFIX}pi/udev/99-wmr-bridge.rules" \

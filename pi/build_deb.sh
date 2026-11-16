@@ -104,6 +104,7 @@ for pyfile in "${SCRIPT_DIR}"/wmr_bridge/*.py; do
     install -m 0644 "$pyfile" "${OPT}/pi/wmr_bridge/$(basename "$pyfile")"
 done
 install -m 0755 "${SCRIPT_DIR}/tools/wifi_probe.py" "${OPT}/pi/tools/wifi_probe.py"
+install -m 0755 "${SCRIPT_DIR}/tools/bench_failover.sh" "${OPT}/pi/tools/bench_failover.sh"
 # The shipped installer reads the drop-in from its own tree, so the package must
 # carry it: without it install.sh aborts under set -eu. run_tests.sh is not
 # shipped because the suite needs the repo build scripts, not just this tree.
