@@ -450,6 +450,7 @@ async def run(args: argparse.Namespace) -> int:
             await asyncio.sleep(0.05)
 
     ping_task = asyncio.create_task(ping_loop())
+    disconnected: str | None = None
     try:
         while True:
             if args.duration and time.monotonic() - started >= args.duration:
@@ -459,6 +460,11 @@ async def run(args: argparse.Namespace) -> int:
             except asyncio.TimeoutError:
                 opcode = None
                 payload = b""
+            except (wsmod.WebSocketClosed, wsmod.WebSocketError) as exc:
+                # The bridge went away mid-run: keep the measurements taken so
+                # far, write --json-out, then fail below instead of aborting.
+                disconnected = f"{exc.__class__.__name__}: {exc}"
+                break
             now = time.monotonic()
             if opcode == wsmod.OP_BINARY:
                 counters.messages += 1
@@ -511,7 +517,13 @@ async def run(args: argparse.Namespace) -> int:
         ping_task.cancel()
         try:
             await ping_task
-        except asyncio.CancelledError:
+        except (
+            asyncio.CancelledError,
+            wsmod.WebSocketClosed,
+            wsmod.WebSocketError,
+            ConnectionError,
+            OSError,
+        ):
             pass
         try:
             await client.send_json({"type": "status"})
@@ -531,6 +543,7 @@ async def run(args: argparse.Namespace) -> int:
         summary["rttMs"] = summarize_rtt(ping_times)
     summary["dropped"] = status.get("dropped") if isinstance(status, dict) else None
     summary["serverStatus"] = status
+    summary["disconnected"] = disconnected
     gates = None
     if getattr(args, "assert_gates", False):
         gates = evaluate_gates(summary)
@@ -539,6 +552,9 @@ async def run(args: argparse.Namespace) -> int:
     if json_out:
         Path(json_out).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(summary, indent=2))
+    if disconnected is not None:
+        print(f"connection lost: {disconnected}", file=sys.stderr)
+        return 3
     if gates is not None:
         print("gates:", json.dumps(gates, indent=2))
         if not gates["passed"]:

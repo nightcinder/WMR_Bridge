@@ -517,6 +517,7 @@ The probe prints the `hello` Wi-Fi and uplink objects.
 `--json-out PATH` writes the final summary as JSON.
 `--assert-gates` checks the Sitting P pass criteria and exits non-zero if any check fails (`pi/tools/wifi_probe.py:50-52,575-578`).
 The gates require RTT p50 below 15 ms, tick-based missing reports at or below 3.0% per hand, and zero sequence gaps.
+If the bridge closes the connection mid-run, the probe writes `--json-out` from existing measurements, records the reason in `disconnected`, and exits 3 (`pi/tools/wifi_probe.py:463-467,546,555-557`).
 Every expected hand requires at least one record.
 A run without controller frames fails the loss and gap gates.
 The installed probe path is `/opt/wmr-bridge/pi/tools/wifi_probe.py` (`pi/build_deb.sh:106`, `pi/install.sh:438`).
@@ -1272,9 +1273,9 @@ whatever BlueZ paired, and assigns hands by HID name.
   default).
 - The Pi 3B+ has less CPU headroom than a Pi 4 (Cortex-A53 at 1.4 GHz, 1 GB
   RAM). The event loop must fit 2 x about 180 reports/s. The M2 decode CPU gate
-  requires daemon CPU usage to stay under 25% of one core during two-hand
-  streaming (`pi/wmr_bridge/decode.py:183-230`). Sample CPU usage with:
-  `top -b -n 600 -d 1 -p "$(systemctl show -p MainPID --value wmr-bridge.service)"`
+  requires mean daemon CPU below 25% of one core over 10 minutes (`wmr-companion docs/TEST_PLAN_PI_WMR.md:97`).
+  No 10 s sample can exceed 50%. Sample CPU usage with:
+  `top -b -n 60 -d 10 -p "$(systemctl show -p MainPID --value wmr-bridge.service)"`
   Do not use `pgrep -f wmr-bridge`, because `pgrep` matches `avahi-publish-service`
   arguments (`pi/wmr_bridge/mdns.py:81-90`). Record CPU load and
   `vcgencmd get_throttled` with the results.
@@ -1388,9 +1389,9 @@ INFO/WARNING:
 | Client gets `stream_active` | send `unsubscribe` before switching streams |
 | High RTT or drops | confirm 5 GHz, disable Wi-Fi power save, check channel congestion, inspect `status.dropped` |
 | Port unreachable | `--bind 0.0.0.0` (plus a token, or the daemon refuses to start), firewall, correct Pi address, same VLAN/client isolation off |
-| `dumpsys input` does not list WMR Bridge | Android requires Bluetooth HID pairing in Android Settings (`docs/HID_GAMEPAD.md:481-523`). The device registers as `Device: wmr-bridge`. Run `adb shell dumpsys input | grep -E -A 25 -i "wmr[- ]bridge"`. Make sure that the phone BLE bond reports `paired=yes` in `wmr-bridge status` (`docs/HID_GAMEPAD.md:542-560`, `pi/wmr_bridge/ble_gatt.py:2121-2144`, `pi/wmr_bridge/__main__.py:591-627`) |
-| `DebugScreen` version or FF17 control | in `wmr_companion_app` (`v0.3.25`, `ONY-1448`), open the `Debug` tab and locate the `Bridge Firmware` card for FF16 (`debug_screen.dart:523-579`, `wmr_ws_transport.dart:285,338-340`). `ControllerPanel` (FF17 disconnect) is hidden on Wi-Fi bridges (`debug_screen.dart:229-235`) and is tested on ESP32 BLE only |
-| Controller does not wake after idle power-off | motion wakes controllers only from stage 1 idle sleep (30 s). After stage 2 idle power-off (90 s), BlueZ blocks reconnects for a 60 s cooldown. Wake the controller with a physical button press after the cooldown expires (`pi/wmr_bridge/inputs.py:418-470`) |
+| `dumpsys input` does not list WMR Bridge | Android requires Bluetooth HID pairing in Android Settings (`docs/HID_GAMEPAD.md:481-523`). The device registers as `Device: wmr-bridge`. Run `adb shell dumpsys input | grep -E -A 25 -i "wmr[- ]bridge"`. Confirm the phone LE bond with the stored LE bond note in `wmr-bridge status` (`pairable=no`, `pi/wmr_bridge/__main__.py:605-612`) or `bluetoothctl info <MAC>` (`Paired: yes`, `docs/HID_GAMEPAD.md:542-560`, `pi/wmr_bridge/ble_gatt.py:2121-2144`) |
+| `DebugScreen` version or FF17 control | In `wmr_companion_app` (`v0.3.25`, `ONY-1448`), tap `Open 3D debug view` on the connect screen (`connect_screen.dart:341-348`). Find the FF16 firmware line under the `Stream` heading (`debug_screen.dart:265-268,523-556`, `wmr_ws_transport.dart:285,338-340`). `ControllerPanel` (FF17 disconnect) is hidden on Wi-Fi bridges (`debug_screen.dart:283-296`) and is tested on ESP32 BLE only |
+| Controller does not wake after idle power-off | Motion wakes controllers only from stage 1 idle sleep (default 300 s, or 30 s under bench overrides `pi/wmr_bridge/inputs.py:26-27`). After stage 2 idle power-off (default 900 s, or 90 s under bench overrides), BlueZ blocks reconnects for a 60 s cooldown. Wake the controller with a physical button press after the cooldown expires (`pi/wmr_bridge/inputs.py:418-470`) |
 
 ## Future work
 

@@ -9,7 +9,7 @@ import socket
 import struct
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from tools.wifi_probe import discover, evaluate_gates, run as run_probe
@@ -210,6 +210,50 @@ class JsonOutAndGateRunTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(written["gates"]["passed"])
                 self.assertIn("uplink", written)
                 self.assertEqual(written["gaps"], [0, 0])
+        finally:
+            await server.close()
+
+    async def test_run_writes_json_out_and_exits_non_zero_when_the_bridge_closes(self) -> None:
+        bridge = Bridge(batch_max=4, batch_hold_ms=5)
+        server = BridgeServer(bridge, host="127.0.0.1", port=0)
+        await server.start()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                json_out = Path(tmp) / "disconnected.json"
+                args = argparse.Namespace(
+                    host="127.0.0.1",
+                    port=server.port,
+                    path="/wmr",
+                    stream="batched",
+                    token=None,
+                    token_file=None,
+                    duration=5.0,
+                    report_interval=10.0,
+                    ping_interval=0.05,
+                    discover=False,
+                    discovery_port=8765,
+                    discovery_timeout=0.1,
+                    json_out=str(json_out),
+                    assert_gates=False,
+                )
+
+                async def stop() -> None:
+                    import asyncio
+
+                    await asyncio.sleep(0.3)
+                    await server.close()
+
+                import asyncio
+
+                stopper = asyncio.create_task(stop())
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    rc = await run_probe(args)
+                await stopper
+
+                self.assertEqual(rc, 3)
+                written = json.loads(json_out.read_text(encoding="utf-8"))
+                self.assertIn("WebSocketClosed", written["disconnected"])
+                self.assertIn("recordsPerSecond", written)
         finally:
             await server.close()
 
