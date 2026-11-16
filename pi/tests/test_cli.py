@@ -183,6 +183,9 @@ class AutoPairIntervalTests(unittest.IsolatedAsyncioTestCase):
             def start(self) -> None:
                 pass
 
+            def reconnect_allowed(self, _address: str) -> bool:
+                return True
+
             async def close(self) -> None:
                 pass
 

@@ -181,6 +181,18 @@ class HidrawManager:
         self._keep_alive_task: asyncio.Task[None] | None = None
         self._no_controllers_warned = False
 
+    def reconnect_allowed(self, address: str) -> bool:
+        """True unless *address* is still inside its power-off cooldown."""
+
+        address = address.upper()
+        now_us = self._now_us()
+        for hand, until in list(self._powered_off_until_us.items()):
+            if now_us >= until:
+                continue
+            if self._poweroff_address.get(hand, "").upper() == address:
+                return False
+        return True
+
     def start(self) -> None:
         self._loop = asyncio.get_running_loop()
         for path in self.explicit_paths:
@@ -238,10 +250,21 @@ class HidrawManager:
             return False
         if hand not in self.allowed_hands:
             return False
-        if hand in self._powered_off_until_us:
-            # The link is being dropped to power the controller off. Refuse its
-            # page-in until the cooldown ends, even if BlueZ let it through.
-            return False
+        until_us = self._powered_off_until_us.get(hand)
+        if until_us is not None:
+            if self._now_us() < until_us:
+                # The link is being dropped to power the controller off. Refuse
+                # its page-in until the cooldown ends, even if BlueZ let it
+                # through.
+                return False
+            # The cooldown ended before the idle tick ran. Do not refuse the
+            # page-in on a stale latch; the pairer unblocks the device and
+            # retries the link on the same schedule.
+            self._powered_off_until_us.pop(hand, None)
+            self._powered_off.discard(hand)
+            self._poweroff_address.pop(hand, None)
+            self._set_asleep(hand, False)
+            self._warned_no_address.discard(hand)
         other = self._path_of_hand.get(hand)
         if other is not None and other != path:
             LOG.warning(

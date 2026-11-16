@@ -348,6 +348,7 @@ class BluezParseTests(unittest.TestCase):
             "        Paired: yes\n"
             "        Trusted: no\n"
             "        Connected: yes\n"
+            "        Blocked: yes\n"
         )
         info = parse_info(output)
         self.assertIsNotNone(info)
@@ -357,6 +358,7 @@ class BluezParseTests(unittest.TestCase):
         self.assertTrue(info.paired)
         self.assertFalse(info.trusted)
         self.assertTrue(info.connected)
+        self.assertTrue(info.blocked)
 
     def test_scan_output_parses_new_and_changed_name_lines(self) -> None:
         output = (
@@ -467,6 +469,7 @@ class BluezAutoPairerTests(unittest.TestCase):
                     pairing_window_open=None,
                     on_scan_end=None,
                     ble_central_subscribed=None,
+                    reconnect_allowed=None,
                     rfkill_root="/nonexistent/rfkill"):
         return BluezAutoPairer(
             bridge,
@@ -476,6 +479,7 @@ class BluezAutoPairerTests(unittest.TestCase):
             pairing_window_open=pairing_window_open,
             on_scan_end=on_scan_end,
             ble_central_subscribed=ble_central_subscribed,
+            reconnect_allowed=reconnect_allowed,
             which=which,
             scan_seconds=scan_seconds,
             poll_interval=1.0,
@@ -490,6 +494,10 @@ class BluezAutoPairerTests(unittest.TestCase):
         (switch / "name").write_text("hci0\n", encoding="utf-8")
         (switch / "soft").write_text(f"{int(soft)}\n", encoding="utf-8")
         (switch / "hard").write_text(f"{int(hard)}\n", encoding="utf-8")
+
+    @staticmethod
+    def no_scan(_seconds: float, _should_pair) -> list:
+        raise AssertionError("a bonded hand must not trigger a scan")
 
     def test_unpaired_device_is_left_to_the_scan_session(self) -> None:
         calls: list[list[str]] = []
@@ -590,7 +598,85 @@ class BluezAutoPairerTests(unittest.TestCase):
         self.assertEqual(calls[1][1:], ["power", "on"])
         self.assertTrue(any("cleared the rfkill" in line for line in logs.output))
 
-    def test_bonded_offline_controller_is_left_to_page_in(self) -> None:
+    def test_bonded_disconnected_controller_is_reconnected(self) -> None:
+        calls: list[list[str]] = []
+
+        def runner(args: list[str], timeout: float):
+            calls.append(args)
+            if args[1] == "power":
+                return _completed(args)
+            if args[1] == "devices":
+                return _completed(args, f"Device {self.RIGHT} Motion controller - Right\n")
+            if args[1] == "info":
+                return _completed(args, "        Paired: yes\n        Trusted: yes\n"
+                                        "        Connected: no\n")
+            return _completed(args, "Connection successful\n")
+
+        def session(_seconds: float, _should_pair) -> list:
+            raise AssertionError("a bonded hand must not trigger a scan")
+
+        pairer = self.make_pairer(_Bridge(left=True), runner, session=session)
+        self.assertTrue(pairer._tick())
+
+        actions = [call[1:] for call in calls if call[1] in ("pair", "trust", "connect")]
+        self.assertEqual(actions, [["connect", self.RIGHT]])
+
+    def test_stale_block_is_cleared_before_reconnecting(self) -> None:
+        calls: list[list[str]] = []
+
+        def runner(args: list[str], timeout: float):
+            calls.append(args)
+            if args[1] == "power":
+                return _completed(args)
+            if args[1] == "devices":
+                return _completed(args, f"Device {self.RIGHT} Motion controller - Right\n")
+            if args[1] == "info":
+                return _completed(args, "        Paired: yes\n        Trusted: yes\n"
+                                        "        Connected: no\n        Blocked: yes\n")
+            if args[1] == "connect":
+                return _completed(args, "Connection successful\n")
+            return _completed(args)
+
+        pairer = self.make_pairer(
+            _Bridge(left=True),
+            runner,
+            session=self.no_scan,
+        )
+        with self.assertLogs("wmr_bridge.bluez", level="INFO") as logs:
+            self.assertTrue(pairer._tick())
+
+        actions = [call[1:] for call in calls if call[1] in ("unblock", "connect")]
+        self.assertEqual(actions, [["unblock", self.RIGHT], ["connect", self.RIGHT]])
+        self.assertTrue(any("stale BlueZ block" in line for line in logs.output))
+
+    def test_failed_unblock_is_retried_without_connecting(self) -> None:
+        calls: list[list[str]] = []
+
+        def runner(args: list[str], timeout: float):
+            calls.append(args)
+            if args[1] == "power":
+                return _completed(args)
+            if args[1] == "devices":
+                return _completed(args, f"Device {self.RIGHT} Motion controller - Right\n")
+            if args[1] == "info":
+                return _completed(args, "        Paired: yes\n        Trusted: yes\n"
+                                        "        Connected: no\n        Blocked: yes\n")
+            if args[1] == "unblock":
+                return _completed(args, "Failed to unblock\n", 1)
+            return _completed(args)
+
+        pairer = self.make_pairer(_Bridge(left=True), runner)
+        with self.assertLogs("wmr_bridge.bluez", level="WARNING") as logs:
+            self.assertFalse(pairer._tick())
+            self.assertFalse(pairer._tick())
+
+        actions = [call[1:] for call in calls if call[1] in ("unblock", "connect")]
+        self.assertEqual(
+            actions, [["unblock", self.RIGHT], ["unblock", self.RIGHT]]
+        )
+        self.assertTrue(any("could not unblock" in line for line in logs.output))
+
+    def test_bonded_reconnect_waits_for_the_power_off_cooldown(self) -> None:
         calls: list[list[str]] = []
 
         def runner(args: list[str], timeout: float):
@@ -604,14 +690,167 @@ class BluezAutoPairerTests(unittest.TestCase):
                                         "        Connected: no\n")
             return _completed(args)
 
-        def session(_seconds: float, _should_pair) -> list:
-            raise AssertionError("a bonded offline hand must not trigger a scan")
-
-        pairer = self.make_pairer(_Bridge(left=True), runner, session=session)
+        pairer = self.make_pairer(
+            _Bridge(left=True),
+            runner,
+            reconnect_allowed=lambda _address: False,
+            session=self.no_scan,
+        )
         self.assertFalse(pairer._tick())
 
-        actions = [call[1:] for call in calls if call[1] in ("pair", "trust", "connect")]
-        self.assertEqual(actions, [])
+        self.assertFalse(
+            [call for call in calls if call[1] in ("unblock", "connect")]
+        )
+
+    def test_bonded_reconnect_runs_while_the_ble_scan_is_paused(self) -> None:
+        calls: list[list[str]] = []
+        bridge = _Bridge(left=True, reports=5, last_rx_us=1_000_000)
+
+        def runner(args: list[str], timeout: float):
+            calls.append(args)
+            if args[1] == "power":
+                return _completed(args)
+            if args[1] == "devices":
+                return _completed(args, f"Device {self.RIGHT} Motion controller - Right\n")
+            if args[1] == "info":
+                return _completed(args, "        Paired: yes\n        Trusted: yes\n"
+                                        "        Connected: no\n")
+            if args[1] == "connect":
+                return _completed(args, "Connection successful\n")
+            return _completed(args)
+
+        pairer = self.make_pairer(
+            bridge,
+            runner,
+            ble_central_subscribed=lambda: True,
+            session=self.no_scan,
+        )
+        self.assertTrue(pairer._tick())
+
+        self.assertEqual(
+            [call[1:] for call in calls if call[1] == "connect"],
+            [["connect", self.RIGHT]],
+        )
+        self.assertTrue(bridge.hands[0].connected)
+
+    def test_failed_reconnect_while_ble_scan_is_paused_keeps_the_live_link(self) -> None:
+        bridge = _Bridge(left=True, reports=5, last_rx_us=1_000_000)
+
+        def runner(args: list[str], timeout: float):
+            if args[1] == "power":
+                return _completed(args)
+            if args[1] == "devices":
+                return _completed(args, f"Device {self.RIGHT} Motion controller - Right\n")
+            if args[1] == "info":
+                return _completed(args, "        Paired: yes\n        Trusted: yes\n"
+                                        "        Connected: no\n")
+            if args[1] == "connect":
+                return _completed(args, "Failed to connect: org.bluez.Error.Failed\n")
+            return _completed(args)
+
+        pairer = self.make_pairer(
+            bridge,
+            runner,
+            ble_central_subscribed=lambda: True,
+            session=self.no_scan,
+        )
+        self.assertFalse(pairer._tick())
+
+        self.assertTrue(bridge.hands[0].connected)
+
+    def test_connect_timeout_is_bounded_and_retried(self) -> None:
+        connects: list[str] = []
+
+        def runner(args: list[str], timeout: float):
+            if args[1] == "power":
+                return _completed(args)
+            if args[1] == "devices":
+                return _completed(args, f"Device {self.RIGHT} Motion controller - Right\n")
+            if args[1] == "info":
+                return _completed(args, "        Paired: yes\n        Trusted: yes\n"
+                                        "        Connected: no\n")
+            if args[1] == "connect":
+                connects.append(args[2])
+                raise subprocess.TimeoutExpired(args, timeout)
+            return _completed(args)
+
+        pairer = self.make_pairer(_Bridge(left=True), runner)
+        self.assertFalse(pairer._tick())
+        self.assertFalse(pairer._tick())
+
+        self.assertEqual(connects, [self.RIGHT, self.RIGHT])
+
+    def test_stale_bond_auth_failure_removes_it_and_rescans(self) -> None:
+        calls: list[list[str]] = []
+        scans: list[bool] = []
+        removed = False
+
+        def runner(args: list[str], timeout: float):
+            nonlocal removed
+            calls.append(args)
+            if args[1] == "power":
+                return _completed(args)
+            if args[1] == "devices":
+                if removed:
+                    return _completed(args)
+                return _completed(args, f"Device {self.RIGHT} Motion controller - Right\n")
+            if args[1] == "info":
+                return _completed(args, "        Paired: yes\n        Trusted: yes\n"
+                                        "        Connected: no\n")
+            if args[1] == "connect":
+                return _completed(
+                    args,
+                    "Failed to connect: org.bluez.Error.AuthenticationFailed\n",
+                )
+            if args[1] == "remove":
+                removed = True
+                return _completed(args, "Device has been removed\n")
+            return _completed(args)
+
+        def session(_seconds: float, _should_pair) -> list:
+            scans.append(True)
+            return []
+
+        pairer = self.make_pairer(_Bridge(left=True), runner, session=session)
+        with self.assertLogs("wmr_bridge.bluez", level="WARNING") as logs:
+            self.assertTrue(pairer._tick())
+        self.assertEqual([call[1:] for call in calls if call[1] == "remove"],
+                         [["remove", self.RIGHT]])
+        self.assertEqual(scans, [])
+        self.assertTrue(any("failed to authenticate" in line for line in logs.output))
+
+        self.assertFalse(pairer._tick())
+        self.assertEqual(scans, [True])
+
+    def test_stale_bond_remove_failure_is_retried(self) -> None:
+        connects: list[str] = []
+        removes: list[str] = []
+
+        def runner(args: list[str], timeout: float):
+            if args[1] == "power":
+                return _completed(args)
+            if args[1] == "devices":
+                return _completed(args, f"Device {self.RIGHT} Motion controller - Right\n")
+            if args[1] == "info":
+                return _completed(args, "        Paired: yes\n        Trusted: yes\n"
+                                        "        Connected: no\n")
+            if args[1] == "connect":
+                connects.append(args[2])
+                return _completed(
+                    args, "Failed to connect: org.bluez.Error.AuthenticationFailed\n"
+                )
+            if args[1] == "remove":
+                removes.append(args[2])
+                return _completed(args, "Failed to remove device\n", 1)
+            return _completed(args)
+
+        pairer = self.make_pairer(_Bridge(left=True), runner)
+        with self.assertLogs("wmr_bridge.bluez", level="WARNING"):
+            self.assertFalse(pairer._tick())
+            self.assertFalse(pairer._tick())
+
+        self.assertEqual(connects, [self.RIGHT, self.RIGHT])
+        self.assertEqual(removes, [self.RIGHT, self.RIGHT])
 
     def test_trusts_paired_but_untrusted_controller_without_connecting(self) -> None:
         calls: list[list[str]] = []
@@ -1549,6 +1788,7 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
         manager._device_for = lambda path: HidrawDevice(
             path=path, name="", uniq=self.ADDRESS
         )
+        manager._now_us = lambda: self.START_US + 900_000_000
         self.assertFalse(manager._open(reader.path))
         manager._note_activity(0, reader)  # type: ignore[arg-type]
         self.assertIn(0, manager._powered_off)
@@ -1568,6 +1808,42 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
         manager._loop = _Loop()  # type: ignore[assignment]
         with mock.patch("wmr_bridge.inputs.HidrawReader", _FakeReader):
             self.assertTrue(manager._open(reader.path))
+
+    async def test_reconnect_allowed_tracks_the_power_off_cooldown(self) -> None:
+        manager, _bridge, _reader = self.make_manager(
+            poweroff_cb=lambda address: True
+        )
+
+        await manager._idle_tick(self.START_US + 900_000_000)
+
+        manager._now_us = lambda: self.START_US + 950_000_000
+        self.assertFalse(manager.reconnect_allowed(self.ADDRESS))
+        self.assertTrue(manager.reconnect_allowed("11:22:33:44:55:66"))
+
+        manager._now_us = lambda: self.START_US + 960_000_000
+        self.assertTrue(manager.reconnect_allowed(self.ADDRESS))
+
+    async def test_open_accepts_a_page_in_after_the_cooldown_without_a_tick(self) -> None:
+        manager, _bridge, reader = self.make_manager(
+            poweroff_cb=lambda address: True
+        )
+        await manager._idle_tick(self.START_US + 900_000_000)
+        manager._now_us = lambda: self.START_US + 960_000_000
+        manager.left_spec = reader.path
+        manager._device_for = lambda path: HidrawDevice(
+            path=path, name="", uniq=self.ADDRESS
+        )
+
+        class _Loop:
+            def add_reader(self, *_args: object) -> None:
+                pass
+
+        manager._loop = _Loop()  # type: ignore[assignment]
+        with mock.patch("wmr_bridge.inputs.HidrawReader", _FakeReader):
+            self.assertTrue(manager._open(reader.path))
+
+        self.assertNotIn(0, manager._powered_off_until_us)
+        self.assertNotIn(0, manager._powered_off)
 
     async def test_failed_poweroff_lifts_the_block_and_retries(self) -> None:
         guard_calls: list[tuple[str, bool]] = []
