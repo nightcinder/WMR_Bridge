@@ -227,6 +227,7 @@ class FrameSink(Protocol):
     """A non-WebSocket consumer of the ingest stream (for example BLE GATT)."""
 
     needs_decoded: bool
+    wants_frames: bool
 
     def deliver(self, frame: Frame, record: DecodedRecord | None) -> None: ...
 
@@ -527,7 +528,7 @@ class Bridge:
         if state is not None:
             stats.note_activity(state, now_us)
         subscribers = tuple(subscriber for subscriber in self.subscribers if subscriber.stream)
-        sinks = tuple(self.sinks)
+        sinks = tuple(sink for sink in self.sinks if sink.wants_frames)
         if not subscribers and not sinks:
             return frame
         record = None
