@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -330,6 +331,170 @@ class AuthBridgeTests(BridgeTests):
     test_unknown_message = None  # type: ignore[assignment]
     test_server_close_closes_active_clients = None  # type: ignore[assignment]
     test_per_hand_dropped_counts_queue_rejections = None  # type: ignore[assignment]
+
+
+class _StalledWriter:
+    """A transport whose peer stopped reading: ``drain()`` never returns."""
+
+    def __init__(self) -> None:
+        self.closed = False
+        self.written = b""
+
+    def write(self, data: bytes) -> None:
+        self.written += data
+
+    async def drain(self) -> None:
+        await asyncio.Event().wait()
+
+    def close(self) -> None:
+        self.closed = True
+
+    async def wait_closed(self) -> None:
+        pass
+
+    def get_extra_info(self, _name: str) -> None:
+        return None
+
+
+class _IdleReader:
+    async def readexactly(self, _count: int) -> bytes:
+        raise AssertionError("the sender must not read")
+
+
+class SubscriberTeardownTests(unittest.IsolatedAsyncioTestCase):
+    """The five WebSocket teardown transitions and their failure paths."""
+
+    async def start_server(self, **kwargs) -> tuple[Bridge, BridgeServer, int]:
+        bridge = Bridge(batch_max=4, batch_hold_ms=5, **kwargs)
+        server = BridgeServer(bridge, host="127.0.0.1", port=0)
+        await server.start()
+        self.addAsyncCleanup(server.close)
+        return bridge, server, server.port
+
+    async def connect(self, port: int) -> wsmod.WebSocket:
+        client = await wsmod.connect("127.0.0.1", port, "/wmr", timeout=5)
+        self.addAsyncCleanup(client.close)
+        hello = await asyncio.wait_for(client.recv_json(), 2)
+        self.assertEqual(hello["type"], "hello")
+        return client
+
+    async def wait_for(self, predicate, timeout: float = 2.0) -> None:
+        deadline = time.monotonic() + timeout
+        while not predicate():
+            if time.monotonic() >= deadline:
+                self.fail("condition was not reached before the deadline")
+            await asyncio.sleep(0.01)
+
+    def stalled_subscriber(self, bridge: Bridge) -> tuple[Subscriber, wsmod.WebSocket, _StalledWriter]:
+        writer = _StalledWriter()
+        socket = wsmod.WebSocket(
+            _IdleReader(),  # type: ignore[arg-type]
+            writer,  # type: ignore[arg-type]
+            is_client=False,
+            write_timeout=0.02,
+        )
+        subscriber = Subscriber(bridge, socket)
+        bridge.subscribers.add(subscriber)
+        return subscriber, socket, writer
+
+    async def test_active_to_pong_keeps_the_subscriber(self) -> None:
+        bridge, _server, port = await self.start_server(
+            ping_interval_s=0.02, pong_timeout_s=0.3
+        )
+        client = await self.connect(port)
+        await client.send_json({"type": "subscribe", "stream": "decoded"})
+        self.assertEqual((await asyncio.wait_for(client.recv_json(), 2))["type"], "subscribed")
+        subscriber = next(iter(bridge.subscribers))
+        first_pong = subscriber.websocket.last_pong_s
+
+        async def feed() -> None:
+            for _ in range(10):
+                bridge.ingest(0, SAMPLE_DATA)
+                await asyncio.sleep(0.03)
+
+        feeder = asyncio.create_task(feed())
+        for _ in range(10):
+            self.assertEqual(len(await asyncio.wait_for(client.recv_binary(), 2)), 56)
+        await feeder
+
+        self.assertIn(subscriber, bridge.subscribers)
+        self.assertFalse(subscriber.closed)
+        self.assertEqual(subscriber.dropped, 0)
+        self.assertGreater(subscriber.websocket.last_pong_s, first_pong)
+
+    async def test_drain_timeout_detaches_the_subscriber(self) -> None:
+        bridge = Bridge(queue_size=4, ping_interval_s=0)
+        subscriber, socket, writer = self.stalled_subscriber(bridge)
+        subscriber._enqueue(b"frame")
+
+        await asyncio.wait_for(subscriber._sender, 2)
+
+        self.assertTrue(subscriber.closed)
+        self.assertTrue(socket.closed)
+        self.assertTrue(writer.closed)
+        self.assertNotIn(subscriber, bridge.subscribers)
+
+    async def test_pong_timeout_detaches_a_client_that_stops_reading(self) -> None:
+        bridge, _server, port = await self.start_server(
+            ping_interval_s=0.02, pong_timeout_s=0.05
+        )
+        client = await self.connect(port)
+        subscriber = next(iter(bridge.subscribers))
+
+        await self.wait_for(lambda: not bridge.subscribers)
+
+        self.assertTrue(subscriber.closed)
+        with self.assertRaises(wsmod.WebSocketClosed):
+            while True:
+                await asyncio.wait_for(client.recv(), 2)
+
+    async def test_peer_close_detaches_the_subscriber(self) -> None:
+        bridge, _server, port = await self.start_server()
+        client = await self.connect(port)
+        subscriber = next(iter(bridge.subscribers))
+
+        await client.close()
+        await self.wait_for(lambda: not bridge.subscribers)
+
+        self.assertTrue(subscriber.closed)
+
+    async def test_cancel_during_a_stalled_send_detaches_cleanly(self) -> None:
+        bridge = Bridge(queue_size=4, ping_interval_s=0)
+        subscriber, _socket, _writer = self.stalled_subscriber(bridge)
+        subscriber._enqueue(b"frame")
+        await asyncio.sleep(0.01)
+
+        subscriber._sender.cancel()
+        await asyncio.gather(subscriber._sender, return_exceptions=True)
+
+        self.assertTrue(subscriber.closed)
+        self.assertNotIn(subscriber, bridge.subscribers)
+
+    async def test_close_oserror_still_detaches_the_subscriber(self) -> None:
+        class FailingCloseSocket:
+            closed = False
+
+            async def send_json(self, _value: dict) -> None:
+                pass
+
+            async def send_binary(self, _payload: bytes) -> None:
+                raise ConnectionError("broken pipe")
+
+            async def close(self, _code: int = 1000, _reason: str = "") -> None:
+                self.closed = True
+                raise OSError("socket already gone")
+
+        bridge = Bridge(ping_interval_s=0)
+        socket = FailingCloseSocket()
+        subscriber = Subscriber(bridge, socket)  # type: ignore[arg-type]
+        bridge.subscribers.add(subscriber)
+        subscriber._enqueue(b"frame")
+
+        await asyncio.wait_for(subscriber._sender, 2)
+
+        self.assertTrue(subscriber.closed)
+        self.assertTrue(socket.closed)
+        self.assertNotIn(subscriber, bridge.subscribers)
 
 
 class HandFilterPayloadTests(unittest.TestCase):

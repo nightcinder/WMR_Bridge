@@ -53,7 +53,9 @@ python3 tools/wifi_probe.py --host 192.168.1.10 --discover
 Sitting P pass criteria and exits non-zero when any fails: echo RTT p50 below
 15 ms, tick-based missing-report share at or below 3 % per hand, and zero
 sequence gaps. A run without RTT samples fails the RTT gate, and every hand the
-bridge expects must have at least one record, so an idle run cannot pass.
+bridge expects must have at least one record, so an idle run cannot pass. If
+the bridge closes the connection mid-run, the summary is still written (with
+`disconnected` set) and the probe exits 3.
 
 ```bash
 python3 tools/wifi_probe.py --host 192.168.1.10 --duration 600 \

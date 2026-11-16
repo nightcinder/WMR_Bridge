@@ -516,7 +516,9 @@ The probe prints the `hello` Wi-Fi and uplink objects. `--discover` sends a
 `WMR_DISCOVER_V1` probe to UDP port 8765 before connecting. `--json-out PATH`
 writes the final summary as JSON. `--assert-gates` checks the Sitting P pass
 criteria (RTT p50 below 15 ms, tick-based missing-report share at or below 3 %
-per hand, zero sequence gaps) and exits non-zero when any fails. Every hand the
+per hand, zero sequence gaps) and exits non-zero when any fails. If the bridge
+closes the connection mid-run, the probe writes `--json-out` from the
+measurements taken so far, records the reason in `disconnected`, and exits 3. Every hand the
 bridge expects needs at least one record, so a run with no controller frames
 fails the loss and gap gates instead of passing at 0 %:
 

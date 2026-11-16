@@ -48,6 +48,10 @@ from . import ws as wsmod
 
 STREAMS = ("raw", "decoded", "batched")
 HAND_NAMES = ("LEFT", "RIGHT")
+# WebSocket keepalive: ping an idle client so a half-open TCP connection is
+# detected, and detach it once a pong is overdue. 0 disables the ping.
+DEFAULT_PING_INTERVAL_S = 10.0
+DEFAULT_PONG_TIMEOUT_S = 30.0
 # Activity thresholds for the controller idle policy. Values match the plan in
 # any button, a trigger past its dead zone, meaningful stick
 # deflection, or motion above the stationary MEMS bias/noise floor.
@@ -241,6 +245,7 @@ class Subscriber:
         self._batch: list[tuple[int, bytes]] = []
         self._batch_timer: asyncio.TimerHandle | None = None
         self._sender = asyncio.create_task(self._send_loop())
+        self._keepalive = asyncio.create_task(self._keepalive_loop())
         self.closed = False
 
     # ---- outbound --------------------------------------------------------
@@ -270,7 +275,47 @@ class Subscriber:
         except asyncio.CancelledError:
             raise
         finally:
-            self.closed = True
+            # A stalled write must not leave the subscriber registered: the
+            # bridge would keep queueing frames for a client that cannot read.
+            await self._detach(wsmod.CLOSE_GOING_AWAY, "send failed")
+
+    async def _keepalive_loop(self) -> None:
+        """Ping periodically and detach a client whose pong is overdue."""
+
+        interval = self.bridge.ping_interval_s
+        # Test doubles and the BLE sink have no socket to ping.
+        if interval <= 0 or not hasattr(self.websocket, "last_pong_s"):
+            return
+        while not self.closed:
+            await asyncio.sleep(interval)
+            if self.closed:
+                return
+            if time.monotonic() - self.websocket.last_pong_s > self.bridge.pong_timeout_s:
+                LOG.info("client %s missed its pong deadline", self.websocket.peer)
+                await self._detach(wsmod.CLOSE_GOING_AWAY, "pong timeout")
+                return
+            try:
+                await self.websocket.ping()
+            except (wsmod.WebSocketClosed, ConnectionError, OSError):
+                await self._detach(wsmod.CLOSE_GOING_AWAY, "ping failed")
+                return
+
+    async def _detach(self, code: int, reason: str) -> None:
+        """Remove this subscriber and close its socket, from any teardown path."""
+
+        if self.closed:
+            return
+        self.closed = True
+        self.reset_stream()
+        current = asyncio.current_task()
+        for task in (self._sender, self._keepalive):
+            if task is not None and task is not current:
+                task.cancel()
+        self.bridge.subscribers.discard(self)
+        try:
+            await self.websocket.close(code, reason)
+        except (ConnectionError, OSError):
+            pass
 
     # ---- stream delivery -------------------------------------------------
 
@@ -342,6 +387,7 @@ class Subscriber:
         self.closed = True
         self.reset_stream()
         self._sender.cancel()
+        self._keepalive.cancel()
 
 
 class Bridge:
@@ -356,6 +402,8 @@ class Bridge:
         batch_hold_ms: float = 5.0,
         fragment_capacity: int = DEFAULT_FRAGMENT_CAPACITY,
         auth_timeout_s: float = 5.0,
+        ping_interval_s: float = DEFAULT_PING_INTERVAL_S,
+        pong_timeout_s: float = DEFAULT_PONG_TIMEOUT_S,
         allowed_hands: tuple[int, ...] | list[int] = (0, 1),
         calibration: bool | CalibrationCache = True,
         bridge_id: str | None = None,
@@ -396,6 +444,8 @@ class Bridge:
         self.batch_hold_s = batch_hold_ms / 1000.0
         self.fragment_capacity = max(13, fragment_capacity)
         self.auth_timeout_s = auth_timeout_s
+        self.ping_interval_s = ping_interval_s
+        self.pong_timeout_s = pong_timeout_s
         self.hands = [HandStats(), HandStats()]
         self.sequence = [0, 0]
         self.subscribers: set[Subscriber] = set()
