@@ -164,6 +164,10 @@ _RECORD = struct.Struct("<BBBB I Q I 3f 3f h 4h BB")
 def pack_record(record: DecodedRecord) -> bytes:
     """Serialize a record to exactly 56 bytes (FF12 layout)."""
 
+    gyro = record.gyro
+    accel = record.accel
+    stick = record.stick
+    trackpad = record.trackpad
     return _RECORD.pack(
         DECODED_VERSION,
         record.hand,
@@ -172,11 +176,17 @@ def pack_record(record: DecodedRecord) -> bytes:
         record.sequence,
         record.rx_time_us,
         record.device_ticks,
-        *record.gyro,
-        *record.accel,
+        gyro[0],
+        gyro[1],
+        gyro[2],
+        accel[0],
+        accel[1],
+        accel[2],
         record.temperature_raw,
-        *record.stick,
-        *record.trackpad,
+        stick[0],
+        stick[1],
+        trackpad[0],
+        trackpad[1],
         record.trigger,
         record.battery,
     )
