@@ -436,6 +436,7 @@ for pyfile in "${SCRIPT_DIR}"/wmr_bridge/*.py; do
 done
 
 install -m 0755 "${SCRIPT_DIR}/tools/wifi_probe.py" "${DEST_PI}/tools/wifi_probe.py"
+install -m 0755 "${SCRIPT_DIR}/tools/bench_failover.sh" "${DEST_PI}/tools/bench_failover.sh"
 # Keep the installed pi/ tree self-sufficient: the shipped install.sh reads the
 # NetworkManager drop-in from its own directory. run_tests.sh stays out of the
 # installed tree because the suite needs the repo build scripts.

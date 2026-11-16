@@ -82,6 +82,7 @@ class DebPackagingTests(unittest.TestCase):
             for path in (
                 "./opt/wmr-bridge/pi/wmr_bridge/__main__.py",
                 "./opt/wmr-bridge/pi/tools/wifi_probe.py",
+                "./opt/wmr-bridge/pi/tools/bench_failover.sh",
                 "./opt/wmr-bridge/pi/networkmanager/99-wmr-bridge-powersave.conf",
                 "./opt/wmr-bridge/pi/install.sh",
                 "./opt/wmr-bridge/pi/minisign.pub",
