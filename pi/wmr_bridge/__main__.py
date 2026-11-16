@@ -921,6 +921,7 @@ async def _run(args: argparse.Namespace) -> int:
                     ble_central_subscribed=(
                         (lambda: bool(ble.app.subscribed)) if ble else None
                     ),
+                    reconnect_allowed=manager.reconnect_allowed,
                 )
                 pairer.start()
                 LOG.info(

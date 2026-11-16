@@ -347,6 +347,7 @@ class BluezDevice:
     paired: bool = False
     trusted: bool = False
     connected: bool = False
+    blocked: bool = False
 
     @property
     def is_wmr(self) -> bool:
@@ -394,7 +395,12 @@ def parse_info(output: str, address: str = "") -> BluezDevice | None:
     """Parse ``bluetoothctl info <address>`` output into a :class:`BluezDevice`."""
 
     name = ""
-    flags = {"Paired": False, "Trusted": False, "Connected": False}
+    flags = {
+        "Paired": False,
+        "Trusted": False,
+        "Connected": False,
+        "Blocked": False,
+    }
     for line in _clean(output).splitlines():
         line = line.strip()
         if line.startswith("Device "):
@@ -419,6 +425,7 @@ def parse_info(output: str, address: str = "") -> BluezDevice | None:
         paired=flags["Paired"],
         trusted=flags["Trusted"],
         connected=flags["Connected"],
+        blocked=flags["Blocked"],
     )
 
 
@@ -663,6 +670,14 @@ _FAILURE_MARKERS = (
     "Failed to start discovery",
     "Failed to set power",
 )
+_CONNECT_FAILED_MARKERS = (
+    "failed to connect",
+    "authenticationfailed",
+    "authentication failed",
+    "page timeout",
+    "connection timeout",
+    "not available",
+)
 
 _PAIR_RESULT_RE = re.compile(r"Pairing successful|Failed to pair(?::\s*(.*))?")
 
@@ -834,10 +849,11 @@ class BluezAutoPairer:
 
     BlueZ keeps the bonds; this class only drives the command-line client so the
     Pi package stays dependency-free. Connected hands are left alone. A hand
-    that already has a ``Paired: yes`` and ``Trusted: yes`` bond is also left
-    alone: BlueZ accepts the controller's incoming HID connection when it is
-    switched on, so an offline controller is never woken with an inquiry burst
-    or an outgoing ``connect``.
+    that already has a ``Paired: yes`` and ``Trusted: yes`` bond needs no
+    inquiry: the pairer retries a direct ``connect`` so a controller that
+    dropped its link comes back without a Pi reboot. It skips that retry while
+    the idle power-off stage owns the hand, and clears a stale BlueZ
+    ``Blocked: yes`` left by a previous run first.
 
     Only hands with no usable bond trigger discovery. One interactive
     ``bluetoothctl`` session runs ``scan on`` and issues ``pair`` before it
@@ -877,6 +893,7 @@ class BluezAutoPairer:
         pairing_window_open: Callable[[], bool] | None = None,
         on_scan_end: Callable[[], None] | None = None,
         ble_central_subscribed: Callable[[], bool] | None = None,
+        reconnect_allowed: Callable[[str], bool] | None = None,
         which: Callable[[str], str | None] = shutil.which,
         rfkill_root: str = RFKILL_ROOT,
     ) -> None:
@@ -893,6 +910,7 @@ class BluezAutoPairer:
         self._pairing_window_open = pairing_window_open
         self._on_scan_end = on_scan_end
         self._ble_central_subscribed = ble_central_subscribed
+        self._reconnect_allowed = reconnect_allowed
         self._scan_pause_logged = False
         self._which = which
         self._rfkill_root = rfkill_root
@@ -1026,8 +1044,11 @@ class BluezAutoPairer:
             info = self._info(device.address) or device
             name = info.name or device.name
             if info.paired and info.trusted:
-                # Already bonded: let BlueZ accept the controller's page-in.
+                # Bonded: no inquiry is needed. Retry a direct connect so a
+                # hand that dropped its link reconnects without a Pi reboot.
                 scan_hands.discard(hand)
+                if not info.connected:
+                    acted = self._reconnect_bonded(info, name) or acted
                 continue
             if info.paired:
                 LOG.info("auto-pair: trusting %s (%s)", device.address, name)
@@ -1226,6 +1247,66 @@ class BluezAutoPairer:
             return False
         return True
 
+    def _run_action(
+        self, action: str, address: str, timeout: float = 20.0
+    ) -> tuple[bool, str]:
+        """Run one ``bluetoothctl`` action, tolerating a crash or timeout."""
+
+        try:
+            result = self._run(action, address, timeout=timeout)
+        except Exception:  # a failed client must not stop the pairing loop
+            LOG.debug("bluetoothctl %s %s raised", action, address, exc_info=True)
+            return False, ""
+        if result is None:
+            return False, ""
+        return result.returncode == 0, f"{result.stdout or ''}\n{result.stderr or ''}"
+
+    def _connect_bonded(self, address: str) -> bool:
+        """Connect a bonded hand, removing a stale bond on an auth failure."""
+
+        ok, text = self._run_action("connect", address)
+        folded = text.casefold()
+        if ok and not any(marker in folded for marker in _CONNECT_FAILED_MARKERS):
+            LOG.info("auto-pair: connect sent to %s; waiting for its HID node", address)
+            return True
+        if "authenticationfailed" in folded or "authentication failed" in folded:
+            LOG.warning(
+                "auto-pair: %s failed to authenticate on its stored bond; "
+                "removing the bond so the next scan can re-pair it",
+                address,
+            )
+            if self._command("remove", address):
+                return True
+            LOG.warning(
+                "auto-pair: could not remove the stale bond on %s; will retry",
+                address,
+            )
+            return False
+        LOG.info("auto-pair: connect to %s failed; will retry", address)
+        return False
+
+    def _reconnect_bonded(self, info: BluezDevice, name: str) -> bool:
+        """Clear a stale block and retry a bonded hand's dropped link."""
+
+        address = info.address
+        if self._reconnect_allowed is not None and not self._reconnect_allowed(
+            address
+        ):
+            LOG.debug(
+                "auto-pair: %s is in the idle power-off cooldown; not reconnecting",
+                address,
+            )
+            return False
+        acted = False
+        if info.blocked:
+            LOG.info("auto-pair: clearing a stale BlueZ block on %s (%s)", address, name)
+            if not self._command("unblock", address):
+                LOG.warning("auto-pair: could not unblock %s; will retry", address)
+                return False
+            acted = True
+        LOG.info("auto-pair: reconnecting bonded %s (%s)", address, name)
+        return self._connect_bonded(address) or acted
+
     def _ensure(self, device: BluezDevice) -> bool:
         info = self._info(device.address) or device
         name = info.name or device.name
@@ -1238,21 +1319,10 @@ class BluezAutoPairer:
                 name,
             )
             return False
-        bonded = info.trusted
         acted = False
         if not info.trusted:
             LOG.info("auto-pair: trusting %s (%s)", device.address, name)
             acted = self._command("trust", device.address) or acted
-        if not info.connected and not bonded:
-            LOG.info("auto-pair: connecting %s (%s)", device.address, name)
-            if self._command("connect", device.address):
-                acted = True
-                connected = self._info(device.address)
-                if connected is not None and connected.connected:
-                    LOG.info("auto-pair: connected %s (%s)", device.address, name)
-                else:
-                    LOG.info(
-                        "auto-pair: connect sent to %s; waiting for its HID node",
-                        device.address,
-                    )
+        if not info.connected:
+            acted = self._reconnect_bonded(info, name) or acted
         return acted
