@@ -1085,8 +1085,10 @@ The Pi cooldown is `--idle-reconnect-cooldown` (seconds, default 60, 0
 disables it). At the power-off timeout the bridge blocks the controller in
 BlueZ, which also drops the ACL, so a page-in from a still-awake controller is
 refused, and the hidraw monitor refuses to reopen the hand for the same
-window. When the cooldown ends the bridge unblocks the device; a button press
-then reconnects normally.
+window. When the cooldown ends the bridge unblocks the device and auto-pair
+sends a `connect` to the bonded hand (a button press also reconnects it). With
+0 the guard is off, but the pairer still skips a deliberately powered-off hand
+until that hand's own page-in arrives.
 
 Configuration macros (ESP32):
 

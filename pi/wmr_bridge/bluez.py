@@ -852,7 +852,7 @@ class BluezAutoPairer:
     that already has a ``Paired: yes`` and ``Trusted: yes`` bond needs no
     inquiry: the pairer retries a direct ``connect`` so a controller that
     dropped its link comes back without a Pi reboot. It skips that retry while
-    the idle power-off cooldown owns the hand, and clears a stale BlueZ
+    the idle power-off stage owns the hand, and clears a stale BlueZ
     ``Blocked: yes`` left by a previous run first.
 
     Only hands with no usable bond trigger discovery. One interactive

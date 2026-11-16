@@ -182,12 +182,19 @@ class HidrawManager:
         self._no_controllers_warned = False
 
     def reconnect_allowed(self, address: str) -> bool:
-        """True unless *address* is still inside its power-off cooldown."""
+        """True unless *address* is still inside its power-off stage."""
 
         address = address.upper()
         now_us = self._now_us()
         for hand, until in list(self._powered_off_until_us.items()):
             if now_us >= until:
+                continue
+            if self._poweroff_address.get(hand, "").upper() == address:
+                return False
+        # A disabled cooldown leaves no deadline; the power-off latch still
+        # owns the hand until its own page-in ends the stage.
+        for hand in self._powered_off:
+            if hand in self._powered_off_until_us:
                 continue
             if self._poweroff_address.get(hand, "").upper() == address:
                 return False
@@ -258,13 +265,9 @@ class HidrawManager:
                 # through.
                 return False
             # The cooldown ended before the idle tick ran. Do not refuse the
-            # page-in on a stale latch; the pairer unblocks the device and
-            # retries the link on the same schedule.
-            self._powered_off_until_us.pop(hand, None)
-            self._powered_off.discard(hand)
-            self._poweroff_address.pop(hand, None)
-            self._set_asleep(hand, False)
-            self._warned_no_address.discard(hand)
+            # page-in on a stale latch, but keep the bookkeeping until this
+            # open succeeds: a missing node must leave the latch for _idle_tick
+            # to clear and unblock, as a failed open has no other owner.
         other = self._path_of_hand.get(hand)
         if other is not None and other != path:
             LOG.warning(
@@ -465,11 +468,13 @@ class HidrawManager:
                 # dropping the ACL: a controller that is still awake
                 # reconnects within seconds of the disconnect.
                 guarded = self.idle_reconnect_cooldown > 0
+                # The latch owns the hand even when the cooldown is disabled:
+                # the pairer must not force a deliberate power-off back on.
+                self._poweroff_address[hand] = address
                 if guarded:
                     self._powered_off_until_us[hand] = now_us + int(
                         self.idle_reconnect_cooldown * 1_000_000
                     )
-                    self._poweroff_address[hand] = address
                 blocked = guarded and await self._guard(address, True)
                 activity_before = stats.last_activity_us
                 powered_off = False

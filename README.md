@@ -450,8 +450,11 @@ On the Pi bridge use `--idle-sleep-timeout` (default 300) and
 `WMR_BRIDGE_ARGS` under systemd. 0 disables a stage.
 `--idle-reconnect-cooldown` (default 60 s) blocks the controller in BlueZ at
 the power-off timeout, which also drops the ACL, and refuses to reopen its
-hidraw node until the controller's own shutdown timer has run out; a button
-press after the cooldown reconnects normally. 0 disables the guard.
+hidraw node until the controller's own shutdown timer has run out. When the
+cooldown ends, auto-pair sends a `connect` to the bonded controller, so it
+comes back without a button press; a button press still reconnects it too.
+0 disables the guard, but the pairer still leaves a deliberately powered-off
+controller alone until it pages in itself.
 
 ## Running the host tests
 

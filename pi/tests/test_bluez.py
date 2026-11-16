@@ -1845,6 +1845,47 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(0, manager._powered_off_until_us)
         self.assertNotIn(0, manager._powered_off)
 
+    async def test_failed_open_after_the_cooldown_leaves_the_latch_for_the_tick(self) -> None:
+        guard_calls: list[tuple[str, bool]] = []
+
+        manager, _bridge, reader = self.make_manager(
+            poweroff_cb=lambda address: True,
+            reconnect_guard=(
+                lambda address, blocked: guard_calls.append((address, blocked))
+                or True
+            ),
+        )
+        await manager._idle_tick(self.START_US + 900_000_000)
+        manager._now_us = lambda: self.START_US + 960_000_000
+        manager.left_spec = reader.path
+        manager._device_for = lambda path: HidrawDevice(
+            path=path, name="", uniq=self.ADDRESS
+        )
+
+        class _MissingNodeReader(_FakeReader):
+            def open(self) -> int:
+                raise FileNotFoundError(self.path)
+
+        with mock.patch("wmr_bridge.inputs.HidrawReader", _MissingNodeReader):
+            self.assertFalse(manager._open(reader.path))
+
+        # The node vanished before the cooldown ended. The latch must survive
+        # the failed open so the tick still unblocks the device.
+        self.assertIn(0, manager._powered_off)
+        self.assertEqual(
+            manager._powered_off_until_us[0], self.START_US + 960_000_000
+        )
+        self.assertEqual(manager._poweroff_address[0], self.ADDRESS)
+
+        await manager._idle_tick(self.START_US + 960_000_000)
+
+        self.assertEqual(
+            guard_calls, [(self.ADDRESS, True), (self.ADDRESS, False)]
+        )
+        self.assertNotIn(0, manager._powered_off)
+        self.assertNotIn(0, manager._powered_off_until_us)
+        self.assertNotIn(0, manager._poweroff_address)
+
     async def test_failed_poweroff_lifts_the_block_and_retries(self) -> None:
         guard_calls: list[tuple[str, bool]] = []
         results = [False, True]
@@ -1911,6 +1952,10 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(guard_calls, [])
         self.assertIn(0, manager._powered_off)
         self.assertNotIn(0, manager._powered_off_until_us)
+        # No deadline to expire, so only the hand's own page-in ends the stage:
+        # the pairer must not force the deliberate power-off back on.
+        self.assertFalse(manager.reconnect_allowed(self.ADDRESS))
+        self.assertTrue(manager.reconnect_allowed("11:22:33:44:55:66"))
 
     async def test_close_lifts_a_remaining_block(self) -> None:
         guard_calls: list[tuple[str, bool]] = []
