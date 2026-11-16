@@ -158,6 +158,72 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(writer.closed)
 
 
+class _BufferTransport:
+    def __init__(self, queued: int) -> None:
+        self.queued = queued
+
+    def get_write_buffer_size(self) -> int:
+        return self.queued
+
+
+class _BufferedWriter:
+    """A ``StreamWriter`` stand-in: ``drain()`` never returns."""
+
+    def __init__(self, queued: int) -> None:
+        self.transport = _BufferTransport(queued)
+        self.written = b""
+        self.closed = False
+
+    def write(self, data: bytes) -> None:
+        self.written += data
+
+    async def drain(self) -> None:
+        await asyncio.Event().wait()
+
+    def close(self) -> None:
+        self.closed = True
+
+    def get_extra_info(self, _name: str) -> None:
+        return None
+
+
+class _IdleReader:
+    async def readexactly(self, _count: int) -> bytes:
+        raise AssertionError("the sender must not read")
+
+
+class WriteBufferTests(unittest.IsolatedAsyncioTestCase):
+    """The send fast path keeps the write timeout where it is needed."""
+
+    def socket(self, queued: int) -> tuple[wsmod.WebSocket, _BufferedWriter]:
+        writer = _BufferedWriter(queued)
+        return (
+            wsmod.WebSocket(  # type: ignore[arg-type]
+                _IdleReader(), writer, is_client=False, write_timeout=0.02
+            ),
+            writer,
+        )
+
+    async def test_a_backlogged_transport_still_times_out(self) -> None:
+        socket, writer = self.socket(queued=4096)
+
+        with self.assertRaises(wsmod.WebSocketClosed):
+            await asyncio.wait_for(socket.send_binary(b"x"), 2)
+
+        self.assertTrue(socket.closed)
+        self.assertTrue(writer.closed)
+
+    async def test_a_clear_write_buffer_does_not_wait_for_drain(self) -> None:
+        # drain() here would never return, so this only passes when the frame
+        # that fit the socket buffer skips the per-frame timer and drain.
+        socket, writer = self.socket(queued=0)
+
+        await asyncio.wait_for(socket.send_binary(b"x"), 1)
+
+        self.assertEqual(writer.written[:2], b"\x82\x01")
+        self.assertFalse(writer.closed)
+
+
 class OriginTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.server = await wsmod.serve(
