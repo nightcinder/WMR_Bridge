@@ -189,12 +189,22 @@ def decode_frame(frame: bytes) -> ControllerState | None:
         frame
     )
 
-    ar0 = int.from_bytes(accel9[0:3], "little", signed=True)
-    ar1 = int.from_bytes(accel9[3:6], "little", signed=True)
-    ar2 = int.from_bytes(accel9[6:9], "little", signed=True)
-    gr0 = int.from_bytes(gyro9[0:3], "little", signed=True)
-    gr1 = int.from_bytes(gyro9[3:6], "little", signed=True)
-    gr2 = int.from_bytes(gyro9[6:9], "little", signed=True)
+    # The three 24-bit fields of each axis group arrive as one 9-byte blob, so
+    # decoding the blob as a single integer avoids six slice copies per packet.
+    accel = int.from_bytes(accel9, "little")
+    gyro = int.from_bytes(gyro9, "little")
+    ar0 = accel & 0xFFFFFF
+    ar1 = (accel >> 24) & 0xFFFFFF
+    ar2 = accel >> 48
+    gr0 = gyro & 0xFFFFFF
+    gr1 = (gyro >> 24) & 0xFFFFFF
+    gr2 = gyro >> 48
+    ar0 -= 0x1000000 if ar0 & 0x800000 else 0
+    ar1 -= 0x1000000 if ar1 & 0x800000 else 0
+    ar2 -= 0x1000000 if ar2 & 0x800000 else 0
+    gr0 -= 0x1000000 if gr0 & 0x800000 else 0
+    gr1 -= 0x1000000 if gr1 & 0x800000 else 0
+    gr2 -= 0x1000000 if gr2 & 0x800000 else 0
 
     # Each value is one binary32 operation on exact operands; see module doc.
     sx, sy, t, px, py, ax, ay, az, gx, gy, gz = _F11.unpack(
@@ -213,20 +223,22 @@ def decode_frame(frame: bytes) -> ControllerState | None:
         )
     )
 
+    # Positional: the hot path skips keyword-argument building; the order is the
+    # ``ControllerState`` field order.
     return ControllerState(
-        buttons=buttons,
-        thumbstick_x=1.0 if sx > 1.0 else sx,
-        thumbstick_y=1.0 if sy > 1.0 else sy,
-        trigger=t,
-        trackpad_x=px,
-        trackpad_y=py,
-        battery=battery,
-        accel_raw=(ar0, ar1, ar2),
-        accel=(ax, ay, az),
-        temperature_raw=temp,
-        gyro_raw=(gr0, gr1, gr2),
-        gyro=(gx, gy, gz),
-        ticks=ticks,
+        buttons,
+        1.0 if sx > 1.0 else sx,
+        1.0 if sy > 1.0 else sy,
+        t,
+        px,
+        py,
+        battery,
+        (ar0, ar1, ar2),
+        (ax, ay, az),
+        temp,
+        (gr0, gr1, gr2),
+        (gx, gy, gz),
+        ticks,
     )
 
 
@@ -272,12 +284,6 @@ def _decode_frame_reference(frame: bytes) -> ControllerState | None:
     )
 
 
-def _half_away(value: float) -> float:
-    """Bias for round-half-away-from-zero before truncation (Q15 and trigger)."""
-
-    return value + 0.5 if value >= 0.0 else value - 0.5
-
-
 def record_from_state(
     state: ControllerState,
     hand: int,
@@ -296,24 +302,29 @@ def record_from_state(
             state.trigger * 255.0,
         )
     )
-    a, b, c, d, e = _F5.unpack(
-        _F5.pack(_half_away(a), _half_away(b), _half_away(c), _half_away(d), e + 0.5)
-    )
+    # Bias for round-half-away-from-zero before truncation (Q15 and trigger).
+    a += 0.5 if a >= 0.0 else -0.5
+    b += 0.5 if b >= 0.0 else -0.5
+    c += 0.5 if c >= 0.0 else -0.5
+    d += 0.5 if d >= 0.0 else -0.5
+    a, b, c, d, e = _F5.unpack(_F5.pack(a, b, c, d, e + 0.5))
 
+    # Positional: the hot path skips keyword-argument building; the order is the
+    # ``DecodedRecord`` field order.
     return DecodedRecord(
-        hand=hand,
-        sequence=sequence,
-        rx_time_us=rx_time_us,
-        device_ticks=state.ticks,
-        gyro=state.gyro,
-        accel=state.accel,
-        temperature_raw=state.temperature_raw,
-        stick=(int(a), int(b)),
-        trackpad=(int(c), int(d)),
-        trigger=int(e) & 0xFF,
-        battery=state.battery,
-        buttons=state.buttons,
-        flags=0,
+        hand,
+        sequence,
+        rx_time_us,
+        state.ticks,
+        state.gyro,
+        state.accel,
+        state.temperature_raw,
+        (int(a), int(b)),
+        (int(c), int(d)),
+        int(e) & 0xFF,
+        state.battery,
+        state.buttons,
+        0,
     )
 
 
