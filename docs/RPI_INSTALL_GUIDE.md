@@ -98,13 +98,14 @@ at `/etc/wmr-bridge/token`, and starts `wmr-bridge.service`.
 To pin a release or pre-release, set the version and the tag:
 
 ```bash
-curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.27/install.sh | sudo env WMR_BRIDGE_VERSION=0.3.27 WMR_BRIDGE_TAG=v0.3.27 bash
+curl -fsSL https://github.com/nightcinder/WMR_Bridge/releases/download/v0.3.28-rc.1/install.sh | sudo env WMR_BRIDGE_VERSION=0.3.28-rc.1 WMR_BRIDGE_TAG=v0.3.28-rc.1 bash
 ```
 
 The Pi package version matches the repository `VERSION`, and the release
 workflow refuses to build unless the tag equals `v$(cat VERSION)`. So a release
 cut from this tree reports one version across firmware, Pi package and tag.
-The latest full release is v0.3.27; its Pi package is `0.3.27`. A prerelease is
+The latest full release is v0.3.27; the `v0.3.28-rc.1` pre-release ships the
+`0.3.28-rc.1` package for the Pixel + Pi hardware check. A prerelease is
 not returned by `releases/latest`, so pin the version and tag as above when
 installing a pre-release build.
 
@@ -117,10 +118,10 @@ minisign -Vm SHA256SUMS -P RWTL80BhYeTEqPhBvFePoSc/uoC+iJCEa41o1uA3h+t4opQbX0yKC
 sha256sum -c SHA256SUMS --ignore-missing
 ```
 
-The `v0.3.27` release carries the same ten files as `v0.3.26`: three
+The `v0.3.28-rc.1` pre-release carries the same ten files as `v0.3.27`: three
 merged factory images (`wmr-bridge-factory.bin`, `-left`, `-right`), three
 application images (`wmr-bridge-app.bin`, `-left`, `-right`), the
-`0.3.27` package, `install.sh`, SHA256SUMS and SHA256SUMS.minisig. There
+`0.3.28-rc.1` package, `install.sh`, SHA256SUMS and SHA256SUMS.minisig. There
 are no per-file checksum files.
 
 Reboot the Pi so the Wi-Fi power-saving setting takes effect:

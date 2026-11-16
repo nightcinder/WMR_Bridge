@@ -5,6 +5,44 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.28-rc.1 — 2026-11-15
+
+The pre-release candidate for the Pixel + Pi hardware check, cut from `main` on
+top of 0.3.27 with the four triage fixes from #251/#252/#253/#254. It is a
+prerelease: GitHub does not offer it as "Latest", and `releases/latest` still
+returns `v0.3.27`. Firmware payloads are unchanged from 0.3.27: FF10–FF17 keep
+their payloads, companions at 0.2.2 or later continue to work, and the tag only
+changes the version FF16 reports. The Pi bridge path is host-tested only; it has
+not run on Pi hardware. The 10-minute FF14 field capture (both controllers and a
+phone subscribed) has not been run yet.
+
+### Raspberry Pi bridge
+
+- **A client that stops reading no longer stalls the bridge.** Every WebSocket
+  `drain()` is bounded by a write timeout, the daemon pings each client and
+  detaches the one whose pong is overdue, and a send failure or a close during a
+  stalled send still unregisters the subscriber, so its frames stop queueing
+  instead of backing the stream up (#251).
+- **No BLE work for a characteristic no central subscribed.** A FF12/FF14 or HID
+  report nobody subscribed skips `pack_record`, the HID sample path and its
+  `record_from_frame` decode, and the bridge only hands frames to a GATT sink
+  that wants them (#253).
+- **`WMR_BRIDGE_ARGS` is set to an empty string** in the packaged
+  `wmr-bridge.env.example`, so systemd stops warning about an unset variable on
+  every start (#253).
+- **The decode path allocates less per packet.** The 24-bit IMU fields are read
+  as one little-endian integer instead of six 3-byte slices, the per-packet
+  records are built positionally, and the round-half-away bias is inlined into
+  the binary32 round-trip: `bench_decode.py` reports 12.51 → 10.23 µs/report
+  combined, still bit-identical to the reference on every loaded frame (#254).
+
+### Docs
+
+- `docs/runs/sheets/bench.md` and `docs/PI_BRIDGE.md` are aligned with the
+  triage findings: the prerequisites and checklist steps name the code that
+  implements them, the companion-app UI line citations are corrected, and the
+  Android HID device name reads `WMR Bridge` (#252).
+
 ## 0.3.27 — 2026-11-15
 
 The first full release since 0.3.26, cut from `main` on top of the
