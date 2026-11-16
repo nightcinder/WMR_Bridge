@@ -1,6 +1,6 @@
 # Minimum bench run sheet
 
-Hardware: Raspberry Pi 3B+, ESP32 (v0.3.27 candidate), LEFT and RIGHT WMR controllers, Pixel 11 Pro running wmr_companion_app v0.3.25. Target time is about 24 minutes.
+Hardware: Raspberry Pi 3B+, ESP32 (v0.3.28-rc.1 candidate), LEFT and RIGHT WMR controllers, Pixel 11 Pro running wmr_companion_app v0.3.25. Target time is about 24 minutes.
 
 ## Prerequisites
 
@@ -31,7 +31,7 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.27 candidate), LEFT and RIGHT WMR contro
 
 ## Part B: ESP32 (~14 min)
 
-8. ESP32 BLE GATT stream. Boot ESP32 (v0.3.27). Power on both controllers. Connect Pixel 11 Pro over BLE in `wmr_companion_app`.
+8. ESP32 BLE GATT stream. Boot ESP32 (v0.3.28-rc.1). Power on both controllers. Connect Pixel 11 Pro over BLE in `wmr_companion_app`.
    - [ ] PASS / FAIL: Both hands stream over BLE characteristic 0xFF14 at 150-180 reports/s per hand. Zero disconnects over 60 s.
 9. FF16 version and FF17 control (Block B). In `wmr_companion_app` (`v0.3.25`), tap "Open 3D debug view" on the connect screen (`connect_screen.dart:436-445`). Find the FF16 firmware line under the "Stream" heading (`debug_screen.dart:205-213,523-556`, `wmr_ws_transport.dart:285,338-340`). Check the firmware version. In `ControllerPanel`, tap disconnect on LEFT (0xFF17) and reconnect LEFT (`debug_screen.dart:229-235`). Note that `ControllerPanel` (FF17) is hidden on Wi-Fi bridges and is tested on ESP32 BLE only.
    - [ ] PASS / FAIL: FF16 version matches serial `v` output. FF17 drops LEFT cleanly and reconnects within 5 s.
