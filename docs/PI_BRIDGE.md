@@ -474,7 +474,7 @@ The unit runs as `wmr` with `SupplementaryGroups=input bluetooth` and restarts o
 It reads the token from `/etc/wmr-bridge/token`.
 It loads optional flags from `/etc/wmr-bridge/wmr-bridge.env` through `WMR_BRIDGE_ARGS` (`pi/systemd/wmr-bridge.service:13,25`).
 For example, bench runs use `WMR_BRIDGE_ARGS="--idle-sleep-timeout 30 --idle-poweroff-timeout 90"`.
-The token file must have mode 0640 and ownership `wmr:wmr` (`pi/tools/wifi_probe.py:382-393,562`).
+The token file must have mode 0640 and ownership `wmr:wmr` (`pi/tools/wifi_probe.py:378-389,409-414`).
 The installed probe path is `/opt/wmr-bridge/pi/tools/wifi_probe.py` (`pi/build_deb.sh:106`, `pi/install.sh:438`).
 Members of the `wmr` group can read the token file and run the probe without `sudo`.
 If your user is not in the `wmr` group, pass `--token-file /etc/wmr-bridge/token` and run with `sudo`.
@@ -523,15 +523,15 @@ python3 tools/wifi_probe.py --stream batched --duration 10
 The probe prints the `hello` Wi-Fi and uplink objects.
 `--discover` sends a `WMR_DISCOVER_V1` probe to UDP port 8765 before connecting (`pi/wmr_bridge/discovery.py:28`, `pi/tools/wifi_probe.py:48`).
 `--json-out PATH` writes the final summary as JSON.
-`--assert-gates` checks the Sitting P pass criteria and exits non-zero if any check fails (`pi/tools/wifi_probe.py:50-52,575-578`).
+`--assert-gates` checks the Sitting P pass criteria and exits non-zero if any check fails (`pi/tools/wifi_probe.py:50-52,589-593`).
 The gates require RTT p50 below 15 ms, tick-based missing reports at or below 3.0% per hand, and zero sequence gaps.
-If the bridge closes the connection mid-run, the probe writes `--json-out` from existing measurements, records the reason in `disconnected`, and exits 3 (`pi/tools/wifi_probe.py:463-467,546,555-557`).
+If the bridge closes the connection mid-run, the probe writes `--json-out` from existing measurements, records the reason in `disconnected`, and exits 3 (`pi/tools/wifi_probe.py:459-463,542,551-553`).
 Every expected hand requires at least one record.
 A run with no controller records (no expected hands, or every hand at zero)
 reports `status: no_data`, prints `no controller data (0 records)`, and exits
 non-zero under `--assert-gates`.
 The installed probe path is `/opt/wmr-bridge/pi/tools/wifi_probe.py` (`pi/build_deb.sh:106`, `pi/install.sh:438`).
-Because `/etc/wmr-bridge/token` is mode 0640, pass `--token-file /etc/wmr-bridge/token` with `sudo` if needed (`pi/tools/wifi_probe.py:382-393,562`):
+Because `/etc/wmr-bridge/token` is mode 0640, pass `--token-file /etc/wmr-bridge/token` with `sudo` if needed (`pi/tools/wifi_probe.py:378-389,409-414`):
 
 ```bash
 sudo python3 /opt/wmr-bridge/pi/tools/wifi_probe.py --host 192.168.1.10 --discover \
