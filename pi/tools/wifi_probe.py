@@ -102,6 +102,10 @@ def evaluate_gates(
     expects (``summary["handFilter"]``) must also have at least one record: a
     hand with no frames would otherwise report 0 % loss and zero gaps and pass
     a run that never streamed. Hands excluded by the filter are not checked.
+
+    A run with no controller records at all (no expected hands, or every
+    expected hand at zero) is reported as ``status = "no_data"`` with
+    ``passed = None`` and no checks, rather than as a loss or gap failure.
     """
 
     checks: list[dict[str, Any]] = []
@@ -128,37 +132,29 @@ def evaluate_gates(
         if isinstance(hand, dict)
         and (expected_names is None or str(hand.get("hand", "")).upper() in expected_names)
     ]
-    total_records = 0
-    if expected:
-        for hand in expected:
-            loss = hand.get("lossPct")
-            records = hand.get("records")
-            if isinstance(records, int) and records > 0:
-                total_records += records
-            checks.append(
-                {
-                    "name": "devloss_pct",
-                    "hand": hand.get("hand"),
-                    "passed": (
-                        isinstance(records, int)
-                        and records > 0
-                        and isinstance(loss, (int, float))
-                        and loss <= devloss_max_pct
-                    ),
-                    "value": loss,
-                    "limit": devloss_max_pct,
-                    "records": records,
-                }
-            )
-    else:
+    total_records = sum(
+        hand["records"]
+        for hand in expected
+        if isinstance(hand.get("records"), int) and hand["records"] > 0
+    )
+    if total_records == 0:
+        return {"status": "no_data", "passed": None, "records": 0, "checks": []}
+    for hand in expected:
+        loss = hand.get("lossPct")
+        records = hand.get("records")
         checks.append(
             {
                 "name": "devloss_pct",
-                "hand": None,
-                "passed": False,
-                "value": None,
+                "hand": hand.get("hand"),
+                "passed": (
+                    isinstance(records, int)
+                    and records > 0
+                    and isinstance(loss, (int, float))
+                    and loss <= devloss_max_pct
+                ),
+                "value": loss,
                 "limit": devloss_max_pct,
-                "records": 0,
+                "records": records,
             }
         )
     gaps = summary.get("gaps")
@@ -557,13 +553,16 @@ async def run(args: argparse.Namespace) -> int:
         return 3
     if gates is not None:
         print("gates:", json.dumps(gates, indent=2))
-        if not gates["passed"]:
-            failed = ", ".join(
-                check["name"] + (f"[{check['hand']}]" if check.get("hand") else "")
-                for check in gates["checks"]
-                if not check["passed"]
-            )
-            print(f"Sitting P gates failed: {failed}", file=sys.stderr)
+        if gates["passed"] is not True:
+            if gates.get("status") == "no_data":
+                print(f"no controller data ({gates['records']} records)", file=sys.stderr)
+            else:
+                failed = ", ".join(
+                    check["name"] + (f"[{check['hand']}]" if check.get("hand") else "")
+                    for check in gates["checks"]
+                    if not check["passed"]
+                )
+                print(f"Sitting P gates failed: {failed}", file=sys.stderr)
             return 1
     return 0
 
