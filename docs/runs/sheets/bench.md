@@ -10,7 +10,7 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.28-rc.2 candidate), LEFT and RIGHT WMR c
 4. Isolate or unplug `eth0` before the Wi-Fi failover and recovery steps so that network routing stays unambiguous.
 5. When the 60 s cooldown expires, the pairer reconnects the bonded controller automatically (`pi/wmr_bridge/inputs.py:184-201,418-432`, `pi/wmr_bridge/bluez.py:1046-1052,1288-1308`). If the controller stays offline, press a physical button to wake it. Motion wakes the controller only from stage 1 idle sleep.
 
-## Part A: Raspberry Pi 3B+ (~10 min)
+## Part A: Raspberry Pi 3B+ (~12 min)
 
 1. Boot and uplink (PR #187, #188). Start `wmr-bridge` on Pi 3B+ with the prerequisites configured. Pair LEFT and RIGHT controllers. Run `wmr-bridge status`.
    - [ ] PASS / FAIL: Both controllers connected. Uplink matches the active interface (`eth0` metric 100 or `wlan0` 5 GHz metric 200). The adapter's BlueZ name follows the Pi host name (`wmr-bridge`; `wmr-bridge status` prints it, `pi/wmr_bridge/__main__.py:586-590`), mDNS advertises `_wmr-bridge._tcp` as `wmr-bridge.local` (`pi/wmr_bridge/mdns.py:29,54,101`), and BLE advertises `WMR Bridge` (`pi/wmr_bridge/__main__.py:295-296`). Stored LE bond note appears with `pairable=no` (`pi/wmr_bridge/__main__.py:605-612`) or `bluetoothctl info <MAC>` confirms `Paired: yes`.
@@ -31,17 +31,20 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.28-rc.2 candidate), LEFT and RIGHT WMR c
 
    Step 7 tests stage 2 idle power-off at 90 s (default 900 s in `pi/wmr_bridge/inputs.py:27`). This stage forces an ACL disconnect and blocks incoming connections in BlueZ for a 60 s cooldown (`pi/wmr_bridge/inputs.py:444-495`). Motion cannot wake a powered-off controller. After the 60 s cooldown expires, the pairer reconnects the bonded hand automatically (`pi/wmr_bridge/inputs.py:184-201,418-432`, `pi/wmr_bridge/bluez.py:1046-1052,1288-1308`). If the hand stays offline, a physical button press also reconnects it (`pi/wmr_bridge/inputs.py:418-432`).
 
+8. Restart-safe adapter recovery (ONY-1499). Record `systemctl show -p ExecMainStartTimestamp wmr-bridge` and `systemctl show -p ExecMainStartTimestamp wmr-bridge-bt-recover` before the cycle. Run `sudo systemctl restart wmr-bridge` twice, then copy the built `dist/wmr-bridge_<version>_all.deb` (`pi/build_deb.sh:4-5`) to the Pi and run `sudo apt-get install --reinstall ./wmr-bridge_<version>_all.deb`, which re-runs `pi/debian/postinst:114` (the daemon's `--upgrade` is a no-op when the installed version is current, `pi/install.sh:287-297`).
+   - [ ] PASS / FAIL: After each of the three commands, `timeout 10 sh -c 'until bluetoothctl show | grep -q "Powered: yes"; do sleep 1; done'` exits 0. The 10 s gate is a healthy-path regression guard, sourced to ONY-1499 items 1 and 3 and the two clean rc.2 restarts in ONY-1498 `rc2-restart-test`, not the 30 s idle sleep cap. After each command, `systemctl is-failed wmr-bridge-bt-recover` does not print `failed`, and `systemctl show -p ExecMainStartTimestamp wmr-bridge-bt-recover` still prints the value recorded before the cycle, so a recovery run inside the gate fails the step. After each command, `journalctl -k -b 0` contains no `Opcode 0x0c03`. After the reinstall, `systemctl show -p ExecMainStartTimestamp wmr-bridge` prints a later timestamp than the one recorded before it.
+
 ## Part B: ESP32 (~14 min)
 
-8. ESP32 BLE GATT stream. Boot ESP32 (v0.3.28-rc.2). Power on both controllers. Connect Pixel 11 Pro over BLE in `wmr_companion_app`.
+9. ESP32 BLE GATT stream. Boot ESP32 (v0.3.28-rc.2). Power on both controllers. Connect Pixel 11 Pro over BLE in `wmr_companion_app`.
    - [ ] PASS / FAIL: Both hands stream over BLE characteristic 0xFF14 at 150-180 reports/s per hand. Zero disconnects over 60 s.
-9. FF16 version and FF17 control (Block B). In `wmr_companion_app` (`v0.3.26`), tap "Open 3D debug view" on the connect screen (`connect_screen.dart:436-445`). Find the FF16 firmware line under the "Stream" heading (`debug_screen.dart:205-213,523-556`, `wmr_ws_transport.dart:285,338-340`). Check the firmware version. In `ControllerPanel`, tap disconnect on LEFT (0xFF17) and reconnect LEFT (`debug_screen.dart:229-235`). Note that `ControllerPanel` (FF17) is hidden on Wi-Fi bridges and is tested on ESP32 BLE only.
+10. FF16 version and FF17 control (Block B). In `wmr_companion_app` (`v0.3.26`), tap "Open 3D debug view" on the connect screen (`connect_screen.dart:436-445`). Find the FF16 firmware line under the "Stream" heading (`debug_screen.dart:205-213,523-556`, `wmr_ws_transport.dart:285,338-340`). Check the firmware version. In `ControllerPanel`, tap disconnect on LEFT (0xFF17) and reconnect LEFT (`debug_screen.dart:229-235`). Note that `ControllerPanel` (FF17) is hidden on Wi-Fi bridges and is tested on ESP32 BLE only.
    - [ ] PASS / FAIL: FF16 version matches serial `v` output. FF17 drops LEFT cleanly and reconnects within 5 s.
-10. Five-minute active keep-alive and Android HID check. Keep controllers moving or tapped for 5 min 30 s while connected to ESP32. While HID and BLE stream together, inspect Android input registration with `adb shell dumpsys input | grep -E -A 25 -i "wmr[- ]bridge"` (`docs/HID_GAMEPAD.md:481-523`).
+11. Five-minute active keep-alive and Android HID check. Keep controllers moving or tapped for 5 min 30 s while connected to ESP32. While HID and BLE stream together, inspect Android input registration with `adb shell dumpsys input | grep -E -A 25 -i "wmr[- ]bridge"` (`docs/HID_GAMEPAD.md:481-523`).
     - [ ] PASS / FAIL: No controller powers off during more than 5 min of active use. Zero unexpected ACL drops. Android registers `WMR Bridge` with no HID slot starvation.
-11. ESP32 idle sleep and motion wake (PR #191). Leave both controllers untouched for 5 min 15 s. Check serial log. Tilt both controllers.
+12. ESP32 idle sleep and motion wake (PR #191). Leave both controllers untouched for 5 min 15 s. Check serial log. Tilt both controllers.
     - [ ] PASS / FAIL: Serial logs `FF13 LEFT: idle for <N> ms; keep-alive paused, controller may sleep` (and RIGHT), with N between 300000 and 310000. Tilting logs `FF13 LEFT: activity after idle sleep; resuming the keep-alive` (and RIGHT) and resumes streaming within 1 s.
-12. Bundle export. Tap Export Test Bundle in `wmr_companion_app` on Pixel 11 Pro.
+13. Bundle export. Tap Export Test Bundle in `wmr_companion_app` on Pixel 11 Pro.
     - [ ] PASS / FAIL: ZIP bundle exports with `manifest.md`, `diagnostics.json` and non-empty controller samples.
 
 ## Optional expansions
