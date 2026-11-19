@@ -21,6 +21,7 @@ UPGRADE_PRERELEASE_SERVICE_FILE = PI_DIR / "systemd" / "wmr-bridge-upgrade-prere
 UPGRADE_PRERELEASE_PATH_FILE = PI_DIR / "systemd" / "wmr-bridge-upgrade-prerelease.path"
 BT_RECOVER_SERVICE_FILE = PI_DIR / "systemd" / "wmr-bridge-bt-recover.service"
 BT_RECOVER_PATH_FILE = PI_DIR / "systemd" / "wmr-bridge-bt-recover.path"
+BT_RECOVER_HELPER_FILE = PI_DIR / "systemd" / "wmr-bridge-bt-recover.sh"
 ENV_EXAMPLE = PI_DIR / "systemd" / "wmr-bridge.env.example"
 UDEV_RULES = PI_DIR / "udev" / "99-wmr-bridge.rules"
 POWERSAVE_CONF = PI_DIR / "networkmanager" / "99-wmr-bridge-powersave.conf"
@@ -297,20 +298,55 @@ class PackagingTests(unittest.TestCase):
         )
         self.assertNotIn("/bin/sh", prerelease_service)
 
-    def test_bt_recover_units_run_hciuart_and_bluetooth_as_root(self) -> None:
+    def test_bt_recover_unit_calls_the_portable_root_ladder(self) -> None:
         path = BT_RECOVER_PATH_FILE.read_text(encoding="utf-8")
         service = BT_RECOVER_SERVICE_FILE.read_text(encoding="utf-8")
+        helper = BT_RECOVER_HELPER_FILE.read_text(encoding="utf-8")
         self.assertIn("PathExists=/var/lib/wmr-bridge/bt-recover.trigger", path)
         self.assertIn("Unit=wmr-bridge-bt-recover.service", path)
         self.assertIn("/bin/rm -f /var/lib/wmr-bridge/bt-recover.trigger", service)
         self.assertIn("User=root", service)
         self.assertIn("Type=oneshot", service)
         self.assertIn("RuntimeDirectory=wmr-bridge-bt-recover", service)
-        self.assertIn("systemctl restart hciuart.service", service)
-        self.assertIn("systemctl restart bluetooth.service", service)
-        self.assertIn("rfkill unblock bluetooth", service)
-        self.assertIn("StartLimitIntervalSec=600", service)
-        self.assertIn("StartLimitBurst=3", service)
+        # The lock directory must survive this oneshot's exit, or a queued
+        # second trigger races a still-running recovery for a deleted lock.
+        self.assertIn("RuntimeDirectoryPreserve=yes", service)
+        # The daemon's 300 s cooldown is the only rate limiter; a start
+        # limit here would silently lock recovery out after three failures.
+        self.assertIn("StartLimitIntervalSec=0", service)
+        self.assertNotIn("StartLimitIntervalSec=600", service)
+        self.assertNotIn("StartLimitBurst", service)
+        # A literal ExecStart: the unit names the root-owned installed
+        # helper, no shell branching in the unit itself.
+        self.assertIn(
+            "ExecStart=/usr/bin/flock -n /run/wmr-bridge-bt-recover/recover.lock "
+            "/opt/wmr-bridge/pi/systemd/wmr-bridge-bt-recover.sh",
+            service,
+        )
+        self.assertNotIn("/bin/sh", service)
+        # The ladder lives in the helper so the same unit works on images
+        # without hciuart: rfkill first, hciuart only when the image ships
+        # the unit, else a btmgmt/hci_uart reset-rebind, bluetoothd, daemon.
+        self.assertIn("rfkill unblock bluetooth", helper)
+        self.assertIn("systemctl cat hciuart.service", helper)
+        self.assertIn("systemctl restart hciuart.service", helper)
+        self.assertIn("btmgmt", helper)
+        self.assertIn("systemctl restart bluetooth.service", helper)
+        self.assertIn("DAEMON_SERVICE=wmr-bridge.service", helper)
+        self.assertIn('systemctl start "$DAEMON_SERVICE"', helper)
+        # Each rung is logged so the journal names the recovery path taken,
+        # and a failed ladder escalates instead of failing the unit.
+        self.assertRegex(helper, r"rung \d/5")
+        self.assertIn("escalation", helper)
+        self.assertIn("exit 0", helper)
+        proc = subprocess.run(
+            ["bash", "-n", str(BT_RECOVER_HELPER_FILE)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+        self.assertTrue(os.access(BT_RECOVER_HELPER_FILE, os.X_OK))
         # The daemon's trigger path must be the same file the unit watches.
         self.assertIn(
             "DEFAULT_BT_RECOVER_TRIGGER = \"/var/lib/wmr-bridge/bt-recover.trigger\"",
@@ -392,6 +428,17 @@ class PackagingTests(unittest.TestCase):
                 staged = opt_pi / "systemd" / name
                 self.assertTrue(staged.is_file(), name)
                 self.assertEqual(staged.read_text(encoding="utf-8"), source.read_text(encoding="utf-8"))
+
+            # The bt-recover unit executes this staged helper by absolute
+            # path, so install.sh must ship it executable in the /opt tree
+            # (only units go to /etc/systemd/system).
+            staged_helper = opt_pi / "systemd" / "wmr-bridge-bt-recover.sh"
+            self.assertTrue(staged_helper.is_file())
+            self.assertTrue(os.access(staged_helper, os.X_OK))
+            self.assertEqual(
+                staged_helper.read_text(encoding="utf-8"),
+                BT_RECOVER_HELPER_FILE.read_text(encoding="utf-8"),
+            )
 
             installed_powersave = destdir / "etc" / "NetworkManager" / "conf.d" / "99-wmr-bridge-powersave.conf"
             self.assertTrue(installed_powersave.is_file())
