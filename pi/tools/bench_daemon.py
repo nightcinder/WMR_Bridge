@@ -2,13 +2,13 @@
 """End-to-end daemon CPU attribution bench (ONY-1534).
 
 Replays the sample capture at ``--rate`` reports/s into a real Bridge, with an
-optional real subscriber (``--stream raw|decoded|batched``, default none) whose
-forked child plays the client, so the measured pid holds daemon-side CPU only.
-Nested stopwatches wrap the production functions into six stages; ``frame
-copy`` is the ingest residual: report copy plus sequence/stats/idle
-bookkeeping that cannot be split without a production change. The stage sum
-must reconcile with this pid's CPU delta from ``/proc/<pid>/stat`` (exit 1
-beyond 20 %); µs/report and % of one core print per stage.
+optional real subscriber (``--stream raw|decoded|batched``, default none); the
+forked child plays the client, so the client's CPU is excluded and the replay
+producer stays in the measured pid. Nested stopwatches wrap the production
+functions into six stages; ``frame copy`` is the ingest residual: report copy
+plus sequence/stats/idle bookkeeping that cannot be split without a production
+change. The stage sum must reconcile with this pid's CPU delta from
+``/proc/<pid>/stat`` (exit 1 beyond 20 %); prints µs/report, % of one core.
 """
 
 from __future__ import annotations
