@@ -737,6 +737,7 @@ class PairCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(code, 1)
         self.assertIn("Powered: no", out.getvalue())
         self.assertIn("wmr-bridge-bt-recover.service", out.getvalue())
+        self.assertIn("6/15/30 s", out.getvalue())
         self.assertEqual(self.calls, [])
 
     async def test_pair_exits_one_when_the_daemon_reports_no_power(self) -> None:
@@ -762,6 +763,7 @@ class PairCommandTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(await _pair_window(args), 1)
             self.assertIn("Powered: no", out.getvalue())
             self.assertIn("wmr-bridge-bt-recover.service", out.getvalue())
+            self.assertIn("6/15/30 s", out.getvalue())
         finally:
             await server.close()
 

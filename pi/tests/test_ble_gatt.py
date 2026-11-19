@@ -12,6 +12,7 @@ from unittest import mock
 
 from wmr_bridge.__main__ import _build_parser
 from wmr_bridge.ble_gatt import (
+    ADAPTER_RECOVERY_ATTEMPTS,
     AGENT_PATH,
     APP_PATH,
     ADV_FAST_MAX_INTERVAL_MS,
@@ -557,6 +558,51 @@ class FakePowerAdapter:
             self.powered = powered
 
 
+class EnsurePoweredBackend(FakeBackend):
+    """Mirror the real start() path: self-power, else trigger the root unit.
+
+    A successful trigger models the root unit's controller reload by
+    restoring power, unless the test says the controller stays dead even
+    after the root rung.
+    """
+
+    def __init__(
+        self,
+        recover: DbusGattBackend,
+        *,
+        power_on_succeeds: bool = True,
+        root_unit_recovers: bool = True,
+    ) -> None:
+        super().__init__()
+        self._recover = recover
+        self.power_on_succeeds = power_on_succeeds
+        self.root_unit_recovers = root_unit_recovers
+
+    async def power_on(self) -> bool:
+        self.power_on_calls += 1
+        if not self.powered and self.power_on_succeeds:
+            self.powered = True
+        return self.powered
+
+    def request_recovery(self) -> bool:
+        if not self._recover.request_recovery():
+            return False
+        self.recovery_requests += 1
+        if self.root_unit_recovers:
+            self.powered = True
+        return True
+
+    async def start(self, app: GattApplication) -> None:
+        if not await self.adapter_powered():
+            if not await self.power_on():
+                self.request_recovery()
+                self.start_calls += 1
+                raise AdapterRecoveryPending(
+                    "BlueZ adapter hci0 reports Powered=no (Authentication Failed)"
+                )
+        await super().start(app)
+
+
 class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
     async def test_powered_no_is_cleared_without_the_root_unit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -689,6 +735,191 @@ class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(backend.advertisement_refreshes, 1)
         finally:
             await peripheral.close()
+
+    async def test_transition_1_healthy_restart_stays_powered_and_writes_no_trigger(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            trigger = Path(tmp) / "bt-recover.trigger"
+            backend = EnsurePoweredBackend(
+                DbusGattBackend(recover_trigger=trigger, recovery_cooldown_s=300.0)
+            )
+            peripheral = BluezGattPeripheral(
+                Bridge(),
+                backend=backend,
+                hosts=["192.0.2.10"],
+                pairing_window_s=0.0,
+                power_check_interval_s=3600.0,
+            )
+            await peripheral.start()
+            try:
+                self.assertTrue(peripheral.started)
+                self.assertTrue(peripheral.advertising)
+                self.assertEqual(backend.start_calls, 1)
+                self.assertEqual(backend.power_on_calls, 0)
+                self.assertEqual(backend.recovery_requests, 0)
+                self.assertFalse(trigger.exists())
+                self.assertTrue(await peripheral.adapter_powered())
+            finally:
+                await peripheral.close()
+
+    async def test_transition_2_powered_no_start_power_on_succeeds_root_unit_skipped(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            trigger = Path(tmp) / "bt-recover.trigger"
+            backend = EnsurePoweredBackend(
+                DbusGattBackend(recover_trigger=trigger, recovery_cooldown_s=300.0)
+            )
+            backend.powered = False
+            peripheral = BluezGattPeripheral(
+                Bridge(),
+                backend=backend,
+                hosts=["192.0.2.10"],
+                pairing_window_s=0.0,
+                power_check_interval_s=3600.0,
+            )
+            await peripheral.start()
+            try:
+                self.assertTrue(peripheral.started)
+                self.assertTrue(peripheral.advertising)
+                self.assertEqual(backend.start_calls, 1)
+                self.assertEqual(backend.power_on_calls, 1)
+                self.assertEqual(backend.recovery_requests, 0)
+                self.assertFalse(trigger.exists())
+                self.assertTrue(backend.powered)
+            finally:
+                await peripheral.close()
+
+    async def test_transition_3_powered_no_start_dead_controller_waits_out_the_ladder(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            trigger = Path(tmp) / "bt-recover.trigger"
+            clock = FakeClock()
+            backend = EnsurePoweredBackend(
+                DbusGattBackend(
+                    recover_trigger=trigger,
+                    recovery_cooldown_s=300.0,
+                    clock=clock,
+                ),
+                power_on_succeeds=False,
+                root_unit_recovers=False,
+            )
+            backend.powered = False
+            peripheral = BluezGattPeripheral(
+                Bridge(),
+                backend=backend,
+                hosts=["192.0.2.10"],
+                pairing_window_s=0.0,
+                power_check_interval_s=3600.0,
+            )
+            waits: list[float] = []
+
+            async def record_wait(seconds: float) -> None:
+                waits.append(seconds)
+                clock.advance(seconds)
+
+            with mock.patch("wmr_bridge.ble_gatt.asyncio.sleep", record_wait):
+                with self.assertRaises(AdapterRecoveryPending):
+                    await peripheral.start()
+            self.assertFalse(peripheral.started)
+            self.assertFalse(peripheral.advertising)
+            self.assertEqual(backend.start_calls, ADAPTER_RECOVERY_ATTEMPTS)
+            self.assertEqual(backend.power_on_calls, ADAPTER_RECOVERY_ATTEMPTS)
+            self.assertEqual(waits, [6.0, 15.0, 30.0])
+            # The ladder spans 51 s, inside the 300 s cooldown window: exactly
+            # one root recovery request even though every rung re-checked power.
+            self.assertEqual(backend.recovery_requests, 1)
+            self.assertTrue(trigger.exists())
+
+    async def test_transition_4_mid_run_power_loss_recovers_once_per_cooldown(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            trigger = Path(tmp) / "bt-recover.trigger"
+            backend = EnsurePoweredBackend(
+                DbusGattBackend(
+                    recover_trigger=trigger,
+                    recovery_cooldown_s=300.0,
+                    clock=FakeClock(),
+                )
+            )
+            peripheral = BluezGattPeripheral(
+                Bridge(),
+                backend=backend,
+                hosts=["192.0.2.10"],
+                pairing_window_s=0.0,
+                power_check_interval_s=0.01,
+                recovery_wait_s=0.0,
+            )
+            await peripheral.start()
+            try:
+                self.assertTrue(peripheral.advertising)
+                # Mid-run crash: the firmware is dead, so self power-on fails
+                # and only the root unit's reload brings the adapter back.
+                backend.power_on_succeeds = False
+                backend.powered = False
+                for _ in range(500):
+                    if backend.start_calls >= 2 and peripheral.advertising:
+                        break
+                    await asyncio.sleep(0.01)
+                self.assertTrue(peripheral.advertising)
+                self.assertEqual(backend.recovery_requests, 1)
+                self.assertTrue(trigger.exists())
+                trigger.unlink()  # the root unit's ExecStartPre removes it
+                # A second crash inside the same 300 s window must not ask
+                # the root unit again; the daemon waits out the cooldown.
+                real_sleep = asyncio.sleep
+                start_calls_before = backend.start_calls
+
+                async def instant_sleep(_seconds: float) -> None:
+                    await real_sleep(0)
+
+                with mock.patch("wmr_bridge.ble_gatt.asyncio.sleep", instant_sleep):
+                    backend.powered = False
+                    for _ in range(2000):
+                        if (
+                            backend.start_calls
+                            >= start_calls_before + 2 * ADAPTER_RECOVERY_ATTEMPTS
+                        ):
+                            break
+                        await real_sleep(0)
+                    self.assertEqual(backend.recovery_requests, 1)
+                    self.assertFalse(trigger.exists())
+                    self.assertFalse(peripheral.advertising)
+            finally:
+                await peripheral.close()
+
+    async def test_close_never_powers_down_the_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = FakePowerAdapter(powered=True)
+            backend = DbusGattBackend(
+                recover_trigger=Path(tmp) / "bt-recover.trigger"
+            )
+            backend._adapter_interface = adapter
+
+            async def registered_gatt(_app: GattApplication) -> None:
+                return None
+
+            # The D-Bus registration is not under test; the real backend's
+            # shutdown path (set_pairable, stop) is.
+            backend.start = registered_gatt
+            peripheral = BluezGattPeripheral(
+                Bridge(),
+                backend=backend,
+                hosts=["192.0.2.10"],
+                pairing_window_s=0.0,
+                power_check_interval_s=3600.0,
+            )
+            await peripheral.start()
+            await peripheral.close()
+            # The no-power-down invariant: close() clears Pairable and
+            # unregisters GATT/advertising but leaves Adapter1.Powered alone,
+            # so a restart never depends on a fresh power-on over a chip that
+            # can wedge.
+            self.assertEqual(adapter.power_calls, [])
+            self.assertTrue(adapter.powered)
 
 
 @unittest.skipUnless(HAS_DBUS_NEXT, "python3-dbus-next is not installed")
