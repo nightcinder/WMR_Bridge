@@ -22,8 +22,9 @@ one, and recovers a powered-off Bluetooth adapter. bluetoothd can leave
 `Adapter1.Powered` false after the combo controller's firmware crashes; the
 daemon first tries `Powered=True` itself, then asks the root
 `wmr-bridge-bt-recover.path`/`.service` to unblock rfkill, `hciuart` (only when
-`systemctl cat` finds the unit), restart `bluetooth.service`, and start the
-bridge again, at most once per 300 s, and it retries GATT and advertising.
+`systemctl cat` finds the unit, else reset-rebind the controller), restart
+`bluetooth.service`, and start the bridge again, at most once per 300 s, and it
+retries GATT and advertising.
 Advertisement re-registration is coalesced over 1 s, so a burst of controller
 or phone events no longer surfaces
 `descriptor write: RequestBusy` on the phone, and `wmr-bridge pair` fails with a

@@ -308,16 +308,18 @@ python3 /opt/wmr-bridge/pi/tools/wifi_probe.py --host 127.0.0.1 --token-file /et
 
 Both controllers should reconnect without re-pairing. An upgrade that does not
 change the BlueZ repair policy no longer restarts `bluetooth.service`, so a
-working adapter and its bonds stay live. If `bluetoothctl show` reports
+working adapter and its bonds stay live. On a healthy adapter, a plain
+`systemctl restart wmr-bridge` returns `Powered: yes` within 10 s. If
+`bluetoothctl show` reports
 `Powered: no` and `btmon` logs `HCI Reset` answered by `Hardware Error` (0x10),
 the controller firmware crashed. The daemon tries `Adapter1.Powered=True` and
 then asks the root `wmr-bridge-bt-recover.service` to run the ladder in
 `pi/systemd/wmr-bridge-bt-recover.sh`: unblock rfkill, `hciuart` (only when
-`systemctl cat` finds the unit), restart `bluetooth.service`, and start the
-bridge again, at most once per cooldown. A plain `systemctl restart
-wmr-bridge` returns `Powered: yes` within 10 s. If the adapter stays off after
-that, reboot the Pi, and power-cycle the board if the error survives the
-reboot. A phone that lost its side of the bond re-pairs
+`systemctl cat` finds the unit, else reset-rebind the controller), restart
+`bluetooth.service`, and start the bridge again, at most once per cooldown. If
+the adapter stays off after that,
+reboot the Pi, and power-cycle the board if the error survives the reboot. A
+phone that lost its side of the bond re-pairs
 through `wmr-bridge pair` while the adapter is pairable.
 
 ## 8. Troubleshooting
