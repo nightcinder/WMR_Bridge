@@ -101,6 +101,7 @@ class DebPackagingTests(unittest.TestCase):
                 "./opt/wmr-bridge/pi/systemd/wmr-bridge-upgrade-prerelease.service",
                 "./opt/wmr-bridge/pi/systemd/wmr-bridge-bt-recover.path",
                 "./opt/wmr-bridge/pi/systemd/wmr-bridge-bt-recover.service",
+                "./opt/wmr-bridge/pi/systemd/wmr-bridge-bt-recover.sh",
                 "./etc/udev/rules.d/99-wmr-bridge.rules",
                 "./etc/NetworkManager/conf.d/99-wmr-bridge-powersave.conf",
             ):
@@ -112,6 +113,12 @@ class DebPackagingTests(unittest.TestCase):
                 if line.rstrip().endswith("./opt/wmr-bridge/pi/systemd/wmr-bridge-upgrade.service"):
                     self.assertIn("root/root", line)
                     self.assertRegex(line, r"^-rw-r--r--")
+            # Same for the root-run recovery ladder, which must also arrive
+            # executable or the unit's ExecStart fails on every trigger.
+            for line in contents.splitlines():
+                if line.rstrip().endswith("./opt/wmr-bridge/pi/systemd/wmr-bridge-bt-recover.sh"):
+                    self.assertIn("root/root", line)
+                    self.assertRegex(line, r"^-rwxr-xr-x")
 
             control_dir = Path(tmp) / "control"
             subprocess.run(
@@ -141,6 +148,8 @@ class DebPackagingTests(unittest.TestCase):
             self.assertIn("systemctl disable wmr-bridge-upgrade-prerelease.path", prerm)
             self.assertIn("systemctl enable wmr-bridge-bt-recover.path", postinst)
             self.assertIn("systemctl start wmr-bridge-bt-recover.path", postinst)
+            self.assertIn("systemctl stop wmr-bridge-bt-recover.path", prerm)
+            self.assertIn("systemctl disable wmr-bridge-bt-recover.path", prerm)
             self.assertIn("--prefer-5ghz --no-reconnect", postinst)
             self.assertNotIn(".pyc", contents)
 
