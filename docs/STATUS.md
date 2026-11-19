@@ -1,9 +1,14 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-19 (adds the 2026-11-18 Pi 3B+ bench run; the release text
-dates from 2026-11-16). Pre-release 0.3.28-rc.2, on top of the 0.3.27
-release: the Pi package in this tree is `0.3.28-rc.2`, which retries a direct
-BlueZ `connect` for a bonded controller that dropped its link once the idle
+Last updated: 2026-11-19 (adds the 2026-11-18 Pi 3B+ bench run; the release
+text covers 0.3.28-rc.3). Pre-release 0.3.28-rc.3, on top of the 0.3.27
+release: the Pi package in this tree is `0.3.28-rc.3`, which widens the
+daemon's adapter-recovery ladder to 6/15/30 s across up to four attempts
+while the root unit reloads the controller, ships a portable root-run
+`wmr-bridge-bt-recover` ladder script whose every rung is logged, and adds
+the end-to-end daemon CPU attribution bench. It carries 0.3.28-rc.2, which
+retries a direct BlueZ `connect` for a bonded controller that dropped its
+link once the idle
 cooldown expires (keeping the idle power-off latch until an open succeeds),
 arms the per-frame WebSocket write timeout only when the transport reports
 queued bytes, and builds its decode records through typed initialisers with
@@ -152,7 +157,7 @@ maintained at the project's single entry point:
 | Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.11 image has not been run on hardware (internal bench runbook block C) |
 | BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (#88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.11 pairing and encryption run is not yet done (internal bench runbook block B) |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, not run on hardware |
-| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests (512 tests + loopback replay), a v0.3.23 hardware run, and Part A steps 1 to 7 of the bench sheet on 2026-11-18, from `v0.3.28-rc.1` to `v0.3.28-rc.2` (user-reported; RIGHT loss 3.69 % at about 20 ft, decode CPU mean 38.5 % and BLE-to-TCP recovery 10.1 s failed their gates, the step 6 sleep gates were not exercised, idle power-off deferred, ESP32 steps parked; [`runs/2026-11-18-pi-bench.md`](runs/2026-11-18-pi-bench.md)). The root upgrade unit and minisign verification still have no hardware run; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
+| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests (521 tests + loopback replay), a v0.3.23 hardware run, and Part A steps 1 to 7 of the bench sheet on 2026-11-18, from `v0.3.28-rc.1` to `v0.3.28-rc.2` (user-reported; RIGHT loss 3.69 % at about 20 ft, decode CPU mean 38.5 % and BLE-to-TCP recovery 10.1 s failed their gates, the step 6 sleep gates were not exercised, idle power-off deferred, ESP32 steps parked; [`runs/2026-11-18-pi-bench.md`](runs/2026-11-18-pi-bench.md)). The root upgrade unit and minisign verification still have no hardware run; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has not been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Console `v` read on the 0.2.4 hardware run (`0.2.4`, ESP-IDF v6.1); the live FF16 phone read on v0.3.11 is open (internal bench runbook block B) |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added in v0.3.11 | Host tests and firmware build only, never run on a PSVR2 controller |
