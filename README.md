@@ -16,8 +16,11 @@ while sending the same FF11/FF12/FF14 payloads. See
 [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) (P1-P14) and the 12-step run sheet
 docs/runs/sheets/bench.md. Both the ESP32-over-BLE
 firmware (default) and the Pi-over-Wi-Fi daemon are supported first-class bridge
-targets. The Pi bridge last ran on hardware at v0.3.23; the Pi path has changed
-since and none of the later changes has run on a Pi. The ESP32
+targets. The Pi bridge ran on a Pi 3B+ on 2026-11-18, from `v0.3.28-rc.1` to
+`v0.3.28-rc.2`, the
+first hardware run since `v0.3.23`. Steps 1 to 7 of the sheet ran, with mixed
+results, and the ESP32 steps were parked by the owner
+([run report](docs/runs/2026-11-18-pi-bench.md)). The ESP32
 firmware has the bench runs recorded below.
 
 ```
@@ -321,6 +324,7 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
 | Host unit tests of the Linux / Raspberry Pi Wi-Fi bridge (`pi/run_tests.sh`, 429 tests) | Pass (host tests only; the real BlueZ pairing path has not been run on a Raspberry Pi or with real controllers) |
 | Flash and boot on a real ESP32 | Passes; advertises; stats print every 5 s; no debug spam |
 | One bench run, about 15 s, both controllers and a phone (log pasted by the user, not instrumented on the phone) | Both controllers connected on their own; ATT MTU went 23 to 517; about 174/s (LEFT) and 154/s (RIGHT); sent = received for both hands; 0 drops, 0 offline, 0 purged, 0 send errors; queue back to 0 after a startup peak of 11; counter accounting added up exactly |
+| Pi 3B+ bench run, 2026-11-18, `v0.3.28-rc.1` to `v0.3.28-rc.2` with companion `v0.3.25` to `v0.3.26` | Part A steps 1 to 7 only. Boot and uplink PASS. Idle sleep fired at the shipped 300 s default on one hand; the sheet's 30 s pause and 1 s wake gates were not measured. RIGHT report loss 3.69 % FAIL at about 20 ft behind furniture, against a 3.0 % limit with no stated range. Decode CPU mean 38.5 % of one core FAIL against a 25 % gate. BLE-to-TCP recovery 10.1 s FAIL against a 5 s gate. Step 4 failover is not measurable from the bridge. Idle power-off deferred after an adapter crash. ESP32 steps parked ([run report](docs/runs/2026-11-18-pi-bench.md)) |
 
 ### Not tested yet
 
@@ -352,9 +356,12 @@ returns a 16-byte status record. Exact layout, fragmentation and reassembly rule
   decoder are host-tested and build-tested but have never run on a Switch
   controller. Hardware may need axis/button corrections
   ([docs/SWITCH.md](docs/SWITCH.md)).
-- Linux / Raspberry Pi Wi-Fi host bridge (`pi/`). Second supported target; its
-  last hardware run used v0.3.23 and the path has changed since
-  ([docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) P1-P14,
+- Linux / Raspberry Pi Wi-Fi host bridge (`pi/`). Second supported target. It ran
+  on a Pi 3B+ on 2026-11-18, from `v0.3.28-rc.1` to `v0.3.28-rc.2`, which covers
+  steps 1 to 7 of Part A
+  only; RIGHT loss, decode CPU and BLE-to-TCP recovery failed their gates
+  ([run report](docs/runs/2026-11-18-pi-bench.md),
+  [docs/PI_BRIDGE.md](docs/PI_BRIDGE.md) P1-P14,
   docs/runs/sheets/bench.md).
 - Known oddity, not investigated: each controller logs `SET_PROTOCOL handshake
   status=0x03`.

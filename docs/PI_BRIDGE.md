@@ -1,11 +1,19 @@
 # Linux / Raspberry Pi host bridge over Wi-Fi
 
 Status: the second supported first-class target (ESP32-over-BLE is the default).
-The last Pi run on hardware used v0.3.23; the path has changed since
-(0.3.24 through 0.3.28-rc.2), and none of those changes has run on a Pi.
-No run of the hardware checklist (P1-P14
-below) is recorded, and no streaming figure (rate, loss, latency, CPU) has
-been measured on a Raspberry Pi with real controllers.
+The Pi ran Part A steps 1 to 7 of `docs/runs/sheets/bench.md` on 2026-11-18,
+starting on `0.3.28-rc.1` and finishing on `0.3.28-rc.2`
+([`runs/2026-11-18-pi-bench.md`](runs/2026-11-18-pi-bench.md)).
+That run measured rate, loss, latency and CPU on a Pi 3B+ with real controllers.
+Boot and uplink passed. RIGHT loss at about 20 ft, decode CPU and BLE-to-TCP
+recovery failed their gates. The idle sleep stage fired at the shipped 300 s
+default, not the 30 s bench override. The idle power-off step was deferred after
+an adapter crash. P1, P4 and P14 have a result: the uplink priority passed and
+the P14 gates were mixed, with RTT p50 2.01 ms, zero gaps and LEFT loss 2.99 %
+passing, RIGHT loss 3.69 % failing, and `dropped` 0. P13 has only the default-timeout
+sleep observation, and P12 has a recovery result but no failover result. The rest
+of the checklist is open, and the ESP32 steps 8 to 12 are parked. The earlier Pi
+run used v0.3.23.
 The changelog entries describe faults seen with a Pi and a
 Pixel phone (the bridge missing from the phone's scan list, `Numeric comparison
 failed (0x0c)` on re-pairing, `HCI Hardware Error` with `Powered: no` after an
@@ -1329,11 +1337,13 @@ the client subscribed. Reports are only decoded while a decoded/batched
 subscriber is attached (`pi/wmr_bridge/bridge.py` `ingest`). That difference
 is not loss. Use sequence gaps and `dropped` to judge loss.
 
-### Hardware checklist (not yet run)
+### Hardware checklist
 
-First target: **Raspberry Pi 3 Model B+**. No result is recorded in this
-repository (no filled run sheet, no probe output), so every row below is
-still open. The
+First target: **Raspberry Pi 3 Model B+**. The 2026-11-18 sitting ran the bench
+steps that map to P1, P4 and P14, to the sleep stage of P13 at its shipped
+default timeout, and to the recovery half of P12
+([`runs/2026-11-18-pi-bench.md`](runs/2026-11-18-pi-bench.md)). The other rows
+below are still open. The
 tester checklist and pinned image/package checksums are in
 [DEPLOY_RPI.md](DEPLOY_RPI.md#0-bench-checklist-raspberry-pi-3b).
 
