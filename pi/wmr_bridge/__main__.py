@@ -78,10 +78,11 @@ def _pair_adapter_problem(reader: Callable[[], Any]) -> str | None:
     if adapter is not None and not adapter.powered:
         return (
             "the Bluetooth adapter reports Powered: no, so it cannot advertise "
-            "or pair; the daemon asks wmr-bridge-bt-recover.service to restart "
-            "hciuart and bluetoothd, and 'wmr-bridge status' shows the adapter "
-            "state. If btmon shows HCI Reset answered by Hardware Error, reboot "
-            "the Pi."
+            "or pair; the daemon asks wmr-bridge-bt-recover.service to run its "
+            "recovery ladder (unblock rfkill, reload the controller, restart "
+            "bluetoothd) and retries every 6/15/30 s; 'wmr-bridge status' shows "
+            "the adapter state. If btmon shows HCI Reset answered by Hardware "
+            "Error, reboot the Pi."
         )
     return None
 
@@ -186,9 +187,10 @@ async def _pair_window(
                 print(
                     "the daemon reports the Bluetooth adapter is Powered: no, "
                     "so it cannot advertise; it asks wmr-bridge-bt-recover.service "
-                    "to restart hciuart and bluetoothd. Check 'wmr-bridge status'; "
-                    "if btmon shows HCI Reset answered by Hardware Error, reboot "
-                    "the Pi."
+                    "to run its recovery ladder (unblock rfkill, reload the "
+                    "controller, restart bluetoothd) and retries every 6/15/30 s. "
+                    "Check 'wmr-bridge status'; if btmon shows HCI Reset answered "
+                    "by Hardware Error, reboot the Pi."
                 )
                 return 1
             if reply.get("advertising") is False:

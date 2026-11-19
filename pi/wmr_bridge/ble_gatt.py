@@ -153,15 +153,21 @@ ADVERTISING_DEBOUNCE_S = 1.0
 # first tries to set it back itself, then asks the root recovery unit to
 # reload the UART attach and bluetoothd. Check at this interval while running.
 ADAPTER_POWER_CHECK_INTERVAL_S = 30.0
-# How long to give the root unit (hciuart + bluetoothd restart) before the
-# daemon reconnects and re-registers GATT/advertising.
+# How long to give the root recovery unit before the daemon reconnects and
+# re-registers GATT/advertising. This is the first rung of the reconnect
+# ladder: a stop, controller reload and bluetoothd restart on a Pi 3B+ can
+# outlast a single 6 s wait.
 ADAPTER_RECOVERY_WAIT_S = 6.0
+# Reconnect rungs past the first wait while the root unit reloads the
+# controller: with the default 6 s wait the daemon retries after 6, 15 and
+# 30 s, capped at the last rung if the attempt count below ever grows.
+ADAPTER_RECOVERY_WAIT_LADDER_S = (15.0, 30.0)
 # At most one root recovery request per window even if the adapter stays off:
 # a crash loop must not restart bluetoothd forever.
 ADAPTER_RECOVERY_COOLDOWN_S = 300.0
 DEFAULT_BT_RECOVER_TRIGGER = "/var/lib/wmr-bridge/bt-recover.trigger"
-# One self-power attempt, then the root unit, then one reconnect attempt.
-ADAPTER_RECOVERY_ATTEMPTS = 2
+# One self-power attempt, then the root unit, then the reconnect ladder.
+ADAPTER_RECOVERY_ATTEMPTS = 4
 # Classic HID profile UUID. A Device1 entry that lists it is a BR/EDR bond
 # (the WMR controllers), never an LE central's bond.
 CLASSIC_HID_UUID = "00001124-0000-1000-8000-00805f9b34fb"
@@ -1528,7 +1534,7 @@ class DbusGattBackend:
         return powered
 
     def request_recovery(self) -> bool:
-        """Ask the root unit to restart hciuart/bluetoothd, at most once per window.
+        """Ask the root unit to reload the controller, at most once per window.
 
         The service user cannot restart system units. The path unit watches this
         empty trigger file, exactly like the daemon's upgrade trigger, so the
@@ -1561,7 +1567,8 @@ class DbusGattBackend:
         self._last_recovery_request = now
         LOG.warning(
             "Bluetooth adapter %s reports Powered=no; triggered "
-            "wmr-bridge-bt-recover.service (hciuart + bluetooth restart)",
+            "wmr-bridge-bt-recover.service (controller reload + bluetoothd "
+            "restart)",
             self.adapter,
         )
         return True
@@ -1910,7 +1917,13 @@ class BluezGattPeripheral:
         )
 
     async def _connect_backend(self) -> None:
-        """Start BlueZ, retrying once after the root unit restarts bluetoothd."""
+        """Start BlueZ, backing off down the reconnect ladder while root recovers.
+
+        A stop, controller reload and bluetoothd restart on a Pi 3B+ can
+        outlast a single 6 s wait, so a working recovery used to read as
+        failure. The daemon now waits 6 s, then 15 s, then 30 s between
+        reconnect attempts before it reports the adapter as down.
+        """
 
         attempts = ADAPTER_RECOVERY_ATTEMPTS
         for attempt in range(attempts):
@@ -1920,11 +1933,24 @@ class BluezGattPeripheral:
             except AdapterRecoveryPending as exc:
                 if attempt + 1 >= attempts:
                     raise
-                wait = max(self._recovery_wait_s, exc.retry_after)
+                wait = max(self._recovery_wait(attempt), exc.retry_after)
                 LOG.warning(
                     "BLE adapter is not ready (%s); retrying in %.1f s", exc, wait
                 )
                 await asyncio.sleep(wait)
+
+    def _recovery_wait(self, attempt: int) -> float:
+        """Ladder rung before reconnect attempt ``attempt`` (0-based).
+
+        The first rung is the injectable recovery wait (6 s by default);
+        later rungs come from ``ADAPTER_RECOVERY_WAIT_LADDER_S`` and cap at
+        its last entry, so a larger attempt count never waits past 30 s.
+        """
+
+        if attempt <= 0:
+            return self._recovery_wait_s
+        ladder = ADAPTER_RECOVERY_WAIT_LADDER_S
+        return ladder[min(attempt - 1, len(ladder) - 1)]
 
     async def _watch_adapter_power(self) -> None:
         """Reconnect GATT/advertising if the adapter powers off while running."""
