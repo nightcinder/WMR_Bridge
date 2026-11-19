@@ -5,8 +5,9 @@ The Pi ran Part A steps 1 to 7 of `docs/runs/sheets/bench.md` on 2026-11-18,
 starting on `0.3.28-rc.1` and finishing on `0.3.28-rc.2`
 ([`runs/2026-11-18-pi-bench.md`](runs/2026-11-18-pi-bench.md)).
 That run measured rate, loss, latency and CPU on a Pi 3B+ with real controllers.
-Boot and uplink passed. RIGHT loss at about 20 ft, decode CPU and BLE-to-TCP
-recovery failed their gates. The idle sleep stage fired at the shipped 300 s
+Boot and uplink passed. RIGHT loss at about 20 ft and BLE-to-TCP recovery failed
+their gates. Mean daemon CPU was 38.5 % of one core, at the Pi 3B+ interim
+budget. The idle sleep stage fired at the shipped 300 s
 default, not the 30 s bench override. The idle power-off step was deferred after
 an adapter crash. P1, P4 and P14 have a result: the uplink priority passed and
 the P14 gates were mixed, with RTT p50 2.01 ms, zero gaps and LEFT loss 2.99 %
@@ -1284,13 +1285,22 @@ whatever BlueZ paired, and assigns hands by HID name.
   Batching reduces WebSocket writes but adds at most the hold time (5 ms
   default).
 - The Pi 3B+ has less CPU headroom than a Pi 4 (Cortex-A53 at 1.4 GHz, 1 GB
-  RAM). The event loop must fit 2 x about 180 reports/s. The M2 decode CPU gate
-  requires mean daemon CPU below 25% of one core over 10 minutes (`wmr-companion docs/TEST_PLAN_PI_WMR.md:97`).
-  No 10 s sample can exceed 50%. Sample CPU usage with:
-  `top -b -n 60 -d 10 -p "$(systemctl show -p MainPID --value wmr-bridge.service)"`
-  Do not use `pgrep -f wmr-bridge`, because `pgrep` matches `avahi-publish-service`
-  arguments (`pi/wmr_bridge/mdns.py:81-90`). Record CPU load and
+  RAM). The event loop must fit 2 x about 180 reports/s. The M2 gate measures
+  mean daemon CPU over 10 minutes, as defined in
+  `wmr-companion docs/TEST_PLAN_PI_WMR.md:97`. The instrument is
+  `top -b -n 60 -d 10 -p MainPID`, where `MainPID` is the daemon PID from
+  `systemctl show -p MainPID --value wmr-bridge.service`. The sample covers the
+  whole daemon process, not the decode step alone. Do not use
+  `pgrep -f wmr-bridge`, because `pgrep` matches `avahi-publish-service`
+  arguments (`pi/wmr_bridge/mdns.py:81-90`). Record the board, CPU load and
   `vcgencmd get_throttled` with the results.
+- The CPU gate depends on the board (decision, ONY-1583). On a Pi 4 or Pi 5,
+  the gate is mean daemon CPU below 25% of one core and no 10 s sample above
+  50%. On a Pi 3B+, the interim gate is mean at or below 38.5% and no 10 s
+  sample above 40.5%. That baseline is 61 samples from the 2026-11-18 run
+  (ONY-1159 comment `0efef418`, document `bench-run-2026-11-18`, archived at
+  `docs/runs/2026-11-18-pi-bench.md:32`). The interim 3B+ gate stays in force
+  after the per-report CPU cut (ONY-1507 child 4).
 - The default 512-message queue absorbs scheduling hiccups for roughly 1.5 s at
   320 records/s per client. A slower client drops the newest messages. It does
   not stall the controllers.
