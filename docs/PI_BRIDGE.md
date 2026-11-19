@@ -527,7 +527,9 @@ The probe prints the `hello` Wi-Fi and uplink objects.
 The gates require RTT p50 below 15 ms, tick-based missing reports at or below 3.0% per hand, and zero sequence gaps.
 If the bridge closes the connection mid-run, the probe writes `--json-out` from existing measurements, records the reason in `disconnected`, and exits 3 (`pi/tools/wifi_probe.py:463-467,546,555-557`).
 Every expected hand requires at least one record.
-A run without controller frames fails the loss and gap gates.
+A run with no controller records (no expected hands, or every hand at zero)
+reports `status: no_data`, prints `no controller data (0 records)`, and exits
+non-zero under `--assert-gates`.
 The installed probe path is `/opt/wmr-bridge/pi/tools/wifi_probe.py` (`pi/build_deb.sh:106`, `pi/install.sh:438`).
 Because `/etc/wmr-bridge/token` is mode 0640, pass `--token-file /etc/wmr-bridge/token` with `sudo` if needed (`pi/tools/wifi_probe.py:382-393,562`):
 
