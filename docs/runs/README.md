@@ -1,6 +1,7 @@
 # Hardware runs and run sheets
 
-Raw logs and run sheets from the 2026-10-22 bench sessions. Everything here is
+Raw logs and run sheets from the bench sessions, 2026-10-22 to 2026-11-18.
+Everything here is
 user-reported: the owner ran the hardware, the assistant analysed the logs.
 Device addresses are replaced by `ADDR-n`. Figures and conclusions are in
 `docs/STATUS.md` and `docs/PREDICTION.md`. This folder keeps the raw material
@@ -8,9 +9,12 @@ so the numbers can be re-derived.
 
 ## Verification campaign, start here
 
-Status: none of these sittings has run. This is a running order, not evidence.
-A sitting stays not run until the owner pastes back its figures. A green CI
-build is not a hardware result.
+Status: Part A ran once, on 2026-11-18. The owner ran steps 1 to 7 of
+`bench.md` on a Raspberry Pi 3B+ with a Pixel 11 Pro and both WMR controllers.
+Results are in [`2026-11-18-pi-bench.md`](2026-11-18-pi-bench.md). Part B, the
+ESP32 steps 8 to 12, is parked by the owner. Every other sitting is still a
+running order, not evidence. A sitting stays not run until the owner pastes back
+its figures. A green CI build is not a hardware result.
 
 The minimum run is `docs/runs/sheets/bench.md`: a 12-step, about 24 minute
 pass/fail checklist on a Raspberry Pi 3B+ and an ESP32 with WMR controllers
@@ -30,7 +34,7 @@ not run, not as a failure.
 
 | File | Purpose | State |
 |---|---|---|
-| [bench.md](sheets/bench.md) | 12-step Pi 3B+ and ESP32 pass/fail checklist, about 24 min | not run |
+| [bench.md](sheets/bench.md) | 12-step Pi 3B+ and ESP32 pass/fail checklist, about 24 min | Part A run 2026-11-18; Part B parked |
 | [external-test-user.md](sheets/external-test-user.md) | External tester Tier 0 quickstart with Tier 1 diagnostics and Tier 2 device evidence | template, not run |
 
 ## Logs (`logs/`)
