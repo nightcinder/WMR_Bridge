@@ -1,6 +1,6 @@
 # Minimum bench run sheet
 
-Hardware: Raspberry Pi 3B+, ESP32 (v0.3.28-rc.2 candidate), LEFT and RIGHT WMR controllers, Pixel 11 Pro running wmr_companion_app v0.3.25. Target time is about 24 minutes.
+Hardware: Raspberry Pi 3B+, ESP32 (v0.3.28-rc.2 candidate), LEFT and RIGHT WMR controllers, Pixel 11 Pro running wmr_companion_app v0.3.26. Target time is about 24 minutes.
 
 ## Prerequisites
 
@@ -13,9 +13,9 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.28-rc.2 candidate), LEFT and RIGHT WMR c
 ## Part A: Raspberry Pi 3B+ (~10 min)
 
 1. Boot and uplink (PR #187, #188). Start `wmr-bridge` on Pi 3B+ with the prerequisites configured. Pair LEFT and RIGHT controllers. Run `wmr-bridge status`.
-   - [ ] PASS / FAIL: Both controllers connected. Uplink matches the active interface (`eth0` metric 100 or `wlan0` 5 GHz metric 200). BlueZ advertises `WMR Bridge`. Stored LE bond note appears with `pairable=no` (`pi/wmr_bridge/__main__.py:605-612`) or `bluetoothctl info <MAC>` confirms `Paired: yes`.
+   - [ ] PASS / FAIL: Both controllers connected. Uplink matches the active interface (`eth0` metric 100 or `wlan0` 5 GHz metric 200). The bridge names itself adapter `wmr-bridge`, mDNS `wmr-bridge.local` (`pi/wmr_bridge/mdns.py:29,54`), and BLE `WMR Bridge` (`pi/wmr_bridge/__main__.py:295-296`). Stored LE bond note appears with `pairable=no` (`pi/wmr_bridge/__main__.py:605-612`) or `bluetoothctl info <MAC>` confirms `Paired: yes`.
 2. UDP discovery and Sitting P gates (PR #193). Run `sudo python3 /opt/wmr-bridge/pi/tools/wifi_probe.py --discover --assert-gates --duration 30 --token-file /etc/wmr-bridge/token --json-out /tmp/pi_probe.json` while moving both controllers (`pi/build_deb.sh:106`, `pi/install.sh:438`).
-   - [ ] PASS / FAIL: Command exits 0. UDP port 8765 discovered (`pi/wmr_bridge/discovery.py:28`, `pi/tools/wifi_probe.py:48`). RTT p50 under 15 ms. Missing share at most 3.0% per hand. Zero sequence gaps. Server drops (`dropped`) are 0 (observed, not a gate).
+   - [ ] PASS / FAIL: Run seated with both controllers at <=2 m and a clear line of sight. Command exits 0. UDP port 8765 discovered (`pi/wmr_bridge/discovery.py:28`, `pi/tools/wifi_probe.py:48`). RTT p50 under 15 ms. Missing share at most 3.0% per hand. Zero sequence gaps. Server drops (`dropped`) are 0 (observed, not a gate).
 3. LAN auto-connect and decode CPU (M2). Open `wmr_companion_app` on Pixel 11 Pro on the same LAN. Sample daemon CPU usage with `top -b -n 60 -d 10 -p "$(systemctl show -p MainPID --value wmr-bridge.service)"` (`pi/wmr_bridge/mdns.py:81-90`).
    - [ ] PASS / FAIL: App auto-discovers Pi via UDP port 8765 and streams both hands over TCP at 150-180 reports/s per hand (`pi/wmr_bridge/discovery.py:28`). Mean decode CPU remains below 25% of one core over 10 minutes with no 10 s sample above 50% (`wmr-companion docs/TEST_PLAN_PI_WMR.md:97`).
 4. TCP-to-BLE failover. Make sure that `eth0` is unplugged. Start streaming to Pixel 11 Pro. If you use SSH, run `sudo /opt/wmr-bridge/pi/tools/bench_failover.sh --detach` on the Pi (`pi/tools/bench_failover.sh:14-15,94-99`). The script takes `wlan0` down for 10 s (`pi/tools/bench_failover.sh:19,124-128`). An SSH session over `wlan0` drops when the interface goes down (`pi/tools/bench_failover.sh:120`). The detached child process survives under `nohup` and restores `wlan0` after 10 s (`pi/tools/bench_failover.sh:94-99,101-116`). If you use a local console, you can run `sudo ip link set wlan0 down`.
@@ -24,7 +24,7 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.28-rc.2 candidate), LEFT and RIGHT WMR c
    - [ ] PASS / FAIL: T2 - T1 <= 5 s and T2 - T0 <= 15 s, with no app restart (`ONY-1456`).
 6. Pi idle sleep and wake (PR #190). Leave both controllers untouched for 35 s, then tilt LEFT.
    - [ ] PASS / FAIL: Journal logs keep-alive paused at about 30 s. Tilting wakes the stream within 1 s.
-7. Pi idle power-off and reconnect guard (PR #190). Leave both controllers untouched for 95 s.
+7. Pi idle power-off and reconnect guard (PR #190). Leave both controllers untouched for 95 s under the 30/90 s override from prerequisite 1.
    - [ ] PASS / FAIL: Journal logs the BlueZ block at about 90 s and both LED rings turn off. The expected log trace is `idle for <N> s: disconnecting...to power it off` followed by `bluetoothctl block <addr>` (`pi/wmr_bridge/inputs.py:444-478`, `pi/wmr_bridge/bluez.py:616-645`). The BlueZ block drops the ACL link, followed by `bluetoothctl disconnected <addr>` or `bluetoothctl <addr> already disconnected` (`pi/wmr_bridge/inputs.py:487-495`, `pi/wmr_bridge/bluez.py:585-613`). No `connected` line appears during the 60 s cooldown (`pi/wmr_bridge/inputs.py:260-266,470-477`). Wait until the log reports `power-off cooldown elapsed: reconnects allowed` and `bluetoothctl unblock <addr>` (`pi/wmr_bridge/inputs.py:418-432`). The pairer reconnects the bonded hand automatically (`pi/wmr_bridge/inputs.py:184-201`, `pi/wmr_bridge/bluez.py:1046-1052,1288-1308`). If LEFT stays offline, press a physical button on LEFT to reconnect and stream. Stop Pi `wmr-bridge` before you start Part B.
 
    Step 6 tests stage 1 idle sleep at 30 s (default 300 s in `pi/wmr_bridge/inputs.py:26`). That stage pauses keep-alive packets while keeping the Bluetooth ACL connected (`pi/wmr_bridge/inputs.py:520-538`). Controller reports can still arrive after that pause, and motion wakes the controller (`pi/wmr_bridge/inputs.py:380-392,533-538`).
@@ -35,7 +35,7 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.28-rc.2 candidate), LEFT and RIGHT WMR c
 
 8. ESP32 BLE GATT stream. Boot ESP32 (v0.3.28-rc.2). Power on both controllers. Connect Pixel 11 Pro over BLE in `wmr_companion_app`.
    - [ ] PASS / FAIL: Both hands stream over BLE characteristic 0xFF14 at 150-180 reports/s per hand. Zero disconnects over 60 s.
-9. FF16 version and FF17 control (Block B). In `wmr_companion_app` (`v0.3.25`), tap "Open 3D debug view" on the connect screen (`connect_screen.dart:436-445`). Find the FF16 firmware line under the "Stream" heading (`debug_screen.dart:205-213,523-556`, `wmr_ws_transport.dart:285,338-340`). Check the firmware version. In `ControllerPanel`, tap disconnect on LEFT (0xFF17) and reconnect LEFT (`debug_screen.dart:229-235`). Note that `ControllerPanel` (FF17) is hidden on Wi-Fi bridges and is tested on ESP32 BLE only.
+9. FF16 version and FF17 control (Block B). In `wmr_companion_app` (`v0.3.26`), tap "Open 3D debug view" on the connect screen (`connect_screen.dart:436-445`). Find the FF16 firmware line under the "Stream" heading (`debug_screen.dart:205-213,523-556`, `wmr_ws_transport.dart:285,338-340`). Check the firmware version. In `ControllerPanel`, tap disconnect on LEFT (0xFF17) and reconnect LEFT (`debug_screen.dart:229-235`). Note that `ControllerPanel` (FF17) is hidden on Wi-Fi bridges and is tested on ESP32 BLE only.
    - [ ] PASS / FAIL: FF16 version matches serial `v` output. FF17 drops LEFT cleanly and reconnects within 5 s.
 10. Five-minute active keep-alive and Android HID check. Keep controllers moving or tapped for 5 min 30 s while connected to ESP32. While HID and BLE stream together, inspect Android input registration with `adb shell dumpsys input | grep -E -A 25 -i "wmr[- ]bridge"` (`docs/HID_GAMEPAD.md:481-523`).
     - [ ] PASS / FAIL: No controller powers off during more than 5 min of active use. Zero unexpected ACL drops. Android registers `WMR Bridge` with no HID slot starvation.
