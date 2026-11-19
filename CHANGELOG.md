@@ -5,6 +5,83 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## 0.3.28-rc.3 — 2026-11-19
+
+The third pre-release candidate for the Pixel + Pi hardware check, cut from
+`main` on top of 0.3.28-rc.2. Beyond the adapter-recovery work from #269 and
+#270, the restart-safe bench step from #267, the recovery docs from #268 and
+the CPU attribution bench from #266, the rc.2..rc.3 range also carries the
+published 2026-11-18 Pi bench run report and bench sheet fixes (#263, #264)
+and the `wifi_probe` no-data gates change (#265) described below. It is a
+prerelease: GitHub does not offer it as "Latest", and `releases/latest`
+still returns `v0.3.27`. Firmware payloads are unchanged from 0.3.28-rc.2,
+and so from 0.3.27: FF10–FF17 keep their payloads, companions at 0.2.2 or
+later continue to work, and the tag only changes the version FF16 reports.
+The Pi bridge last ran on a Pi 3B+ on 2026-11-18, from `0.3.28-rc.1` to
+`0.3.28-rc.2`, Part A steps 1 to 7 with mixed results
+(`docs/runs/2026-11-18-pi-bench.md`); this release's recovery changes are
+host-tested only and have not run on Pi hardware.
+
+### Raspberry Pi bridge
+
+- **The daemon's recovery ladder now waits out a root controller reload.**
+  The single 6 s reconnect wait was shorter than a stop, controller reload
+  and bluetoothd restart on a Pi 3B+, so a working root recovery read as
+  failure. `_connect_backend` now backs off 6/15/30 s
+  (`ADAPTER_RECOVERY_ATTEMPTS` 2 → 4, rungs past the first wait capped at
+  30 s) while the root unit reloads the controller; the trigger stays once
+  per 300 s. The status and pair texts name the recovery ladder instead of
+  the stale "restart hciuart and bluetoothd" claim, and `close()` keeps
+  leaving `Adapter1.Powered` alone — the no-power-down invariant is pinned
+  by unit tests over the plan transitions (#270).
+- **`wmr-bridge-bt-recover` is a portable root-run ladder with per-rung
+  logging.** The recovery unit now executes a shipped
+  `wmr-bridge-bt-recover.sh` instead of inline commands: rfkill unblock,
+  `hciuart` restart only when `systemctl cat` proves the image ships the
+  unit, otherwise a `btmgmt` power cycle plus driver unbind/rebind for each
+  enumerated controller (the kernel re-runs the attach, UART firmware
+  download included), a `bluetooth.service` restart, then the bridge. Every
+  rung is logged so the journal names the path taken, every failure is
+  non-fatal, and the script always exits 0 so a still-dead adapter cannot
+  fail the unit — the daemon's 300 s cooldown stays the rate limiter, and
+  reboot remains the documented last rung. It ships in the `.deb`, the
+  tarball and the installer, with packaging tests over the staged files
+  (#269).
+- **`wifi_probe --assert-gates` reports `no_data` instead of a loss
+  failure.** A gates run with no hands, or with every expected hand at zero
+  records, used to fail the `devloss_pct` and `seq_gaps` checks; it now
+  reports `gates = {status: no_data, passed: null, records: 0, checks: []}`
+  and prints one `no controller data (0 records)` line to stderr.
+  `--assert-gates` still exits non-zero, so an idle run still cannot pass,
+  and a partial-zero run (one hand streaming) still fails the loss and gap
+  gates as before; `PI_BRIDGE` documents the new gates shape (#265).
+
+### Bench tooling and docs
+
+- The bench sheet's Part A gains step 8, a restart-safe adapter recovery
+  check: two `systemctl restart wmr-bridge` cycles and a `.deb` reinstall
+  must each re-power the adapter inside a 10 s healthy-path gate, the
+  `wmr-bridge-bt-recover` unit must not fire inside the gate, and the
+  kernel log must stay free of `Opcode 0x0c03` (#267).
+- `pi/tools/bench_daemon.py` attributes the daemon's CPU end to end: it
+  replays the sample capture at `--rate` into a real Bridge with an
+  optional real subscriber, the forked child plays the client so only the
+  client's CPU is excluded, nested stopwatches split the production path
+  into six stages, and the stage sum must reconcile with the measured
+  pid's CPU delta within 20 % (#266).
+- The deployment and bridge docs describe the bt-recover ladder and its
+  conditional `hciuart` probe (`DEPLOY_RPI`, `PI_BRIDGE`,
+  `RPI_INSTALL_GUIDE`, `STATUS`), replacing the unconditional "restart
+  hciuart" instruction with the `systemctl cat` condition and the
+  reset-rebind fallback (#268).
+- The 2026-11-18 Pi 3B+ bench run is published as
+  `docs/runs/2026-11-18-pi-bench.md`, with the Pi hardware status updates it
+  drove in `README`, `STATUS`, `PI_BRIDGE`, `COMPATIBILITY`, `PROTOCOL` and
+  the runs index (#263), and the bench sheet's drift lines are corrected to
+  match their sources: the companion pin, the step 1 adapter/mDNS/BLE
+  identity names, the step 2 seated-range gate and the step 7 30/90 s
+  override (#264).
+
 ## 0.3.28-rc.2 — 2026-11-16
 
 The second pre-release candidate for the Pixel + Pi hardware check, cut from

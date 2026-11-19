@@ -6,4 +6,4 @@ instead of BLE. BlueZ owns the Classic Bluetooth HID host side; see
 ``docs/PI_BRIDGE.md`` for setup and the wire protocol.
 """
 
-__version__ = "0.3.28-rc.2"
+__version__ = "0.3.28-rc.3"
