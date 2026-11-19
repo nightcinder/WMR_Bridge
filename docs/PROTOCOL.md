@@ -1,8 +1,8 @@
 # BLE protocol (raw stream, wire version unchanged from the pre-refactor bridge)
 
 > Transport note. The FF11/FF12/FF14 payloads below are also used by the
-> supported Linux/Raspberry Pi host bridge (last hardware run v0.3.28-rc.2,
-> 2026-11-18, Part A steps 1 to 7), which carries them over a WebSocket on Wi-Fi instead of BLE. GATT-specific
+> supported Linux/Raspberry Pi host bridge (last hardware run 2026-11-18,
+> `v0.3.28-rc.1` to `v0.3.28-rc.2`, Part A steps 1 to 7), which carries them over a WebSocket on Wi-Fi instead of BLE. GATT-specific
 > details (UUIDs, CCC descriptors, ATT MTU) do not apply there. See
 > [PI_BRIDGE.md](PI_BRIDGE.md) for that transport.
 

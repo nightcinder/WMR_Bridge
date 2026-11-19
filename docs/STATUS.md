@@ -91,8 +91,10 @@ through BlueZ automatically (the `v0.3.12` release shipped `0.2.4`) and does not
 yet read FF13 calibration from controllers. FF10–FF17 payloads otherwise match
 0.3.15, so companions at 0.2.2 or later continue to work. The Pi BLE gamepad,
 advertising and pairing path still has no hardware result for the gamepad. The
-2026-11-18 sitting ran Part A steps 1 to 7 on `v0.3.28-rc.2` and recorded the
-advertising state and the stored-bond pairing state
+2026-11-18 sitting ran Part A steps 1 to 7, starting on `v0.3.28-rc.1` and
+finishing on `v0.3.28-rc.2`, and recorded the stored-bond pairing state
+(`pairable=no`). It did not record the advertised name, so that part of the
+path is still open
 ([`runs/2026-11-18-pi-bench.md`](runs/2026-11-18-pi-bench.md)); the three-state
 jitter check is pending.
 The changelog entries describe faults seen with a Pi and a
@@ -106,7 +108,7 @@ protocol proposals in [`docs/PROTOCOL.md`](PROTOCOL.md) ("Proposals":
 specified, not implemented) are documentation and host tests only. ESP32-over-BLE is
 the default supported target and the Linux/Raspberry Pi Wi-Fi host bridge is the
 second supported first-class target; the 2026-11-18 Pi 3B+ sitting ran Part A
-steps 1 to 7 of the bench sheet on `v0.3.28-rc.2`, see
+steps 1 to 7 of the bench sheet, from `v0.3.28-rc.1` to `v0.3.28-rc.2`, see
 [`runs/2026-11-18-pi-bench.md`](runs/2026-11-18-pi-bench.md) and
 [`docs/PI_BRIDGE.md`](PI_BRIDGE.md).
 Firmware and Pi
@@ -122,8 +124,8 @@ maintained here:
 - Linux / Raspberry Pi-over-Wi-Fi (`pi/`, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md)):
   BlueZ Classic Bluetooth HID host forwarding the same `FF11`/`FF12`/`FF14`
   payloads over a 5 GHz Wi-Fi WebSocket (`wmr-wifi-v1`). Second supported
-  target; it ran Part A steps 1 to 7 of the bench sheet on 2026-11-18 at
-  `v0.3.28-rc.2`
+  target; it ran Part A steps 1 to 7 of the bench sheet on 2026-11-18, from
+  `v0.3.28-rc.1` to `v0.3.28-rc.2`
   ([`runs/2026-11-18-pi-bench.md`](runs/2026-11-18-pi-bench.md),
   `docs/PI_BRIDGE.md`).
 
@@ -148,7 +150,7 @@ maintained at the project's single entry point:
 | Discovery pairing fixes: retry failed pairing connects, reserve the Classic radio while a hand is missing, free the ACL slot before each discovery page (PRs #77 and #80–#82) | Merged (v0.2.1–v0.2.4) | Field logs on 0.2.2/0.2.3 only; the packaged v0.3.11 image has not been run on hardware (internal bench runbook block C) |
 | BLE phone-link hardening: LE Secure Connections with bonding, encrypted data characteristics, stale-bond recovery (#88, [`docs/SECURITY.md`](SECURITY.md)) | Merged (v0.3.0) | Pairing, bonding and reconnect were exercised by the 0.2.4-38 phone runs; the packaged v0.3.11 pairing and encryption run is not yet done (internal bench runbook block B) |
 | Single-hand bridge mode `WMR_CFG_BRIDGE_HANDS` / `WMR_CFG_BLE_NAME` (PR #33) | Merged | Host tests only, not run on hardware |
-| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests (512 tests + loopback replay), a v0.3.23 hardware run, and Part A steps 1 to 7 of the bench sheet on `v0.3.28-rc.2` on 2026-11-18 (user-reported; RIGHT loss 3.69 % at about 20 ft, decode CPU mean 38.5 % and BLE-to-TCP recovery 10.1 s failed their gates, idle power-off deferred, ESP32 steps parked; [`runs/2026-11-18-pi-bench.md`](runs/2026-11-18-pi-bench.md)). The root upgrade unit and minisign verification still have no hardware run; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
+| Linux / Raspberry Pi Wi-Fi host bridge (`pi/`, WebSocket replaces BLE; PR #47, [`docs/PI_BRIDGE.md`](PI_BRIDGE.md), `docs/PI_BRIDGE.md`) | Merged (second supported target) | Host tests (512 tests + loopback replay), a v0.3.23 hardware run, and Part A steps 1 to 7 of the bench sheet on 2026-11-18, from `v0.3.28-rc.1` to `v0.3.28-rc.2` (user-reported; RIGHT loss 3.69 % at about 20 ft, decode CPU mean 38.5 % and BLE-to-TCP recovery 10.1 s failed their gates, the step 6 sleep gates were not exercised, idle power-off deferred, ESP32 steps parked; [`runs/2026-11-18-pi-bench.md`](runs/2026-11-18-pi-bench.md)). The root upgrade unit and minisign verification still have no hardware run; FF13 blobs are cached and forwarded, but the controller read over hidraw is not implemented |
 | One-command build/package/flash framework and the browser installer (PR #37, [`docs/FLASHING.md`](FLASHING.md)) | Merged | CI-built; flashing a packaged image has not been reported |
 | Packaged firmware version over FF16 and the console `v` command (PR #38, [`docs/COMPATIBILITY.md`](COMPATIBILITY.md)) | Merged | Console `v` read on the 0.2.4 hardware run (`0.2.4`, ESP-IDF v6.1); the live FF16 phone read on v0.3.11 is open (internal bench runbook block B) |
 | PSVR2 Sense controller support: name/model discovery searched by default beside WMR, model persistence, 79-byte raw frames, decoded FF12/FF14 samples and Feature Report `0x05` wake (PR #46, [`docs/PSVR2.md`](PSVR2.md)) | Merged (always compiled in; 0.2 default); decoded stream added in v0.3.11 | Host tests and firmware build only, never run on a PSVR2 controller |
@@ -349,9 +351,10 @@ However:
   multi-bridge sheet (see git history). LEFT at
   most 3 % on its own bridge is the pass bar.
 - The Raspberry Pi Wi-Fi bridge ran Part A steps 1 to 7 of the bench sheet on
-  2026-11-18 at `v0.3.28-rc.2`
+  2026-11-18, from `v0.3.28-rc.1` to `v0.3.28-rc.2`
   ([`runs/2026-11-18-pi-bench.md`](runs/2026-11-18-pi-bench.md)). P1, P4 and P14
-  have a result, and so does the keep-alive part of P13. P12 has a recovery
+  have a result. P13 has a sleep observation at the shipped 300 s default, not
+  the 30 s bench override. P12 has a recovery
   result but no failover result. P2, P3, P5, P6, P8 to P11 and the P13 power-off
   remain open,
   and steps 8 to 12 (ESP32) are parked. The earlier Pi run used v0.3.23. The second supported
