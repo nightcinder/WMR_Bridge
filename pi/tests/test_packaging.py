@@ -353,6 +353,46 @@ class PackagingTests(unittest.TestCase):
             (PI_DIR / "wmr_bridge" / "ble_gatt.py").read_text(encoding="utf-8"),
         )
 
+    def test_bt_recover_ladder_bounds_each_hanging_step(self) -> None:
+        helper = BT_RECOVER_HELPER_FILE.read_text(encoding="utf-8")
+        service = BT_RECOVER_SERVICE_FILE.read_text(encoding="utf-8")
+        # A crashed controller never answers the mgmt socket, so btmgmt
+        # blocks forever, and the sysfs unbind/bind runs the driver's
+        # detach/attach inline; an unbounded rung 3 hangs the unit until
+        # TimeoutStartSec kills the whole ladder before rungs 4/5.
+        self.assertIn("TimeoutStartSec=120", service)
+        match = re.search(r"^STEP_TIMEOUT_S=(\d+)$", helper, re.MULTILINE)
+        self.assertIsNotNone(match, msg="STEP_TIMEOUT_S is not defined")
+        step = int(match.group(1))
+        # Well under the unit bound: the four bounded rung-3 steps plus
+        # the settle sleep and the unbounded systemctl work must all fit
+        # inside one 120 s unit start.
+        self.assertGreater(step, 0)
+        self.assertLess(step, 25)
+        # Every btmgmt invocation runs under the bound.
+        self.assertIn('timeout "$STEP_TIMEOUT_S" btmgmt -i "$index" power off', helper)
+        self.assertIn('timeout "$STEP_TIMEOUT_S" btmgmt -i "$index" power on', helper)
+        for line in helper.splitlines():
+            if "btmgmt -i" in line:
+                self.assertIn('timeout "$STEP_TIMEOUT_S"', line, msg=line)
+        # The reset-rebind writes run the driver's detach/attach in the
+        # caller's context; timeout(1) cannot wrap a shell redirection, so
+        # both writes must run in the bounded sh -c.
+        self.assertEqual(helper.count('timeout "$STEP_TIMEOUT_S" sh -c'), 2)
+        self.assertIn('"${driver_dir}/unbind"', helper)
+        self.assertIn('"${driver_dir}/bind"', helper)
+        # A timed-out step still logs its rung and the ladder runs on:
+        # each timeout message names rung 3 and precedes rungs 4/5.
+        for message in (
+            "btmgmt power off failed or timed out",
+            "btmgmt power on failed or timed out",
+            "re-binding ${device_name} failed or timed out",
+            "unbinding ${device_name} failed or timed out",
+        ):
+            self.assertIn(message, helper)
+            self.assertLess(helper.index(message), helper.index("rung 4/5: restarting bluetooth.service"))
+        self.assertIn("exit 0", helper)
+
     def test_upgrade_install_does_not_repeat_the_wifi_staging(self) -> None:
         installer = INSTALL_SH.read_text(encoding="utf-8")
         self.assertIn("FRESH_INSTALL=1", installer)
