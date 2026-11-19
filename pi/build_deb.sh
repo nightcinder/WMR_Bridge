@@ -122,6 +122,9 @@ install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade-prerelease.path" "${OP
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade-prerelease.service" "${OPT}/pi/systemd/wmr-bridge-upgrade-prerelease.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.path" "${OPT}/pi/systemd/wmr-bridge-bt-recover.path"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.service" "${OPT}/pi/systemd/wmr-bridge-bt-recover.service"
+# The root-run recovery ladder the bt-recover unit executes; shipped
+# executable and root-owned so only a dpkg upgrade can change what root runs.
+install -m 0755 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.sh" "${OPT}/pi/systemd/wmr-bridge-bt-recover.sh"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.env.example" "${OPT}/pi/systemd/wmr-bridge.env.example"
 install -m 0644 "${SCRIPT_DIR}/udev/99-wmr-bridge.rules" "${OPT}/pi/udev/99-wmr-bridge.rules"
 install -m 0644 "${REPO_ROOT}/docs/PI_BRIDGE.md" "${OPT}/docs/PI_BRIDGE.md"

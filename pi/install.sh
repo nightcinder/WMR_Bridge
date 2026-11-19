@@ -454,6 +454,10 @@ install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade-prerelease.path" "${DE
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-upgrade-prerelease.service" "${DEST_PI}/systemd/wmr-bridge-upgrade-prerelease.service"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.path" "${DEST_PI}/systemd/wmr-bridge-bt-recover.path"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.service" "${DEST_PI}/systemd/wmr-bridge-bt-recover.service"
+# The root-run recovery ladder the bt-recover unit executes; it must stay
+# executable in the staged tree. Units only, never the helper, go to
+# DEST_SYSTEMD: the unit references it by this /opt path.
+install -m 0755 "${SCRIPT_DIR}/systemd/wmr-bridge-bt-recover.sh" "${DEST_PI}/systemd/wmr-bridge-bt-recover.sh"
 install -m 0644 "${SCRIPT_DIR}/systemd/wmr-bridge.env.example" "${DEST_PI}/systemd/wmr-bridge.env.example"
 install -m 0644 "${SCRIPT_DIR}/udev/99-wmr-bridge.rules" "${DEST_PI}/udev/99-wmr-bridge.rules"
 
