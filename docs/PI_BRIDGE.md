@@ -171,10 +171,12 @@ journalctl -u wmr-bridge -n 200 --no-pager
 
 `auto-pair: Bluetooth adapter is not usable yet` means the adapter is still
 rfkill-blocked or `bluetoothd` is down. A stock Pi OS image soft-blocks
-Bluetooth at boot; the bridge reports `Powered: no`, the root
-`wmr-bridge-bt-recover.service` unblocks it and restarts `hciuart` and
-`bluetooth`, and the pairer retries with a 30 s backoff instead of disabling
-itself. Check
+Bluetooth at boot; the bridge reports `Powered: no`, and the root
+`wmr-bridge-bt-recover.service` runs the ladder in
+`pi/systemd/wmr-bridge-bt-recover.sh`: unblock rfkill, `hciuart` (only when
+`systemctl cat` finds the unit, else reset-rebind the controller), then
+restart `bluetooth`. The pairer retries with a 30 s backoff instead of
+disabling itself. Check
 `rfkill list bluetooth` and `systemctl status bluetooth`. A `could not scan;
 retrying with backoff` line names a scan failure such as a resetting adapter;
 the pairer re-probes power and retries, so pairing resumes when the adapter
@@ -1391,7 +1393,7 @@ INFO/WARNING:
 | Symptom | Check |
 | --- | --- |
 | `no /dev/hidraw nodes` | `systemctl status bluetooth`, `lsmod \| grep hidp`, controller paired/trusted/connected |
-| `bluetoothctl show` says `Powered: no`, `Pairable: no`, Class 0 | adapter firmware crashed or the UART attach failed; `btmon` showing `HCI Reset` answered by `Hardware Error` (0x10, code 0x00) is the crashed-controller signature. The daemon first tries `Adapter1.Powered=True`, then asks `wmr-bridge-bt-recover.service` (root) to restart `hciuart` and `bluetooth.service` and start the bridge again, at most once per cooldown. If `Powered` still reads no after that, reboot the Pi; if the error survives the reboot, power-cycle the board |
+| `bluetoothctl show` says `Powered: no`, `Pairable: no`, Class 0 | adapter firmware crashed or the UART attach failed; `btmon` showing `HCI Reset` answered by `Hardware Error` (0x10, code 0x00) is the crashed-controller signature. The daemon first tries `Adapter1.Powered=True`, then asks `wmr-bridge-bt-recover.service` (root) to run the ladder in `pi/systemd/wmr-bridge-bt-recover.sh`: unblock rfkill, `hciuart` (only when `systemctl cat` finds the unit, else reset-rebind the controller), restart `bluetooth.service`, and start the bridge again, at most once per cooldown. If `Powered` still reads no after that, reboot the Pi; if the error survives the reboot, power-cycle the board |
 | Phone will not re-pair after the upgrade; adapter `pairable=no` | a stored LE bond closes pairability. Open a window with `wmr-bridge pair` (180 s), or remove the phone's stale bond with `bluetoothctl remove <MAC>`. v0.3.26 does not touch `/var/lib/bluetooth`; the upgrade scripts now leave bluetoothd alone when both `JustWorksRepairing` and the `[LE]` interval bounds are already set |
 | Wi-Fi auth fails with Bluetooth off | the shared token is only learned over the BLE FF13 encrypted read; the companion's manual Wi-Fi entry does not persist a token. Copy it from `/etc/wmr-bridge/token` (unchanged across upgrades) or read it over BLE |
 | Node exists but `--list` shows name `-` | custom controller name; use `--left/--right` with the MAC or path |
