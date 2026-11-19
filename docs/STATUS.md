@@ -21,10 +21,11 @@ downgrade, selects and packages a pre-release upgrade channel beside the stable
 one, and recovers a powered-off Bluetooth adapter. bluetoothd can leave
 `Adapter1.Powered` false after the combo controller's firmware crashes; the
 daemon first tries `Powered=True` itself, then asks the root
-`wmr-bridge-bt-recover.path`/`.service` to unblock rfkill, restart `hciuart` and
-`bluetooth.service` and start the bridge again, at most once per 300 s, and it
-retries GATT and advertising. Advertisement re-registration is coalesced over
-1 s, so a burst of controller or phone events no longer surfaces
+`wmr-bridge-bt-recover.path`/`.service` to unblock rfkill, `hciuart` (only when
+`systemctl cat` finds the unit), restart `bluetooth.service`, and start the
+bridge again, at most once per 300 s, and it retries GATT and advertising.
+Advertisement re-registration is coalesced over 1 s, so a burst of controller
+or phone events no longer surfaces
 `descriptor write: RequestBusy` on the phone, and `wmr-bridge pair` fails with a
 `Powered: no` or not-advertising diagnostic. The `.deb` post-install script
 restarts `wmr-bridge.service` once on an upgrade and stages the 5 GHz profile and
