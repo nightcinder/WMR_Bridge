@@ -4,10 +4,10 @@ Documentation=file:/opt/wmr-bridge/docs/PI_BRIDGE.md
 # The recovery ladder lives in wmr-bridge-bt-recover.sh: restarting bluetoothd
 # alone does not reload a crashed Broadcom/Cypress firmware, and images
 # differ in how the UART adapter is attached (the rc.2 image has no hciuart
-# unit at all). The daemon already rate-limits triggers to one per 300 s
-# (ADAPTER_RECOVERY_COOLDOWN_S in ble_gatt.py), so a start limit here would
-# only add a silent lock-out after three failures; recovery must never lock
-# itself out, so the interval is disabled outright.
+# unit at all). The daemon throttles triggers while one recovery attempt is
+# in flight and backs off after it exhausts its bounded retries, so a start
+# limit here would only add a silent lock-out; recovery must never lock itself
+# out, so the interval is disabled outright.
 StartLimitIntervalSec=0
 
 [Service]

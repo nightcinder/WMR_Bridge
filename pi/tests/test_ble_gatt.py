@@ -13,6 +13,7 @@ from unittest import mock
 from wmr_bridge.__main__ import _build_parser
 from wmr_bridge.ble_gatt import (
     ADAPTER_RECOVERY_ATTEMPTS,
+    ADAPTER_RECOVERY_MAX_ATTEMPTS,
     AGENT_PATH,
     APP_PATH,
     ADV_FAST_MAX_INTERVAL_MS,
@@ -108,26 +109,42 @@ class FakeBackend:
         self.app: GattApplication | None = None
         self.powered = True
         self.power_on_calls = 0
+        self.power_on_succeeds = True
+        self.adapter_powered_error: Exception | None = None
+        self.fail_start = False
+        self.root_recovery_after: int | None = None
         self.recovery_requests = 0
         self.start_calls = 0
 
     async def start(self, app: GattApplication) -> None:
+        self.start_calls += 1
+        if self.fail_start:
+            raise RuntimeError("bluez unavailable")
         self.app = app
         self.started = True
-        self.start_calls += 1
 
     async def stop(self) -> None:
         self.started = False
 
     async def adapter_powered(self) -> bool:
+        if self.adapter_powered_error is not None:
+            raise self.adapter_powered_error
         return self.powered
 
     async def power_on(self) -> bool:
         self.power_on_calls += 1
+        if self.power_on_succeeds:
+            self.powered = True
         return self.powered
 
     def request_recovery(self) -> bool:
         self.recovery_requests += 1
+        if (
+            self.root_recovery_after is not None
+            and self.recovery_requests >= self.root_recovery_after
+        ):
+            self.powered = True
+            self.fail_start = False
         return True
 
     async def set_pairable(self, pairable: bool) -> None:
@@ -595,7 +612,6 @@ class EnsurePoweredBackend(FakeBackend):
     async def start(self, app: GattApplication) -> None:
         if not await self.adapter_powered():
             if not await self.power_on():
-                self.request_recovery()
                 self.start_calls += 1
                 raise AdapterRecoveryPending(
                     "BlueZ adapter hci0 reports Powered=no (Authentication Failed)"
@@ -604,6 +620,25 @@ class EnsurePoweredBackend(FakeBackend):
 
 
 class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    def _recovery_peripheral(
+        self, backend: FakeBackend, **options: object
+    ) -> BluezGattPeripheral:
+        params: dict[str, object] = {
+            "hosts": ["192.0.2.10"],
+            "pairing_window_s": 0.0,
+            "power_check_interval_s": 0.01,
+            "recovery_wait_s": 0.0,
+            "recovery_backoff_s": 0.0,
+        }
+        params.update(options)
+        return BluezGattPeripheral(Bridge(), backend=backend, **params)  # type: ignore[arg-type]
+
+    async def _wait(self, predicate) -> None:
+        for _ in range(200):
+            if predicate():
+                return
+            await asyncio.sleep(0.01)
+
     async def test_powered_no_is_cleared_without_the_root_unit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             trigger = Path(tmp) / "bt-recover.trigger"
@@ -615,24 +650,24 @@ class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(adapter.power_calls, [True])
             self.assertFalse(trigger.exists())
 
-    async def test_a_stuck_adapter_requests_root_recovery_once_per_cooldown(self) -> None:
+    async def test_request_recovery_is_not_suppressed_after_a_failed_attempt(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             trigger = Path(tmp) / "bt-recover.trigger"
-            clock = FakeClock()
-            backend = DbusGattBackend(
-                recover_trigger=trigger, recovery_cooldown_s=300.0, clock=clock
-            )
+            backend = DbusGattBackend(recover_trigger=trigger)
             adapter = FakePowerAdapter(powered=False, can_power=False)
             backend._adapter_interface = adapter
 
+            # _ensure_powered no longer writes the trigger itself; the
+            # peripheral does, once per bounded retry.
             self.assertFalse(await backend._ensure_powered())
-            self.assertTrue(trigger.exists())
-            # The unit removes the trigger; a second request inside the window
-            # must not restart bluetoothd again.
-            trigger.unlink()
-            self.assertFalse(backend.request_recovery())
             self.assertFalse(trigger.exists())
-            clock.advance(301)
+            self.assertTrue(backend.request_recovery())
+            self.assertTrue(trigger.exists())
+            # The root unit removes the trigger. A second trigger within the
+            # old 300 s window is permitted, not suppressed.
+            trigger.unlink()
             self.assertTrue(backend.request_recovery())
             self.assertTrue(trigger.exists())
 
@@ -664,29 +699,6 @@ class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await peripheral.close()
 
-    async def test_a_runtime_power_loss_reregisters_gatt_and_advertising(self) -> None:
-        backend = FakeBackend()
-        backend.powered = False
-        peripheral = BluezGattPeripheral(
-            Bridge(),
-            backend=backend,
-            hosts=["192.0.2.10"],
-            pairing_window_s=0.0,
-            power_check_interval_s=0.01,
-            recovery_wait_s=0.0,
-        )
-        await peripheral.start()
-        try:
-            for _ in range(50):
-                if backend.start_calls >= 2:
-                    break
-                await asyncio.sleep(0.01)
-            self.assertGreaterEqual(backend.start_calls, 2)
-            self.assertTrue(peripheral.advertising)
-            self.assertGreaterEqual(backend.power_on_calls, 1)
-        finally:
-            await peripheral.close()
-
     async def test_a_failed_reregistration_does_not_report_advertising(self) -> None:
         class FlakyBackend(FakeBackend):
             fail_start = False
@@ -698,13 +710,8 @@ class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 await super().start(app)
 
         backend = FlakyBackend()
-        peripheral = BluezGattPeripheral(
-            Bridge(),
-            backend=backend,
-            hosts=["192.0.2.10"],
-            pairing_window_s=0.0,
-            power_check_interval_s=3600.0,
-            recovery_wait_s=0.0,
+        peripheral = self._recovery_peripheral(
+            backend, power_check_interval_s=3600.0, recovery_attempts=1
         )
         await peripheral.start()
         try:
@@ -741,9 +748,7 @@ class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             trigger = Path(tmp) / "bt-recover.trigger"
-            backend = EnsurePoweredBackend(
-                DbusGattBackend(recover_trigger=trigger, recovery_cooldown_s=300.0)
-            )
+            backend = EnsurePoweredBackend(DbusGattBackend(recover_trigger=trigger))
             peripheral = BluezGattPeripheral(
                 Bridge(),
                 backend=backend,
@@ -768,9 +773,7 @@ class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             trigger = Path(tmp) / "bt-recover.trigger"
-            backend = EnsurePoweredBackend(
-                DbusGattBackend(recover_trigger=trigger, recovery_cooldown_s=300.0)
-            )
+            backend = EnsurePoweredBackend(DbusGattBackend(recover_trigger=trigger))
             backend.powered = False
             peripheral = BluezGattPeripheral(
                 Bridge(),
@@ -798,11 +801,7 @@ class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
             trigger = Path(tmp) / "bt-recover.trigger"
             clock = FakeClock()
             backend = EnsurePoweredBackend(
-                DbusGattBackend(
-                    recover_trigger=trigger,
-                    recovery_cooldown_s=300.0,
-                    clock=clock,
-                ),
+                DbusGattBackend(recover_trigger=trigger),
                 power_on_succeeds=False,
                 root_unit_recovers=False,
             )
@@ -828,68 +827,153 @@ class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(backend.start_calls, ADAPTER_RECOVERY_ATTEMPTS)
             self.assertEqual(backend.power_on_calls, ADAPTER_RECOVERY_ATTEMPTS)
             self.assertEqual(waits, [6.0, 15.0, 30.0])
-            # The ladder spans 51 s, inside the 300 s cooldown window: exactly
-            # one root recovery request even though every rung re-checked power.
+            # One trigger per ladder run, even though every rung re-checked
+            # power; the bounded retry is owned by the peripheral.
             self.assertEqual(backend.recovery_requests, 1)
             self.assertTrue(trigger.exists())
 
-    async def test_transition_4_mid_run_power_loss_recovers_once_per_cooldown(
+    async def test_da_a_wedge_recovers_on_the_first_attempt(self) -> None:
+        backend = FakeBackend()
+        backend.powered = False
+        peripheral = self._recovery_peripheral(backend)
+        await peripheral.start()
+        try:
+            await self._wait(lambda: backend.power_on_calls > 0 and peripheral.advertising)
+            self.assertTrue(peripheral.advertising)
+            self.assertEqual(backend.power_on_calls, 1)
+            self.assertEqual(backend.recovery_requests, 0)
+            self.assertFalse(peripheral.degraded)
+        finally:
+            await peripheral.close()
+
+    async def test_db_a_failed_attempt_is_retried_without_a_300_s_wait(
         self,
     ) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            trigger = Path(tmp) / "bt-recover.trigger"
-            backend = EnsurePoweredBackend(
-                DbusGattBackend(
-                    recover_trigger=trigger,
-                    recovery_cooldown_s=300.0,
-                    clock=FakeClock(),
-                )
+        backend = FakeBackend()
+        peripheral = self._recovery_peripheral(backend)
+        await peripheral.start()
+        try:
+            backend.power_on_succeeds = False
+            backend.powered = False
+            backend.fail_start = True
+            backend.root_recovery_after = 2
+            backend.recovery_requests = 0
+            backend.start_calls = 0
+            await self._wait(
+                lambda: backend.recovery_requests >= 2 and backend.started
             )
-            peripheral = BluezGattPeripheral(
-                Bridge(),
-                backend=backend,
-                hosts=["192.0.2.10"],
-                pairing_window_s=0.0,
-                power_check_interval_s=0.01,
-                recovery_wait_s=0.0,
+            self.assertEqual(backend.recovery_requests, 2)
+            self.assertTrue(backend.started)
+            self.assertTrue(peripheral.advertising)
+            self.assertFalse(peripheral.degraded)
+        finally:
+            await peripheral.close()
+
+    async def test_dc_exhaustion_is_degraded_and_backs_off_before_a_new_trigger(
+        self,
+    ) -> None:
+        backend = FakeBackend()
+        clock = FakeClock()
+        peripheral = self._recovery_peripheral(
+            backend, power_check_interval_s=3600.0, clock=clock,
+            recovery_exhausted_backoff_s=30.0,
+        )
+        await peripheral.start()
+        try:
+            backend.power_on_succeeds = False
+            backend.powered = False
+            backend.fail_start = True
+            with self.assertLogs("wmr_bridge.ble_gatt", level="WARNING") as logs:
+                self.assertFalse(await peripheral._recover_adapter_power())
+            self.assertTrue(peripheral.degraded)
+            self.assertEqual(backend.recovery_requests, ADAPTER_RECOVERY_MAX_ATTEMPTS)
+            self.assertEqual(sum("degraded" in line for line in logs.output), 1)
+            # A new trigger is held off only for the bounded backoff, not 300 s.
+            self.assertFalse(await peripheral._recover_adapter_power())
+            self.assertEqual(backend.recovery_requests, ADAPTER_RECOVERY_MAX_ATTEMPTS)
+            clock.advance(31)
+            self.assertFalse(await peripheral._recover_adapter_power())
+            self.assertEqual(
+                backend.recovery_requests, 2 * ADAPTER_RECOVERY_MAX_ATTEMPTS
             )
-            await peripheral.start()
-            try:
-                self.assertTrue(peripheral.advertising)
-                # Mid-run crash: the firmware is dead, so self power-on fails
-                # and only the root unit's reload brings the adapter back.
-                backend.power_on_succeeds = False
-                backend.powered = False
-                for _ in range(500):
-                    if backend.start_calls >= 2 and peripheral.advertising:
-                        break
-                    await asyncio.sleep(0.01)
-                self.assertTrue(peripheral.advertising)
-                self.assertEqual(backend.recovery_requests, 1)
-                self.assertTrue(trigger.exists())
-                trigger.unlink()  # the root unit's ExecStartPre removes it
-                # A second crash inside the same 300 s window must not ask
-                # the root unit again; the daemon waits out the cooldown.
-                real_sleep = asyncio.sleep
-                start_calls_before = backend.start_calls
+        finally:
+            await peripheral.close()
 
-                async def instant_sleep(_seconds: float) -> None:
-                    await real_sleep(0)
+    async def test_dd_close_during_an_attempt_cancels_it_and_writes_no_power(
+        self,
+    ) -> None:
+        class BlockingBackend(FakeBackend):
+            def __init__(self) -> None:
+                super().__init__()
+                self.power_on_succeeds = False
+                self.entered = asyncio.Event()
+                self.release = asyncio.Event()
 
-                with mock.patch("wmr_bridge.ble_gatt.asyncio.sleep", instant_sleep):
-                    backend.powered = False
-                    for _ in range(2000):
-                        if (
-                            backend.start_calls
-                            >= start_calls_before + 2 * ADAPTER_RECOVERY_ATTEMPTS
-                        ):
-                            break
-                        await real_sleep(0)
-                    self.assertEqual(backend.recovery_requests, 1)
-                    self.assertFalse(trigger.exists())
-                    self.assertFalse(peripheral.advertising)
-            finally:
-                await peripheral.close()
+            async def power_on(self) -> bool:
+                self.power_on_calls += 1
+                self.entered.set()
+                await self.release.wait()
+                return False
+
+        backend = BlockingBackend()
+        backend.powered = False
+        peripheral = self._recovery_peripheral(backend)
+        await peripheral.start()
+        power_task = peripheral._power_task
+        self.assertIsNotNone(power_task)
+        try:
+            await asyncio.wait_for(backend.entered.wait(), 1.0)
+            await peripheral.close()
+            for _ in range(10):
+                if power_task.done():
+                    break
+                await asyncio.sleep(0)
+            self.assertTrue(power_task.done())
+            self.assertEqual(backend.power_on_calls, 1)
+            self.assertFalse(backend.started)
+        finally:
+            if power_task is not None and not power_task.done():
+                power_task.cancel()
+
+    async def test_de_one_ladder_run_at_a_time_and_a_bounded_exhausted_backoff(
+        self,
+    ) -> None:
+        backend = FakeBackend()
+        peripheral = self._recovery_peripheral(
+            backend, recovery_exhausted_backoff_s=3600.0
+        )
+        await peripheral.start()
+        try:
+            backend.power_on_succeeds = False
+            backend.powered = False
+            backend.fail_start = True
+            await self._wait(lambda: peripheral.degraded)
+            self.assertTrue(peripheral.degraded)
+            self.assertEqual(backend.recovery_requests, ADAPTER_RECOVERY_MAX_ATTEMPTS)
+            await asyncio.sleep(0.1)
+            self.assertEqual(backend.recovery_requests, ADAPTER_RECOVERY_MAX_ATTEMPTS)
+        finally:
+            await peripheral.close()
+
+    async def test_df_an_absent_adapter_enters_recovery_within_one_poll(
+        self,
+    ) -> None:
+        backend = FakeBackend()
+        backend.powered = False
+        backend.power_on_succeeds = False
+        backend.adapter_powered_error = RuntimeError("no adapter object")
+        peripheral = self._recovery_peripheral(
+            backend,
+            power_check_interval_s=0.02,
+            recovery_attempts=1,
+            recovery_exhausted_backoff_s=3600.0,
+        )
+        await peripheral.start()
+        try:
+            await self._wait(lambda: backend.recovery_requests > 0)
+            self.assertGreaterEqual(backend.recovery_requests, 1)
+        finally:
+            await peripheral.close()
 
     async def test_close_never_powers_down_the_adapter(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -162,11 +162,16 @@ ADAPTER_RECOVERY_WAIT_S = 6.0
 # controller: with the default 6 s wait the daemon retries after 6, 15 and
 # 30 s, capped at the last rung if the attempt count below ever grows.
 ADAPTER_RECOVERY_WAIT_LADDER_S = (15.0, 30.0)
-# At most one root recovery request per window even if the adapter stays off:
-# a crash loop must not restart bluetoothd forever.
-ADAPTER_RECOVERY_COOLDOWN_S = 300.0
+# A failed recovery must not suppress the next attempt for five minutes: the
+# chip may still be loading firmware when the first ladder run ends. Retry the
+# whole ladder at most three times, with a bounded backoff, and keep the
+# throttle to the in-flight run so a second trigger is accepted after it.
+ADAPTER_RECOVERY_MAX_ATTEMPTS = 3
+ADAPTER_RECOVERY_BACKOFF_S = 2.0
+ADAPTER_RECOVERY_EXHAUSTED_BACKOFF_S = 30.0
 DEFAULT_BT_RECOVER_TRIGGER = "/var/lib/wmr-bridge/bt-recover.trigger"
-# One self-power attempt, then the root unit, then the reconnect ladder.
+# Reconnect attempts inside one ladder run, while the root unit reloads the
+# controller: one self-power attempt, then the root unit, then the ladder.
 ADAPTER_RECOVERY_ATTEMPTS = 4
 # Classic HID profile UUID. A Device1 entry that lists it is a BR/EDR bond
 # (the WMR controllers), never an LE central's bond.
@@ -369,7 +374,7 @@ def log_just_works_repairing(
 
 
 class AdapterRecoveryPending(RuntimeError):
-    """The adapter is off and the root recovery unit was asked to restart it."""
+    """The adapter is off or absent; ask the root unit and retry the attach."""
 
     def __init__(self, message: str, retry_after: float = ADAPTER_RECOVERY_WAIT_S) -> None:
         super().__init__(message)
@@ -1423,8 +1428,6 @@ class DbusGattBackend:
         adapter: str = "hci0",
         *,
         recover_trigger: str | Path | None = None,
-        recovery_cooldown_s: float = ADAPTER_RECOVERY_COOLDOWN_S,
-        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.adapter = adapter
         self._bus: Any = None
@@ -1441,9 +1444,6 @@ class DbusGattBackend:
             recover_trigger
             or os.environ.get("WMR_BRIDGE_BT_RECOVER_TRIGGER", DEFAULT_BT_RECOVER_TRIGGER)
         )
-        self._recovery_cooldown_s = max(0.0, recovery_cooldown_s)
-        self._last_recovery_request: float | None = None
-        self._clock = clock
 
     async def start(self, app: GattApplication) -> None:
         log_just_works_repairing()
@@ -1471,7 +1471,12 @@ class DbusGattBackend:
         except Exception as exc:
             bus.disconnect()
             self._bus = None
-            raise RuntimeError(f"BlueZ adapter {self.adapter} is not available: {exc}") from exc
+            # An adapter that vanished from the bus has no Adapter1 object to
+            # report Powered=no. Treat it like an unpowered adapter so the
+            # recovery path is entered instead of polling in silence.
+            raise AdapterRecoveryPending(
+                f"BlueZ adapter {self.adapter} is not available: {exc}"
+            ) from exc
 
         if not await self._ensure_powered():
             await self.stop()
@@ -1534,25 +1539,15 @@ class DbusGattBackend:
         return powered
 
     def request_recovery(self) -> bool:
-        """Ask the root unit to reload the controller, at most once per window.
+        """Ask the root unit to run the recovery ladder.
 
         The service user cannot restart system units. The path unit watches this
         empty trigger file, exactly like the daemon's upgrade trigger, so the
         unprivileged daemon has no way to pass a command or argument to root.
+        The peripheral owns retry throttling now: this call is unconditional so
+        the attempt after a failed one is not suppressed for five minutes.
         """
 
-        now = self._clock()
-        if (
-            self._last_recovery_request is not None
-            and now - self._last_recovery_request < self._recovery_cooldown_s
-        ):
-            LOG.warning(
-                "Bluetooth adapter %s still reports Powered=no; recovery cooldown "
-                "active for another %.0f s",
-                self.adapter,
-                self._recovery_cooldown_s - (now - self._last_recovery_request),
-            )
-            return False
         try:
             self._recover_trigger.parent.mkdir(parents=True, exist_ok=True)
             self._recover_trigger.unlink(missing_ok=True)
@@ -1564,7 +1559,6 @@ class DbusGattBackend:
                 exc,
             )
             return False
-        self._last_recovery_request = now
         LOG.warning(
             "Bluetooth adapter %s reports Powered=no; triggered "
             "wmr-bridge-bt-recover.service (controller reload + bluetoothd "
@@ -1574,15 +1568,12 @@ class DbusGattBackend:
         return True
 
     async def _ensure_powered(self) -> bool:
-        """Power the adapter on, or ask root to reload the controller attach."""
+        """Power the adapter on; the caller asks root when this fails."""
 
         if await self.adapter_powered():
             return True
         LOG.warning("Bluetooth adapter %s reports Powered=no; powering it on", self.adapter)
-        if await self.power_on():
-            return True
-        self.request_recovery()
-        return False
+        return await self.power_on()
 
     async def _claim_agent(self) -> None:
         """Register the Just Works agent and make it the adapter default.
@@ -1813,6 +1804,9 @@ class BluezGattPeripheral:
         advertising_debounce_s: float = ADVERTISING_DEBOUNCE_S,
         power_check_interval_s: float = ADAPTER_POWER_CHECK_INTERVAL_S,
         recovery_wait_s: float = ADAPTER_RECOVERY_WAIT_S,
+        recovery_attempts: int = ADAPTER_RECOVERY_MAX_ATTEMPTS,
+        recovery_backoff_s: float = ADAPTER_RECOVERY_BACKOFF_S,
+        recovery_exhausted_backoff_s: float = ADAPTER_RECOVERY_EXHAUSTED_BACKOFF_S,
     ) -> None:
         self.app = GattApplication(
             bridge,
@@ -1844,6 +1838,12 @@ class BluezGattPeripheral:
         self._advertising_debounce_s = max(0.0, advertising_debounce_s)
         self._power_check_interval_s = max(0.001, power_check_interval_s)
         self._recovery_wait_s = max(0.0, recovery_wait_s)
+        self._recovery_attempts = max(1, recovery_attempts)
+        self._recovery_backoff_s = max(0.0, recovery_backoff_s)
+        self._recovery_exhausted_backoff_s = max(0.0, recovery_exhausted_backoff_s)
+        self._recovery_in_flight = False
+        self._next_recovery_at = 0.0
+        self._degraded = False
         self._advertised_tier = self.app.advertising_tier
         self._pairable_applied: bool | None = None
         self._pairable_reason = "not started"
@@ -1857,6 +1857,12 @@ class BluezGattPeripheral:
         """True when the advertisement is registered with BlueZ."""
 
         return self._started and self._advertised_tier is not None
+
+    @property
+    def degraded(self) -> bool:
+        """True after every bounded recovery attempt failed."""
+
+        return self._degraded
 
     async def adapter_powered(self) -> bool:
         """Adapter power state for diagnostics; unknown counts as on."""
@@ -1892,6 +1898,8 @@ class BluezGattPeripheral:
         if self._started:
             return
         self._loop = asyncio.get_running_loop()
+        self._degraded = False
+        self._next_recovery_at = 0.0
         await self._connect_backend()
         self.app.set_emitter(self.backend.notify)
         self.app.bridge.add_sink(self.app)
@@ -1916,21 +1924,30 @@ class BluezGattPeripheral:
             self.app.bridge.bridge_id,
         )
 
-    async def _connect_backend(self) -> None:
+    async def _connect_backend(self, *, trigger_recovery: bool = True) -> None:
         """Start BlueZ, backing off down the reconnect ladder while root recovers.
 
         A stop, controller reload and bluetoothd restart on a Pi 3B+ can
         outlast a single 6 s wait, so a working recovery used to read as
         failure. The daemon now waits 6 s, then 15 s, then 30 s between
-        reconnect attempts before it reports the adapter as down.
+        reconnect attempts before it reports the adapter as down. The root
+        trigger is written once per ladder run, not once per retry.
         """
 
         attempts = ADAPTER_RECOVERY_ATTEMPTS
+        requested = False
         for attempt in range(attempts):
             try:
                 await self.backend.start(self.app)
                 return
             except AdapterRecoveryPending as exc:
+                if trigger_recovery and not requested:
+                    requested = True
+                    if not self.backend.request_recovery():
+                        LOG.warning(
+                            "could not request Bluetooth adapter recovery "
+                            "(no trigger path)"
+                        )
                 if attempt + 1 >= attempts:
                     raise
                 wait = max(self._recovery_wait(attempt), exc.retry_after)
@@ -1953,7 +1970,7 @@ class BluezGattPeripheral:
         return ladder[min(attempt - 1, len(ladder) - 1)]
 
     async def _watch_adapter_power(self) -> None:
-        """Reconnect GATT/advertising if the adapter powers off while running."""
+        """Reconnect GATT/advertising if the adapter powers off or vanishes."""
 
         try:
             while self._started:
@@ -1961,10 +1978,18 @@ class BluezGattPeripheral:
                 if not self._started:
                     return
                 try:
-                    if await self.backend.adapter_powered():
-                        continue
+                    powered = await self.backend.adapter_powered()
                 except Exception as exc:
-                    LOG.debug("could not read the adapter power state: %s", exc)
+                    # An adapter absent from the bus has no Adapter1.Powered
+                    # property to answer. Polling in silence there was the
+                    # ~04:07 loss: absence is Powered=no, and must recover.
+                    LOG.warning(
+                        "could not read the adapter power state (%s); "
+                        "treating the adapter as absent",
+                        exc,
+                    )
+                    powered = False
+                if powered:
                     continue
                 await self._recover_adapter_power()
         except asyncio.CancelledError:
@@ -1972,8 +1997,73 @@ class BluezGattPeripheral:
         except Exception as exc:  # keep the daemon alive; the next start retries
             LOG.warning("BLE adapter power watchdog stopped: %s", exc)
 
-    async def _recover_adapter_power(self) -> None:
-        LOG.warning("Bluetooth adapter reports Powered=no while running; recovering")
+    async def _recover_adapter_power(self) -> bool:
+        """Run the recovery ladder, retrying at most a bounded number of times.
+
+        The old 300 s post-failure cooldown suppressed the attempt that might
+        have worked once the controller firmware finished loading. Retries are
+        bounded here instead: only one ladder run is in flight at a time, a
+        bounded backoff separates attempts, and exhaustion leaves a degraded
+        state with a short pause before the next trigger is accepted.
+        """
+
+        if not self._started or self._recovery_in_flight:
+            return False
+        if self._clock() < self._next_recovery_at:
+            return False
+        self._recovery_in_flight = True
+        attempts = self._recovery_attempts
+        try:
+            LOG.warning("Bluetooth adapter reports Powered=no while running; recovering")
+            for attempt in range(1, attempts + 1):
+                if not self._started:
+                    return False
+                try:
+                    if await self._attempt_adapter_recovery():
+                        if self._degraded:
+                            LOG.info(
+                                "Bluetooth adapter recovery succeeded; BLE is no "
+                                "longer degraded"
+                            )
+                        self._degraded = False
+                        self._next_recovery_at = 0.0
+                        return True
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    LOG.warning(
+                        "Bluetooth adapter recovery attempt %d/%d failed: %s",
+                        attempt,
+                        attempts,
+                        exc,
+                    )
+                if attempt < attempts:
+                    backoff = min(
+                        self._recovery_backoff_s * (2 ** (attempt - 1)),
+                        ADAPTER_RECOVERY_EXHAUSTED_BACKOFF_S,
+                    )
+                    LOG.warning(
+                        "Bluetooth adapter recovery attempt %d/%d failed; "
+                        "retrying in %.1f s",
+                        attempt,
+                        attempts,
+                        backoff,
+                    )
+                    await asyncio.sleep(backoff)
+            self._degraded = True
+            self._next_recovery_at = self._clock() + self._recovery_exhausted_backoff_s
+            LOG.warning(
+                "Bluetooth adapter recovery failed after %d attempts; BLE is "
+                "degraded until the next trigger",
+                attempts,
+            )
+            return False
+        finally:
+            self._recovery_in_flight = False
+
+    async def _attempt_adapter_recovery(self) -> bool:
+        """One ladder run: self-power, ask root, re-register, verify power."""
+
         recovered = False
         try:
             recovered = await self.backend.power_on()
@@ -1982,31 +2072,40 @@ class BluezGattPeripheral:
         if not recovered:
             if not self.backend.request_recovery():
                 LOG.warning(
-                    "Bluetooth adapter recovery skipped (cooldown or no trigger path)"
+                    "Bluetooth adapter recovery trigger could not be written; "
+                    "the next attempt retries"
                 )
-            await asyncio.sleep(self._recovery_wait_s)
         try:
             await self.backend.stop()
         except Exception as exc:
             LOG.debug("could not tear down the stopped BlueZ backend: %s", exc)
         else:
             # Nothing is registered now; keep `advertising` honest if the
-            # re-registration below fails and the watchdog retries later.
+            # re-registration below fails and the next attempt retries.
             self._advertised_tier = None
         try:
-            await self._connect_backend()
+            await self._connect_backend(trigger_recovery=False)
         except Exception as exc:
             LOG.warning(
                 "could not re-register BLE after adapter recovery: %s; "
-                "the next power check retries",
+                "the next attempt retries",
                 exc,
             )
-            return
+            return False
         # A fresh backend registration must not trust the old tier shadow.
         self._advertised_tier = self.app.advertising_tier
         self._pairable_applied = None
         await self.refresh_pairing_state()
+        try:
+            powered = await self.backend.adapter_powered()
+        except Exception as exc:
+            LOG.warning("could not verify the adapter after recovery: %s", exc)
+            return False
+        if not powered:
+            LOG.warning("BLE re-registered but the adapter still reports Powered=no")
+            return False
         LOG.info("BLE GATT and advertising re-registered after adapter recovery")
+        return True
 
     # ---- advertising interval -------------------------------------------
 
@@ -2253,6 +2352,9 @@ class BluezGattPeripheral:
         if self._started:
             self.app.bridge.remove_hand_listener(self._on_hand_state_changed)
             self.app.pairing_listener = None
+            # Mark stopped before cancelling so an in-flight recovery cannot
+            # start another attempt, and close itself never writes Powered.
+            self._started = False
             self._cancel_tasks()
             self._bond_grace_deadline = None
             self.app.pairing_open = False
@@ -2268,7 +2370,6 @@ class BluezGattPeripheral:
             self.app.bridge.remove_sink(self.app)
             self.app.set_emitter(lambda _uuid, _value: None)
             self.app.stop_notify(FF14_BATCHED)
-            self._started = False
         else:
             self._cancel_tasks()
         self._loop = None

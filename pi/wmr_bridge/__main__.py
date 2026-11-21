@@ -585,6 +585,11 @@ def _format_status(
             "Bluetooth adapter: none (check 'rfkill list bluetooth' and "
             "'systemctl status bluetooth')"
         )
+        lines.append(
+            "Bluetooth adapter recovery: failed - no controller is enumerated "
+            "after the recovery ladder; check 'systemctl status "
+            "wmr-bridge-bt-recover' and the daemon journal."
+        )
     else:
         adapter = status.adapter
         name = f" ({adapter.name})" if adapter.name else ""
@@ -593,6 +598,12 @@ def _format_status(
             f"pairable={_yes(adapter.pairable)} discovering={_yes(adapter.discovering)}"
         )
         if not adapter.powered:
+            lines.append(
+                "Bluetooth adapter recovery: failed - the adapter is enumerated "
+                "but reports Powered: no; 'wmr-bridge' retried it and asked "
+                "wmr-bridge-bt-recover.service to run the ladder. Check "
+                "'systemctl status wmr-bridge-bt-recover'."
+            )
             # btmon reports HCI Reset -> Hardware Error 0x00 for a crashed
             # Broadcom/Cypress controller. A reboot reinitialises the chip; a
             # daemon restart does not reload its firmware. Field evidence on
