@@ -333,16 +333,21 @@ link) so BLE HID and FF1x notifications keep their slots. If the journal shows
 
 If the log says `auto-pair: Bluetooth adapter is not usable yet`, check that
 Bluetooth is running and not blocked. A fresh install clears a boot-time soft
-block as root, and while the bridge runs a `Powered: no` report triggers the
+block as root. While the bridge runs, a `Powered: no` report triggers the
 root `wmr-bridge-bt-recover.service`, which runs the ladder in
-`pi/systemd/wmr-bridge-bt-recover.sh`: unblock rfkill, `hciuart` (only when
-`systemctl cat` finds the unit, else reset-rebind the controller), then
-restart `bluetooth`; the pairer keeps retrying, so no restart is needed once
-the block clears:
+`pi/systemd/wmr-bridge-bt-recover.sh`. The ladder unblocks rfkill, restarts
+`hciuart` only when `systemctl cat` finds the unit, otherwise reset-rebinds
+the controller, and restarts `bluetooth`. It reports success only when a
+controller is enumerated and reports `Powered: yes`. Otherwise the unit fails
+and the daemon makes up to three attempts. The pairer keeps retrying, so no
+restart is needed once the block clears. If the adapter stays off, check the
+recovery unit and the daemon status:
 
 ```bash
 rfkill list bluetooth
 systemctl status bluetooth
+systemctl status wmr-bridge-bt-recover
+wmr-bridge status
 sudo rfkill unblock bluetooth
 ```
 
