@@ -313,13 +313,15 @@ working adapter and its bonds stay live. On a healthy adapter, a plain
 `systemctl restart wmr-bridge` returns `Powered: yes` within 10 s. If
 `bluetoothctl show` reports
 `Powered: no` and `btmon` logs `HCI Reset` answered by `Hardware Error` (0x10),
-the controller firmware crashed. The daemon tries `Adapter1.Powered=True` and
-then asks the root `wmr-bridge-bt-recover.service` to run the ladder in
-`pi/systemd/wmr-bridge-bt-recover.sh`: unblock rfkill, `hciuart` (only when
-`systemctl cat` finds the unit, else reset-rebind the controller), restart
-`bluetooth.service`, and start the bridge again, at most once per cooldown. If
-the adapter stays off after that,
-reboot the Pi, and power-cycle the board if the error survives the reboot. A
+the controller firmware crashed. The daemon tries `Adapter1.Powered=True`. If
+that fails, it asks the root `wmr-bridge-bt-recover.service` to run the ladder
+in `pi/systemd/wmr-bridge-bt-recover.sh`. The ladder unblocks rfkill, restarts
+`hciuart` only when `systemctl cat` finds the unit, otherwise reset-rebinds
+the controller, restarts `bluetooth.service`, and starts the bridge. The run
+succeeds only when a controller is enumerated and reports `Powered: yes`.
+Otherwise the unit fails with a non-zero exit code and the daemon makes up to
+three attempts. If the adapter stays off after those attempts, reboot the Pi.
+Power-cycle the board if the error survives the reboot. A
 phone that lost its side of the bond re-pairs
 through `wmr-bridge pair` while the adapter is pairable.
 

@@ -5,6 +5,22 @@ Releases before 0.3.0 are listed on the
 This file records what each release contains; hardware evidence stays in
 [`docs/STATUS.md`](docs/STATUS.md) and the run sheets.
 
+## Unreleased
+
+### Raspberry Pi bridge
+
+- **Adapter recovery reports failure, and the daemon retries it.** A ladder
+  run succeeds only when at least one controller is enumerated and reports
+  `Powered: yes` after the last rung. Otherwise the root
+  `wmr-bridge-bt-recover.service` fails with exit 1 (no controller), 2
+  (unpowered controller), 3 (deadline) or 4 (failed sample), and logs the
+  observed state. The daemon makes up to three attempts with a short backoff,
+  treats an adapter that is absent from the bus as `Powered: no`, and reports
+  a degraded state after exhaustion. `wmr-bridge status` names the failed
+  recovery. The recovery changes are host-tested only and have not run on Pi
+  hardware. The package still reports `0.3.28-rc.3` until the release bumps
+  `VERSION`.
+
 ## 0.3.28-rc.3 — 2026-11-19
 
 The third pre-release candidate for the Pixel + Pi hardware check, cut from
