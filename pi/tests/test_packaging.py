@@ -392,6 +392,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('exit "$EXIT_NO_CONTROLLER"', helper)
         self.assertIn('exit "$EXIT_UNPOWERED"', helper)
         self.assertIn('exit "$EXIT_DEADLINE"', helper)
+        self.assertIn('exit "$EXIT_SAMPLE_FAILED"', helper)
         self.assertLess(
             helper.index("sample_postcondition"),
             helper.index("exit 0"),
@@ -535,6 +536,19 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("rung 2/5: hciuart.service present", proc.stdout)
         self.assertIn("postcondition: controllers=0 powered=no", proc.stdout)
         self.assertNotIn("recovery succeeded", proc.stdout)
+
+    def test_bt_recover_l7_failed_sample_is_not_a_deadline_overrun(self) -> None:
+        # bluetoothd unreachable or bluetoothctl missing: the sample fails
+        # at once, so the exit code must name the failed sample (4), not the
+        # deadline (3), and the journal must carry the real cause.
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = _run_bt_recover_ladder(
+                Path(tmp),
+                bluetoothctl_body="exit 1",
+            )
+        self.assertEqual(proc.returncode, 4, msg=proc.stdout + proc.stderr)
+        self.assertIn("sample failed: bluetoothctl list exited 1", proc.stdout)
+        self.assertNotIn("inside the 90s deadline", proc.stdout)
 
     def test_upgrade_install_does_not_repeat_the_wifi_staging(self) -> None:
         installer = INSTALL_SH.read_text(encoding="utf-8")

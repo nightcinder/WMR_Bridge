@@ -18,10 +18,11 @@
 # controller is enumerated and reports "Powered: yes". Otherwise the script
 # exits non-zero with a code naming the failure kind (1 no controller, 2
 # enumerated but unpowered, 3 the postcondition could not be sampled inside
-# the deadline) and logs one line with the observed state. systemd, the
-# daemon and a reader of the journal then see a failed unit instead of a
-# false success. Reboot remains the human last resort, not a rung of a
-# script that cannot fail.
+# the deadline, 4 a sample call failed for another reason, e.g. bluetoothctl
+# missing or bluetoothd unreachable) and logs one line with the observed
+# state. systemd, the daemon and a reader of the journal then see a failed
+# unit instead of a false success. Reboot remains the human last resort, not
+# a rung of a script that cannot fail.
 #   1. rfkill unblock bluetooth -- clear the boot-time soft block that the
 #      unprivileged daemon cannot clear.
 #   2. restart hciuart.service -- only when `systemctl cat` proves the image
@@ -57,6 +58,7 @@ DEADLINE_EPOCH=$(( $(date +%s) + DEADLINE_S ))
 EXIT_NO_CONTROLLER=1
 EXIT_UNPOWERED=2
 EXIT_DEADLINE=3
+EXIT_SAMPLE_FAILED=4
 
 log() {
     echo "wmr-bridge-bt-recover: $*"
@@ -80,22 +82,33 @@ run_bounded() {
 
 # Sample the postcondition: count the controllers BlueZ enumerates, then ask
 # each for Powered. Sets PC_COUNT, PC_MACS, PC_POWERED and PC_POWERED_MAC.
-# Returns 124 when a sample call could not finish inside the deadline, so a
-# wedged bluetoothctl is a bounded non-zero exit rather than a hang.
+# Returns 0 when every sample call completed (PC_COUNT then holds the
+# observed count), 124 when a call could not finish inside the deadline, and
+# 1 when a call failed for another reason (bluetoothctl missing, bluetoothd
+# unreachable, a controller vanishing between `list` and `show`); PC_ERROR
+# then names the cause, so the caller does not report every failure as a
+# deadline overrun.
 sample_postcondition() {
     PC_COUNT=0
     PC_MACS=""
     PC_POWERED=no
     PC_POWERED_MAC=""
+    PC_ERROR=""
     bound=$((DEADLINE_EPOCH - $(date +%s)))
     [ "$bound" -gt "$STEP_TIMEOUT_S" ] && bound="$STEP_TIMEOUT_S"
     if [ "$bound" -le 0 ]; then
         PC_COUNT="unknown"
         return 124
     fi
-    if ! list="$(timeout "$bound" bluetoothctl list 2>/dev/null)"; then
-        PC_COUNT="unknown"
-        return 124
+    list="$(timeout "$bound" bluetoothctl list 2>/dev/null)"
+    status=$?
+    if [ "$status" -ne 0 ]; then
+        if [ "$status" -eq 124 ]; then
+            PC_COUNT="unknown"
+            return 124
+        fi
+        PC_ERROR="bluetoothctl list exited ${status}"
+        return 1
     fi
     while IFS= read -r line; do
         case "$line" in
@@ -116,9 +129,15 @@ EOF
             PC_COUNT="unknown"
             return 124
         fi
-        if ! info="$(timeout "$bound" bluetoothctl show "$mac" 2>/dev/null)"; then
-            PC_COUNT="unknown"
-            return 124
+        info="$(timeout "$bound" bluetoothctl show "$mac" 2>/dev/null)"
+        status=$?
+        if [ "$status" -ne 0 ]; then
+            if [ "$status" -eq 124 ]; then
+                PC_COUNT="unknown"
+                return 124
+            fi
+            PC_ERROR="bluetoothctl show ${mac} exited ${status}"
+            return 1
         fi
         case "$info" in
             *"Powered: yes"*)
@@ -205,9 +224,19 @@ run_bounded "$STEP_TIMEOUT_S" systemctl start "$DAEMON_SERVICE" ||
     log "rung 5/5: ${DAEMON_SERVICE} start failed or timed out (continuing)"
 
 # Success is the observed postcondition, not the fact that the rungs ran.
-if ! sample_postcondition; then
+sample_postcondition
+sample_status=$?
+if [ "$sample_status" -eq 124 ]; then
     log "postcondition: controllers=${PC_COUNT} powered=unknown -- not sampled inside the ${DEADLINE_S}s deadline"
     exit "$EXIT_DEADLINE"
+fi
+if [ "$sample_status" -ne 0 ]; then
+    if [ -n "$PC_MACS" ]; then
+        log "postcondition: controllers=${PC_COUNT} powered=unknown (${PC_MACS}) -- sample failed: ${PC_ERROR}"
+    else
+        log "postcondition: controllers=${PC_COUNT} powered=unknown -- sample failed: ${PC_ERROR}"
+    fi
+    exit "$EXIT_SAMPLE_FAILED"
 fi
 if [ "$PC_COUNT" -eq 0 ]; then
     log "postcondition: controllers=0 powered=no -- no controller enumerated after the ladder"
