@@ -361,7 +361,7 @@ class PackagingTests(unittest.TestCase):
         # The lock directory must survive this oneshot's exit, or a queued
         # second trigger races a still-running recovery for a deleted lock.
         self.assertIn("RuntimeDirectoryPreserve=yes", service)
-        # The daemon's 300 s cooldown is the only rate limiter; a start
+        # The daemon throttles while a recovery attempt is in flight; a start
         # limit here would silently lock recovery out after three failures.
         self.assertIn("StartLimitIntervalSec=0", service)
         self.assertNotIn("StartLimitIntervalSec=600", service)

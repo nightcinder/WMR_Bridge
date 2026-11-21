@@ -431,6 +431,7 @@ class StatusTests(unittest.TestCase):
 
         self.assertEqual(code, 1)
         self.assertIn("rfkill list bluetooth", output.getvalue())
+        self.assertIn("recovery: failed", output.getvalue())
 
     def test_print_status_without_bluetoothctl_explains(self) -> None:
         output = io.StringIO()
@@ -452,6 +453,7 @@ class StatusTests(unittest.TestCase):
         lines = _format_status(status)
         text = "\n".join(lines)
         self.assertIn("powered=no", lines[0])
+        self.assertIn("recovery: failed", text)
         self.assertIn("Hardware Error", text)
         self.assertIn("reboot the Pi", text)
         self.assertIn("power-cycle", text)
