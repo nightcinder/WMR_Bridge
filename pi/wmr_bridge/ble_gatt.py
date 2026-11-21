@@ -1471,10 +1471,11 @@ class DbusGattBackend:
         except Exception as exc:
             bus.disconnect()
             self._bus = None
-            # An adapter that vanished from the bus has no Adapter1 object to
-            # report Powered=no. Treat it like an unpowered adapter so the
-            # recovery path is entered instead of polling in silence.
-            raise AdapterRecoveryPending(
+            # Startup with no adapter must fail fast so the daemon can disable
+            # BLE; the runtime watchdog handles an adapter that vanishes by
+            # treating the unreadable power state as Powered=no and entering
+            # recovery.
+            raise RuntimeError(
                 f"BlueZ adapter {self.adapter} is not available: {exc}"
             ) from exc
 
@@ -1804,6 +1805,7 @@ class BluezGattPeripheral:
         advertising_debounce_s: float = ADVERTISING_DEBOUNCE_S,
         power_check_interval_s: float = ADAPTER_POWER_CHECK_INTERVAL_S,
         recovery_wait_s: float = ADAPTER_RECOVERY_WAIT_S,
+        recovery_wait_ladder_s: tuple[float, ...] = ADAPTER_RECOVERY_WAIT_LADDER_S,
         recovery_attempts: int = ADAPTER_RECOVERY_MAX_ATTEMPTS,
         recovery_backoff_s: float = ADAPTER_RECOVERY_BACKOFF_S,
         recovery_exhausted_backoff_s: float = ADAPTER_RECOVERY_EXHAUSTED_BACKOFF_S,
@@ -1838,6 +1840,9 @@ class BluezGattPeripheral:
         self._advertising_debounce_s = max(0.0, advertising_debounce_s)
         self._power_check_interval_s = max(0.001, power_check_interval_s)
         self._recovery_wait_s = max(0.0, recovery_wait_s)
+        self._recovery_wait_ladder_s = tuple(
+            max(0.0, wait) for wait in recovery_wait_ladder_s
+        ) or (0.0,)
         self._recovery_attempts = max(1, recovery_attempts)
         self._recovery_backoff_s = max(0.0, recovery_backoff_s)
         self._recovery_exhausted_backoff_s = max(0.0, recovery_exhausted_backoff_s)
@@ -1955,6 +1960,20 @@ class BluezGattPeripheral:
                     "BLE adapter is not ready (%s); retrying in %.1f s", exc, wait
                 )
                 await asyncio.sleep(wait)
+            except Exception as exc:
+                # A runtime recovery has already asked root to reload the
+                # controller; an absent adapter's introspection error must
+                # wait out the ladder instead of skipping straight to the
+                # next bounded attempt. Startup still fails fast above.
+                if trigger_recovery:
+                    raise
+                if attempt + 1 >= attempts:
+                    raise
+                wait = self._recovery_wait(attempt)
+                LOG.warning(
+                    "BLE adapter is not ready (%s); retrying in %.1f s", exc, wait
+                )
+                await asyncio.sleep(wait)
 
     def _recovery_wait(self, attempt: int) -> float:
         """Ladder rung before reconnect attempt ``attempt`` (0-based).
@@ -1966,7 +1985,7 @@ class BluezGattPeripheral:
 
         if attempt <= 0:
             return self._recovery_wait_s
-        ladder = ADAPTER_RECOVERY_WAIT_LADDER_S
+        ladder = self._recovery_wait_ladder_s
         return ladder[min(attempt - 1, len(ladder) - 1)]
 
     async def _watch_adapter_power(self) -> None:

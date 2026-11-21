@@ -628,6 +628,7 @@ class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
             "pairing_window_s": 0.0,
             "power_check_interval_s": 0.01,
             "recovery_wait_s": 0.0,
+            "recovery_wait_ladder_s": (0.0, 0.0),
             "recovery_backoff_s": 0.0,
         }
         params.update(options)
