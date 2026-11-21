@@ -46,8 +46,12 @@ exit 0
 """
 
 SYSTEMCTL_STUB = """#!/bin/sh
-[ "${RECOVERY_ACTIVE:-0}" = 1 ] && exit 0
-exit 3
+case "$*" in
+    "show -p ActiveState --value wmr-bridge-bt-recover.service")
+        printf '%s\\n' "${RECOVERY_STATE:-inactive}"
+        ;;
+esac
+exit 0
 """
 
 
@@ -146,17 +150,23 @@ class WlanCycleTests(unittest.TestCase):
         self.assertIn("link set wlan0 up", self.ip_calls())
         self.assertIn("signal: INT", err)
 
-    def test_refuses_while_recovery_is_active(self) -> None:
-        proc = subprocess.run(
-            self.args("0"),
-            env=self.env(RECOVERY_ACTIVE="1"),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(proc.returncode, 75, msg=proc.stderr)
-        self.assertIn("wmr-bridge-bt-recover.service is active", proc.stderr)
-        self.assertEqual(self.ip_calls(), [])
+    def test_refuses_while_recovery_is_running(self) -> None:
+        # The oneshot is `activating` while its ladder runs; `is-active`
+        # would report inactive for that whole window.
+        for state in ("activating", "active", "reloading", "refreshing"):
+            with self.subTest(state=state):
+                proc = subprocess.run(
+                    self.args("0"),
+                    env=self.env(RECOVERY_STATE=state),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(proc.returncode, 75, msg=proc.stderr)
+                self.assertIn(
+                    f"wmr-bridge-bt-recover.service is {state}", proc.stderr
+                )
+                self.assertEqual(self.ip_calls(), [])
 
 
 if __name__ == "__main__":

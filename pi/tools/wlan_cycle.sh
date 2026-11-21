@@ -15,7 +15,7 @@
 #   bt-after:  controllers=<n|unknown> powered=<yes|no|unknown>
 #
 # usage: wlan_cycle.sh [--interface IFACE] N
-# exit: 0 cycle complete, 1 ip failed, 64 usage, 75 bt-recover active,
+# exit: 0 cycle complete, 1 ip failed, 64 usage, 75 bt-recover running,
 #       77 not root, 129/130/143 signal.
 set -u
 
@@ -47,11 +47,16 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # A recovery ladder run owns the adapter; cycling Wi-Fi under it would make
-# the run's postcondition and this record describe different states.
-if systemctl is-active --quiet wmr-bridge-bt-recover.service 2>/dev/null; then
-    echo "wlan-cycle: refusing to start: wmr-bridge-bt-recover.service is active" >&2
-    exit 75
-fi
+# the run's postcondition and this record describe different states. The unit
+# is Type=oneshot without RemainAfterExit, so a running ladder reports
+# `activating`, not `active`; query ActiveState instead of `is-active`.
+recovery_state="$(systemctl show -p ActiveState --value wmr-bridge-bt-recover.service 2>/dev/null)"
+case "$recovery_state" in
+    active|activating|reloading|refreshing)
+        echo "wlan-cycle: refusing to start: wmr-bridge-bt-recover.service is $recovery_state" >&2
+        exit 75
+        ;;
+esac
 
 # Sets CB_COUNT and CB_POWERED from one bounded `bluetoothctl list`/`show`.
 sample_bt() {
