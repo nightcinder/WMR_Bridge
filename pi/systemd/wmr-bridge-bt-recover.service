@@ -31,7 +31,9 @@ ExecStartPre=/bin/rm -f /var/lib/wmr-bridge/bt-recover.trigger
 # attach -- restarting hciuart only when `systemctl cat` proves the image
 # ships it, else a btmgmt/hci_uart reset-rebind -- restarts bluetoothd and
 # starts the daemon again; it logs each rung so the journal names the path
-# taken, and exits 0 even when the adapter stays down.
+# taken, samples the controller count and Powered state after the last rung,
+# and exits non-zero (unit failed, one journal line with the observed state)
+# when no controller is enumerated or the enumerated one is not powered.
 ExecStart=/usr/bin/flock -n /run/wmr-bridge-bt-recover/recover.lock /opt/wmr-bridge/pi/systemd/wmr-bridge-bt-recover.sh
 TimeoutStartSec=120
 Nice=10

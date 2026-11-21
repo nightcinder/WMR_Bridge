@@ -7,14 +7,21 @@
 # retrying from the daemon can reload the controller. Only root can.
 #
 # Ladder, each rung logged so the journal names the path taken. Every step
-# that can hang on a wedged controller (btmgmt, the sysfs unbind/bind)
-# runs under timeout(1) with a per-step bound well under the unit's
-# TimeoutStartSec=120, so a hung step fails forward to the next rung
-# instead of hanging the whole unit until systemd kills it at 120 s.
-# Every failure is non-fatal and the script always exits 0: a still-dead
-# adapter must not fail the unit (the daemon's 300 s cooldown is the rate
-# limiter), so the escalation is logged instead. Reboot remains the
-# documented last rung.
+# that can hang on a wedged controller (btmgmt, systemctl and the sysfs
+# unbind/bind) runs under timeout(1), and the whole script carries its own
+# deadline, so a hung step fails forward to the next rung instead of hanging
+# the unit until systemd kills it at TimeoutStartSec=120. A systemd timeout
+# kill has no exit code for the caller; this script does.
+#
+# A rung failing is non-fatal and the ladder continues, but the run is a
+# success only if the postcondition holds after the last rung: at least one
+# controller is enumerated and reports "Powered: yes". Otherwise the script
+# exits non-zero with a code naming the failure kind (1 no controller, 2
+# enumerated but unpowered, 3 the postcondition could not be sampled inside
+# the deadline) and logs one line with the observed state. systemd, the
+# daemon and a reader of the journal then see a failed unit instead of a
+# false success. Reboot remains the human last resort, not a rung of a
+# script that cannot fail.
 #   1. rfkill unblock bluetooth -- clear the boot-time soft block that the
 #      unprivileged daemon cannot clear.
 #   2. restart hciuart.service -- only when `systemctl cat` proves the image
@@ -30,30 +37,115 @@ set -u
 DAEMON_SERVICE=wmr-bridge.service
 # Per-step bound for the external calls that hang on a wedged controller:
 # a crashed chip never answers the mgmt socket, so btmgmt blocks forever,
-# and the sysfs unbind/bind runs the driver's detach/attach inline. Kept
-# well under the unit's TimeoutStartSec=120 so even a fully hung rung 3
-# still leaves the unit time to reach rungs 4/5.
-STEP_TIMEOUT_S=10
+# the sysfs unbind/bind runs the driver's detach/attach inline, and
+# systemctl can wait forever on a wedged daemon. Kept well under the unit's
+# TimeoutStartSec=120 so even a fully hung rung still leaves the unit time
+# to reach rungs 4/5. The tests lower it; production keeps these values.
+STEP_TIMEOUT_S="${BT_RECOVER_STEP_TIMEOUT_S:-10}"
+# Script-level deadline, enforced by the script itself. systemd's
+# TimeoutStartSec kill yields no exit code, so the ladder must finish, and
+# sample the postcondition, before that. A sampling reserve keeps the final
+# `bluetoothctl` calls inside the deadline even when every rung hangs.
+DEADLINE_S="${BT_RECOVER_DEADLINE_S:-90}"
+case "$STEP_TIMEOUT_S" in ''|*[!0-9]*) STEP_TIMEOUT_S=10 ;; esac
+case "$DEADLINE_S" in ''|*[!0-9]*) DEADLINE_S=90 ;; esac
+[ "$DEADLINE_S" -ge "$STEP_TIMEOUT_S" ] || DEADLINE_S="$STEP_TIMEOUT_S"
+SAMPLE_RESERVE_S=$((DEADLINE_S / 4))
+[ "$SAMPLE_RESERVE_S" -gt 10 ] && SAMPLE_RESERVE_S=10
+DEADLINE_EPOCH=$(( $(date +%s) + DEADLINE_S ))
+
+EXIT_NO_CONTROLLER=1
+EXIT_UNPOWERED=2
+EXIT_DEADLINE=3
 
 log() {
     echo "wmr-bridge-bt-recover: $*"
+}
+
+# Run one external step under min(STEP_TIMEOUT_S, deadline - reserve). The
+# reserve leaves time to sample the postcondition; once it is gone the step
+# is skipped and reports timeout(1)'s 124, so the ladder still reaches the
+# postcondition check instead of being killed by systemd.
+run_bounded() {
+    cap="$1"
+    shift
+    left=$((DEADLINE_EPOCH - $(date +%s) - SAMPLE_RESERVE_S))
+    [ "$left" -gt "$cap" ] && left="$cap"
+    if [ "$left" -le 0 ]; then
+        log "deadline ${DEADLINE_S}s: skipping $*"
+        return 124
+    fi
+    timeout "$left" "$@"
+}
+
+# Sample the postcondition: count the controllers BlueZ enumerates, then ask
+# each for Powered. Sets PC_COUNT, PC_MACS, PC_POWERED and PC_POWERED_MAC.
+# Returns 124 when a sample call could not finish inside the deadline, so a
+# wedged bluetoothctl is a bounded non-zero exit rather than a hang.
+sample_postcondition() {
+    PC_COUNT=0
+    PC_MACS=""
+    PC_POWERED=no
+    PC_POWERED_MAC=""
+    bound=$((DEADLINE_EPOCH - $(date +%s)))
+    [ "$bound" -gt "$STEP_TIMEOUT_S" ] && bound="$STEP_TIMEOUT_S"
+    if [ "$bound" -le 0 ]; then
+        PC_COUNT="unknown"
+        return 124
+    fi
+    if ! list="$(timeout "$bound" bluetoothctl list 2>/dev/null)"; then
+        PC_COUNT="unknown"
+        return 124
+    fi
+    while IFS= read -r line; do
+        case "$line" in
+            Controller\ *)
+                mac="${line#Controller }"
+                mac="${mac%% *}"
+                PC_COUNT=$((PC_COUNT + 1))
+                PC_MACS="${PC_MACS:+${PC_MACS} }${mac}"
+                ;;
+        esac
+    done <<EOF
+${list}
+EOF
+    for mac in $PC_MACS; do
+        bound=$((DEADLINE_EPOCH - $(date +%s)))
+        [ "$bound" -gt "$STEP_TIMEOUT_S" ] && bound="$STEP_TIMEOUT_S"
+        if [ "$bound" -le 0 ]; then
+            PC_COUNT="unknown"
+            return 124
+        fi
+        if ! info="$(timeout "$bound" bluetoothctl show "$mac" 2>/dev/null)"; then
+            PC_COUNT="unknown"
+            return 124
+        fi
+        case "$info" in
+            *"Powered: yes"*)
+                PC_POWERED=yes
+                PC_POWERED_MAC="$mac"
+                break
+                ;;
+        esac
+    done
+    return 0
 }
 
 # Stop the daemon before touching bluetoothd: a live GATT application,
 # advertisement and Classic scan racing a bluetoothd restart can wedge the
 # combo controller until the Pi is rebooted.
 log "stopping ${DAEMON_SERVICE} before the ladder"
-systemctl stop "$DAEMON_SERVICE" ||
+run_bounded "$STEP_TIMEOUT_S" systemctl stop "$DAEMON_SERVICE" ||
     log "could not stop ${DAEMON_SERVICE} (continuing)"
 
 log "rung 1/5: rfkill unblock bluetooth"
-rfkill unblock bluetooth ||
-    log "rung 1/5: rfkill unblock failed (continuing)"
+run_bounded "$STEP_TIMEOUT_S" rfkill unblock bluetooth ||
+    log "rung 1/5: rfkill unblock failed or timed out (continuing)"
 
-if systemctl cat hciuart.service >/dev/null 2>&1; then
+if run_bounded "$STEP_TIMEOUT_S" systemctl cat hciuart.service >/dev/null 2>&1; then
     log "rung 2/5: hciuart.service present; restarting the UART attach"
-    systemctl restart hciuart.service ||
-        log "rung 2/5: hciuart.service restart failed (continuing)"
+    run_bounded "$STEP_TIMEOUT_S" systemctl restart hciuart.service ||
+        log "rung 2/5: hciuart.service restart failed or timed out (continuing)"
 else
     log "rung 3/5: no hciuart.service on this image; btmgmt/hci_uart reset-rebind"
     found=0
@@ -63,9 +155,9 @@ else
         index="$(basename "$hci")"
         if command -v btmgmt >/dev/null 2>&1; then
             log "rung 3/5: btmgmt power cycle on ${index}"
-            timeout "$STEP_TIMEOUT_S" btmgmt -i "$index" power off >/dev/null 2>&1 ||
+            run_bounded "$STEP_TIMEOUT_S" btmgmt -i "$index" power off >/dev/null 2>&1 ||
                 log "rung 3/5: btmgmt power off failed or timed out on ${index} (continuing)"
-            timeout "$STEP_TIMEOUT_S" btmgmt -i "$index" power on >/dev/null 2>&1 ||
+            run_bounded "$STEP_TIMEOUT_S" btmgmt -i "$index" power on >/dev/null 2>&1 ||
                 log "rung 3/5: btmgmt power on failed or timed out on ${index} (continuing)"
         fi
         # Driver reset-rebind: walk to the closest ancestor bound to a
@@ -89,10 +181,10 @@ else
         # timeout(1) cannot wrap a shell redirection, so each sysfs write
         # runs in a bounded sh -c: a wedged driver can block the write in
         # the kernel, and the bound keeps the ladder moving to rung 4/5.
-        if timeout "$STEP_TIMEOUT_S" sh -c 'printf "%s\n" "$1" >"$2"' sh "$device_name" "${driver_dir}/unbind" 2>/dev/null; then
+        if run_bounded "$STEP_TIMEOUT_S" sh -c 'printf "%s\n" "$1" >"$2"' sh "$device_name" "${driver_dir}/unbind" 2>/dev/null; then
             # Let the detach settle before re-attaching the same device.
             sleep 1
-            timeout "$STEP_TIMEOUT_S" sh -c 'printf "%s\n" "$1" >"$2"' sh "$device_name" "${driver_dir}/bind" 2>/dev/null ||
+            run_bounded "$STEP_TIMEOUT_S" sh -c 'printf "%s\n" "$1" >"$2"' sh "$device_name" "${driver_dir}/bind" 2>/dev/null ||
                 log "rung 3/5: re-binding ${device_name} failed or timed out (continuing)"
             log "rung 3/5: re-bound ${device_name} via ${driver_dir##*/}"
         else
@@ -105,12 +197,25 @@ else
 fi
 
 log "rung 4/5: restarting bluetooth.service"
-if ! systemctl restart bluetooth.service; then
-    log "escalation: bluetooth.service restart failed; adapter left down -- reboot the Pi (documented last rung)"
-fi
+run_bounded "$STEP_TIMEOUT_S" systemctl restart bluetooth.service ||
+    log "rung 4/5: bluetooth.service restart failed or timed out (continuing)"
 
 log "rung 5/5: starting ${DAEMON_SERVICE}"
-systemctl start "$DAEMON_SERVICE" ||
-    log "rung 5/5: ${DAEMON_SERVICE} start failed (continuing)"
+run_bounded "$STEP_TIMEOUT_S" systemctl start "$DAEMON_SERVICE" ||
+    log "rung 5/5: ${DAEMON_SERVICE} start failed or timed out (continuing)"
 
+# Success is the observed postcondition, not the fact that the rungs ran.
+if ! sample_postcondition; then
+    log "postcondition: controllers=${PC_COUNT} powered=unknown -- not sampled inside the ${DEADLINE_S}s deadline"
+    exit "$EXIT_DEADLINE"
+fi
+if [ "$PC_COUNT" -eq 0 ]; then
+    log "postcondition: controllers=0 powered=no -- no controller enumerated after the ladder"
+    exit "$EXIT_NO_CONTROLLER"
+fi
+if [ "$PC_POWERED" != yes ]; then
+    log "postcondition: controllers=${PC_COUNT} powered=no (${PC_MACS}) -- controller enumerated but not powered"
+    exit "$EXIT_UNPOWERED"
+fi
+log "postcondition: controllers=${PC_COUNT} powered=yes (${PC_POWERED_MAC}) -- recovery succeeded"
 exit 0

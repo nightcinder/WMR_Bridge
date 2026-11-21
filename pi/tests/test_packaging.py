@@ -9,6 +9,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -109,6 +110,55 @@ def _stage_signed_release(directory: Path) -> tuple[Path, str]:
     _pub, bare_key = _minisign_keypair(directory / "keys")
     _sign_sums(release, directory / "keys" / "minisign.key")
     return release, bare_key
+
+
+def _run_bt_recover_ladder(
+    directory: Path,
+    *,
+    controllers: tuple[str, ...] = ("00:11:22:33:44:55",),
+    powered: str = "yes",
+    systemctl_body: str = "exit 0",
+    bluetoothctl_body: str | None = None,
+    step_timeout: int = 10,
+    deadline: int = 90,
+) -> subprocess.CompletedProcess[str]:
+    """Run the root ladder against stubbed systemctl/bluetoothctl/rfkill."""
+    bin_dir = directory / "bin"
+    bin_dir.mkdir()
+    for name in ("systemctl", "rfkill", "btmgmt"):
+        _write_stub(bin_dir, name, "exit 0")
+    _write_stub(bin_dir, "systemctl", systemctl_body)
+    if bluetoothctl_body is None:
+        enumerated = "".join(
+            f"Controller {mac} wmr-bridge #1\n" for mac in controllers
+        )
+        bluetoothctl_body = f'''if [ "$1" = "list" ]; then
+    cat <<'EOF'
+{enumerated}EOF
+    exit 0
+fi
+if [ "$1" = "show" ]; then
+    printf '\\tPowered: %s\\n' "{powered}"
+    exit 0
+fi
+exit 0'''
+    _write_stub(bin_dir, "bluetoothctl", bluetoothctl_body)
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
+        "BT_RECOVER_STEP_TIMEOUT_S": str(step_timeout),
+        "BT_RECOVER_DEADLINE_S": str(deadline),
+    }
+    # A login-shell rc sourced through BASH_ENV would overwrite the stub
+    # PATH; the ladder runs under systemd's clean environment, not one.
+    env.pop("BASH_ENV", None)
+    return subprocess.run(
+        ["bash", str(BT_RECOVER_HELPER_FILE)],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 def _run_upgrade_install(
@@ -334,11 +384,19 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("systemctl restart bluetooth.service", helper)
         self.assertIn("DAEMON_SERVICE=wmr-bridge.service", helper)
         self.assertIn('systemctl start "$DAEMON_SERVICE"', helper)
-        # Each rung is logged so the journal names the recovery path taken,
-        # and a failed ladder escalates instead of failing the unit.
+        # Each rung is logged so the journal names the recovery path taken.
         self.assertRegex(helper, r"rung \d/5")
-        self.assertIn("escalation", helper)
-        self.assertIn("exit 0", helper)
+        # Exit 0 is not unconditional: it follows the postcondition sample,
+        # and each failure kind has its own non-zero code.
+        self.assertEqual(helper.count("exit 0"), 1)
+        self.assertIn('exit "$EXIT_NO_CONTROLLER"', helper)
+        self.assertIn('exit "$EXIT_UNPOWERED"', helper)
+        self.assertIn('exit "$EXIT_DEADLINE"', helper)
+        self.assertLess(
+            helper.index("sample_postcondition"),
+            helper.index("exit 0"),
+        )
+        self.assertIn("Powered: yes", helper)
         proc = subprocess.run(
             ["bash", "-n", str(BT_RECOVER_HELPER_FILE)],
             capture_output=True,
@@ -361,26 +419,43 @@ class PackagingTests(unittest.TestCase):
         # detach/attach inline; an unbounded rung 3 hangs the unit until
         # TimeoutStartSec kills the whole ladder before rungs 4/5.
         self.assertIn("TimeoutStartSec=120", service)
-        match = re.search(r"^STEP_TIMEOUT_S=(\d+)$", helper, re.MULTILINE)
+        match = re.search(
+            r'^STEP_TIMEOUT_S="\$\{BT_RECOVER_STEP_TIMEOUT_S:-(\d+)\}"$',
+            helper,
+            re.MULTILINE,
+        )
         self.assertIsNotNone(match, msg="STEP_TIMEOUT_S is not defined")
         step = int(match.group(1))
-        # Well under the unit bound: the four bounded rung-3 steps plus
-        # the settle sleep and the unbounded systemctl work must all fit
-        # inside one 120 s unit start.
+        match = re.search(
+            r'^DEADLINE_S="\$\{BT_RECOVER_DEADLINE_S:-(\d+)\}"$',
+            helper,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(match, msg="DEADLINE_S is not defined")
+        deadline = int(match.group(1))
+        # Well under the unit bound: the rungs and the postcondition sample
+        # must all fit inside one 120 s unit start, enforced by the script.
         self.assertGreater(step, 0)
         self.assertLess(step, 25)
+        self.assertGreater(deadline, step)
+        self.assertLess(deadline, 120)
         # Every btmgmt invocation runs under the bound.
-        self.assertIn('timeout "$STEP_TIMEOUT_S" btmgmt -i "$index" power off', helper)
-        self.assertIn('timeout "$STEP_TIMEOUT_S" btmgmt -i "$index" power on', helper)
+        self.assertIn('run_bounded "$STEP_TIMEOUT_S" btmgmt -i "$index" power off', helper)
+        self.assertIn('run_bounded "$STEP_TIMEOUT_S" btmgmt -i "$index" power on', helper)
         for line in helper.splitlines():
             if "btmgmt -i" in line:
-                self.assertIn('timeout "$STEP_TIMEOUT_S"', line, msg=line)
+                self.assertIn('run_bounded "$STEP_TIMEOUT_S"', line, msg=line)
         # The reset-rebind writes run the driver's detach/attach in the
         # caller's context; timeout(1) cannot wrap a shell redirection, so
         # both writes must run in the bounded sh -c.
-        self.assertEqual(helper.count('timeout "$STEP_TIMEOUT_S" sh -c'), 2)
+        self.assertEqual(helper.count('run_bounded "$STEP_TIMEOUT_S" sh -c'), 2)
         self.assertIn('"${driver_dir}/unbind"', helper)
         self.assertIn('"${driver_dir}/bind"', helper)
+        # systemctl stop/restart/start can hang on a wedged daemon and were
+        # previously unbounded; every invocation must go through the bound.
+        for line in helper.splitlines():
+            if "systemctl " in line and not line.lstrip().startswith("#"):
+                self.assertIn("run_bounded", line, msg=line)
         # A timed-out step still logs its rung and the ladder runs on:
         # each timeout message names rung 3 and precedes rungs 4/5.
         for message in (
@@ -391,7 +466,75 @@ class PackagingTests(unittest.TestCase):
         ):
             self.assertIn(message, helper)
             self.assertLess(helper.index(message), helper.index("rung 4/5: restarting bluetooth.service"))
-        self.assertIn("exit 0", helper)
+        self.assertEqual(helper.count("exit 0"), 1)
+
+    def test_bt_recover_l1_success_names_the_powered_controller(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = _run_bt_recover_ladder(Path(tmp))
+        self.assertEqual(proc.returncode, 0, msg=proc.stdout + proc.stderr)
+        self.assertIn(
+            "postcondition: controllers=1 powered=yes (00:11:22:33:44:55)",
+            proc.stdout,
+        )
+        self.assertIn("recovery succeeded", proc.stdout)
+
+    def test_bt_recover_l2_zero_controllers_exits_nonzero(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = _run_bt_recover_ladder(Path(tmp), controllers=())
+        self.assertEqual(proc.returncode, 1, msg=proc.stdout + proc.stderr)
+        self.assertIn("postcondition: controllers=0 powered=no", proc.stdout)
+        self.assertNotIn("recovery succeeded", proc.stdout)
+
+    def test_bt_recover_l3_unpowered_controller_is_distinct(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = _run_bt_recover_ladder(Path(tmp), powered="no")
+        self.assertEqual(proc.returncode, 2, msg=proc.stdout + proc.stderr)
+        self.assertIn(
+            "postcondition: controllers=1 powered=no (00:11:22:33:44:55)",
+            proc.stdout,
+        )
+        self.assertNotIn("recovery succeeded", proc.stdout)
+
+    def test_bt_recover_l4_postcondition_sample_is_bounded(self) -> None:
+        hung = "sleep 30"
+        started = time.monotonic()
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = _run_bt_recover_ladder(
+                Path(tmp),
+                bluetoothctl_body=hung,
+                step_timeout=1,
+                deadline=2,
+            )
+        elapsed = time.monotonic() - started
+        self.assertEqual(proc.returncode, 3, msg=proc.stdout + proc.stderr)
+        self.assertIn("not sampled inside the 2s deadline", proc.stdout)
+        self.assertLess(elapsed, 15, msg=f"ladder took {elapsed:.1f}s")
+
+    def test_bt_recover_l5_hung_systemctl_is_bounded_by_the_script(self) -> None:
+        started = time.monotonic()
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = _run_bt_recover_ladder(
+                Path(tmp),
+                controllers=(),
+                systemctl_body="sleep 30",
+                step_timeout=1,
+                deadline=4,
+            )
+        elapsed = time.monotonic() - started
+        self.assertNotEqual(proc.returncode, 0, msg=proc.stdout + proc.stderr)
+        self.assertLess(elapsed, 15, msg=f"ladder took {elapsed:.1f}s")
+        self.assertIn("deadline 4s: skipping", proc.stdout)
+        self.assertIn("postcondition: controllers=0 powered=no", proc.stdout)
+
+    def test_bt_recover_l6_early_rung_success_does_not_exit_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = _run_bt_recover_ladder(Path(tmp), controllers=())
+        self.assertEqual(proc.returncode, 1, msg=proc.stdout + proc.stderr)
+        # Rung 2 succeeded (the stub ships hciuart), yet the run failed:
+        # no early exit 0 may follow an apparently successful rung.
+        self.assertIn("rung 2/5: hciuart.service present", proc.stdout)
+        self.assertIn("postcondition: controllers=0 powered=no", proc.stdout)
+        self.assertNotIn("recovery succeeded", proc.stdout)
 
     def test_upgrade_install_does_not_repeat_the_wifi_staging(self) -> None:
         installer = INSTALL_SH.read_text(encoding="utf-8")
