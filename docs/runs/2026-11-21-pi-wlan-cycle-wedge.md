@@ -77,7 +77,7 @@ No capture separates these hypotheses. The document therefore names no root caus
 
 - It does not claim a firmware root cause.
 - It does not treat the software reboot after event 1 or the outlet cycle after event 2 as a PASS. ONY-1313 item 3 remains unaccepted (`hardware-bench-20261120`).
-- It does not claim that `wlan-cycle` is implemented in this repository. The only mention is the bench verb list at `docs/runs/2026-11-18-pi-bench.md:108`, and no tracked file matches `wlan` or `wmr-agent` (`git ls-files`). The cycle ran from the bench agent on the Pi, not from this tree.
+- It does not claim that `wlan-cycle` is implemented in this repository. Apart from this document, the only mention is the bench verb list at `docs/runs/2026-11-18-pi-bench.md:108`. No tracked implementation file matches `wmr-agent` (`git ls-files`). The cycle ran from the bench agent on the Pi, not from this tree.
 - It does not claim an exact per-cycle BLE subscribe latency. The failed round's export is excluded (see Excluded exports).
 - It does not cover the 15 s failover gate.
 
