@@ -37,6 +37,7 @@ except ImportError:  # pragma: no cover
 
 HIDRAW_ROOT = "/sys/class/hidraw"
 RFKILL_ROOT = "/sys/class/rfkill"
+SYSFS_BLUETOOTH_ROOT = "/sys/class/bluetooth"
 WMR_NAMES = {
     "motion controller - left": 0,
     "motion controller - right": 1,
@@ -84,6 +85,67 @@ class HidrawDevice:
             or spec == self.path.casefold()
             or spec in self.name.casefold()
         )
+
+
+@dataclass(frozen=True)
+class BluetoothAdapterTransport:
+    """Sysfs transport metadata for a BlueZ HCI adapter."""
+
+    adapter: str
+    present: bool
+    driver: str | None = None
+    subsystem: str | None = None
+
+    @property
+    def is_serial_uart(self) -> bool:
+        return (
+            (self.driver is not None and self.driver.startswith("hci_uart"))
+            or self.subsystem == "serial"
+        )
+
+
+def inspect_bluetooth_adapter(
+    adapter: str = "hci0",
+    sysfs_root: str | None = None,
+) -> BluetoothAdapterTransport:
+    """Inspect ``/sys/class/bluetooth/<adapter>`` for its bound driver and bus."""
+
+    if sysfs_root is None:
+        sysfs_root = SYSFS_BLUETOOTH_ROOT
+
+    if not adapter or os.sep in adapter or (os.altsep and os.altsep in adapter):
+        return BluetoothAdapterTransport(adapter=adapter, present=False)
+    hci_path = os.path.join(sysfs_root, adapter)
+    if not os.path.exists(hci_path):
+        return BluetoothAdapterTransport(adapter=adapter, present=False)
+
+    dev = os.path.realpath(hci_path)
+    bound: str | None = None
+    while True:
+        if os.path.islink(os.path.join(dev, "driver")):
+            bound = dev
+            break
+        parent = os.path.dirname(dev)
+        if parent == dev:
+            break
+        dev = parent
+
+    if bound is None:
+        return BluetoothAdapterTransport(adapter=adapter, present=True)
+
+    driver_name = os.path.basename(os.path.realpath(os.path.join(bound, "driver"))) or None
+    subsystem_link = os.path.join(bound, "subsystem")
+    subsystem_name = (
+        os.path.basename(os.path.realpath(subsystem_link))
+        if os.path.islink(subsystem_link)
+        else None
+    )
+    return BluetoothAdapterTransport(
+        adapter=adapter,
+        present=True,
+        driver=driver_name,
+        subsystem=subsystem_name,
+    )
 
 
 def _read_uevent(sysfs_root: str, node: str) -> dict[str, str]:

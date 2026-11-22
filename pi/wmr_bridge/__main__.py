@@ -20,12 +20,14 @@ from typing import Any
 from . import __version__
 from .bluez import (
     HIDRAW_ROOT,
+    SYSFS_BLUETOOTH_ROOT,
     BluezAutoPairer,
     BluezStatus,
     Runner,
     _run_command,
     collect_status,
     discover_hidraw,
+    inspect_bluetooth_adapter,
     read_adapter,
     set_device_blocked,
 )
@@ -315,6 +317,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "keep the BLE adapter pairable whenever BLE is active, like the "
             "ESP32 (default off; any nearby LE central can then bond)"
+        ),
+    )
+    parser.add_argument(
+        "--ble-allow-serial",
+        action="store_true",
+        help=(
+            "allow the BLE GATT peripheral on a serial/UART adapter such as "
+            "hci_uart (default off; serial/UART adapters auto-degrade to "
+            "TCP-only unless overridden)"
         ),
     )
 
@@ -788,67 +799,90 @@ async def _run(args: argparse.Namespace) -> int:
             "peripheral is enabled by default (use --no-ble to disable it)"
         )
     if args.ble:
-        from .ble_gatt import BluezGattPeripheral
-
-        hosts = lambda: [address for address in _local_addresses() if address != "127.0.0.1"]
-        ble = BluezGattPeripheral(
-            bridge,
-            adapter=args.ble_adapter,
-            hosts=hosts,
-            port=server.port,
-            name=args.ble_name,
-            pairing_window_s=args.ble_pairing_window,
-            continuous_pairing=args.ble_continuous_pairing,
-        )
-        try:
-            await ble.start()
-        except Exception as exc:
-            LOG.warning("BLE GATT disabled: %s", exc)
-            ble = None
-        else:
-            LOG.info(
-                "BLE GATT: FF10 on %s, endpoint %s",
+        transport = inspect_bluetooth_adapter(args.ble_adapter)
+        if not transport.present:
+            LOG.warning(
+                "BLE GATT disabled (TCP-only): Bluetooth adapter %s is not present in %s",
                 args.ble_adapter,
-                ", ".join(hosts()) or "no LAN address yet",
+                SYSFS_BLUETOOTH_ROOT,
             )
+        elif transport.is_serial_uart and not args.ble_allow_serial:
+            LOG.warning(
+                "BLE GATT disabled (TCP-only): adapter %s uses %s (%s bus); "
+                "pass --ble-allow-serial to override",
+                args.ble_adapter,
+                transport.driver or "unknown driver",
+                transport.subsystem or "unknown",
+            )
+        else:
+            if transport.is_serial_uart and args.ble_allow_serial:
+                LOG.warning(
+                    "BLE GATT override (--ble-allow-serial): starting on %s (%s, %s bus)",
+                    args.ble_adapter,
+                    transport.driver or "unknown driver",
+                    transport.subsystem or "unknown",
+                )
+            from .ble_gatt import BluezGattPeripheral
 
-            async def _pairing_control(
-                action: str, seconds: float | None
-            ) -> dict[str, Any]:
-                powered = await ble.adapter_powered()
-                advertising = ble.advertising
-                if action == "open" and not powered:
+            hosts = lambda: [address for address in _local_addresses() if address != "127.0.0.1"]
+            ble = BluezGattPeripheral(
+                bridge,
+                adapter=args.ble_adapter,
+                hosts=hosts,
+                port=server.port,
+                name=args.ble_name,
+                pairing_window_s=args.ble_pairing_window,
+                continuous_pairing=args.ble_continuous_pairing,
+            )
+            try:
+                await ble.start()
+            except Exception as exc:
+                LOG.warning("BLE GATT disabled: %s", exc)
+                ble = None
+            else:
+                LOG.info(
+                    "BLE GATT: FF10 on %s, endpoint %s",
+                    args.ble_adapter,
+                    ", ".join(hosts()) or "no LAN address yet",
+                )
+
+                async def _pairing_control(
+                    action: str, seconds: float | None
+                ) -> dict[str, Any]:
+                    powered = await ble.adapter_powered()
+                    advertising = ble.advertising
+                    if action == "open" and not powered:
+                        return {
+                            "open": False,
+                            "manual": ble.manual_pairing_window_open(),
+                            "reason": "adapter powered off",
+                            "powered": False,
+                            "advertising": advertising,
+                            "seconds": None if seconds is None else seconds,
+                        }
+                    if action == "open" and not advertising:
+                        return {
+                            "open": False,
+                            "manual": ble.manual_pairing_window_open(),
+                            "reason": "advertisement not registered",
+                            "powered": powered,
+                            "advertising": False,
+                            "seconds": None if seconds is None else seconds,
+                        }
+                    if action == "open":
+                        await ble.open_pairing_window(seconds)
+                    else:
+                        await ble.close_pairing_window()
                     return {
-                        "open": False,
+                        "open": ble.pairing_window_open(),
                         "manual": ble.manual_pairing_window_open(),
-                        "reason": "adapter powered off",
-                        "powered": False,
+                        "reason": ble.pairable_reason(),
+                        "powered": powered,
                         "advertising": advertising,
                         "seconds": None if seconds is None else seconds,
                     }
-                if action == "open" and not advertising:
-                    return {
-                        "open": False,
-                        "manual": ble.manual_pairing_window_open(),
-                        "reason": "advertisement not registered",
-                        "powered": powered,
-                        "advertising": False,
-                        "seconds": None if seconds is None else seconds,
-                    }
-                if action == "open":
-                    await ble.open_pairing_window(seconds)
-                else:
-                    await ble.close_pairing_window()
-                return {
-                    "open": ble.pairing_window_open(),
-                    "manual": ble.manual_pairing_window_open(),
-                    "reason": ble.pairable_reason(),
-                    "powered": powered,
-                    "advertising": advertising,
-                    "seconds": None if seconds is None else seconds,
-                }
 
-            bridge.pairing_handler = _pairing_control
+                bridge.pairing_handler = _pairing_control
 
     advertiser: MdnsAdvertiser | None = None
     discovery: DiscoveryResponder | None = None
