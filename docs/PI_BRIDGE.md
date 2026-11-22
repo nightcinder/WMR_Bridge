@@ -174,14 +174,24 @@ journalctl -u wmr-bridge -n 200 --no-pager
 rfkill-blocked or `bluetoothd` is down. A stock Pi OS image soft-blocks
 Bluetooth at boot, so the bridge reports `Powered: no`. The root
 `wmr-bridge-bt-recover.service` then runs the ladder in
-`pi/systemd/wmr-bridge-bt-recover.sh`. The ladder unblocks rfkill, restarts
-`hciuart` only when `systemctl cat` finds the unit, and otherwise reset-rebinds
-the controller. It then restarts `bluetooth`. A failed rung does not stop the
-ladder. The run succeeds only when at least one controller is enumerated and
+`pi/systemd/wmr-bridge-bt-recover.sh`. The ladder unblocks rfkill and restarts
+`hciuart` only when `systemctl cat` finds the unit. Otherwise it runs a `btmgmt`
+power cycle, skips sysfs unbind and rebind on `hci_uart` or `serial` bus
+adapters, and still unbinds and rebinds non-serial adapters such as USB
+dongles. It then restarts `bluetooth` and starts `wmr-bridge.service`. A failed
+rung does not stop the ladder. Exit and signal traps in
+`wmr-bridge-bt-recover.sh` plus `ExecStopPost` in
+`wmr-bridge-bt-recover.service` guarantee that `wmr-bridge.service` starts even
+if the ladder fails or times out, so the TCP WebSocket stays active in degraded
+mode. The run succeeds only when at least one controller is enumerated and
 reports `Powered: yes` after the last rung. Otherwise the unit fails with a
 non-zero exit code. The daemon makes up to three attempts with a short backoff,
-and it treats an adapter that is absent from the bus as `Powered: no`. The
-pairer retries with a 30 s backoff instead of disabling itself. Check
+treats an adapter that is absent from the bus as `Powered: no`, and records
+`bt-recover.state.json` keyed by `/proc/sys/kernel/random/boot_id`. If the
+adapter still reports `Powered: no` on a later start in the same boot, the
+daemon fails fast into degraded TCP-only mode instead of triggering recovery
+again, and clears the state file once the adapter powers on. The pairer retries
+with a 30 s backoff instead of disabling itself. Check
 `rfkill list bluetooth`, `systemctl status bluetooth` and
 `systemctl status wmr-bridge-bt-recover`. A `could not scan;
 retrying with backoff` line names a scan failure such as a resetting adapter;
@@ -1410,7 +1420,7 @@ INFO/WARNING:
 | Symptom | Check |
 | --- | --- |
 | `no /dev/hidraw nodes` | `systemctl status bluetooth`, `lsmod \| grep hidp`, controller paired/trusted/connected |
-| `bluetoothctl show` says `Powered: no`, `Pairable: no`, Class 0 | adapter firmware crashed or the UART attach failed. `btmon` showing `HCI Reset` answered by `Hardware Error` (0x10, code 0x00) is the crashed-controller signature. The daemon first tries `Adapter1.Powered=True`. If that fails, it asks the root `wmr-bridge-bt-recover.service` to run the ladder in `pi/systemd/wmr-bridge-bt-recover.sh`. The ladder unblocks rfkill, restarts `hciuart` only when `systemctl cat` finds the unit, otherwise reset-rebinds the controller, restarts `bluetooth.service`, and starts the bridge. The run succeeds only when at least one controller is enumerated and reports `Powered: yes`. Otherwise the unit fails with exit 1 (no controller), 2 (unpowered controller), 3 (deadline) or 4 (failed sample), and logs the observed state. The daemon makes up to three attempts with a short backoff. If the unit still fails, reboot the Pi. If the error survives the reboot, power-cycle the board |
+| `bluetoothctl show` says `Powered: no`, `Pairable: no`, Class 0 | adapter firmware crashed or the UART attach failed. `btmon` showing `HCI Reset` answered by `Hardware Error` (0x10, code 0x00) is the crashed-controller signature. The daemon first tries `Adapter1.Powered=True`. If that fails, it asks the root `wmr-bridge-bt-recover.service` to run the ladder in `pi/systemd/wmr-bridge-bt-recover.sh`. The ladder unblocks rfkill and restarts `hciuart` only when `systemctl cat` finds the unit. Otherwise it runs a `btmgmt` power cycle, skips sysfs unbind and rebind on `hci_uart` or `serial` bus adapters, and still unbinds and rebinds non-serial adapters. It then restarts `bluetooth.service` and starts `wmr-bridge.service`. Exit and signal traps plus `ExecStopPost` guarantee that `wmr-bridge.service` starts even if recovery fails or times out, so TCP stays active in degraded mode. The run succeeds only when at least one controller is enumerated and reports `Powered: yes`. Otherwise the unit fails with exit 1 (no controller), 2 (unpowered controller), 3 (deadline) or 4 (failed sample), and logs the observed state. The daemon makes up to three attempts with a short backoff and records `bt-recover.state.json` keyed by `boot_id`, so a later start on the same boot fails fast into degraded TCP-only mode instead of re-triggering recovery. If the unit still fails, reboot the Pi. If the error survives the reboot, power-cycle the board |
 | Phone will not re-pair after the upgrade; adapter `pairable=no` | a stored LE bond closes pairability. Open a window with `wmr-bridge pair` (180 s), or remove the phone's stale bond with `bluetoothctl remove <MAC>`. v0.3.26 does not touch `/var/lib/bluetooth`; the upgrade scripts now leave bluetoothd alone when both `JustWorksRepairing` and the `[LE]` interval bounds are already set |
 | Wi-Fi auth fails with Bluetooth off | the shared token is only learned over the BLE FF13 encrypted read; the companion's manual Wi-Fi entry does not persist a token. Copy it from `/etc/wmr-bridge/token` (unchanged across upgrades) or read it over BLE |
 | Node exists but `--list` shows name `-` | custom controller name; use `--left/--right` with the MAC or path |

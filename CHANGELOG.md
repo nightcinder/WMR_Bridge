@@ -20,6 +20,18 @@ This file records what each release contains; hardware evidence stays in
   recovery. The recovery changes are host-tested only and have not run on Pi
   hardware. The package still reports `0.3.28-rc.3` until the release bumps
   `VERSION`.
+- **`wmr-bridge-bt-recover` skips `hci_uart` sysfs rebind, guarantees daemon
+  restart, and backs off per boot.** `pi/systemd/wmr-bridge-bt-recover.sh`
+  skips sysfs unbind and rebind on `hci_uart` or `serial` bus adapters while
+  keeping sysfs rebind for non-serial adapters such as USB dongles. Exit and
+  signal traps in `wmr-bridge-bt-recover.sh` plus `ExecStopPost` in
+  `wmr-bridge-bt-recover.service` guarantee that `wmr-bridge.service` starts
+  even if recovery fails or hits `TimeoutStartSec=120`, keeping the TCP
+  WebSocket active in degraded mode. `BluezGattPeripheral` persists
+  `bt-recover.state.json` keyed by `/proc/sys/kernel/random/boot_id` when
+  recovery is requested or exhausted, so a later daemon start on the same boot
+  fails fast into degraded TCP-only mode instead of re-triggering recovery, and
+  clears the state file once the adapter powers on.
 
 ## 0.3.28-rc.3 — 2026-11-19
 
