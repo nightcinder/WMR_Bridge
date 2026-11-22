@@ -15,9 +15,14 @@ config survive updates.
 ## 0. Bench checklist (Raspberry Pi 3B+)
 
 - [ ] Flash Raspberry Pi OS Lite **64-bit**.
+- [ ] For Option B BLE fallback, add `dtoverlay=disable-bt` to
+      `/boot/firmware/config.txt`, attach one mainline Bluetooth 5.x `btusb` USB
+      dongle (plus `firmware-realtek` for `rtl_bt` if Realtek), and reboot.
+      Without a `btusb` dongle, `wmr-bridge` auto-gates BLE GATT to TCP-only on
+      `hci_uart*` or `serial` adapters.
 - [ ] Use a 5 V / 2.5 A micro-USB supply; `vcgencmd get_throttled` prints
       `throttled=0x0`.
-- [ ] Join the dedicated **5 GHz** SSID; `iw dev wlan0 link` shows `freq: 5xxx`.
+- [ ] Use Ethernet (`eth0`) or join the dedicated **5 GHz** SSID; `iw dev wlan0 link` shows `freq: 5xxx`.
 - [ ] `uname -m` prints `aarch64`; `systemctl is-active bluetooth` prints
       `active`.
 - [ ] Install the package; `wmr-bridge --version` prints the installed version.
@@ -39,13 +44,24 @@ Pi 4/5 data.
 ## 1. Hardware
 
 - Pi 3B+, Pi 4 Model B or Pi 5. Pi 4/5 are the reference targets.
-  Stock Pi OS already carries the Bluetooth and Wi-Fi firmware; no extra
-  package is needed.
+  Stock Pi OS carries the onboard Wi-Fi firmware, but the onboard
+  `BCM4345C0` (`hci_uart`) Bluetooth chip is unstable under `MTU 517`,
+  `11.25 ms`, `200 Hz` `FF14` BLE load.
+- For BLE fallback alongside Classic HID (Option B), disable onboard Bluetooth
+  by adding `dtoverlay=disable-bt` to `/boot/firmware/config.txt`, then plug in
+  one mainline Bluetooth 5.x `btusb` USB dongle carrying both Classic HID and
+  BLE unsplit. Install the chipset firmware package if your dongle needs it
+  (for example, `sudo apt install firmware-realtek` for `rtl_bt` dongles).
+  Without a `btusb` dongle, `wmr-bridge` auto-gates BLE GATT to TCP-only on
+  `hci_uart*`, `serial`, or missing adapters unless `--ble-allow-serial` is
+  passed.
 - MicroSD card (8 GB+) and reader.
 - Correct supply: 5 V / 2.5 A micro-USB for 3B+, 5 V / 3 A USB-C for Pi 4,
   official supply for Pi 5.
-- A dedicated **5 GHz** SSID. Bluetooth Classic is at 2.4 GHz; running the Pi
-  Wi-Fi at 2.4 GHz causes packet loss and radio contention.
+- Ethernet (`eth0`) or a dedicated **5 GHz** SSID. Bluetooth Classic and BLE
+  use 2.4 GHz; running the Pi Wi-Fi at 2.4 GHz causes packet loss and radio
+  contention. Keep a `btusb` dongle away from USB 3.0 ports or noisy cables if
+  you observe range loss.
 - Two WMR controllers with fresh batteries.
 - A workstation with Raspberry Pi Imager.
 
@@ -318,8 +334,8 @@ that fails, it asks the root `wmr-bridge-bt-recover.service` to run the ladder
 in `pi/systemd/wmr-bridge-bt-recover.sh`. The ladder unblocks rfkill and
 restarts `hciuart` only when `systemctl cat` finds the unit. Otherwise it runs a
 `btmgmt` power cycle, skips sysfs unbind and rebind on `hci_uart` or `serial`
-bus adapters, and still unbinds and rebinds non-serial adapters. It then
-restarts `bluetooth.service` and starts `wmr-bridge.service`. Exit and signal
+bus adapters, and still unbinds and rebinds non-serial adapters such as `btusb`
+USB dongles. It then restarts `bluetooth.service` and starts `wmr-bridge.service`. Exit and signal
 traps plus `ExecStopPost` guarantee that `wmr-bridge.service` starts even if
 recovery fails or times out, so TCP stays active in degraded mode. The run
 succeeds only when a controller is enumerated and reports `Powered: yes`.
@@ -350,5 +366,10 @@ through `wmr-bridge pair` while the adapter is pairable.
   controller's stale bond on the ESP32 or PC, or `bluetoothctl remove <MAC>` on
   the Pi, then retry in pairing mode.
 - **Controller will not reconnect after reboot:** `bluetoothctl trust <MAC>`.
+- **BLE GATT disabled (`TCP-only`) or `wmr-bridge pair` exits `1`:** `wmr-bridge`
+  disables BLE GATT at startup when `hci0` is absent or uses `hci_uart*` or the
+  `serial` bus. Enable Option B (`dtoverlay=disable-bt` plus one Bluetooth 5.x
+  `btusb` dongle), or pass `--ble-allow-serial` in
+  `/etc/wmr-bridge/wmr-bridge.env` only to override the gate on serial hardware.
 - **3B+ throttling:** use a 5 V / 2.5 A supply and cooling; re-check
   `vcgencmd get_throttled` and `vcgencmd measure_temp`.

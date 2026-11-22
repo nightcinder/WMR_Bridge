@@ -4,11 +4,13 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.28-rc.3 candidate), LEFT and RIGHT WMR c
 
 ## Prerequisites
 
-1. Set `WMR_BRIDGE_ARGS="--idle-sleep-timeout 30 --idle-poweroff-timeout 90"` in `/etc/wmr-bridge/wmr-bridge.env` on the Pi (`pi/systemd/wmr-bridge.service:13,25`).
-2. Restart the daemon with `sudo systemctl restart wmr-bridge`.
-3. Pair the phone to the Pi over Bluetooth in Android Settings (`docs/HID_GAMEPAD.md:481-523`). If pairability is off, open a pairing window with `wmr-bridge pair` (`docs/HID_GAMEPAD.md:542-560`, `pi/wmr_bridge/ble_gatt.py:2121-2144`). Run `wmr-bridge status` to confirm that the stored LE bond note appears with `pairable=no` (`pi/wmr_bridge/__main__.py:605-612`), or verify `Paired: yes` with `bluetoothctl info <MAC>`.
-4. Isolate or unplug `eth0` before the Wi-Fi failover and recovery steps so that network routing stays unambiguous.
-5. When the 60 s cooldown expires, the pairer reconnects the bonded controller automatically (`pi/wmr_bridge/inputs.py:184-201,418-432`, `pi/wmr_bridge/bluez.py:1046-1052,1288-1308`). If the controller stays offline, press a physical button to wake it. Motion wakes the controller only from stage 1 idle sleep.
+1. For Option B BLE failover and recovery, add `dtoverlay=disable-bt` to `/boot/firmware/config.txt` on the Pi and attach one mainline Bluetooth 5.x `btusb` USB dongle (plus `firmware-realtek` for `rtl_bt` if Realtek) carrying both Classic HID and BLE unsplit (`MTU 517`, `11.25 ms` interval, `200 Hz` `FF14` unchanged; `docs/PROTOCOL.md:479,520,544`). Without a `btusb` dongle, `wmr-bridge` auto-gates BLE GATT to TCP-only on `hci_uart*` or `serial` adapters (`pi/wmr_bridge/__main__.py:801-816`).
+2. Set `WMR_BRIDGE_ARGS="--idle-sleep-timeout 30 --idle-poweroff-timeout 90"` in `/etc/wmr-bridge/wmr-bridge.env` on the Pi (`pi/systemd/wmr-bridge.service:13,25`).
+3. Restart the daemon with `sudo systemctl restart wmr-bridge`.
+4. Pair the phone to the Pi over Bluetooth in Android Settings (`docs/HID_GAMEPAD.md:481-523`). If pairability is off, open a pairing window with `wmr-bridge pair` (`docs/HID_GAMEPAD.md:542-560`, `pi/wmr_bridge/ble_gatt.py:2121-2144`). Run `wmr-bridge status` to confirm that the stored LE bond note appears with `pairable=no` (`pi/wmr_bridge/__main__.py:605-612`), or verify `Paired: yes` with `bluetoothctl info <MAC>`.
+5. Isolate or unplug `eth0` before the Wi-Fi failover and recovery steps so that network routing stays unambiguous.
+6. When the 60 s cooldown expires, the pairer reconnects the bonded controller automatically (`pi/wmr_bridge/inputs.py:184-201,418-432`, `pi/wmr_bridge/bluez.py:1046-1052,1288-1308`). If the controller stays offline, press a physical button to wake it. Motion wakes the controller only from stage 1 idle sleep.
+7. External OS prompt note (Anomaly 2): if a brief biometric prompt appears on the phone when Bluetooth turns on, check `logcat` for `com.google.android.crossdeviceaccessservice/.primary.shared.ui.biometric.BiometricPromptActivity`. That prompt comes from an external Android OS service (`docs/runs/2026-11-22-pi-paired-ble-hardware-error.md:40-44`). Do not log it as a repo fault.
 
 ## Part A: Raspberry Pi 3B+ (~12 min)
 
@@ -24,7 +26,7 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.28-rc.3 candidate), LEFT and RIGHT WMR c
    - [ ] PASS / FAIL: T2 - T1 <= 5 s and T2 - T0 <= 15 s, with no app restart (`ONY-1456`).
 6. Pi idle sleep and wake (PR #190). Leave both controllers untouched for 35 s, then tilt LEFT.
    - [ ] PASS / FAIL: Journal logs keep-alive paused at about 30 s. Tilting wakes the stream within 1 s.
-7. Pi idle power-off and reconnect guard (PR #190). Leave both controllers untouched for 95 s under the 30/90 s override from prerequisite 1.
+7. Pi idle power-off and reconnect guard (PR #190). Leave both controllers untouched for 95 s under the 30/90 s override from prerequisite 2.
    - [ ] PASS / FAIL: Journal logs the BlueZ block at about 90 s and both LED rings turn off. The expected log trace is `idle for <N> s: disconnecting...to power it off` followed by `bluetoothctl block <addr>` (`pi/wmr_bridge/inputs.py:444-478`, `pi/wmr_bridge/bluez.py:616-645`). The BlueZ block drops the ACL link, followed by `bluetoothctl disconnected <addr>` or `bluetoothctl <addr> already disconnected` (`pi/wmr_bridge/inputs.py:487-495`, `pi/wmr_bridge/bluez.py:585-613`). No `connected` line appears during the 60 s cooldown (`pi/wmr_bridge/inputs.py:260-266,470-477`). Wait until the log reports `power-off cooldown elapsed: reconnects allowed` and `bluetoothctl unblock <addr>` (`pi/wmr_bridge/inputs.py:418-432`). The pairer reconnects the bonded hand automatically (`pi/wmr_bridge/inputs.py:184-201`, `pi/wmr_bridge/bluez.py:1046-1052,1288-1308`). If LEFT stays offline, press a physical button on LEFT to reconnect and stream. Stop Pi `wmr-bridge` before you start Part B.
 
    Step 6 tests stage 1 idle sleep at 30 s (default 300 s in `pi/wmr_bridge/inputs.py:26`). That stage pauses keep-alive packets while keeping the Bluetooth ACL connected (`pi/wmr_bridge/inputs.py:520-538`). Controller reports can still arrive after that pause, and motion wakes the controller (`pi/wmr_bridge/inputs.py:380-392,533-538`).
