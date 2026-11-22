@@ -2290,7 +2290,7 @@ class SerialLoadCutsTests(unittest.IsolatedAsyncioTestCase):
         for hand in (0, 1):
             hand_seqs = [seq for h, seq in kept_seqs if h == hand]
             self.assertTrue(all(b > a for a, b in zip(hand_seqs, hand_seqs[1:])))
-            self.assertGreaterEqual(len(hand_seqs), 4)
+            self.assertGreaterEqual(len(hand_seqs), 5)
             self.assertLessEqual(len(hand_seqs), 6)
 
         # TCP WebSocket stayed unthrottled at all 42 ingested records (batch_max = 9).
@@ -2317,6 +2317,29 @@ class SerialLoadCutsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.backend.values(FF14_BATCHED)), 2)
         self.assertEqual(len(parse_batch(self.backend.values(FF14_BATCHED)[1])), 4)
         self.assertEqual(len(app._batch), 7)
+        self.assertEqual(app.dropped_records, 0)
+
+    async def test_z5_100hz_decimation_holds_rate_at_201_6hz_input(self) -> None:
+        app = self._make_app(serial_load_cuts=True, ff14_hz=100.0, mtu=517)
+        app.start_notify(FF14_BATCHED)
+
+        dt = 1.0 / 201.6
+        for _step in range(21):
+            for hand in (0, 1):
+                self.bridge.ingest(hand, SAMPLE_DATA)
+            self.clock.advance(dt)
+            await asyncio.sleep(0)
+
+        app.flush_batches()
+        kept_seqs = [
+            (rec.hand, rec.sequence)
+            for payload in self.backend.values(FF14_BATCHED)
+            for rec in (unpack_record(r) for r in parse_batch(payload))
+        ]
+        for hand in (0, 1):
+            hand_seqs = [seq for h, seq in kept_seqs if h == hand]
+            self.assertGreaterEqual(len(hand_seqs), 9)
+            self.assertLessEqual(len(hand_seqs), 11)
         self.assertEqual(app.dropped_records, 0)
 
     async def test_z6_bounded_queue_and_stop_notify_cleanup(self) -> None:

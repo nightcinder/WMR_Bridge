@@ -464,7 +464,7 @@ class GattApplication:
         self._batch_timer: asyncio.TimerHandle | None = None
         self._last_batch = float("-inf")
         self._batch_interval = 1.0 / self.batch_hz
-        self._ff14_last_hand_time: list[float] = [float("-inf"), float("-inf")]
+        self._ff14_next_hand_time: list[float] = [float("-inf"), float("-inf")]
         self._ff13_cursor: tuple[int, int] | None = None
         self.dropped_records = 0
         self.decimated = 0
@@ -870,12 +870,16 @@ class GattApplication:
                     min_interval = 1.0 / self.ff14_hz
                     if (
                         0 <= hand < 2
-                        and now - self._ff14_last_hand_time[hand] + 1e-6 < min_interval
+                        and now + 1e-6 < self._ff14_next_hand_time[hand]
                     ):
                         self.decimated += 1
                     else:
                         if 0 <= hand < 2:
-                            self._ff14_last_hand_time[hand] = now
+                            next_time = self._ff14_next_hand_time[hand]
+                            if now - next_time >= min_interval:
+                                self._ff14_next_hand_time[hand] = now + min_interval
+                            else:
+                                self._ff14_next_hand_time[hand] = next_time + min_interval
                         if self.batch_max_count:
                             self._queue_batch(packed)
                         else:
@@ -1106,7 +1110,7 @@ class GattApplication:
             self._batch_timer.cancel()
             self._batch_timer = None
         self._batch.clear()
-        self._ff14_last_hand_time = [float("-inf"), float("-inf")]
+        self._ff14_next_hand_time = [float("-inf"), float("-inf")]
 
 
 def _dbus_value(value: Any) -> Any:
