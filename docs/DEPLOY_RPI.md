@@ -53,8 +53,9 @@ Pi 4/5 data.
   BLE unsplit. Install the chipset firmware package if your dongle needs it
   (for example, `sudo apt install firmware-realtek` for `rtl_bt` dongles).
   Without a `btusb` dongle, `wmr-bridge` auto-gates BLE GATT to TCP-only on
-  `hci_uart*`, `serial`, or missing adapters unless `--ble-allow-serial` is
-  passed.
+  `hci_uart*`, `serial`, or missing adapters. Pass `--ble-allow-serial` to
+  override the gate on serial adapters only. A missing adapter cannot be
+  overridden.
 - MicroSD card (8 GB+) and reader.
 - Correct supply: 5 V / 2.5 A micro-USB for 3B+, 5 V / 3 A USB-C for Pi 4,
   official supply for Pi 5.
@@ -370,6 +371,7 @@ through `wmr-bridge pair` while the adapter is pairable.
   disables BLE GATT at startup when `hci0` is absent or uses `hci_uart*` or the
   `serial` bus. Enable Option B (`dtoverlay=disable-bt` plus one Bluetooth 5.x
   `btusb` dongle), or pass `--ble-allow-serial` in
-  `/etc/wmr-bridge/wmr-bridge.env` only to override the gate on serial hardware.
+  `/etc/wmr-bridge/wmr-bridge.env` to override the gate on serial hardware only
+  (a missing adapter cannot be overridden).
 - **3B+ throttling:** use a 5 V / 2.5 A supply and cooling; re-check
   `vcgencmd get_throttled` and `vcgencmd measure_temp`.

@@ -8,7 +8,7 @@ Hardware: Raspberry Pi 3B+, ESP32 (v0.3.28-rc.3 candidate), LEFT and RIGHT WMR c
 2. Set `WMR_BRIDGE_ARGS="--idle-sleep-timeout 30 --idle-poweroff-timeout 90"` in `/etc/wmr-bridge/wmr-bridge.env` on the Pi (`pi/systemd/wmr-bridge.service:13,25`).
 3. Restart the daemon with `sudo systemctl restart wmr-bridge`.
 4. Pair the phone to the Pi over Bluetooth in Android Settings (`docs/HID_GAMEPAD.md:481-523`). If pairability is off, open a pairing window with `wmr-bridge pair` (`docs/HID_GAMEPAD.md:542-560`, `pi/wmr_bridge/ble_gatt.py:2121-2144`). Run `wmr-bridge status` to confirm that the stored LE bond note appears with `pairable=no` (`pi/wmr_bridge/__main__.py:605-612`), or verify `Paired: yes` with `bluetoothctl info <MAC>`.
-5. Isolate or unplug `eth0` before the Wi-Fi failover and recovery steps so that network routing stays unambiguous.
+5. Use Ethernet (`eth0`) or a dedicated 5 GHz Wi-Fi SSID for normal operation. Unplug or isolate `eth0` only for the Wi-Fi failover and recovery steps (steps 4 and 5) so that network routing stays unambiguous.
 6. When the 60 s cooldown expires, the pairer reconnects the bonded controller automatically (`pi/wmr_bridge/inputs.py:184-201,418-432`, `pi/wmr_bridge/bluez.py:1046-1052,1288-1308`). If the controller stays offline, press a physical button to wake it. Motion wakes the controller only from stage 1 idle sleep.
 7. External OS prompt note (Anomaly 2): if a brief biometric prompt appears on the phone when Bluetooth turns on, check `logcat` for `com.google.android.crossdeviceaccessservice/.primary.shared.ui.biometric.BiometricPromptActivity`. That prompt comes from an external Android OS service (`docs/runs/2026-11-22-pi-paired-ble-hardware-error.md:40-44`). Do not log it as a repo fault.
 

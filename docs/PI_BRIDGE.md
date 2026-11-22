@@ -116,7 +116,8 @@ For BLE fallback alongside Classic HID (Option B), disable the onboard
 firmware-realtek` so `rtl_bt` firmware loads. Use Ethernet (`eth0`) or 5 GHz
 Wi-Fi to avoid 2.4 GHz radio contention with the `btusb` dongle. Without a
 `btusb` dongle, `wmr-bridge` auto-gates BLE GATT to TCP-only on `hci_uart*`,
-`serial`, or missing adapters unless `--ble-allow-serial` is passed.
+`serial`, or missing adapters. Pass `--ble-allow-serial` to override the gate
+on serial adapters only. A missing adapter cannot be overridden.
 
 The bridge deliberately does not open L2CAP PSM 0x11/0x13 itself. The kernel
 HIDP driver already listens there. A user-space listener would collide with it.
@@ -1451,7 +1452,7 @@ INFO/WARNING:
 | Port unreachable | `--bind 0.0.0.0` (plus a token, or the daemon refuses to start), firewall, correct Pi address, same VLAN/client isolation off |
 | `dumpsys input` does not list WMR Bridge | Android requires Bluetooth HID pairing in Android Settings (`docs/HID_GAMEPAD.md:481-523`). The device registers as `WMR Bridge`. Run `adb shell dumpsys input | grep -E -A 25 -i "wmr[- ]bridge"`. Confirm the phone LE bond with the stored LE bond note in `wmr-bridge status` (`pairable=no`, `pi/wmr_bridge/__main__.py:605-612`) or `bluetoothctl info <MAC>` (`Paired: yes`, `docs/HID_GAMEPAD.md:542-560`, `pi/wmr_bridge/ble_gatt.py:2121-2144`) |
 | `DebugScreen` version or FF17 control | In `wmr_companion_app` (`v0.3.25`, `ONY-1448`), tap `Open 3D debug view` on the connect screen (`connect_screen.dart:436-445`). Find the FF16 firmware line under the `Stream` heading (`debug_screen.dart:205-213,523-556`, `wmr_ws_transport.dart:285,338-340`). `ControllerPanel` (FF17 disconnect) is hidden on Wi-Fi bridges (`debug_screen.dart:229-235`) and is tested on ESP32 BLE only |
-| `BLE pairing is unavailable` (`wmr-bridge pair` exits `1`) | The daemon auto-gated BLE GATT to TCP-only at startup because `hci0` is missing or uses `hci_uart*` or `serial` (`pi/wmr_bridge/__main__.py:152-160,801-816`). Use Option B (`dtoverlay=disable-bt` plus a `btusb` dongle) or pass `--ble-allow-serial` to override |
+| `BLE pairing is unavailable` (`wmr-bridge pair` exits `1`) | The daemon auto-gated BLE GATT to TCP-only at startup because `hci0` is missing or uses `hci_uart*` or `serial` (`pi/wmr_bridge/__main__.py:152-160,801-816`). Use Option B (`dtoverlay=disable-bt` plus a `btusb` dongle), or pass `--ble-allow-serial` to override on serial adapters only (a missing adapter cannot be overridden) |
 | Controller does not wake after idle power-off | Motion wakes controllers only from stage 1 idle sleep (default 300 s, or 30 s under bench overrides `pi/wmr_bridge/inputs.py:26-27`). After stage 2 idle power-off (default 900 s, or 90 s under bench overrides), BlueZ blocks reconnects for a 60 s cooldown, then auto-pair reconnects the bonded hand; a physical button press also wakes it (`pi/wmr_bridge/inputs.py:444-516`) |
 
 ## Future work
