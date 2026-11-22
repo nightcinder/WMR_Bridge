@@ -111,6 +111,9 @@ RESULT_INVALID_PARAM = 0x06
 
 DEFAULT_MTU = 23
 DEFAULT_BATCH_HZ = 50.0
+SERIAL_MAX_MTU = 247
+SERIAL_MIN_BATCH_HZ_HIGH_RATE = 66.7
+BATCH_QUEUE_MAX_RECORDS = 64
 # HID Information: bcdHID 1.11, country code 0, Normally Connectable. The
 # firmware's hids_device_init() uses the same value.
 HID_INFORMATION_VALUE = bytes((0x11, 0x01, 0x00, 0x02))
@@ -423,6 +426,8 @@ class GattApplication:
         clock: Callable[[], float] = time.monotonic,
         fragment_capacity: int = DEFAULT_FRAGMENT_CAPACITY,
         control_handler: Callable[[int, int | None], int] | None = None,
+        serial_load_cuts: bool = False,
+        ff14_hz: float = DEFAULT_BATCH_HZ,
     ) -> None:
         self.bridge = bridge
         self.port = port
@@ -430,7 +435,15 @@ class GattApplication:
         self.name = name
         self.version = version
         self.token = token if token is not None else bridge.token
+        self.serial_load_cuts = bool(serial_load_cuts)
+        self.ff14_hz = (
+            min(100.0, max(50.0, float(ff14_hz)))
+            if self.serial_load_cuts
+            else float(ff14_hz)
+        )
         self.batch_hz = max(1.0, batch_hz)
+        if self.serial_load_cuts and self.ff14_hz > 50.0:
+            self.batch_hz = max(self.batch_hz, SERIAL_MIN_BATCH_HZ_HIGH_RATE)
         self._clock = clock
         self._hosts = hosts if callable(hosts) else (lambda: list(hosts or []))
         self.fragment_capacity = max(13, fragment_capacity)
@@ -451,8 +464,10 @@ class GattApplication:
         self._batch_timer: asyncio.TimerHandle | None = None
         self._last_batch = float("-inf")
         self._batch_interval = 1.0 / self.batch_hz
+        self._ff14_last_hand_time: list[float] = [float("-inf"), float("-inf")]
         self._ff13_cursor: tuple[int, int] | None = None
         self.dropped_records = 0
+        self.decimated = 0
         self.last_command = 0
         self.last_result = RESULT_OK
 
@@ -515,6 +530,10 @@ class GattApplication:
         return any(
             uuid in self._subscribed for uuid in (FF11_RAW, FF12_DECODED, FF14_BATCHED)
         )
+
+    @property
+    def _hid_paused_by_ble_stream(self) -> bool:
+        return self.serial_load_cuts and self._ble_stream_active
 
     @property
     def subscribed(self) -> frozenset[str]:
@@ -629,7 +648,8 @@ class GattApplication:
     def notification_limit(self) -> int:
         """Largest ATT notification value at the negotiated MTU."""
 
-        return self._mtu - 3
+        mtu = min(self._mtu, SERIAL_MAX_MTU) if self.serial_load_cuts else self._mtu
+        return mtu - 3
 
     @property
     def batch_max_count(self) -> int:
@@ -647,7 +667,7 @@ class GattApplication:
     def fragment_size(self) -> int:
         """Largest FF11 notification value for the current ATT MTU."""
 
-        return max(13, min(self.fragment_capacity, self._mtu - 3))
+        return max(13, min(self.fragment_capacity, self.notification_limit))
 
     def read_value(self, uuid: str, options: dict[str, Any] | None = None) -> bytes:
         self._note_mtu(options)
@@ -844,11 +864,27 @@ class GattApplication:
                 else:
                     self.dropped_records += 1
             if wants_batched:
-                if self.batch_max_count:
+                if self.serial_load_cuts:
+                    now = self._clock()
+                    hand = record.hand
+                    min_interval = 1.0 / self.ff14_hz
+                    if (
+                        0 <= hand < 2
+                        and now - self._ff14_last_hand_time[hand] + 1e-6 < min_interval
+                    ):
+                        self.decimated += 1
+                    else:
+                        if 0 <= hand < 2:
+                            self._ff14_last_hand_time[hand] = now
+                        if self.batch_max_count:
+                            self._queue_batch(packed)
+                        else:
+                            self.dropped_records += 1
+                elif self.batch_max_count:
                     self._queue_batch(packed)
                 else:
                     self.dropped_records += 1
-        if wants_hid:
+        if wants_hid and not self._hid_paused_by_ble_stream:
             self._deliver_hid(frame, record)
 
     # ---- HID-over-GATT ---------------------------------------------------
@@ -926,7 +962,11 @@ class GattApplication:
         self._flush_hid(now)
 
     def _flush_hid(self, now: float) -> None:
-        if not self.hid_enabled or not self._hid_hand_connected():
+        if (
+            not self.hid_enabled
+            or not self._hid_hand_connected()
+            or self._hid_paused_by_ble_stream
+        ):
             return
         elapsed = now - self._hid_last_send
         # Both floors reject anything under the shorter one, so the stream
@@ -969,6 +1009,8 @@ class GattApplication:
         if uuid not in CHARACTERISTIC_BY_UUID and uuid not in HID_CHARACTERISTIC_BY_UUID:
             return
         self._subscribed.add(uuid)
+        if self.serial_load_cuts and uuid in (FF11_RAW, FF12_DECODED, FF14_BATCHED):
+            self._emit_hid_neutral()
         if uuid == HID_REPORT:
             # Firmware wmr_hid_reset(): forget the trigger history and send a
             # neutral report so the host starts from a known state.
@@ -986,6 +1028,17 @@ class GattApplication:
 
     def _queue_batch(self, packed: bytes) -> None:
         self._batch.append(packed)
+        if self.serial_load_cuts:
+            if len(self._batch) > BATCH_QUEUE_MAX_RECORDS:
+                overflow = len(self._batch) - BATCH_QUEUE_MAX_RECORDS
+                del self._batch[:overflow]
+                self.dropped_records += overflow
+            now = self._clock()
+            if now - self._last_batch + 1e-6 >= self._batch_interval:
+                self.flush_batches()
+            else:
+                self._schedule_batch_flush()
+            return
         if len(self._batch) >= self.batch_max_count:
             self.flush_batches()
             return
@@ -1015,6 +1068,23 @@ class GattApplication:
             self._batch_timer = None
         if not self._batch:
             return
+        if self.serial_load_cuts:
+            max_count = max(1, self.batch_max_count)
+            chunk = self._batch[:max_count]
+            self._batch = self._batch[max_count:]
+            self._last_batch = self._clock()
+            if BATCH_HEADER_SIZE + len(chunk) * DECODED_SIZE > self.notification_limit:
+                self.dropped_records += len(chunk)
+            else:
+                try:
+                    payload = encode_batch(chunk)
+                except ProtocolError:
+                    self.dropped_records += len(chunk)
+                else:
+                    self._notify(FF14_BATCHED, payload)
+            if self._batch:
+                self._schedule_batch_flush()
+            return
         records = self._batch
         self._batch = []
         self._last_batch = self._clock()
@@ -1036,6 +1106,7 @@ class GattApplication:
             self._batch_timer.cancel()
             self._batch_timer = None
         self._batch.clear()
+        self._ff14_last_hand_time = [float("-inf"), float("-inf")]
 
 
 def _dbus_value(value: Any) -> Any:
@@ -1812,6 +1883,8 @@ class BluezGattPeripheral:
         batch_hz: float = DEFAULT_BATCH_HZ,
         fragment_capacity: int = DEFAULT_FRAGMENT_CAPACITY,
         control_handler: Callable[[int, int | None], int] | None = None,
+        serial_load_cuts: bool = False,
+        ff14_hz: float = DEFAULT_BATCH_HZ,
         clock: Callable[[], float] = time.monotonic,
         advertising_debounce_s: float = ADVERTISING_DEBOUNCE_S,
         power_check_interval_s: float = ADAPTER_POWER_CHECK_INTERVAL_S,
@@ -1833,6 +1906,8 @@ class BluezGattPeripheral:
             batch_hz=batch_hz,
             fragment_capacity=fragment_capacity,
             control_handler=control_handler,
+            serial_load_cuts=serial_load_cuts,
+            ff14_hz=ff14_hz,
             clock=clock,
         )
         self.backend = backend or DbusGattBackend(adapter)

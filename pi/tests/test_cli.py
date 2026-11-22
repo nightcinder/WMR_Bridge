@@ -230,6 +230,7 @@ class BlePeripheralStartupTests(unittest.IsolatedAsyncioTestCase):
         adapter: str | None = "hci0",
         driver: str | None = "btusb",
         subsystem: str | None = "usb",
+        start_error: Exception | None = None,
     ) -> tuple[list[str], dict[str, object], list[str]]:
         events: list[str] = []
         captured: dict[str, object] = {}
@@ -241,6 +242,8 @@ class BlePeripheralStartupTests(unittest.IsolatedAsyncioTestCase):
 
             async def start(self) -> None:
                 events.append("start")
+                if start_error is not None:
+                    raise start_error
 
             async def close(self) -> None:
                 events.append("close")
@@ -270,7 +273,6 @@ class BlePeripheralStartupTests(unittest.IsolatedAsyncioTestCase):
             with mock.patch("wmr_bridge.ble_gatt.BluezGattPeripheral", FakeBle), \
                  mock.patch("wmr_bridge.__main__.HidrawManager", FakeManager), \
                  mock.patch("wmr_bridge.bluez.SYSFS_BLUETOOTH_ROOT", sysfs_bt), \
-                 mock.patch("wmr_bridge.__main__.SYSFS_BLUETOOTH_ROOT", sysfs_bt), \
                  self.assertLogs("wmr_bridge", level="INFO") as logs:
                 await asyncio.wait_for(_run(args), 5)
         return events, captured, logs.output
@@ -278,6 +280,7 @@ class BlePeripheralStartupTests(unittest.IsolatedAsyncioTestCase):
     async def test_ble_peripheral_starts_by_default(self) -> None:
         events, captured, output = await self._run_with_ble([])
         self.assertEqual(events, ["start", "close"])
+        self.assertFalse(captured["serial_load_cuts"])
         self.assertTrue(any("BLE GATT: FF10" in line for line in output))
         self.assertFalse(any("BLE GATT disabled" in line for line in output))
         hosts = captured["hosts"]
@@ -287,16 +290,6 @@ class BlePeripheralStartupTests(unittest.IsolatedAsyncioTestCase):
     async def test_no_ble_skips_the_peripheral(self) -> None:
         events, captured, output = await self._run_with_ble(
             ["--no-ble"],
-            driver="btusb",
-            subsystem="usb",
-        )
-        self.assertEqual(events, [])
-        self.assertEqual(captured, {})
-        self.assertFalse(any("BLE GATT" in line for line in output))
-
-    async def test_no_ble_overrides_ble_allow_serial(self) -> None:
-        events, captured, output = await self._run_with_ble(
-            ["--no-ble", "--ble-allow-serial"],
             driver="hci_uart_bcm",
             subsystem="serial",
         )
@@ -309,71 +302,82 @@ class BlePeripheralStartupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(events, ["start", "close"])
         self.assertTrue(any("deprecated" in line for line in output))
 
-    async def test_hci_uart_serial_auto_disables_ble_to_tcp_only(self) -> None:
-        events, _captured, output = await self._run_with_ble(
+    async def test_hci_uart_serial_starts_ble_with_load_cuts_by_default(self) -> None:
+        events, captured, output = await self._run_with_ble(
             [],
-            driver="hci_uart_bcm",
-            subsystem="serial",
-        )
-        self.assertEqual(events, [])
-        self.assertTrue(
-            any(
-                "BLE GATT disabled (TCP-only)" in line
-                and "hci_uart_bcm" in line
-                and "--ble-allow-serial" in line
-                for line in output
-            ),
-            msg=output,
-        )
-
-    async def test_serial_bus_with_non_hci_uart_driver_auto_disables_ble(self) -> None:
-        events, _captured, output = await self._run_with_ble(
-            [],
-            driver="btbcm",
-            subsystem="serial",
-        )
-        self.assertEqual(events, [])
-        self.assertTrue(
-            any(
-                "BLE GATT disabled (TCP-only)" in line and "serial bus" in line
-                for line in output
-            ),
-            msg=output,
-        )
-
-    async def test_ble_allow_serial_overrides_hci_uart_gate(self) -> None:
-        events, _captured, output = await self._run_with_ble(
-            ["--ble-allow-serial"],
             driver="hci_uart_bcm",
             subsystem="serial",
         )
         self.assertEqual(events, ["start", "close"])
+        self.assertTrue(captured["serial_load_cuts"])
+        self.assertEqual(captured["ff14_hz"], 50.0)
         self.assertTrue(
-            any("BLE GATT override (--ble-allow-serial)" in line for line in output),
+            any("BLE GATT load cuts enabled" in line and "hci_uart_bcm" in line for line in output),
             msg=output,
         )
         self.assertTrue(any("BLE GATT: FF10" in line for line in output), msg=output)
 
-    async def test_missing_sysfs_adapter_degrades_cleanly_to_tcp_only(self) -> None:
-        events, _captured, output = await self._run_with_ble(
+    async def test_serial_bus_with_non_hci_uart_driver_starts_ble_with_load_cuts(self) -> None:
+        events, captured, output = await self._run_with_ble(
+            [],
+            driver="btbcm",
+            subsystem="serial",
+        )
+        self.assertEqual(events, ["start", "close"])
+        self.assertTrue(captured["serial_load_cuts"])
+        self.assertTrue(
+            any("BLE GATT load cuts enabled" in line and "serial bus" in line for line in output),
+            msg=output,
+        )
+
+    async def test_no_ble_load_cuts_overrides_serial_to_full_rate(self) -> None:
+        events, captured, output = await self._run_with_ble(
+            ["--no-ble-load-cuts"],
+            driver="hci_uart_bcm",
+            subsystem="serial",
+        )
+        self.assertEqual(events, ["start", "close"])
+        self.assertFalse(captured["serial_load_cuts"])
+        self.assertFalse(any("BLE GATT load cuts enabled" in line for line in output))
+        self.assertTrue(any("BLE GATT: FF10" in line for line in output), msg=output)
+
+    async def test_ble_load_cuts_and_ff14_hz_override_btusb(self) -> None:
+        events, captured, _output = await self._run_with_ble(
+            ["--ble-load-cuts", "--ble-ff14-hz", "100"],
+            driver="btusb",
+            subsystem="usb",
+        )
+        self.assertEqual(events, ["start", "close"])
+        self.assertTrue(captured["serial_load_cuts"])
+        self.assertEqual(captured["ff14_hz"], 100.0)
+
+    async def test_missing_sysfs_adapter_flows_through_start_and_degrades_to_tcp_only(self) -> None:
+        events, captured, output = await self._run_with_ble(
             [],
             adapter=None,
             driver=None,
             subsystem=None,
+            start_error=RuntimeError("BlueZ adapter hci0 is not available"),
         )
-        self.assertEqual(events, [])
+        self.assertEqual(events, ["start"])
+        self.assertTrue(captured["init"])
         self.assertTrue(
-            any(
-                "BLE GATT disabled (TCP-only)" in line and "not present" in line
-                for line in output
-            ),
+            any("BLE GATT disabled:" in line and "not available" in line for line in output),
             msg=output,
         )
 
-    def test_ble_allow_serial_is_off_by_default(self) -> None:
+    def test_ble_allow_serial_is_removed(self) -> None:
         parser = _build_parser()
-        self.assertFalse(parser.parse_args([]).ble_allow_serial)
-        self.assertTrue(parser.parse_args(["--ble-allow-serial"]).ble_allow_serial)
+        self.assertNotIn("--ble-allow-serial", parser.format_help())
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--ble-allow-serial"])
+
+    def test_ble_ff14_hz_requires_50_to_100_range(self) -> None:
+        parser = _build_parser()
+        self.assertEqual(parser.parse_args(["--ble-ff14-hz", "75"]).ble_ff14_hz, 75.0)
+        for bad in ("49", "101", "0", "-5", "nan"):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["--ble-ff14-hz", bad])
 
 
 class HandFilterTests(unittest.TestCase):
