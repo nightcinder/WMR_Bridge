@@ -1,6 +1,6 @@
 # Paired BLE bench and `BCM4345C0` hardware error verdict (2026-11-22)
 
-On 2026-11-22, the paired bench (`wmr-bridge` `3970074`, `wmr-companion` `a9d2fa5`) kept prior passes on `ONY-1313` items 1, 2, and 4. Item 3 failed after BLE cycle 1 when Pi `hci0` logged `hardware error 0x00` and `Opcode 0x0c03 failed: -110`. The `#281` recovery ladder (`pi/systemd/wmr-bridge-bt-recover.sh:243-248`) skipped `hci_uart_bcm` sysfs unbind, prevented any `bcm_recv` Oops or 120 s hang, and restored TCP in 26.2 s while BLE stayed `Powered=no`. `ONY-1711` selected Option B: disable onboard `BCM4345C0` (`dtoverlay=disable-bt`) and run Classic HID plus BLE fallback on one `btusb` USB adapter.
+On 2026-11-22, the paired bench (`wmr-bridge` `3970074`, `wmr-companion` `a9d2fa5`) kept prior passes on `ONY-1313` items 1, 2, and 4. Item 3 failed after BLE cycle 1 when Pi `hci0` logged `hardware error 0x00` and `Opcode 0x0c03 failed: -110`. The `#281` recovery ladder (`pi/systemd/wmr-bridge-bt-recover.sh:243-248`) skipped `hci_uart_bcm` sysfs unbind, prevented any `bcm_recv` Oops or 120 s hang, and restored TCP in 26.2 s while BLE stayed `Powered=no`. `ONY-1711` (revised) withdrew Option B (no USB dongle) and selected Option C: keep onboard `BCM4345C0` with config-gated BLE load cuts on by default, keep TCP unthrottled at `200 Hz`, and ship TCP-only if one `btmon` bench hits `hardware error 0x00`, `-84`, or `-110`.
 
 ## Evidence key and redaction
 
@@ -49,12 +49,12 @@ Cycle 2 ran while Pi `hci0` was already `Powered=no` (`paired/recovery-end.txt`)
 
 Code inspection found a real app defect during dead-peer setup. `UniversalBleTransport._setup` (`universal_ble_transport.dart:538-542`) catches all errors from `_adapter.requestMtu(deviceId, requestedMtu)`, including `TimeoutException` from `universal_ble`'s 10 s command queue. It records a warning and continues to `requestHighConnectionPriority` (`universal_ble_transport.dart:553`) and `discoverServices` (`universal_ble_transport.dart:571`), burning a second 10 s timeout on a dead link.
 
-## `ONY-1711` Option B resolution
+## `ONY-1711` revised Option C resolution
 
-`ONY-1711` selected Option B over software throttling on `BCM4345C0`. Software throttling alters the `200 Hz` / `MTU 517` BLE fallback contract and cannot prevent restart (`-110`) or idle (`-84`) faults on the onboard PL011 UART chip.
+`ONY-1711` withdrew Option B (no USB dongle exists or will be added) and selected Option C with TCP-only as the end state if the onboard `BCM4345C0` fails again:
 
-1. Configure `dtoverlay=disable-bt` on the Pi and run both WMR Classic HID links and BLE GATT fallback on one mainline Bluetooth 5.x `btusb` USB adapter (`ONY-1711` decision, not yet documented in `docs/PI_BRIDGE.md`). Non-serial adapters keep rung-3 sysfs unbind and rebind (`docs/PI_BRIDGE.md:179`).
-2. Keep `MTU 517`, `11.25 ms` connection interval, and `200 Hz` `FF14` unchanged (`packages/wmr_core/lib/protocol/gatt.dart:75`).
-3. Auto-gate `wmr-bridge` startup to TCP-only when `hci0` uses `hci_uart` or `serial`, or when no adapter is present, with an off-by-default CLI override.
-4. Bound `requestMtu` (`<= 5 s`) and `discoverServices` (`<= 10 s`) in `UniversalBleTransport._setup` so `TimeoutException` fails fast with `BleLinkPhase.connectFailed` and disconnects.
-5. Gate `ONY-1313` item 3 acceptance on a clean two-cycle TCP-down bench run using `dtoverlay=disable-bt` and a `btusb` dongle, with no further unmitigated `BCM4345C0` runs.
+1. Keep the bridge on onboard `BCM4345C0` (`hci_uart_bcm`) with config-gated BLE load cuts enabled by default: `MTU <= 247` (`<= 4` records, one LE PDU per notify), strict batch spacing in `_queue_batch` (no back-to-back flush), pause `0x2A4D` (`HID_REPORT`) while `FF1x` streams, skip `highPerformance` priority (keep `15–30 ms` interval), and decimate BLE `FF14` to `50–100 Hz/hand` (`50 Hz/hand` default).
+2. Keep TCP unthrottled at `200 Hz` with its contract unchanged. Document the lower-rate BLE fallback profile in `docs/PROTOCOL.md` and `docs/PI_BRIDGE.md`, plus `--no-ble` for explicit TCP-only configuration.
+3. Run one human bench with `btmon` capture. If `hardware error 0x00`, `-84`, or `-110` returns once, the Pi 3B+ ships TCP-only for BLE fallback using the `#281` degraded path (`--no-ble`), with no further retries on the onboard chip. Caveat: the restart (`-110`) and idle (`-84`) faults occurred without `FF14` load, so this bench may fail; if it does, the TCP-only fallback applies.
+4. Anomaly 2 (external `com.google.android.crossdeviceaccessservice` prompt) remains external to both repositories.
+5. Anomaly 3 remains unchanged: bound `requestMtu` to `<= 5 s` and `discoverServices` to `<= 10 s` in `UniversalBleTransport._setup`, transitioning to `BleLinkPhase.connectFailed` on timeout.

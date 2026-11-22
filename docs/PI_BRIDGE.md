@@ -50,10 +50,9 @@ at 2.4 GHz, and away from the Pi's own 2.4 GHz Wi-Fi/BT coexistence machinery.
 | --- | --- | --- |
 | Raspberry Pi 5 | Yes | BT 5.0 Classic + dual-band Wi-Fi; reference target |
 | Raspberry Pi 4 Model B | Yes | BT 5.0 Classic + dual-band Wi-Fi |
-| Raspberry Pi 3 Model B+ | Expected | dual-band Wi-Fi + BT 4.2 Classic; 64-bit OS supported; less CPU headroom and 1 GB RAM |
+| Raspberry Pi 3 Model B+ | Expected | dual-band Wi-Fi + BT 4.2 Classic (`BCM4345C0`); 64-bit OS supported; less CPU headroom and 1 GB RAM; BLE fallback uses Option C load cuts by default |
 | Raspberry Pi Zero 2 W | No | 2.4 GHz Wi-Fi only, shares the band with BT |
 | Generic x86/ARM Linux | Expected | needs BlueZ HID host + a 5 GHz adapter |
-| Pi with a `btusb` USB dongle (Option B) | Recommended for BLE fallback | Add `dtoverlay=disable-bt` in `/boot/firmware/config.txt` and use one mainline BT 5.x `btusb` dongle (plus `firmware-realtek` for `rtl_bt` if Realtek) carrying Classic HID and BLE unsplit |
 
 This does not fix Classic Bluetooth loss by itself. The controller-to-bridge
 link is still Bluetooth. What it removes is the BLE notification airtime and
@@ -109,15 +108,13 @@ systemctl status bluetooth
 bluetoothctl show
 ```
 
-For BLE fallback alongside Classic HID (Option B), disable the onboard
-`BCM4345C0` (`hci_uart`) controller by adding `dtoverlay=disable-bt` to
-`/boot/firmware/config.txt`, then reboot with one mainline Bluetooth 5.x
-`btusb` USB dongle attached. Realtek dongles need `sudo apt install
-firmware-realtek` so `rtl_bt` firmware loads. Use Ethernet (`eth0`) or 5 GHz
-Wi-Fi to avoid 2.4 GHz radio contention with the `btusb` dongle. Without a
-`btusb` dongle, `wmr-bridge` auto-gates BLE GATT to TCP-only on `hci_uart*`,
-`serial`, or missing adapters. Pass `--ble-allow-serial` to override the gate
-on serial adapters only. A missing adapter cannot be overridden.
+On onboard `hci_uart` and `serial` Bluetooth adapters (`BCM4345C0`), `wmr-bridge`
+runs BLE GATT fallback with Option C load cuts enabled by default (`MTU <= 247`,
+at most `4` records per `FF14` PDU, strict batch spacing, `50 Hz/hand` `FF14`
+decimation, and `0x2A4D` paused while `FF1x` streams). TCP stays unthrottled at
+the full controller rate (`200 Hz` nominal). Use Ethernet (`eth0`) or 5 GHz Wi-Fi
+to avoid 2.4 GHz radio contention. Pass `--no-ble` in
+`/etc/wmr-bridge/wmr-bridge.env` to disable BLE GATT and run TCP-only.
 
 The bridge deliberately does not open L2CAP PSM 0x11/0x13 itself. The kernel
 HIDP driver already listens there. A user-space listener would collide with it.
@@ -187,8 +184,7 @@ Bluetooth at boot, so the bridge reports `Powered: no`. The root
 `pi/systemd/wmr-bridge-bt-recover.sh`. The ladder unblocks rfkill and restarts
 `hciuart` only when `systemctl cat` finds the unit. Otherwise it runs a `btmgmt`
 power cycle, skips sysfs unbind and rebind on `hci_uart` or `serial` bus
-adapters, and still unbinds and rebinds non-serial adapters such as USB
-dongles. It then restarts `bluetooth` and starts `wmr-bridge.service`. A failed
+adapters, and still unbinds and rebinds non-serial adapters. It then restarts `bluetooth` and starts `wmr-bridge.service`. A failed
 rung does not stop the ladder. Exit and signal traps in
 `wmr-bridge-bt-recover.sh` plus `ExecStopPost` in
 `wmr-bridge-bt-recover.service` guarantee that `wmr-bridge.service` starts even
@@ -280,7 +276,9 @@ Useful flags:
 | `--list` | print hidraw nodes and exit |
 | `--status` (or `status`) | print adapter, BlueZ bond and hidraw state, then exit |
 | `--no-auto-pair` | do not run the BlueZ auto-pairer |
-| `--ble-allow-serial` | force BLE GATT on a `hci_uart*` or `serial` adapter (off by default; serial adapters auto-gate to TCP-only) |
+| `--no-ble` | disable the BLE GATT peripheral and run TCP-only |
+| `--ble-load-cuts`, `--no-ble-load-cuts` | enable or disable Option C BLE load cuts (auto-enabled on `hci_uart`/`serial` adapters by default) |
+| `--ble-ff14-hz HZ` | per-hand BLE `FF14` decimation rate when Option C load cuts are active (`50` to `100`, default `50`) |
 | `--prefer-5ghz` | Create or update the `<connection>-5ghz` NetworkManager profile and prefer 5 GHz. This is a one-shot action and does not start the bridge. |
 | `--no-reconnect` | with `--prefer-5ghz`, save the profile without switching to it |
 
@@ -746,21 +744,40 @@ not authentication and does not change the token requirement.
 
 ### BlueZ BLE GATT fallback (default)
 
-The daemon also serves the same FF11, FF12 and FF14 payloads over a BlueZ
-BLE GATT service. This is a fallback for when the Wi-Fi WebSocket is
-unreachable. It starts by default on non-serial adapters; disable it with
-`--no-ble`. The old `--ble-fallback` flag is a deprecated no-op alias. At
-startup, `wmr-bridge` inspects `/sys/class/bluetooth/<adapter>`: if the adapter
-is absent or uses an `hci_uart*` driver or `serial` bus, the daemon disables
-BLE GATT and runs TCP-only (`wmr-bridge pair` then exits `1` with
-`pairing_unavailable`). Pass `--ble-allow-serial` (off by default) to force BLE
-GATT on a serial adapter. Full BLE fallback alongside Classic HID uses Option B:
-`dtoverlay=disable-bt` plus one mainline Bluetooth 5.x `btusb` USB dongle (with
-`firmware-realtek` for `rtl_bt` if Realtek), carrying both Classic HID and BLE
-unsplit. `MTU 517`, `11.25 ms` connection interval, and `200 Hz` `FF14` batching
-remain unchanged. The peripheral needs `python3-dbus-next` and a free hci
-adapter (default `hci0`); if either is missing the daemon logs a warning and
-keeps serving TCP.
+The daemon also serves the FF11, FF12 and FF14 payloads over a BlueZ BLE GATT
+service. This is a fallback for when the Wi-Fi WebSocket is unreachable. It
+starts by default; disable it with `--no-ble` to run TCP-only. The old
+`--ble-fallback` flag is a deprecated no-op alias.
+
+On `hci_uart` and `serial` adapters (including the onboard `BCM4345C0`),
+`wmr-bridge` enables Option C BLE load cuts by default (`--ble-load-cuts` is
+auto-enabled; `--no-ble-load-cuts` disables them). This is a separate,
+lower-rate BLE fallback profile:
+
+- **One LE PDU per notify:** ATT MTU is capped at `247` (`244` bytes of ATT
+  value), so `FF14` sends at most `4` records per notification.
+- **Strict batch spacing:** `_queue_batch` does not flush back-to-back when a
+  full batch queues, caps the queue at `64` records, and `flush_batches` sends
+  at most one batch per `1 / batch_hz` interval.
+- **HID pause during `FF1x`:** `0x2A4D` (`HID_REPORT`) notifications pause while
+  `FF11`, `FF12`, or `FF14` is subscribed, and the bridge sends a neutral HID
+  report when that subscription starts.
+- **Connection interval:** BlueZ sets `[LE] MinConnectionInterval = 12` and
+  `MaxConnectionInterval = 15` (`15–18.75 ms`). The Option C profile skips
+  `highPerformance` (`11.25 ms`) priority to keep a `15–30 ms` interval.
+- **`FF14` decimation (`50–100 Hz`):** `--ble-ff14-hz` defaults to `50 Hz/hand`
+  (`DEFAULT_BATCH_HZ = 50.0`). Raising it above `50 Hz` (up to `100 Hz/hand`)
+  raises `batch_hz` to at least `66.7 Hz` (`SERIAL_MIN_BATCH_HZ_HIGH_RATE`) so
+  4-record batches keep up with two hands. Skipped frames are counted in
+  `decimated`, and `sequence` advances by stride `N` on the BLE `FF14` stream.
+  On the receiver, `ControllerService` `sequenceGaps` increments by stride while
+  `TickTimer` settles to `0%` `missingFromTicks` after its ~231-sample 256-delta
+  rollover.
+
+The WebSocket (TCP) path is unchanged: TCP stays unthrottled at the full
+controller rate (nominal `200 Hz`) with `--batch-hold-ms` (default `5 ms`).
+The peripheral needs `python3-dbus-next` and a free hci adapter (default
+`hci0`); if either is missing, the daemon logs a warning and keeps serving TCP.
 
 The fallback registers the firmware's FF10 service (characteristics FF11 to
 FF17) with BlueZ through `org.bluez.GattManager1` and advertises it with
@@ -840,9 +857,12 @@ Report Reference descriptor. `wmr_bridge/hid_gamepad.py` ports the
 `src/wmr_hid.c` mapping and `tests/vectors/hid_gamepad.txt` keeps the 9-byte
 report byte-identical to the firmware. A HOGP host therefore binds the
 controllers as a gamepad with no app. The bridge sends no HID report until a
-Classic controller is connected and the phone enables the Report CCCD. After
-that, HID reports keep flowing while a WebSocket/TCP client or an
-FF11/FF12/FF14 subscriber is active. TCP and BLE share one radio on the Pi,
+Classic controller is connected and the phone enables the Report CCCD. When
+Option C BLE load cuts are inactive (`--no-ble-load-cuts` or non-serial
+adapters), HID reports keep flowing while a WebSocket/TCP client or an
+FF11/FF12/FF14 subscriber is active. When Option C BLE load cuts are active,
+`0x2A4D` (`HID_REPORT`) pauses while `FF11`, `FF12`, or `FF14` is subscribed
+and sends a neutral report when that subscription starts. TCP and BLE share one radio on the Pi,
 so the bridge paces HID at 20 ms (50 Hz) during a stream; without a stream
 the floor is 10 ms. While an FF1x frame is waiting, HID never takes two send
 slots in a row. A neutral report is still sent on BLE connect and disconnect,
@@ -882,12 +902,15 @@ Per-client gating:
   A phone with notifications enabled keeps receiving FF11, FF12 and FF14 even
   while another client is on TCP. A phone with notifications off receives
   nothing.
-- FF14 partial batches are paced at 50 Hz (`DEFAULT_BATCH_HZ`: at most one
-  timed flush per 20 ms) because the Pi shares `hci0` with the two Classic
-  HID controller links. A full batch (as many records as the MTU allows, at
-  most 9) is sent at once, so this is a pacing interval for partial batches,
-  not a cap on the record rate or on notifications per second. No command-line
-  flag changes it.
+- `FF14` batch pacing depends on Option C BLE load cuts. When load cuts are
+  active (the default on `hci_uart`/`serial`), `_queue_batch` enforces strict
+  pacing with at most `4` records per batch (`MTU <= 247`), `flush_batches`
+  sends at most one batch per `1 / batch_hz` interval (default `50 Hz`, or at
+  least `66.7 Hz` when `--ble-ff14-hz > 50`), and `FF14` frames are decimated
+  per hand to `--ble-ff14-hz` (`50–100 Hz`, default `50`). When load cuts are
+  off (`--no-ble-load-cuts` or non-serial adapters), a full batch (as many
+  records as the MTU allows, at most `9`) flushes at once, and a partial batch
+  flushes when `1 / batch_hz` (`20 ms` at `50 Hz`) has elapsed.
 - Bonding is accepted only while the adapter is pairable: during the boot
   window (`--ble-pairing-window`), for a manual window opened with
   `wmr-bridge pair`, with `--ble-continuous-pairing`, or while no LE bond is
@@ -1452,7 +1475,7 @@ INFO/WARNING:
 | Port unreachable | `--bind 0.0.0.0` (plus a token, or the daemon refuses to start), firewall, correct Pi address, same VLAN/client isolation off |
 | `dumpsys input` does not list WMR Bridge | Android requires Bluetooth HID pairing in Android Settings (`docs/HID_GAMEPAD.md:481-523`). The device registers as `WMR Bridge`. Run `adb shell dumpsys input | grep -E -A 25 -i "wmr[- ]bridge"`. Confirm the phone LE bond with the stored LE bond note in `wmr-bridge status` (`pairable=no`, `pi/wmr_bridge/__main__.py:605-612`) or `bluetoothctl info <MAC>` (`Paired: yes`, `docs/HID_GAMEPAD.md:542-560`, `pi/wmr_bridge/ble_gatt.py:2121-2144`) |
 | `DebugScreen` version or FF17 control | In `wmr_companion_app` (`v0.3.25`, `ONY-1448`), tap `Open 3D debug view` on the connect screen (`connect_screen.dart:436-445`). Find the FF16 firmware line under the `Stream` heading (`debug_screen.dart:205-213,523-556`, `wmr_ws_transport.dart:285,338-340`). `ControllerPanel` (FF17 disconnect) is hidden on Wi-Fi bridges (`debug_screen.dart:229-235`) and is tested on ESP32 BLE only |
-| `BLE pairing is unavailable` (`wmr-bridge pair` exits `1`) | The daemon auto-gated BLE GATT to TCP-only at startup because `hci0` is missing or uses `hci_uart*` or `serial` (`pi/wmr_bridge/__main__.py:152-160,801-816`). Use Option B (`dtoverlay=disable-bt` plus a `btusb` dongle), or pass `--ble-allow-serial` to override on serial adapters only (a missing adapter cannot be overridden) |
+| `BLE pairing is unavailable` (`wmr-bridge pair` exits `1`) | The daemon has no GATT peripheral because `--no-ble` is set, `python3-dbus-next` is not installed, or the Bluetooth adapter failed to start (`Powered: no` or missing, `pi/wmr_bridge/__main__.py:165-171,833-869`). Check `wmr-bridge status`, `journalctl -u wmr-bridge`, and `/etc/wmr-bridge/wmr-bridge.env` |
 | Controller does not wake after idle power-off | Motion wakes controllers only from stage 1 idle sleep (default 300 s, or 30 s under bench overrides `pi/wmr_bridge/inputs.py:26-27`). After stage 2 idle power-off (default 900 s, or 90 s under bench overrides), BlueZ blocks reconnects for a 60 s cooldown, then auto-pair reconnects the bonded hand; a physical button press also wakes it (`pi/wmr_bridge/inputs.py:444-516`) |
 
 ## Future work

@@ -23,7 +23,7 @@ This file records what each release contains; hardware evidence stays in
 - **`wmr-bridge-bt-recover` skips `hci_uart` sysfs rebind, guarantees daemon
   restart, and backs off per boot.** `pi/systemd/wmr-bridge-bt-recover.sh`
   skips sysfs unbind and rebind on `hci_uart` or `serial` bus adapters while
-  keeping sysfs rebind for non-serial adapters such as USB dongles. Exit and
+  keeping sysfs rebind for non-serial adapters. Exit and
   signal traps in `wmr-bridge-bt-recover.sh` plus `ExecStopPost` in
   `wmr-bridge-bt-recover.service` guarantee that `wmr-bridge.service` starts
   even if recovery fails or hits `TimeoutStartSec=120`, keeping the TCP
@@ -32,15 +32,17 @@ This file records what each release contains; hardware evidence stays in
   recovery is requested or exhausted, so a later daemon start on the same boot
   fails fast into degraded TCP-only mode instead of re-triggering recovery, and
   clears the state file once the adapter powers on.
-- **Startup auto-gates BLE GATT to TCP-only on `hci_uart` or missing adapters.**
-  At startup, `wmr-bridge` inspects `/sys/class/bluetooth/<adapter>`. If the
-  adapter is absent or uses an `hci_uart*` driver or `serial` bus, the daemon
-  disables the `FF10` and `0x1812` BLE GATT peripheral and runs TCP-only. Pass
-  `--ble-allow-serial` (off by default) to force BLE GATT on a serial adapter.
-  For full BLE fallback alongside Classic HID, the Option B setup disables
-  onboard `BCM4345C0` with `dtoverlay=disable-bt` and uses one mainline
-  Bluetooth 5.x `btusb` USB dongle. `MTU 517`, `11.25 ms` connection interval,
-  and `200 Hz` `FF14` batching remain unchanged.
+- **Option C lower-rate BLE fallback profile on `hci_uart` and `serial` adapters.**
+  At startup, `wmr-bridge` inspects `/sys/class/bluetooth/<adapter>` and
+  enables Option C BLE load cuts by default when the adapter uses an
+  `hci_uart*` driver or `serial` bus (`--ble-load-cuts` on by default,
+  `--no-ble-load-cuts` to disable, `--no-ble` for TCP-only). Load cuts cap
+  ATT MTU at `247` (`<= 4` records per single-PDU `FF14` notification), enforce
+  strict batch pacing in `_queue_batch` without back-to-back flushes, pause
+  `0x2A4D` (`HID_REPORT`) while `FF11`/`FF12`/`FF14` streams, keep a
+  `15–30 ms` LE interval, and decimate `FF14` per hand to `50–100 Hz`
+  (`--ble-ff14-hz`, default `50`). TCP stays unthrottled at `200 Hz` with its
+  contract unchanged.
 
 ## 0.3.28-rc.3 — 2026-11-19
 

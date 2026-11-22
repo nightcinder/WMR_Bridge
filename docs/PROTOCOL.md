@@ -1282,12 +1282,21 @@ Consequences for a receiver, on both bridges but mandatory on the Pi:
   single record).
 - Do not compare `rx_time_us` across bridges.
 
-## Batched stream pacing on the Pi's BLE fallback
+## Batched stream pacing and Option C BLE profile on the Pi
 
-On the Pi's BLE fallback a full batch is sent at once, and a partial batch is
-sent when at least `1 / batch_hz` (default 50 Hz, so 20 ms) has passed since
-the previous batch. That is a pacing interval for partial batches, not a cap on
-the record rate. On the WebSocket the hold is `--batch-hold-ms` (default 5 ms).
+On the WebSocket (TCP), `--batch-hold-ms` defaults to `5 ms` and `serial_load_cuts` does not apply. TCP stays unthrottled at the full controller rate (nominal `200 Hz`), and its contract does not change.
+
+On the Pi's BLE fallback, behavior depends on whether Option C BLE load cuts are active:
+
+- **Default on `hci_uart` and `serial` adapters (`--ble-load-cuts` auto-enabled):**
+  - `notification_limit` caps the effective ATT MTU at `247` (`244` bytes of ATT value), so each `FF14` notification carries at most `4` records in one LE PDU.
+  - `_queue_batch` enforces strict batch pacing. It does not flush back-to-back when a full batch queues, caps the queue at `64` records, and `flush_batches` sends at most one batch per `1 / batch_hz` interval.
+  - `HID_REPORT` (`0x2A4D`) notifications pause while `FF11`, `FF12`, or `FF14` is subscribed, and the bridge emits a neutral HID report when that subscription starts.
+  - BlueZ sets `[LE] MinConnectionInterval = 12` and `MaxConnectionInterval = 15` (`15–18.75 ms`). The Option C profile skips `highPerformance` (`11.25 ms`) connection priority to keep a `15–30 ms` interval.
+  - `FF14` is decimated per hand to `50–100 Hz` (`--ble-ff14-hz`, default `50 Hz/hand` at `DEFAULT_BATCH_HZ = 50.0`). When `ff14_hz > 50.0`, `batch_hz` rises to at least `66.7 Hz` (`SERIAL_MIN_BATCH_HZ_HIGH_RATE`) so 4-record batches keep pace with two hands up to `100 Hz/hand`.
+  - Skipped frames are counted in `decimated`. Because `sequence` comes from the controller frame counter, `sequence` advances by stride `N` on the BLE `FF14` stream. On the receiver, `ControllerService` `sequenceGaps` increments by stride while `TickTimer` settles to `0%` `missingFromTicks` after its ~231-sample 256-delta rollover.
+- **Full-rate BLE (`--no-ble-load-cuts`, or non-serial adapters by default):** a full batch (`(MTU - 5) // 56`, up to `9` records at `MTU 517`) flushes at once, and a partial batch flushes when `1 / batch_hz` (default `50 Hz`, `20 ms`) has elapsed since the previous batch.
+- **TCP-only (`--no-ble`):** disables the BLE GATT peripheral and serves WebSocket over Wi-Fi or Ethernet only.
 
 # Proposals (specified, NOT implemented, NOT part of the spec above)
 
