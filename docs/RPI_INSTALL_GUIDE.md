@@ -335,11 +335,19 @@ If the log says `auto-pair: Bluetooth adapter is not usable yet`, check that
 Bluetooth is running and not blocked. A fresh install clears a boot-time soft
 block as root. While the bridge runs, a `Powered: no` report triggers the
 root `wmr-bridge-bt-recover.service`, which runs the ladder in
-`pi/systemd/wmr-bridge-bt-recover.sh`. The ladder unblocks rfkill, restarts
-`hciuart` only when `systemctl cat` finds the unit, otherwise reset-rebinds
-the controller, and restarts `bluetooth`. It reports success only when a
+`pi/systemd/wmr-bridge-bt-recover.sh`. The ladder unblocks rfkill and restarts
+`hciuart` only when `systemctl cat` finds the unit. Otherwise it runs a `btmgmt`
+power cycle, skips sysfs unbind and rebind on `hci_uart` or `serial` bus
+adapters, and still unbinds and rebinds non-serial adapters. It then restarts
+`bluetooth` and starts `wmr-bridge.service`. Exit and signal traps in the script
+plus `ExecStopPost` in `wmr-bridge-bt-recover.service` guarantee that
+`wmr-bridge.service` starts even if recovery fails or times out, so TCP stays
+active in degraded mode. The recovery unit reports success only when a
 controller is enumerated and reports `Powered: yes`. Otherwise the unit fails
-and the daemon makes up to three attempts. The pairer keeps retrying, so no
+and the daemon makes up to three attempts. The daemon also records
+`bt-recover.state.json` keyed by `/proc/sys/kernel/random/boot_id`, so a later
+start in the same boot fails fast into degraded TCP-only mode instead of
+triggering recovery again. The pairer keeps retrying, so no
 restart is needed once the block clears. If the adapter stays off, check the
 recovery unit and the daemon status:
 
