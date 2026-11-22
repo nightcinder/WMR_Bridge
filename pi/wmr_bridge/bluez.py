@@ -26,6 +26,7 @@ import re
 import select
 import shutil
 import subprocess
+import threading
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -762,6 +763,8 @@ def scan_and_pair(
     claim_agent: bool = True,
     settle_seconds: float = 1.0,
     pair_timeout: float = 20.0,
+    stop_event: threading.Event | None = None,
+    on_process: Callable[[subprocess.Popen[bytes] | None], None] | None = None,
 ) -> list[BluezDevice] | None:
     """Discover controllers and pair matches inside one ``bluetoothctl`` session.
 
@@ -808,16 +811,21 @@ def scan_and_pair(
         os.close(slave_fd)
         return None
     os.close(slave_fd)
+    if on_process is not None:
+        on_process(proc)
 
     chunks: list[bytes] = []
 
     def drain(seconds: float) -> None:
         end = time.monotonic() + max(0.0, seconds)
         while True:
+            if stop_event is not None and stop_event.is_set():
+                return
             remaining = end - time.monotonic()
             if remaining <= 0:
                 return
-            ready, _, _ = select.select([master_fd], [], [], remaining)
+            wait = min(remaining, 0.1) if stop_event is not None else remaining
+            ready, _, _ = select.select([master_fd], [], [], wait)
             if not ready:
                 continue
             try:
@@ -858,30 +866,45 @@ def scan_and_pair(
             os.write(master_fd, b"agent off\n")
         os.write(master_fd, b"pairable on\nscan on\n")
         drain(scan_seconds)
-        discovered = parse_devices(output())
-        to_pair = [device for device in discovered if should_pair(device)]
-        for device in to_pair:
-            LOG.info("auto-pair: pairing %s (%s)", device.address, device.name or "?")
-            os.write(master_fd, f"pair {device.address}\n".encode())
-        # cmd_pair is asynchronous: quitting before the reply arrives tears
-        # down the agent and aborts the pairing. Wait for a result per device.
-        deadline = time.monotonic() + max(5.0, pair_timeout * max(1, len(to_pair)))
-        while to_pair and proc.poll() is None and time.monotonic() < deadline:
-            drain(0.1)
-            if len(pair_results(output())) >= len(to_pair):
-                break
-        drain(settle_seconds)
+        if stop_event is None or not stop_event.is_set():
+            discovered = parse_devices(output())
+            to_pair = [device for device in discovered if should_pair(device)]
+            for device in to_pair:
+                LOG.info("auto-pair: pairing %s (%s)", device.address, device.name or "?")
+                os.write(master_fd, f"pair {device.address}\n".encode())
+            # cmd_pair is asynchronous: quitting before the reply arrives tears
+            # down the agent and aborts the pairing. Wait for a result per device.
+            deadline = time.monotonic() + max(5.0, pair_timeout * max(1, len(to_pair)))
+            while to_pair and proc.poll() is None and time.monotonic() < deadline:
+                if stop_event is not None and stop_event.is_set():
+                    break
+                drain(0.1)
+                if len(pair_results(output())) >= len(to_pair):
+                    break
+            drain(settle_seconds)
         os.write(master_fd, b"scan off\nquit\n")
         deadline = time.monotonic() + 5.0
         while proc.poll() is None and time.monotonic() < deadline:
+            if stop_event is not None and stop_event.is_set():
+                break
             drain(0.1)
         if proc.poll() is None:
-            proc.kill()
-            proc.wait()
+            if stop_event is not None and stop_event.is_set():
+                proc.terminate()
+                try:
+                    proc.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+            else:
+                proc.kill()
+                proc.wait()
         drain(0.1)
     except (BrokenPipeError, OSError, subprocess.SubprocessError):
         return None
     finally:
+        if on_process is not None:
+            on_process(None)
         try:
             os.close(master_fd)
         except OSError:
@@ -958,6 +981,7 @@ class BluezAutoPairer:
         reconnect_allowed: Callable[[str], bool] | None = None,
         which: Callable[[str], str | None] = shutil.which,
         rfkill_root: str = RFKILL_ROOT,
+        close_timeout: float = 2.0,
     ) -> None:
         self.bridge = bridge
         self.allowed_hands = frozenset(allowed_hands)
@@ -976,7 +1000,11 @@ class BluezAutoPairer:
         self._scan_pause_logged = False
         self._which = which
         self._rfkill_root = rfkill_root
+        self._close_timeout = max(0.05, close_timeout)
         self._task: asyncio.Task[None] | None = None
+        self._worker_future: asyncio.Future[bool] | None = None
+        self._stop_event = threading.Event()
+        self._active_proc: subprocess.Popen[bytes] | None = None
         self._disabled = False
         self._adapter_ready = False
         self._adapter_warned = False
@@ -1029,9 +1057,20 @@ class BluezAutoPairer:
             return False
 
     def start(self) -> None:
+        self._stop_event.clear()
         self._task = asyncio.create_task(self._loop(), name="bluez-auto-pair")
 
+    def _set_active_proc(self, proc: subprocess.Popen[bytes] | None) -> None:
+        self._active_proc = proc
+
     async def close(self) -> None:
+        self._stop_event.set()
+        proc = self._active_proc
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.terminate()
+            except OSError:
+                pass
         if self._task is not None:
             self._task.cancel()
             try:
@@ -1039,15 +1078,35 @@ class BluezAutoPairer:
             except asyncio.CancelledError:
                 pass
             self._task = None
+        worker = self._worker_future
+        if worker is not None:
+            if not worker.done():
+                try:
+                    await asyncio.wait_for(worker, timeout=self._close_timeout)
+                except asyncio.TimeoutError:
+                    LOG.warning(
+                        "auto-pair: worker did not exit within %.1f s during shutdown",
+                        self._close_timeout,
+                    )
+                except Exception:
+                    pass
+            self._worker_future = None
 
     async def _loop(self) -> None:
         idle = 0
-        while True:
+        while not self._stop_event.is_set():
+            worker = asyncio.ensure_future(asyncio.to_thread(self._tick))
+            self._worker_future = worker
             try:
-                acted = await asyncio.to_thread(self._tick)
+                acted = await asyncio.shield(worker)
+            except asyncio.CancelledError:
+                raise
             except Exception:  # keep the daemon alive; log the reason
                 LOG.exception("automatic pairing iteration failed")
                 acted = False
+            finally:
+                if worker.done():
+                    self._worker_future = None
             idle = 0 if acted else idle + 1
             await asyncio.sleep(self._next_delay(idle))
 
@@ -1080,7 +1139,7 @@ class BluezAutoPairer:
     def _tick(self) -> bool:
         """Ensure the adapter and service one missing hand; report any action."""
 
-        if self._disabled:
+        if self._disabled or self._stop_event.is_set():
             return False
         if self._which(self.command) is None:
             LOG.warning(
@@ -1293,7 +1352,12 @@ class BluezAutoPairer:
             self._pairing_window_open is not None and self._pairing_window_open()
         )
         return scan_and_pair(
-            self.command, scan_seconds, should_pair, claim_agent=claim_agent
+            self.command,
+            scan_seconds,
+            should_pair,
+            claim_agent=claim_agent,
+            stop_event=self._stop_event,
+            on_process=self._set_active_proc,
         )
 
     def _info(self, address: str) -> BluezDevice | None:

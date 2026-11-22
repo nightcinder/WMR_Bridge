@@ -2198,3 +2198,202 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         raw = self.app.read_value(FF16_VERSION)
         self.assertEqual(json.loads(raw)["bridge_id"], self.bridge.bridge_id)
         self.assertEqual(self.app.read_value(FF13_CONFIG), self.app.ff13_value())
+
+
+class SerialLoadCutsTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.clock = FakeClock(100.0)
+        self.bridge = Bridge()
+        self.backend = FakeBackend()
+
+    def _make_app(
+        self,
+        *,
+        serial_load_cuts: bool = True,
+        ff14_hz: float = 50.0,
+        batch_hz: float = 50.0,
+        mtu: int = 517,
+    ) -> GattApplication:
+        app = GattApplication(
+            self.bridge,
+            hosts=["192.0.2.10"],
+            port=8765,
+            name="WMR Bridge",
+            batch_hz=batch_hz,
+            serial_load_cuts=serial_load_cuts,
+            ff14_hz=ff14_hz,
+            clock=self.clock,
+        )
+        app.set_emitter(self.backend.notify)
+        self.bridge.add_sink(app)
+        app.read_value(FF16_VERSION, {"mtu": mtu})
+        return app
+
+    @staticmethod
+    def _sample(buttons: int = 0) -> bytes:
+        frame = bytearray(SAMPLE_DATA)
+        frame[2] = buttons & 0xFF
+        return bytes(frame)
+
+    def test_z1_single_pdu_cap_even_at_mtu_517(self) -> None:
+        app = self._make_app(serial_load_cuts=True, mtu=517)
+        self.assertEqual(app.notification_limit, 244)
+        self.assertEqual(app.batch_max_count, 4)
+        self.assertEqual(app.fragment_size, 244)
+
+        full_rate = self._make_app(serial_load_cuts=False, mtu=517)
+        self.assertEqual(full_rate.notification_limit, 514)
+        self.assertEqual(full_rate.batch_max_count, 9)
+
+    async def test_z5_strict_queue_spacing_and_50hz_decimation_with_unthrottled_tcp(self) -> None:
+        app = self._make_app(serial_load_cuts=True, ff14_hz=50.0, mtu=517)
+        app.start_notify(FF14_BATCHED)
+
+        class RecordingSubscriber:
+            stream = "batched"
+            closed = False
+
+            def __init__(self) -> None:
+                self.records: list[object] = []
+
+            def deliver(self, _frame, record) -> None:
+                if record is not None:
+                    self.records.append(record)
+
+        tcp_sub = RecordingSubscriber()
+        self.bridge.subscribers.add(tcp_sub)  # type: ignore[arg-type]
+
+        # Simulate 100 ms of 403.3 records/s (201.6 Hz/hand at 1.0083x WMR clocks).
+        dt = 1.0 / 201.6
+        for _step in range(21):
+            for hand in (0, 1):
+                self.bridge.ingest(hand, SAMPLE_DATA)
+            self.clock.advance(dt)
+            await asyncio.sleep(0)
+
+        app.flush_batches()
+        batches = self.backend.values(FF14_BATCHED)
+        self.assertGreaterEqual(len(batches), 4)
+        for payload in batches:
+            self.assertLessEqual(len(payload), 226)
+            records = parse_batch(payload)
+            self.assertLessEqual(len(records), 4)
+
+        # Kept records preserve Bridge.sequence stride; skipped records counted in decimated.
+        self.assertGreater(app.decimated, 0)
+        self.assertEqual(app.dropped_records, 0)
+        kept_seqs = [
+            (rec.hand, rec.sequence)
+            for payload in batches
+            for rec in (unpack_record(r) for r in parse_batch(payload))
+        ]
+        for hand in (0, 1):
+            hand_seqs = [seq for h, seq in kept_seqs if h == hand]
+            self.assertTrue(all(b > a for a, b in zip(hand_seqs, hand_seqs[1:])))
+            self.assertGreaterEqual(len(hand_seqs), 5)
+            self.assertLessEqual(len(hand_seqs), 6)
+
+        # TCP WebSocket stayed unthrottled at all 42 ingested records (batch_max = 9).
+        self.assertEqual(self.bridge.batch_max, 9)
+        self.assertEqual(len(tcp_sub.records), 42)
+
+    async def test_z5_no_back_to_back_flush_and_100hz_drains_with_zero_drops(self) -> None:
+        app = self._make_app(serial_load_cuts=True, ff14_hz=100.0, mtu=517)
+        self.assertGreaterEqual(app.batch_hz, 66.7)
+        self.assertLessEqual(app._batch_interval, 0.015)
+        app.start_notify(FF14_BATCHED)
+
+        # Burst 12 records at the same timestamp: only 1 flush on the initial slot,
+        # never an immediate back-to-back flush at len >= 4 or len >= 9.
+        for _ in range(12):
+            app._queue_batch(b"\x00" * 56)
+        self.assertEqual(len(self.backend.values(FF14_BATCHED)), 1)
+        self.assertEqual(len(parse_batch(self.backend.values(FF14_BATCHED)[0])), 1)
+        self.assertEqual(len(app._batch), 11)
+
+        # Advancing 15 ms and flushing emits at most ONE single-PDU notification (4 records).
+        self.clock.advance(0.015)
+        app.flush_batches()
+        self.assertEqual(len(self.backend.values(FF14_BATCHED)), 2)
+        self.assertEqual(len(parse_batch(self.backend.values(FF14_BATCHED)[1])), 4)
+        self.assertEqual(len(app._batch), 7)
+        self.assertEqual(app.dropped_records, 0)
+
+    async def test_z5_100hz_decimation_holds_rate_at_201_6hz_input(self) -> None:
+        app = self._make_app(serial_load_cuts=True, ff14_hz=100.0, mtu=517)
+        app.start_notify(FF14_BATCHED)
+
+        dt = 1.0 / 201.6
+        for _step in range(21):
+            for hand in (0, 1):
+                self.bridge.ingest(hand, SAMPLE_DATA)
+            self.clock.advance(dt)
+            await asyncio.sleep(0)
+
+        app.flush_batches()
+        kept_seqs = [
+            (rec.hand, rec.sequence)
+            for payload in self.backend.values(FF14_BATCHED)
+            for rec in (unpack_record(r) for r in parse_batch(payload))
+        ]
+        for hand in (0, 1):
+            hand_seqs = [seq for h, seq in kept_seqs if h == hand]
+            self.assertGreaterEqual(len(hand_seqs), 9)
+            self.assertLessEqual(len(hand_seqs), 11)
+        self.assertEqual(app.dropped_records, 0)
+
+    async def test_z6_bounded_queue_and_stop_notify_cleanup(self) -> None:
+        from wmr_bridge.ble_gatt import BATCH_QUEUE_MAX_RECORDS
+
+        app = self._make_app(serial_load_cuts=True, ff14_hz=50.0, mtu=517)
+        app.start_notify(FF14_BATCHED)
+
+        # Trigger initial flush, then stall without advancing clock.
+        app._queue_batch(b"\x01" * 56)
+        for index in range(BATCH_QUEUE_MAX_RECORDS + 10):
+            app._queue_batch(bytes([index % 256]) * 56)
+
+        self.assertEqual(len(app._batch), BATCH_QUEUE_MAX_RECORDS)
+        self.assertEqual(app.dropped_records, 10)
+        self.assertIsNotNone(app._batch_timer)
+
+        app.stop_notify(FF14_BATCHED)
+        self.assertIsNone(app._batch_timer)
+        self.assertEqual(app._batch, [])
+
+    async def test_z7_hid_report_pauses_during_ff1x_and_resumes_after(self) -> None:
+        app = self._make_app(serial_load_cuts=True, mtu=517)
+        self.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+        app.start_notify(HID_REPORT)
+        self.clock.advance(0.02)
+        self.bridge.ingest(0, self._sample(0x08))
+        before = len(self.backend.values(HID_REPORT))
+        self.assertNotEqual(self.backend.values(HID_REPORT)[-1], NEUTRAL_REPORT)
+
+        # Subscribing FF14 emits NEUTRAL_REPORT once and suppresses 0x2A4D.
+        app.start_notify(FF14_BATCHED)
+        hid_values = self.backend.values(HID_REPORT)
+        self.assertEqual(len(hid_values), before + 1)
+        self.assertEqual(hid_values[-1], NEUTRAL_REPORT)
+
+        # Subscribing a second FF1x does not emit a duplicate NEUTRAL_REPORT.
+        app.start_notify(FF11_RAW)
+        self.assertEqual(len(self.backend.values(HID_REPORT)), before + 1)
+
+        # Ingesting while FF1x is active suppresses 0x2A4D notifications.
+        self.clock.advance(0.05)
+        self.bridge.ingest(0, self._sample(0x02))
+        self.assertEqual(len(self.backend.values(HID_REPORT)), before + 1)
+
+        # Stopping only FF14 still keeps 0x2A4D paused while FF11 is active.
+        app.stop_notify(FF14_BATCHED)
+        self.clock.advance(0.05)
+        self.bridge.ingest(0, self._sample(0x04))
+        self.assertEqual(len(self.backend.values(HID_REPORT)), before + 1)
+
+        # Stopping the last FF1x resumes 0x2A4D cleanly.
+        app.stop_notify(FF11_RAW)
+        self.clock.advance(0.05)
+        self.bridge.ingest(0, self._sample(0x08))
+        self.assertEqual(len(self.backend.values(HID_REPORT)), before + 2)
+

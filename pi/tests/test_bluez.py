@@ -2001,5 +2001,81 @@ class IdlePolicyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, [self.ADDRESS])
 
 
+class AutoPairerCloseTests(unittest.IsolatedAsyncioTestCase):
+    async def test_z8_close_terminates_and_waits_for_active_worker_before_ble_close(self) -> None:
+        import threading
+
+        events: list[str] = []
+        worker_started = threading.Event()
+        worker_exited = threading.Event()
+
+        def fake_session(_seconds: float, _should_pair) -> list:
+            events.append("worker_start")
+            worker_started.set()
+            pairer._stop_event.wait(timeout=5.0)
+            events.append("worker_exit")
+            worker_exited.set()
+            return []
+
+        def runner(args: list[str], _timeout: float):
+            return _completed(args)
+
+        pairer = BluezAutoPairer(
+            _Bridge(),
+            runner=runner,
+            session=fake_session,
+            which=lambda _command: "/usr/bin/bluetoothctl",
+            rfkill_root="/nonexistent/rfkill",
+            close_timeout=2.0,
+        )
+        pairer.start()
+        for _ in range(100):
+            if worker_started.is_set():
+                break
+            await asyncio.sleep(0.01)
+        self.assertTrue(worker_started.is_set())
+
+        await pairer.close()
+        events.append("ble_close")
+        self.assertTrue(worker_exited.is_set())
+        self.assertEqual(events, ["worker_start", "worker_exit", "ble_close"])
+
+    async def test_z8_close_terminates_active_subprocess_and_bounds_hang(self) -> None:
+        import threading
+
+        fake_proc = mock.MagicMock()
+        fake_proc.poll.return_value = None
+        worker_entered = threading.Event()
+        release_worker = threading.Event()
+
+        def hanging_session(_seconds: float, _should_pair) -> list:
+            pairer._set_active_proc(fake_proc)
+            worker_entered.set()
+            release_worker.wait(timeout=1.0)
+            pairer._set_active_proc(None)
+            return []
+
+        pairer = BluezAutoPairer(
+            _Bridge(),
+            runner=lambda args, _timeout: _completed(args),
+            session=hanging_session,
+            which=lambda _command: "/usr/bin/bluetoothctl",
+            rfkill_root="/nonexistent/rfkill",
+            close_timeout=0.1,
+        )
+        pairer.start()
+        for _ in range(100):
+            if worker_entered.is_set():
+                break
+            await asyncio.sleep(0.01)
+        self.assertTrue(worker_entered.is_set())
+
+        with self.assertLogs("wmr_bridge.bluez", level="WARNING") as logs:
+            await pairer.close()
+        release_worker.set()
+        fake_proc.terminate.assert_called_once()
+        self.assertTrue(any("worker did not exit" in line for line in logs.output))
+
+
 if __name__ == "__main__":
     unittest.main()
