@@ -35,5 +35,8 @@ ExecStartPre=/bin/rm -f /var/lib/wmr-bridge/bt-recover.trigger
 # and exits non-zero (unit failed, one journal line with the observed state)
 # when no controller is enumerated or the enumerated one is not powered.
 ExecStart=/usr/bin/flock -n /run/wmr-bridge-bt-recover/recover.lock /opt/wmr-bridge/pi/systemd/wmr-bridge-bt-recover.sh
+# Guarantee wmr-bridge.service is started even if TimeoutStartSec=120 kills the
+# script with SIGKILL, without masking the failed exit status of this unit.
+ExecStopPost=-/bin/systemctl start --no-block wmr-bridge.service
 TimeoutStartSec=120
 Nice=10
