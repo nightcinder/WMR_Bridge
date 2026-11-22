@@ -121,6 +121,7 @@ def _run_bt_recover_ladder(
     bluetoothctl_body: str | None = None,
     step_timeout: int = 10,
     deadline: int = 90,
+    sysfs_bt_dir: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the root ladder against stubbed systemctl/bluetoothctl/rfkill."""
     bin_dir = directory / "bin"
@@ -149,6 +150,8 @@ exit 0'''
         "BT_RECOVER_STEP_TIMEOUT_S": str(step_timeout),
         "BT_RECOVER_DEADLINE_S": str(deadline),
     }
+    if sysfs_bt_dir is not None:
+        env["BT_RECOVER_SYSFS_DIR"] = str(sysfs_bt_dir)
     # A login-shell rc sourced through BASH_ENV would overwrite the stub
     # PATH; the ladder runs under systemd's clean environment, not one.
     env.pop("BASH_ENV", None)
@@ -373,6 +376,10 @@ class PackagingTests(unittest.TestCase):
             "/opt/wmr-bridge/pi/systemd/wmr-bridge-bt-recover.sh",
             service,
         )
+        self.assertIn(
+            "ExecStopPost=-/bin/systemctl start --no-block wmr-bridge.service",
+            service,
+        )
         self.assertNotIn("/bin/sh", service)
         # The ladder lives in the helper so the same unit works on images
         # without hciuart: rfkill first, hciuart only when the image ships
@@ -549,6 +556,156 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 4, msg=proc.stdout + proc.stderr)
         self.assertIn("sample failed: bluetoothctl list exited 1", proc.stdout)
         self.assertNotIn("inside the 90s deadline", proc.stdout)
+
+    def test_bt_recover_rung3_skips_hci_uart_sysfs_rebind(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sysfs_bt = root / "sys_class_bluetooth"
+            sysfs_bt.mkdir()
+            dev_dir = root / "devices" / "serial0" / "serial0-0"
+            hci_target = dev_dir / "bluetooth" / "hci0"
+            hci_target.mkdir(parents=True)
+            driver_dir = root / "bus" / "serial" / "drivers" / "hci_uart_bcm"
+            driver_dir.mkdir(parents=True)
+            subsystem_dir = root / "bus" / "serial"
+            (dev_dir / "driver").symlink_to(driver_dir)
+            (dev_dir / "subsystem").symlink_to(subsystem_dir)
+            (sysfs_bt / "hci0").symlink_to(hci_target)
+            unbind_file = driver_dir / "unbind"
+            bind_file = driver_dir / "bind"
+
+            systemctl_log = root / "systemctl.log"
+            systemctl_body = (
+                f'echo "$*" >> "{systemctl_log}"\n'
+                'if [ "$1" = "cat" ] && [ "$2" = "hciuart.service" ]; then exit 1; fi\n'
+                "exit 0"
+            )
+            proc = _run_bt_recover_ladder(
+                root,
+                systemctl_body=systemctl_body,
+                sysfs_bt_dir=sysfs_bt,
+            )
+        self.assertEqual(proc.returncode, 0, msg=proc.stdout + proc.stderr)
+        self.assertFalse(unbind_file.exists())
+        self.assertFalse(bind_file.exists())
+        self.assertIn("skipping sysfs unbind/bind", proc.stdout)
+        self.assertIn("rung 4/5: restarting bluetooth.service", proc.stdout)
+        self.assertIn("rung 5/5: starting wmr-bridge.service", proc.stdout)
+        self.assertIn("recovery succeeded", proc.stdout)
+
+    def test_bt_recover_rung3_stops_bluetooth_before_non_hci_uart_rebind(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sysfs_bt = root / "sys_class_bluetooth"
+            sysfs_bt.mkdir()
+            dev_dir = root / "devices" / "usb1" / "1-1.2"
+            hci_target = dev_dir / "bluetooth" / "hci0"
+            hci_target.mkdir(parents=True)
+            driver_dir = root / "bus" / "usb" / "drivers" / "btusb"
+            driver_dir.mkdir(parents=True)
+            subsystem_dir = root / "bus" / "usb"
+            (dev_dir / "driver").symlink_to(driver_dir)
+            (dev_dir / "subsystem").symlink_to(subsystem_dir)
+            (sysfs_bt / "hci0").symlink_to(hci_target)
+
+            systemctl_log = root / "systemctl.log"
+            systemctl_body = (
+                f'echo "$*" >> "{systemctl_log}"\n'
+                'if [ "$1" = "cat" ] && [ "$2" = "hciuart.service" ]; then exit 1; fi\n'
+                "exit 0"
+            )
+            proc = _run_bt_recover_ladder(
+                root,
+                systemctl_body=systemctl_body,
+                sysfs_bt_dir=sysfs_bt,
+            )
+            calls = systemctl_log.read_text(encoding="utf-8").splitlines()
+            unbind_text = (driver_dir / "unbind").read_text(encoding="utf-8").strip()
+            bind_text = (driver_dir / "bind").read_text(encoding="utf-8").strip()
+        self.assertEqual(proc.returncode, 0, msg=proc.stdout + proc.stderr)
+        self.assertEqual(unbind_text, "1-1.2")
+        self.assertEqual(bind_text, "1-1.2")
+        self.assertIn("stop bluetooth.service", calls)
+        self.assertLess(
+            calls.index("stop bluetooth.service"),
+            calls.index("restart bluetooth.service"),
+        )
+        self.assertIn("re-bound 1-1.2 via btusb", proc.stdout)
+
+    def test_bt_recover_l8_always_starts_daemon_on_failure_and_signal(self) -> None:
+        cases = [
+            ("L2", {"controllers": ()}, 1),
+            ("L3", {"powered": "no"}, 2),
+            ("L4", {"bluetoothctl_body": "sleep 30", "step_timeout": 1, "deadline": 2}, 3),
+            ("L7", {"bluetoothctl_body": "exit 1"}, 4),
+        ]
+        for label, kwargs, expected_rc in cases:
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                systemctl_log = root / "systemctl.log"
+                proc = _run_bt_recover_ladder(
+                    root,
+                    systemctl_body=f'echo "$*" >> "{systemctl_log}"\nexit 0',
+                    **kwargs,  # type: ignore[arg-type]
+                )
+                calls = systemctl_log.read_text(encoding="utf-8").splitlines()
+                self.assertEqual(proc.returncode, expected_rc, msg=proc.stdout + proc.stderr)
+                self.assertIn("start wmr-bridge.service", calls)
+
+        with self.subTest(case="L5_deadline_skip"), tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            systemctl_log = root / "systemctl.log"
+            proc = _run_bt_recover_ladder(
+                root,
+                controllers=(),
+                systemctl_body=f'echo "$*" >> "{systemctl_log}"\nsleep 30',
+                step_timeout=1,
+                deadline=4,
+            )
+            calls = systemctl_log.read_text(encoding="utf-8").splitlines()
+            self.assertNotEqual(proc.returncode, 0, msg=proc.stdout + proc.stderr)
+            self.assertIn("start wmr-bridge.service", calls)
+
+        with self.subTest(case="SIGTERM"), tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            systemctl_log = root / "systemctl.log"
+            marker = root / "in_stop"
+            for name in ("rfkill", "btmgmt", "bluetoothctl"):
+                _write_stub(bin_dir, name, "exit 0")
+            _write_stub(
+                bin_dir,
+                "systemctl",
+                (
+                    f'echo "$*" >> "{systemctl_log}"\n'
+                    f'if [ "$1" = "stop" ]; then touch "{marker}"; sleep 1; fi\n'
+                    "exit 0"
+                ),
+            )
+            env = {
+                **os.environ,
+                "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
+                "BT_RECOVER_STEP_TIMEOUT_S": "2",
+                "BT_RECOVER_DEADLINE_S": "20",
+            }
+            env.pop("BASH_ENV", None)
+            child = subprocess.Popen(
+                ["bash", str(BT_RECOVER_HELPER_FILE)],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            deadline = time.monotonic() + 5.0
+            while not marker.exists() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            self.assertTrue(marker.exists(), msg="script never entered systemctl stop")
+            child.terminate()
+            stdout, stderr = child.communicate(timeout=10)
+            calls = systemctl_log.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(child.returncode, 143, msg=stdout + stderr)
+            self.assertIn("start wmr-bridge.service", calls)
 
     def test_upgrade_install_does_not_repeat_the_wifi_staging(self) -> None:
         installer = INSTALL_SH.read_text(encoding="utf-8")

@@ -170,6 +170,7 @@ ADAPTER_RECOVERY_MAX_ATTEMPTS = 3
 ADAPTER_RECOVERY_BACKOFF_S = 2.0
 ADAPTER_RECOVERY_EXHAUSTED_BACKOFF_S = 30.0
 DEFAULT_BT_RECOVER_TRIGGER = "/var/lib/wmr-bridge/bt-recover.trigger"
+DEFAULT_BOOT_ID_PATH = "/proc/sys/kernel/random/boot_id"
 # Reconnect attempts inside one ladder run, while the root unit reloads the
 # controller: one self-power attempt, then the root unit, then the ladder.
 ADAPTER_RECOVERY_ATTEMPTS = 4
@@ -1043,6 +1044,16 @@ def _dbus_value(value: Any) -> Any:
     return getattr(value, "value", value)
 
 
+def _read_boot_id(path: str | Path = DEFAULT_BOOT_ID_PATH) -> str | None:
+    """Return the current kernel boot_id, or None when unreadable."""
+
+    try:
+        value = Path(path).read_text(encoding="utf-8").strip()
+        return value or None
+    except OSError:
+        return None
+
+
 def _address_tail(address: str) -> bytes:
     """Last three MAC bytes, or zero when no address is known."""
 
@@ -1809,6 +1820,8 @@ class BluezGattPeripheral:
         recovery_attempts: int = ADAPTER_RECOVERY_MAX_ATTEMPTS,
         recovery_backoff_s: float = ADAPTER_RECOVERY_BACKOFF_S,
         recovery_exhausted_backoff_s: float = ADAPTER_RECOVERY_EXHAUSTED_BACKOFF_S,
+        recover_state_path: str | Path | None = None,
+        boot_id_path: str | Path = DEFAULT_BOOT_ID_PATH,
     ) -> None:
         self.app = GattApplication(
             bridge,
@@ -1849,6 +1862,8 @@ class BluezGattPeripheral:
         self._recovery_in_flight = False
         self._next_recovery_at = 0.0
         self._degraded = False
+        self._boot_id_path = Path(boot_id_path)
+        self._recover_state_path = self._resolve_recover_state_path(recover_state_path)
         self._advertised_tier = self.app.advertising_tier
         self._pairable_applied: bool | None = None
         self._pairable_reason = "not started"
@@ -1899,6 +1914,59 @@ class BluezGattPeripheral:
 
         return self._pairable_reason
 
+    def _resolve_recover_state_path(
+        self, explicit: str | Path | None
+    ) -> Path | None:
+        if explicit is not None:
+            return Path(explicit)
+        trigger = getattr(self.backend, "_recover_trigger", None)
+        if trigger is None:
+            inner = getattr(self.backend, "_recover", None)
+            trigger = getattr(inner, "_recover_trigger", None)
+        if trigger is None:
+            return None
+        return Path(trigger).with_name("bt-recover.state.json")
+
+    def _recovery_suppressed_for_boot(self) -> bool:
+        path = self._recover_state_path
+        if path is None:
+            return False
+        boot_id = _read_boot_id(self._boot_id_path)
+        if boot_id is None:
+            return False
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        if not isinstance(data, dict):
+            return False
+        return data.get("boot_id") == boot_id and bool(data.get("suppressed"))
+
+    def _persist_recovery_suppression(self) -> None:
+        path = self._recover_state_path
+        if path is None:
+            return
+        boot_id = _read_boot_id(self._boot_id_path)
+        if boot_id is None:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps({"boot_id": boot_id, "suppressed": True}),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            LOG.debug("could not persist Bluetooth recovery state: %s", exc)
+
+    def _clear_recovery_suppression(self) -> None:
+        path = self._recover_state_path
+        if path is None or not path.exists():
+            return
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            LOG.debug("could not clear Bluetooth recovery state: %s", exc)
+
     async def start(self) -> None:
         if self._started:
             return
@@ -1906,6 +1974,7 @@ class BluezGattPeripheral:
         self._degraded = False
         self._next_recovery_at = 0.0
         await self._connect_backend()
+        self._clear_recovery_suppression()
         self.app.set_emitter(self.backend.notify)
         self.app.bridge.add_sink(self.app)
         self.app.bridge.add_hand_listener(self._on_hand_state_changed)
@@ -1941,14 +2010,24 @@ class BluezGattPeripheral:
 
         attempts = ADAPTER_RECOVERY_ATTEMPTS
         requested = False
+        suppressed = trigger_recovery and self._recovery_suppressed_for_boot()
         for attempt in range(attempts):
             try:
                 await self.backend.start(self.app)
                 return
             except AdapterRecoveryPending as exc:
+                if suppressed:
+                    LOG.warning(
+                        "BLE adapter recovery already attempted on this boot (%s); "
+                        "failing fast into degraded TCP-only mode",
+                        exc,
+                    )
+                    raise
                 if trigger_recovery and not requested:
                     requested = True
-                    if not self.backend.request_recovery():
+                    if self.backend.request_recovery():
+                        self._persist_recovery_suppression()
+                    else:
                         LOG.warning(
                             "could not request Bluetooth adapter recovery "
                             "(no trigger path)"
@@ -2009,6 +2088,7 @@ class BluezGattPeripheral:
                     )
                     powered = False
                 if powered:
+                    self._clear_recovery_suppression()
                     continue
                 await self._recover_adapter_power()
         except asyncio.CancelledError:
@@ -2070,6 +2150,7 @@ class BluezGattPeripheral:
                     )
                     await asyncio.sleep(backoff)
             self._degraded = True
+            self._persist_recovery_suppression()
             self._next_recovery_at = self._clock() + self._recovery_exhausted_backoff_s
             LOG.warning(
                 "Bluetooth adapter recovery failed after %d attempts; BLE is "
@@ -2089,7 +2170,9 @@ class BluezGattPeripheral:
         except Exception as exc:
             LOG.warning("could not power the adapter back on: %s", exc)
         if not recovered:
-            if not self.backend.request_recovery():
+            if self.backend.request_recovery():
+                self._persist_recovery_suppression()
+            else:
                 LOG.warning(
                     "Bluetooth adapter recovery trigger could not be written; "
                     "the next attempt retries"
@@ -2123,6 +2206,7 @@ class BluezGattPeripheral:
         if not powered:
             LOG.warning("BLE re-registered but the adapter still reports Powered=no")
             return False
+        self._clear_recovery_suppression()
         LOG.info("BLE GATT and advertising re-registered after adapter recovery")
         return True
 
@@ -2178,6 +2262,18 @@ class BluezGattPeripheral:
                 # Unknown state: force the next hand event to re-register
                 # rather than trusting a shadow that may not match BlueZ.
                 self._advertised_tier = None
+                if self._started:
+                    try:
+                        powered = await self.backend.adapter_powered()
+                    except Exception as power_exc:
+                        LOG.warning(
+                            "could not read the adapter power state (%s); "
+                            "treating the adapter as absent",
+                            power_exc,
+                        )
+                        powered = False
+                    if not powered:
+                        await self._recover_adapter_power()
                 return
             self._advertised_tier = tier
             LOG.info("BLE advertising interval: %s tier", tier)

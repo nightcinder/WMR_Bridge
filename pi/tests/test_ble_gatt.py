@@ -1006,6 +1006,134 @@ class AdapterRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(adapter.power_calls, [])
             self.assertTrue(adapter.powered)
 
+    async def test_dg_cross_restart_suppression_is_scoped_to_boot_id_and_powered_yes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trigger = root / "bt-recover.trigger"
+            boot_id_file = root / "boot_id"
+            boot_id_file.write_text("boot-1\n", encoding="utf-8")
+            clock = FakeClock()
+
+            async def run_startup(powered: bool, clock_fn: FakeClock) -> tuple[bool, list[float], int]:
+                backend = EnsurePoweredBackend(
+                    DbusGattBackend(recover_trigger=trigger),
+                    power_on_succeeds=False,
+                    root_unit_recovers=False,
+                )
+                backend.powered = powered
+                peripheral = BluezGattPeripheral(
+                    Bridge(),
+                    backend=backend,
+                    hosts=["192.0.2.10"],
+                    pairing_window_s=0.0,
+                    power_check_interval_s=3600.0,
+                    clock=clock_fn,
+                    boot_id_path=boot_id_file,
+                )
+                waits: list[float] = []
+
+                async def record_wait(seconds: float) -> None:
+                    waits.append(seconds)
+                    clock_fn.advance(seconds)
+
+                with mock.patch("wmr_bridge.ble_gatt.asyncio.sleep", record_wait):
+                    try:
+                        await peripheral.start()
+                        await peripheral.close()
+                        return True, waits, backend.recovery_requests
+                    except AdapterRecoveryPending:
+                        await peripheral.close()
+                        return False, waits, backend.recovery_requests
+
+            # First instance triggers and persists boot-1 suppression.
+            ok, waits, reqs = await run_startup(False, clock)
+            self.assertFalse(ok)
+            self.assertEqual(waits, [6.0, 15.0, 30.0])
+            self.assertEqual(reqs, 1)
+            self.assertTrue(trigger.exists())
+            trigger.unlink()
+
+            # Second instance immediately in the same boot: fails fast, no trigger.
+            ok, waits, reqs = await run_startup(False, clock)
+            self.assertFalse(ok)
+            self.assertEqual(waits, [])
+            self.assertEqual(reqs, 0)
+            self.assertFalse(trigger.exists())
+
+            # Second instance after >= 120 s in the same boot: still suppressed.
+            clock.advance(125.0)
+            ok, waits, reqs = await run_startup(False, clock)
+            self.assertFalse(ok)
+            self.assertEqual(waits, [])
+            self.assertEqual(reqs, 0)
+            self.assertFalse(trigger.exists())
+
+            # Reboot (boot_id change) clears suppression so recovery triggers again.
+            boot_id_file.write_text("boot-2\n", encoding="utf-8")
+            ok, waits, reqs = await run_startup(False, clock)
+            self.assertFalse(ok)
+            self.assertEqual(waits, [6.0, 15.0, 30.0])
+            self.assertEqual(reqs, 1)
+            self.assertTrue(trigger.exists())
+            trigger.unlink()
+
+            # Observing Powered=yes clears suppression for subsequent faults in boot-2.
+            ok, waits, reqs = await run_startup(True, clock)
+            self.assertTrue(ok)
+            self.assertEqual(waits, [])
+            self.assertEqual(reqs, 0)
+
+            ok, waits, reqs = await run_startup(False, clock)
+            self.assertFalse(ok)
+            self.assertEqual(waits, [6.0, 15.0, 30.0])
+            self.assertEqual(reqs, 1)
+            self.assertTrue(trigger.exists())
+
+    async def test_di_refresh_advertising_failure_triggers_recovery_only_when_unpowered(
+        self,
+    ) -> None:
+        class FailingAdvBackend(FakeBackend):
+            async def refresh_advertisement(self) -> None:
+                raise RuntimeError("advertisement failed")
+
+        # Powered=False -> immediate recovery without waiting ADAPTER_POWER_CHECK_INTERVAL_S.
+        backend_off = FailingAdvBackend()
+        peripheral_off = self._recovery_peripheral(
+            backend_off,
+            power_check_interval_s=3600.0,
+            recovery_attempts=1,
+            recovery_exhausted_backoff_s=3600.0,
+        )
+        await peripheral_off.start()
+        try:
+            backend_off.powered = False
+            backend_off.power_on_succeeds = False
+            backend_off.fail_start = True
+            peripheral_off.app.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+            await peripheral_off.refresh_advertising()
+            self.assertEqual(backend_off.recovery_requests, 1)
+            self.assertTrue(peripheral_off.degraded)
+        finally:
+            await peripheral_off.close()
+
+        # Powered=True -> no recovery triggered.
+        backend_on = FailingAdvBackend()
+        peripheral_on = self._recovery_peripheral(
+            backend_on,
+            power_check_interval_s=3600.0,
+            recovery_attempts=1,
+        )
+        await peripheral_on.start()
+        try:
+            peripheral_on.app.bridge.set_hand_connected(0, True, "AA:BB:CC:DD:EE:FF")
+            await peripheral_on.refresh_advertising()
+            self.assertEqual(backend_on.recovery_requests, 0)
+            self.assertFalse(peripheral_on.degraded)
+        finally:
+            await peripheral_on.close()
+
 
 @unittest.skipUnless(HAS_DBUS_NEXT, "python3-dbus-next is not installed")
 class DbusNextInterfaceTests(unittest.TestCase):

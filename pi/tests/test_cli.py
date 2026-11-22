@@ -550,6 +550,35 @@ class StatusTests(unittest.TestCase):
         self.assertIn("Wi-Fi wlan0: band=2.4GHz", output.getvalue())
         self.assertIn("Wi-Fi warning:", output.getvalue())
 
+    def test_run_survives_startup_adapter_recovery_pending(self) -> None:
+        from wmr_bridge.ble_gatt import AdapterRecoveryPending
+
+        args = _build_parser().parse_args(
+            [
+                "--port",
+                "0",
+                "--replay",
+                str(SAMPLES),
+                "--replay-rate",
+                "5000",
+                "--replay-once",
+                "--no-auto-pair",
+            ]
+        )
+        with (
+            mock.patch(
+                "wmr_bridge.ble_gatt.BluezGattPeripheral.start",
+                side_effect=AdapterRecoveryPending("BlueZ adapter hci0 reports Powered=no"),
+            ),
+            self.assertLogs("wmr_bridge", level="WARNING") as logs,
+        ):
+            code = asyncio.run(_run(args))
+        self.assertEqual(code, 0)
+        self.assertTrue(
+            any("BLE GATT disabled" in line for line in logs.output),
+            msg=logs.output,
+        )
+
 
 class IdleTimeoutTests(unittest.TestCase):
     def test_defaults_match_the_two_stage_policy(self) -> None:

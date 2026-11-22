@@ -36,6 +36,7 @@
 set -u
 
 DAEMON_SERVICE=wmr-bridge.service
+SYSFS_BT_DIR="${BT_RECOVER_SYSFS_DIR:-/sys/class/bluetooth}"
 # Per-step bound for the external calls that hang on a wedged controller:
 # a crashed chip never answers the mgmt socket, so btmgmt blocks forever,
 # the sysfs unbind/bind runs the driver's detach/attach inline, and
@@ -60,6 +61,9 @@ EXIT_UNPOWERED=2
 EXIT_DEADLINE=3
 EXIT_SAMPLE_FAILED=4
 
+DAEMON_START_ATTEMPTED=0
+RUN_BOUNDED_SKIPPED=0
+
 log() {
     echo "wmr-bridge-bt-recover: $*"
 }
@@ -69,16 +73,47 @@ log() {
 # is skipped and reports timeout(1)'s 124, so the ladder still reaches the
 # postcondition check instead of being killed by systemd.
 run_bounded() {
+    RUN_BOUNDED_SKIPPED=0
     cap="$1"
     shift
     left=$((DEADLINE_EPOCH - $(date +%s) - SAMPLE_RESERVE_S))
     [ "$left" -gt "$cap" ] && left="$cap"
     if [ "$left" -le 0 ]; then
+        RUN_BOUNDED_SKIPPED=1
         log "deadline ${DEADLINE_S}s: skipping $*"
         return 124
     fi
     timeout "$left" "$@"
 }
+
+ensure_daemon_started() {
+    if [ "${DAEMON_START_ATTEMPTED:-0}" -eq 0 ]; then
+        DAEMON_START_ATTEMPTED=1
+        log "cleanup: starting ${DAEMON_SERVICE}"
+        DEADLINE_EPOCH=$(( $(date +%s) + STEP_TIMEOUT_S + SAMPLE_RESERVE_S ))
+        run_bounded "$STEP_TIMEOUT_S" systemctl start "$DAEMON_SERVICE" ||
+            log "cleanup: ${DAEMON_SERVICE} start failed or timed out"
+    fi
+}
+
+on_signal() {
+    sig_rc="$1"
+    trap - EXIT TERM INT HUP
+    ensure_daemon_started
+    exit "$sig_rc"
+}
+
+on_exit() {
+    rc=$?
+    trap - EXIT TERM INT HUP
+    ensure_daemon_started
+    exit "$rc"
+}
+
+trap on_exit EXIT
+trap 'on_signal 143' TERM
+trap 'on_signal 130' INT
+trap 'on_signal 129' HUP
 
 # Sample the postcondition: count the controllers BlueZ enumerates, then ask
 # each for Powered. Sets PC_COUNT, PC_MACS, PC_POWERED and PC_POWERED_MAC.
@@ -166,9 +201,10 @@ if run_bounded "$STEP_TIMEOUT_S" systemctl cat hciuart.service >/dev/null 2>&1; 
     run_bounded "$STEP_TIMEOUT_S" systemctl restart hciuart.service ||
         log "rung 2/5: hciuart.service restart failed or timed out (continuing)"
 else
-    log "rung 3/5: no hciuart.service on this image; btmgmt/hci_uart reset-rebind"
+    log "rung 3/5: no hciuart.service on this image; btmgmt/sysfs reset-rebind"
     found=0
-    for hci in /sys/class/bluetooth/hci[0-9]*; do
+    bt_stopped=0
+    for hci in "${SYSFS_BT_DIR}"/hci[0-9]*; do
         [ -d "$hci" ] || continue
         found=1
         index="$(basename "$hci")"
@@ -180,8 +216,9 @@ else
                 log "rung 3/5: btmgmt power on failed or timed out on ${index} (continuing)"
         fi
         # Driver reset-rebind: walk to the closest ancestor bound to a
-        # driver and unbind/rebind that device. Best-effort; a driver
-        # without bind controls is logged and skipped.
+        # driver and unbind/rebind that device. Best-effort; hci_uart / serial
+        # adapters are skipped because unbinding a wedged UART serdev can
+        # leave no controller and trigger bcm_recv/kernel faults.
         dev="$(readlink -f "$hci")"
         bound=""
         while [ "$dev" != "/" ]; do
@@ -196,7 +233,25 @@ else
             continue
         fi
         driver_dir="$(readlink -f "${bound}/driver")"
+        driver_name="${driver_dir##*/}"
+        subsystem_name=""
+        if [ -L "${bound}/subsystem" ]; then
+            subsystem_dir="$(readlink -f "${bound}/subsystem")"
+            subsystem_name="${subsystem_dir##*/}"
+        fi
         device_name="$(basename "$bound")"
+        case "${driver_name}:${subsystem_name}" in
+            hci_uart*:*|*:serial)
+                log "rung 3/5: ${index} uses ${driver_name} (${subsystem_name:-unknown} bus); skipping sysfs unbind/bind"
+                continue
+                ;;
+        esac
+        if [ "$bt_stopped" -eq 0 ]; then
+            log "rung 3/5: stopping bluetooth.service before sysfs rebind"
+            run_bounded "$STEP_TIMEOUT_S" systemctl stop bluetooth.service ||
+                log "rung 3/5: bluetooth.service stop failed or timed out (continuing)"
+            bt_stopped=1
+        fi
         # timeout(1) cannot wrap a shell redirection, so each sysfs write
         # runs in a bounded sh -c: a wedged driver can block the write in
         # the kernel, and the bound keeps the ladder moving to rung 4/5.
@@ -222,6 +277,9 @@ run_bounded "$STEP_TIMEOUT_S" systemctl restart bluetooth.service ||
 log "rung 5/5: starting ${DAEMON_SERVICE}"
 run_bounded "$STEP_TIMEOUT_S" systemctl start "$DAEMON_SERVICE" ||
     log "rung 5/5: ${DAEMON_SERVICE} start failed or timed out (continuing)"
+if [ "${RUN_BOUNDED_SKIPPED:-0}" -eq 0 ]; then
+    DAEMON_START_ATTEMPTED=1
+fi
 
 # Success is the observed postcondition, not the fact that the rungs ran.
 sample_postcondition
