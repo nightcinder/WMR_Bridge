@@ -32,6 +32,15 @@ This file records what each release contains; hardware evidence stays in
   recovery is requested or exhausted, so a later daemon start on the same boot
   fails fast into degraded TCP-only mode instead of re-triggering recovery, and
   clears the state file once the adapter powers on.
+- **Startup auto-gates BLE GATT to TCP-only on `hci_uart` or missing adapters.**
+  At startup, `wmr-bridge` inspects `/sys/class/bluetooth/<adapter>`. If the
+  adapter is absent or uses an `hci_uart*` driver or `serial` bus, the daemon
+  disables the `FF10` and `0x1812` BLE GATT peripheral and runs TCP-only. Pass
+  `--ble-allow-serial` (off by default) to force BLE GATT on a serial adapter.
+  For full BLE fallback alongside Classic HID, the Option B setup disables
+  onboard `BCM4345C0` with `dtoverlay=disable-bt` and uses one mainline
+  Bluetooth 5.x `btusb` USB dongle. `MTU 517`, `11.25 ms` connection interval,
+  and `200 Hz` `FF14` batching remain unchanged.
 
 ## 0.3.28-rc.3 — 2026-11-19
 

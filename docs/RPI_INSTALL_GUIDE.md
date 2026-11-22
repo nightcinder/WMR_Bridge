@@ -14,7 +14,8 @@ You need these things:
 - A Raspberry Pi 3 Model B+, Pi 4, or Pi 5.
 - A microSD card of 8 GB or more and a card reader.
 - A power supply. Use 5 V / 2.5 A micro-USB for a Pi 3B+, 5 V / 3 A USB-C for a Pi 4, and the official Pi 5 supply for a Pi 5.
-- A Wi-Fi network that uses the 5 GHz band.
+- Ethernet or a Wi-Fi network that uses the 5 GHz band.
+- For BLE fallback alongside Classic HID (Option B), one mainline Bluetooth 5.x USB dongle (`btusb`) with `dtoverlay=disable-bt` in `/boot/firmware/config.txt`. Realtek dongles also need `firmware-realtek` (`rtl_bt`). Without a `btusb` dongle, the bridge auto-gates to TCP-only on `hci_uart*`, `serial`, or missing adapters.
 - Two WMR controllers with fresh batteries.
 - A computer with Raspberry Pi Imager installed.
 
@@ -310,6 +311,13 @@ and scanning, and whether each hand has a bond and a hidraw node. In the log,
 heard, and `pairing <MAC> failed:...` gives the BlueZ error.
 
 **A phone sees the bridge but will not pair.**
+BLE GATT requires a non-serial `btusb` dongle (Option B: `dtoverlay=disable-bt`
+plus one Bluetooth 5.x `btusb` USB dongle). If the Pi uses only the onboard
+`hci_uart*` or `serial` adapter, or if no adapter is present, `wmr-bridge`
+disables BLE GATT at startup and runs TCP-only. In that state, `wmr-bridge pair`
+prints `BLE pairing is unavailable: the daemon has no GATT peripheral` and exits
+with code `1`.
+
 Open a pairing window on the running service, then pair from the phone:
 
 ```bash

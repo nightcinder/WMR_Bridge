@@ -53,7 +53,7 @@ at 2.4 GHz, and away from the Pi's own 2.4 GHz Wi-Fi/BT coexistence machinery.
 | Raspberry Pi 3 Model B+ | Expected | dual-band Wi-Fi + BT 4.2 Classic; 64-bit OS supported; less CPU headroom and 1 GB RAM |
 | Raspberry Pi Zero 2 W | No | 2.4 GHz Wi-Fi only, shares the band with BT |
 | Generic x86/ARM Linux | Expected | needs BlueZ HID host + a 5 GHz adapter |
-| Pi with a USB BT dongle | Expected | kernel must expose HID input as `/dev/hidraw*` |
+| Pi with a `btusb` USB dongle (Option B) | Recommended for BLE fallback | Add `dtoverlay=disable-bt` in `/boot/firmware/config.txt` and use one mainline BT 5.x `btusb` dongle (plus `firmware-realtek` for `rtl_bt` if Realtek) carrying Classic HID and BLE unsplit |
 
 This does not fix Classic Bluetooth loss by itself. The controller-to-bridge
 link is still Bluetooth. What it removes is the BLE notification airtime and
@@ -108,6 +108,16 @@ Confirm that BlueZ is running with the input plugin:
 systemctl status bluetooth
 bluetoothctl show
 ```
+
+For BLE fallback alongside Classic HID (Option B), disable the onboard
+`BCM4345C0` (`hci_uart`) controller by adding `dtoverlay=disable-bt` to
+`/boot/firmware/config.txt`, then reboot with one mainline Bluetooth 5.x
+`btusb` USB dongle attached. Realtek dongles need `sudo apt install
+firmware-realtek` so `rtl_bt` firmware loads. Use Ethernet (`eth0`) or 5 GHz
+Wi-Fi to avoid 2.4 GHz radio contention with the `btusb` dongle. Without a
+`btusb` dongle, `wmr-bridge` auto-gates BLE GATT to TCP-only on `hci_uart*`,
+`serial`, or missing adapters. Pass `--ble-allow-serial` to override the gate
+on serial adapters only. A missing adapter cannot be overridden.
 
 The bridge deliberately does not open L2CAP PSM 0x11/0x13 itself. The kernel
 HIDP driver already listens there. A user-space listener would collide with it.
@@ -270,6 +280,7 @@ Useful flags:
 | `--list` | print hidraw nodes and exit |
 | `--status` (or `status`) | print adapter, BlueZ bond and hidraw state, then exit |
 | `--no-auto-pair` | do not run the BlueZ auto-pairer |
+| `--ble-allow-serial` | force BLE GATT on a `hci_uart*` or `serial` adapter (off by default; serial adapters auto-gate to TCP-only) |
 | `--prefer-5ghz` | Create or update the `<connection>-5ghz` NetworkManager profile and prefer 5 GHz. This is a one-shot action and does not start the bridge. |
 | `--no-reconnect` | with `--prefer-5ghz`, save the profile without switching to it |
 
@@ -737,10 +748,19 @@ not authentication and does not change the token requirement.
 
 The daemon also serves the same FF11, FF12 and FF14 payloads over a BlueZ
 BLE GATT service. This is a fallback for when the Wi-Fi WebSocket is
-unreachable. It starts by default; disable it with `--no-ble`. The old
-`--ble-fallback` flag is a deprecated no-op alias. The peripheral needs
-`python3-dbus-next` and a free hci adapter (default `hci0`); if either is
-missing the daemon logs a warning and keeps serving TCP.
+unreachable. It starts by default on non-serial adapters; disable it with
+`--no-ble`. The old `--ble-fallback` flag is a deprecated no-op alias. At
+startup, `wmr-bridge` inspects `/sys/class/bluetooth/<adapter>`: if the adapter
+is absent or uses an `hci_uart*` driver or `serial` bus, the daemon disables
+BLE GATT and runs TCP-only (`wmr-bridge pair` then exits `1` with
+`pairing_unavailable`). Pass `--ble-allow-serial` (off by default) to force BLE
+GATT on a serial adapter. Full BLE fallback alongside Classic HID uses Option B:
+`dtoverlay=disable-bt` plus one mainline Bluetooth 5.x `btusb` USB dongle (with
+`firmware-realtek` for `rtl_bt` if Realtek), carrying both Classic HID and BLE
+unsplit. `MTU 517`, `11.25 ms` connection interval, and `200 Hz` `FF14` batching
+remain unchanged. The peripheral needs `python3-dbus-next` and a free hci
+adapter (default `hci0`); if either is missing the daemon logs a warning and
+keeps serving TCP.
 
 The fallback registers the firmware's FF10 service (characteristics FF11 to
 FF17) with BlueZ through `org.bluez.GattManager1` and advertises it with
@@ -1432,6 +1452,7 @@ INFO/WARNING:
 | Port unreachable | `--bind 0.0.0.0` (plus a token, or the daemon refuses to start), firewall, correct Pi address, same VLAN/client isolation off |
 | `dumpsys input` does not list WMR Bridge | Android requires Bluetooth HID pairing in Android Settings (`docs/HID_GAMEPAD.md:481-523`). The device registers as `WMR Bridge`. Run `adb shell dumpsys input | grep -E -A 25 -i "wmr[- ]bridge"`. Confirm the phone LE bond with the stored LE bond note in `wmr-bridge status` (`pairable=no`, `pi/wmr_bridge/__main__.py:605-612`) or `bluetoothctl info <MAC>` (`Paired: yes`, `docs/HID_GAMEPAD.md:542-560`, `pi/wmr_bridge/ble_gatt.py:2121-2144`) |
 | `DebugScreen` version or FF17 control | In `wmr_companion_app` (`v0.3.25`, `ONY-1448`), tap `Open 3D debug view` on the connect screen (`connect_screen.dart:436-445`). Find the FF16 firmware line under the `Stream` heading (`debug_screen.dart:205-213,523-556`, `wmr_ws_transport.dart:285,338-340`). `ControllerPanel` (FF17 disconnect) is hidden on Wi-Fi bridges (`debug_screen.dart:229-235`) and is tested on ESP32 BLE only |
+| `BLE pairing is unavailable` (`wmr-bridge pair` exits `1`) | The daemon auto-gated BLE GATT to TCP-only at startup because `hci0` is missing or uses `hci_uart*` or `serial` (`pi/wmr_bridge/__main__.py:152-160,801-816`). Use Option B (`dtoverlay=disable-bt` plus a `btusb` dongle), or pass `--ble-allow-serial` to override on serial adapters only (a missing adapter cannot be overridden) |
 | Controller does not wake after idle power-off | Motion wakes controllers only from stage 1 idle sleep (default 300 s, or 30 s under bench overrides `pi/wmr_bridge/inputs.py:26-27`). After stage 2 idle power-off (default 900 s, or 90 s under bench overrides), BlueZ blocks reconnects for a 60 s cooldown, then auto-pair reconnects the bonded hand; a physical button press also wakes it (`pi/wmr_bridge/inputs.py:444-516`) |
 
 ## Future work
