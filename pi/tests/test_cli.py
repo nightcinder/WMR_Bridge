@@ -197,15 +197,46 @@ class AutoPairIntervalTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("poll_interval", captured)
 
 
+def _make_sysfs_bluetooth_tree(
+    root: Path,
+    *,
+    adapter: str | None = "hci0",
+    driver: str | None = "btusb",
+    subsystem: str | None = "usb",
+) -> Path:
+    sysfs_bt = root / "sys_class_bluetooth"
+    sysfs_bt.mkdir()
+    if adapter is not None:
+        dev_dir = root / "devices" / "dev0"
+        hci_target = dev_dir / "bluetooth" / adapter
+        hci_target.mkdir(parents=True)
+        if driver is not None:
+            driver_dir = root / "bus" / (subsystem or "unknown") / "drivers" / driver
+            driver_dir.mkdir(parents=True, exist_ok=True)
+            (dev_dir / "driver").symlink_to(driver_dir)
+        if subsystem is not None:
+            subsystem_dir = root / "bus" / subsystem
+            subsystem_dir.mkdir(parents=True, exist_ok=True)
+            (dev_dir / "subsystem").symlink_to(subsystem_dir)
+        (sysfs_bt / adapter).symlink_to(hci_target)
+    return sysfs_bt
+
+
 class BlePeripheralStartupTests(unittest.IsolatedAsyncioTestCase):
     async def _run_with_ble(
-        self, argv: list[str]
+        self,
+        argv: list[str],
+        *,
+        adapter: str | None = "hci0",
+        driver: str | None = "btusb",
+        subsystem: str | None = "usb",
     ) -> tuple[list[str], dict[str, object], list[str]]:
         events: list[str] = []
         captured: dict[str, object] = {}
 
         class FakeBle:
             def __init__(self, _bridge, **kwargs) -> None:
+                captured["init"] = True
                 captured.update(kwargs)
 
             async def start(self) -> None:
@@ -227,10 +258,21 @@ class BlePeripheralStartupTests(unittest.IsolatedAsyncioTestCase):
         args = _build_parser().parse_args(
             ["--duration", "0.05", "--port", "0", "--no-auto-pair", *argv]
         )
-        with mock.patch("wmr_bridge.ble_gatt.BluezGattPeripheral", FakeBle), \
-             mock.patch("wmr_bridge.__main__.HidrawManager", FakeManager), \
-             self.assertLogs("wmr_bridge", level="INFO") as logs:
-            await asyncio.wait_for(_run(args), 5)
+        with tempfile.TemporaryDirectory() as tmp:
+            sysfs_bt = str(
+                _make_sysfs_bluetooth_tree(
+                    Path(tmp),
+                    adapter=adapter,
+                    driver=driver,
+                    subsystem=subsystem,
+                )
+            )
+            with mock.patch("wmr_bridge.ble_gatt.BluezGattPeripheral", FakeBle), \
+                 mock.patch("wmr_bridge.__main__.HidrawManager", FakeManager), \
+                 mock.patch("wmr_bridge.bluez.SYSFS_BLUETOOTH_ROOT", sysfs_bt), \
+                 mock.patch("wmr_bridge.__main__.SYSFS_BLUETOOTH_ROOT", sysfs_bt), \
+                 self.assertLogs("wmr_bridge", level="INFO") as logs:
+                await asyncio.wait_for(_run(args), 5)
         return events, captured, logs.output
 
     async def test_ble_peripheral_starts_by_default(self) -> None:
@@ -243,32 +285,95 @@ class BlePeripheralStartupTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(hosts(), list)
 
     async def test_no_ble_skips_the_peripheral(self) -> None:
-        class ForbiddenBle:
-            def __init__(self, *_args, **_kwargs) -> None:
-                raise AssertionError("--no-ble must not construct the peripheral")
-
-        class FakeManager:
-            def __init__(self, *_args, **_kwargs) -> None:
-                pass
-
-            def start(self) -> None:
-                pass
-
-            async def close(self) -> None:
-                pass
-
-        args = _build_parser().parse_args(
-            ["--duration", "0.05", "--port", "0", "--no-auto-pair", "--no-ble"]
+        events, captured, output = await self._run_with_ble(
+            ["--no-ble"],
+            driver="btusb",
+            subsystem="usb",
         )
-        with mock.patch("wmr_bridge.ble_gatt.BluezGattPeripheral", ForbiddenBle), \
-             mock.patch("wmr_bridge.__main__.HidrawManager", FakeManager), \
-             self.assertLogs("wmr_bridge", level="INFO"):
-            await asyncio.wait_for(_run(args), 5)
+        self.assertEqual(events, [])
+        self.assertEqual(captured, {})
+        self.assertFalse(any("BLE GATT" in line for line in output))
+
+    async def test_no_ble_overrides_ble_allow_serial(self) -> None:
+        events, captured, output = await self._run_with_ble(
+            ["--no-ble", "--ble-allow-serial"],
+            driver="hci_uart_bcm",
+            subsystem="serial",
+        )
+        self.assertEqual(events, [])
+        self.assertEqual(captured, {})
+        self.assertFalse(any("BLE GATT" in line for line in output))
 
     async def test_ble_fallback_alias_warns_but_still_runs(self) -> None:
         events, _captured, output = await self._run_with_ble(["--ble-fallback"])
         self.assertEqual(events, ["start", "close"])
         self.assertTrue(any("deprecated" in line for line in output))
+
+    async def test_hci_uart_serial_auto_disables_ble_to_tcp_only(self) -> None:
+        events, _captured, output = await self._run_with_ble(
+            [],
+            driver="hci_uart_bcm",
+            subsystem="serial",
+        )
+        self.assertEqual(events, [])
+        self.assertTrue(
+            any(
+                "BLE GATT disabled (TCP-only)" in line
+                and "hci_uart_bcm" in line
+                and "--ble-allow-serial" in line
+                for line in output
+            ),
+            msg=output,
+        )
+
+    async def test_serial_bus_with_non_hci_uart_driver_auto_disables_ble(self) -> None:
+        events, _captured, output = await self._run_with_ble(
+            [],
+            driver="btbcm",
+            subsystem="serial",
+        )
+        self.assertEqual(events, [])
+        self.assertTrue(
+            any(
+                "BLE GATT disabled (TCP-only)" in line and "serial bus" in line
+                for line in output
+            ),
+            msg=output,
+        )
+
+    async def test_ble_allow_serial_overrides_hci_uart_gate(self) -> None:
+        events, _captured, output = await self._run_with_ble(
+            ["--ble-allow-serial"],
+            driver="hci_uart_bcm",
+            subsystem="serial",
+        )
+        self.assertEqual(events, ["start", "close"])
+        self.assertTrue(
+            any("BLE GATT override (--ble-allow-serial)" in line for line in output),
+            msg=output,
+        )
+        self.assertTrue(any("BLE GATT: FF10" in line for line in output), msg=output)
+
+    async def test_missing_sysfs_adapter_degrades_cleanly_to_tcp_only(self) -> None:
+        events, _captured, output = await self._run_with_ble(
+            [],
+            adapter=None,
+            driver=None,
+            subsystem=None,
+        )
+        self.assertEqual(events, [])
+        self.assertTrue(
+            any(
+                "BLE GATT disabled (TCP-only)" in line and "not present" in line
+                for line in output
+            ),
+            msg=output,
+        )
+
+    def test_ble_allow_serial_is_off_by_default(self) -> None:
+        parser = _build_parser()
+        self.assertFalse(parser.parse_args([]).ble_allow_serial)
+        self.assertTrue(parser.parse_args(["--ble-allow-serial"]).ble_allow_serial)
 
 
 class HandFilterTests(unittest.TestCase):
