@@ -1037,5 +1037,85 @@ class WifiStartupTests(unittest.TestCase):
             self.assertEqual(calls[-1], ("prefer", False))
 
 
+class BleStatusPersistenceTests(unittest.TestCase):
+    def test_status_snapshot_rejects_stale_boot_id_and_dead_pid(self) -> None:
+        from wmr_bridge.ble_gatt import read_ble_status, write_ble_status
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            boot_id = state_dir / "boot_id"
+            boot_id.write_text("boot-1\n", encoding="utf-8")
+
+            write_ble_status(
+                {
+                    "mode": "active",
+                    "load_cuts": True,
+                    "mtu": 185,
+                    "subscribed": ["0000ff14-0000-1000-8000-00805f9b34fb"],
+                    "decimated": 12,
+                    "ble_dropped": 0,
+                },
+                state_dir,
+                boot_id_path=boot_id,
+            )
+            live = read_ble_status(
+                state_dir, boot_id_path=boot_id, pid_alive=lambda _p: True
+            )
+            self.assertIsNotNone(live)
+            assert live is not None
+            self.assertEqual(live["mode"], "active")
+            self.assertEqual(live["mtu"], 185)
+
+            # Dead PID -> stale snapshot ignored.
+            self.assertIsNone(
+                read_ble_status(
+                    state_dir, boot_id_path=boot_id, pid_alive=lambda _p: False
+                )
+            )
+
+            # Different boot_id -> stale snapshot ignored.
+            boot_id.write_text("boot-2\n", encoding="utf-8")
+            self.assertIsNone(
+                read_ble_status(
+                    state_dir, boot_id_path=boot_id, pid_alive=lambda _p: True
+                )
+            )
+
+    def test_status_reports_suppressed_from_bt_recover_state_json(self) -> None:
+        import json
+        from wmr_bridge.ble_gatt import read_ble_status
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp)
+            boot_id = state_dir / "boot_id"
+            boot_id.write_text("boot-suppressed\n", encoding="utf-8")
+            (state_dir / "bt-recover.state.json").write_text(
+                json.dumps({"boot_id": "boot-suppressed", "suppressed": True}),
+                encoding="utf-8",
+            )
+            suppressed = read_ble_status(state_dir, boot_id_path=boot_id)
+            self.assertIsNotNone(suppressed)
+            assert suppressed is not None
+            self.assertEqual(suppressed["mode"], "suppressed")
+
+            lines = _format_status(
+                BluezStatus(
+                    adapter=BluezAdapter(
+                        address="AA:BB:CC:DD:EE:FF",
+                        name="wmr-bridge",
+                        powered=False,
+                        pairable=False,
+                        discovering=False,
+                    ),
+                    devices=(),
+                    hidraw=(),
+                ),
+                ble_status=suppressed,
+            )
+            self.assertTrue(
+                any("BLE peripheral: mode=suppressed" in line for line in lines)
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,3 @@
+# Synthetic hex key strings in unit test for btmon redaction (commit e155a72)
+e155a72d4b6a6279e12bdd6ec3ef4bb31540d360:pi/tests/test_bench_optionc.py:generic-api-key:195
+e155a72d4b6a6279e12bdd6ec3ef4bb31540d360:pi/tests/test_bench_optionc.py:generic-api-key:196
