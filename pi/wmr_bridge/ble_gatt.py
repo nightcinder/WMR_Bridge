@@ -154,8 +154,11 @@ PAIRING_AGENT_GRACE_S = 10.0
 ADVERTISING_DEBOUNCE_S = 1.0
 # Adapter1.Powered can go False after a controller firmware crash. The daemon
 # first tries to set it back itself, then asks the root recovery unit to
-# reload the UART attach and bluetoothd. Check at this interval while running.
-ADAPTER_POWER_CHECK_INTERVAL_S = 30.0
+# reload the UART attach and bluetoothd. Check at this interval while running,
+# and confirm across a short re-read so transient D-Bus errors do not tear down
+# an active GATT stream.
+ADAPTER_POWER_CHECK_INTERVAL_S = 5.0
+ADAPTER_POWER_CONFIRM_DELAY_S = 0.25
 # How long to give the root recovery unit before the daemon reconnects and
 # re-registers GATT/advertising. This is the first rung of the reconnect
 # ladder: a stop, controller reload and bluetoothd restart on a Pi 3B+ can
@@ -173,6 +176,7 @@ ADAPTER_RECOVERY_MAX_ATTEMPTS = 3
 ADAPTER_RECOVERY_BACKOFF_S = 2.0
 ADAPTER_RECOVERY_EXHAUSTED_BACKOFF_S = 30.0
 DEFAULT_BT_RECOVER_TRIGGER = "/var/lib/wmr-bridge/bt-recover.trigger"
+DEFAULT_STATE_DIR = "/var/lib/wmr-bridge"
 DEFAULT_BOOT_ID_PATH = "/proc/sys/kernel/random/boot_id"
 # Reconnect attempts inside one ladder run, while the root unit reloads the
 # controller: one self-power attempt, then the root unit, then the ladder.
@@ -468,6 +472,7 @@ class GattApplication:
         self._ff13_cursor: tuple[int, int] | None = None
         self.dropped_records = 0
         self.decimated = 0
+        self._mtu_drop_warned: set[tuple[str, int]] = set()
         self.last_command = 0
         self.last_result = RESULT_OK
 
@@ -637,8 +642,31 @@ class GattApplication:
 
     def _note_mtu(self, options: dict[str, Any] | None) -> None:
         mtu = self._option(options, "mtu", self._mtu)
-        if isinstance(mtu, int) and 23 <= mtu <= 517:
+        if isinstance(mtu, int) and 23 <= mtu <= 517 and mtu != self._mtu:
             self._mtu = mtu
+            self._mtu_drop_warned.clear()
+
+    def reset_mtu(self) -> None:
+        """Reset negotiated ATT MTU back to the 23-byte BLE default."""
+
+        self._mtu = DEFAULT_MTU
+        self._mtu_drop_warned.clear()
+
+    def _warn_undersized_mtu(self, uuid: str, required_limit: int) -> None:
+        key = (uuid, self._mtu)
+        if key in self._mtu_drop_warned:
+            return
+        self._mtu_drop_warned.add(key)
+        min_mtu = required_limit + 3
+        LOG.warning(
+            "BLE %s dropping records: ATT MTU %d is below the %d-byte floor "
+            "(notification limit %d < %d)",
+            uuid,
+            self._mtu,
+            min_mtu,
+            self.notification_limit,
+            required_limit,
+        )
 
     @property
     def mtu(self) -> int:
@@ -863,6 +891,7 @@ class GattApplication:
                     self._notify(FF12_DECODED, packed)
                 else:
                     self.dropped_records += 1
+                    self._warn_undersized_mtu(FF12_DECODED, len(packed))
             if wants_batched:
                 if self.serial_load_cuts:
                     now = self._clock()
@@ -884,10 +913,16 @@ class GattApplication:
                             self._queue_batch(packed)
                         else:
                             self.dropped_records += 1
+                            self._warn_undersized_mtu(
+                                FF14_BATCHED, BATCH_HEADER_SIZE + DECODED_SIZE
+                            )
                 elif self.batch_max_count:
                     self._queue_batch(packed)
                 else:
                     self.dropped_records += 1
+                    self._warn_undersized_mtu(
+                        FF14_BATCHED, BATCH_HEADER_SIZE + DECODED_SIZE
+                    )
         if wants_hid and not self._hid_paused_by_ble_stream:
             self._deliver_hid(frame, record)
 
@@ -1029,6 +1064,8 @@ class GattApplication:
         self._subscribed.discard(uuid)
         if uuid == FF14_BATCHED:
             self._discard_batch()
+        if not self._subscribed:
+            self.reset_mtu()
 
     def _queue_batch(self, packed: bytes) -> None:
         self._batch.append(packed)
@@ -1079,6 +1116,9 @@ class GattApplication:
             self._last_batch = self._clock()
             if BATCH_HEADER_SIZE + len(chunk) * DECODED_SIZE > self.notification_limit:
                 self.dropped_records += len(chunk)
+                self._warn_undersized_mtu(
+                    FF14_BATCHED, BATCH_HEADER_SIZE + len(chunk) * DECODED_SIZE
+                )
             else:
                 try:
                     payload = encode_batch(chunk)
@@ -1097,6 +1137,9 @@ class GattApplication:
             chunk = records[start : start + max_count]
             if BATCH_HEADER_SIZE + len(chunk) * DECODED_SIZE > self.notification_limit:
                 self.dropped_records += len(chunk)
+                self._warn_undersized_mtu(
+                    FF14_BATCHED, BATCH_HEADER_SIZE + len(chunk) * DECODED_SIZE
+                )
                 continue
             try:
                 payload = encode_batch(chunk)
@@ -1127,6 +1170,124 @@ def _read_boot_id(path: str | Path = DEFAULT_BOOT_ID_PATH) -> str | None:
         return value or None
     except OSError:
         return None
+
+
+def default_state_dir() -> Path:
+    """Return the daemon state directory (``STATE_DIRECTORY`` or ``/var/lib/wmr-bridge``)."""
+
+    raw = os.environ.get("STATE_DIRECTORY", "").split(":")[0].strip()
+    return Path(raw or DEFAULT_STATE_DIR)
+
+
+def is_pid_alive(pid: int) -> bool:
+    """Return True if *pid* is an active process on this host."""
+
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def is_recovery_suppressed(
+    state_dir: Path | None = None,
+    *,
+    boot_id_path: str | Path = DEFAULT_BOOT_ID_PATH,
+) -> bool:
+    """Return True if ``bt-recover.state.json`` marks recovery suppressed on this boot."""
+
+    base = state_dir or default_state_dir()
+    path = base / "bt-recover.state.json"
+    boot_id = _read_boot_id(boot_id_path)
+    if boot_id is None:
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    return data.get("boot_id") == boot_id and bool(data.get("suppressed"))
+
+
+def write_ble_status(
+    snapshot: dict[str, Any],
+    state_dir: Path | None = None,
+    *,
+    boot_id_path: str | Path = DEFAULT_BOOT_ID_PATH,
+) -> Path | None:
+    """Persist a ``boot_id`` + PID-scoped BLE status snapshot under ``state_dir``."""
+
+    base = state_dir or default_state_dir()
+    path = base / "ble-status.json"
+    payload = dict(snapshot)
+    payload["boot_id"] = _read_boot_id(boot_id_path)
+    payload["pid"] = os.getpid()
+    payload["updated_at"] = time.time()
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        LOG.debug("could not persist BLE status snapshot: %s", exc)
+        return None
+    return path
+
+
+def clear_ble_status(state_dir: Path | None = None) -> None:
+    """Remove the persisted BLE status snapshot on clean daemon exit."""
+
+    base = state_dir or default_state_dir()
+    path = base / "ble-status.json"
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        LOG.debug("could not remove BLE status snapshot: %s", exc)
+
+
+def read_ble_status(
+    state_dir: Path | None = None,
+    *,
+    boot_id_path: str | Path = DEFAULT_BOOT_ID_PATH,
+    pid_alive: Callable[[int], bool] = is_pid_alive,
+) -> dict[str, Any] | None:
+    """Read the live BLE status snapshot if its ``boot_id`` and PID are current.
+
+    If no live snapshot exists (or it is stale) and ``bt-recover.state.json``
+    marks the current ``boot_id`` as suppressed, returns a minimal
+    ``suppressed`` status dictionary so ``wmr-bridge status`` and preflight
+    unambiguously report ``#281`` degraded TCP-only mode.
+    """
+
+    base = state_dir or default_state_dir()
+    path = base / "ble-status.json"
+    suppressed = is_recovery_suppressed(base, boot_id_path=boot_id_path)
+    current_boot_id = _read_boot_id(boot_id_path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = None
+    if isinstance(data, dict):
+        snap_boot = data.get("boot_id")
+        snap_pid = data.get("pid")
+        boot_ok = current_boot_id is None or snap_boot == current_boot_id
+        pid_ok = isinstance(snap_pid, int) and pid_alive(snap_pid)
+        if boot_ok and pid_ok:
+            if suppressed and data.get("mode") == "active":
+                data = dict(data, mode="suppressed")
+            return data
+    if suppressed:
+        return {
+            "mode": "suppressed",
+            "suppressed": True,
+            "stale": True,
+        }
+    return None
 
 
 def _address_tail(address: str) -> bytes:
@@ -1526,12 +1687,14 @@ class DbusGattBackend:
         self._agent_default = False
         self._exported: list[Any] = []
         self._characteristics: dict[str, Any] = {}
+        self._app: GattApplication | None = None
         self._recover_trigger = Path(
             recover_trigger
             or os.environ.get("WMR_BRIDGE_BT_RECOVER_TRIGGER", DEFAULT_BT_RECOVER_TRIGGER)
         )
 
     async def start(self, app: GattApplication) -> None:
+        self._app = app
         log_just_works_repairing()
         try:
             interfaces = build_dbus_interfaces(app)
@@ -1832,6 +1995,9 @@ class DbusGattBackend:
         raise RuntimeError("could not re-register the advertisement") from error
 
     async def stop(self) -> None:
+        if self._app is not None:
+            self._app.reset_mtu()
+            self._app = None
         bus = self._bus
         if bus is None:
             return
@@ -1892,6 +2058,7 @@ class BluezGattPeripheral:
         clock: Callable[[], float] = time.monotonic,
         advertising_debounce_s: float = ADVERTISING_DEBOUNCE_S,
         power_check_interval_s: float = ADAPTER_POWER_CHECK_INTERVAL_S,
+        power_confirm_delay_s: float = ADAPTER_POWER_CONFIRM_DELAY_S,
         recovery_wait_s: float = ADAPTER_RECOVERY_WAIT_S,
         recovery_wait_ladder_s: tuple[float, ...] = ADAPTER_RECOVERY_WAIT_LADDER_S,
         recovery_attempts: int = ADAPTER_RECOVERY_MAX_ATTEMPTS,
@@ -1931,6 +2098,7 @@ class BluezGattPeripheral:
         self._advertising_dirty = False
         self._advertising_debounce_s = max(0.0, advertising_debounce_s)
         self._power_check_interval_s = max(0.001, power_check_interval_s)
+        self._power_confirm_delay_s = max(0.0, power_confirm_delay_s)
         self._recovery_wait_s = max(0.0, recovery_wait_s)
         self._recovery_wait_ladder_s = tuple(
             max(0.0, wait) for wait in recovery_wait_ladder_s
@@ -2146,6 +2314,20 @@ class BluezGattPeripheral:
         ladder = self._recovery_wait_ladder_s
         return ladder[min(attempt - 1, len(ladder) - 1)]
 
+    async def _read_adapter_powered(self) -> bool:
+        try:
+            return await self.backend.adapter_powered()
+        except Exception as exc:
+            # An adapter absent from the bus has no Adapter1.Powered
+            # property to answer. Polling in silence there was the
+            # ~04:07 loss: absence is Powered=no, and must recover.
+            LOG.warning(
+                "could not read the adapter power state (%s); "
+                "treating the adapter as absent",
+                exc,
+            )
+            return False
+
     async def _watch_adapter_power(self) -> None:
         """Reconnect GATT/advertising if the adapter powers off or vanishes."""
 
@@ -2154,19 +2336,20 @@ class BluezGattPeripheral:
                 await asyncio.sleep(self._power_check_interval_s)
                 if not self._started:
                     return
-                try:
-                    powered = await self.backend.adapter_powered()
-                except Exception as exc:
-                    # An adapter absent from the bus has no Adapter1.Powered
-                    # property to answer. Polling in silence there was the
-                    # ~04:07 loss: absence is Powered=no, and must recover.
-                    LOG.warning(
-                        "could not read the adapter power state (%s); "
-                        "treating the adapter as absent",
-                        exc,
-                    )
-                    powered = False
+                powered = await self._read_adapter_powered()
                 if powered:
+                    self._clear_recovery_suppression()
+                    continue
+                if self._power_confirm_delay_s > 0:
+                    await asyncio.sleep(self._power_confirm_delay_s)
+                    if not self._started:
+                        return
+                if await self._read_adapter_powered():
+                    LOG.info(
+                        "Bluetooth adapter %s power state recovered on re-read; "
+                        "skipping GATT teardown",
+                        self.backend.adapter if hasattr(self.backend, "adapter") else "hci0",
+                    )
                     self._clear_recovery_suppression()
                     continue
                 await self._recover_adapter_power()
@@ -2563,8 +2746,11 @@ class BluezGattPeripheral:
                 LOG.debug("could not disable pairing: %s", exc)
             self.app.bridge.remove_sink(self.app)
             self.app.set_emitter(lambda _uuid, _value: None)
-            self.app.stop_notify(FF14_BATCHED)
+            for uuid in list(self.app.subscribed):
+                self.app.stop_notify(uuid)
+            self.app.reset_mtu()
         else:
             self._cancel_tasks()
+            self.app.reset_mtu()
         self._loop = None
         await self.backend.stop()

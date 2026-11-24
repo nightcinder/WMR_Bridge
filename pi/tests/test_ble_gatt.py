@@ -2397,3 +2397,147 @@ class SerialLoadCutsTests(unittest.IsolatedAsyncioTestCase):
         self.bridge.ingest(0, self._sample(0x08))
         self.assertEqual(len(self.backend.values(HID_REPORT)), before + 2)
 
+
+class Hardening281AndMtuTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.clock = FakeClock(100.0)
+        self.bridge = Bridge()
+
+    async def _wait(self, predicate, timeout: float = 1.0) -> None:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while not predicate():
+            if asyncio.get_running_loop().time() >= deadline:
+                raise AssertionError("timed out waiting for condition")
+            await asyncio.sleep(0.005)
+
+    async def test_transient_adapter_powered_error_self_recovers_without_teardown(self) -> None:
+        class TransientErrorBackend(FakeBackend):
+            def __init__(self) -> None:
+                super().__init__()
+                self.reads = 0
+                self.stops = 0
+
+            async def adapter_powered(self) -> bool:
+                self.reads += 1
+                if self.reads == 1:
+                    raise RuntimeError("transient D-Bus timeout")
+                return True
+
+            async def stop(self) -> None:
+                self.stops += 1
+                await super().stop()
+
+        backend = TransientErrorBackend()
+        peripheral = BluezGattPeripheral(
+            self.bridge,
+            backend=backend,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            power_check_interval_s=0.01,
+            power_confirm_delay_s=0.005,
+        )
+        await peripheral.start()
+        try:
+            await self._wait(lambda: backend.reads >= 2)
+            self.assertEqual(backend.stops, 0)
+            self.assertEqual(backend.recovery_requests, 0)
+            self.assertTrue(peripheral.started)
+            self.assertTrue(peripheral.advertising)
+            self.assertFalse(peripheral.degraded)
+        finally:
+            await peripheral.close()
+
+    async def test_persistent_powered_no_mid_stream_triggers_recovery_and_teardown(self) -> None:
+        class DropBackend(FakeBackend):
+            def __init__(self) -> None:
+                super().__init__()
+                self.stops = 0
+
+            async def stop(self) -> None:
+                self.stops += 1
+                await super().stop()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            boot_id = Path(tmp) / "boot_id"
+            boot_id.write_text("boot-mid-stream\n", encoding="utf-8")
+            state_path = Path(tmp) / "bt-recover.state.json"
+            backend = DropBackend()
+            backend.power_on_succeeds = False
+            peripheral = BluezGattPeripheral(
+                self.bridge,
+                backend=backend,
+                hosts=["192.0.2.10"],
+                clock=self.clock,
+                power_check_interval_s=0.01,
+                power_confirm_delay_s=0.005,
+                recovery_wait_s=0.0,
+                recovery_wait_ladder_s=(0.0,),
+                recovery_attempts=1,
+                recovery_backoff_s=0.0,
+                recovery_exhausted_backoff_s=3600.0,
+                recover_state_path=state_path,
+                boot_id_path=boot_id,
+            )
+            await peripheral.start()
+            try:
+                # Drop adapter power mid-stream while subscribed; TCP bridge stays up.
+                peripheral.app.read_value(FF16_VERSION, {"mtu": 185})
+                peripheral.app.start_notify(FF14_BATCHED)
+                self.assertEqual(peripheral.app.mtu, 185)
+                backend.powered = False
+                await self._wait(lambda: peripheral.degraded)
+                self.assertGreaterEqual(backend.recovery_requests, 1)
+                self.assertGreaterEqual(backend.stops, 1)
+                self.assertTrue(peripheral._recovery_suppressed_for_boot())
+            finally:
+                await peripheral.close()
+
+    async def test_ff14_subscribe_below_61_warns_and_drops_then_recovers_after_ff16_mtu_61(self) -> None:
+        backend = FakeBackend()
+        app = GattApplication(
+            self.bridge,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            serial_load_cuts=True,
+        )
+        app.set_emitter(backend.notify)
+        self.bridge.add_sink(app)
+
+        app.start_notify(FF14_BATCHED)
+        with self.assertLogs("wmr_bridge.ble_gatt", level="WARNING") as logs:
+            self.bridge.ingest(0, SAMPLE_DATA)
+        self.assertEqual(app.dropped_records, 1)
+        self.assertEqual(backend.values(FF14_BATCHED), [])
+        self.assertTrue(any("61-byte floor" in line for line in logs.output))
+
+        # Reading FF16 with negotiated MTU >= 61 unblocks FF14 delivery.
+        app.read_value(FF16_VERSION, {"mtu": 61})
+        self.clock.advance(0.05)
+        self.bridge.ingest(0, SAMPLE_DATA)
+        self.assertEqual(app.dropped_records, 1)
+        self.assertEqual(len(backend.values(FF14_BATCHED)), 1)
+
+    async def test_all_centrals_disconnect_and_backend_stop_reset_mtu_to_default(self) -> None:
+        from wmr_bridge.ble_gatt import DEFAULT_MTU
+
+        backend = DbusGattBackend()
+        app = GattApplication(self.bridge, hosts=["192.0.2.10"], clock=self.clock)
+        backend._app = app
+
+        app.read_value(FF16_VERSION, {"mtu": 247})
+        self.assertEqual(app.mtu, 247)
+        app.start_notify(FF14_BATCHED)
+        app.start_notify(HID_REPORT)
+        app.stop_notify(FF14_BATCHED)
+        # Still one subscribed characteristic: MTU stays negotiated.
+        self.assertEqual(app.mtu, 247)
+        app.stop_notify(HID_REPORT)
+        # All centrals disconnected: MTU resets to DEFAULT_MTU (23).
+        self.assertEqual(app.mtu, DEFAULT_MTU)
+
+        app.read_value(FF16_VERSION, {"mtu": 185})
+        self.assertEqual(app.mtu, 185)
+        await backend.stop()
+        self.assertEqual(app.mtu, DEFAULT_MTU)
+
+

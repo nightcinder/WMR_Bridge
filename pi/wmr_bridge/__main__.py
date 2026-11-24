@@ -15,9 +15,18 @@ import socket
 import stat
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .ble_gatt import (
+    DEFAULT_MTU,
+    clear_ble_status,
+    default_state_dir,
+    is_recovery_suppressed,
+    read_ble_status,
+    write_ble_status,
+)
 from .bluez import (
     HIDRAW_ROOT,
     BluezAutoPairer,
@@ -615,10 +624,39 @@ def _yes(value: bool) -> str:
     return "yes" if value else "no"
 
 
+def _format_ble_status(ble_status: dict[str, Any] | None) -> list[str]:
+    """Render the persisted BLE peripheral mode and counters."""
+
+    if ble_status is None:
+        return []
+    mode = str(ble_status.get("mode") or "unknown")
+    load_cuts_raw = ble_status.get("load_cuts")
+    load_cuts = (
+        "on" if load_cuts_raw is True else "off" if load_cuts_raw is False else "unknown"
+    )
+    mtu = ble_status.get("mtu", "-")
+    sub_raw = ble_status.get("subscribed")
+    if isinstance(sub_raw, list):
+        subscribed = (
+            ",".join(u[4:8] if isinstance(u, str) and len(u) == 36 else str(u) for u in sub_raw)
+            if sub_raw
+            else "none"
+        )
+    else:
+        subscribed = str(sub_raw) if sub_raw is not None else "-"
+    decimated = ble_status.get("decimated", "-")
+    ble_dropped = ble_status.get("ble_dropped", "-")
+    return [
+        f"BLE peripheral: mode={mode} load_cuts={load_cuts} mtu={mtu} "
+        f"subscribed={subscribed} decimated={decimated} ble_dropped={ble_dropped}"
+    ]
+
+
 def _format_status(
     status: BluezStatus,
     wifi: dict[str, Any] | None = None,
     uplink: dict[str, Any] | None = None,
+    ble_status: dict[str, Any] | None = None,
 ) -> list[str]:
     """Render the pairing state a user needs when a controller will not pair."""
 
@@ -696,6 +734,7 @@ def _format_status(
         )
     lines.extend(_format_uplink(uplink))
     lines.extend(_format_wifi(wifi))
+    lines.extend(_format_ble_status(ble_status))
     return lines
 
 
@@ -744,12 +783,14 @@ def _print_status(
     sysfs_root: str = HIDRAW_ROOT,
     wifi: dict[str, Any] | None = None,
     uplink: dict[str, Any] | None = None,
+    state_dir: Path | None = None,
 ) -> int:
     if which(command) is None:
         print(f"{command} not found; install bluez and try again")
         return 1
     status = collect_status(command, runner or _run_command, sysfs_root)
-    print("\n".join(_format_status(status, wifi, uplink)))
+    ble_status = read_ble_status(state_dir)
+    print("\n".join(_format_status(status, wifi, uplink, ble_status)))
     return 0 if status.adapter is not None else 1
 
 
@@ -824,7 +865,10 @@ async def _run(args: argparse.Namespace) -> int:
     LOG.info("payloads: FF11 raw, FF12 decoded, FF14 batched; protocol 1")
     LOG.info("hand filter: %s", ", ".join(bridge.hand_filter))
 
+    state_dir = default_state_dir()
     ble = None
+    ble_load_cuts = False
+    ble_startup_suppressed = False
     if args.ble_fallback:
         LOG.warning(
             "--ble-fallback is deprecated and now a no-op: the BLE GATT "
@@ -865,6 +909,7 @@ async def _run(args: argparse.Namespace) -> int:
             await ble.start()
         except Exception as exc:
             LOG.warning("BLE GATT disabled: %s", exc)
+            ble_startup_suppressed = is_recovery_suppressed(state_dir)
             ble = None
         else:
             LOG.info(
@@ -910,6 +955,33 @@ async def _run(args: argparse.Namespace) -> int:
                 }
 
             bridge.pairing_handler = _pairing_control
+
+    def _ble_snapshot() -> dict[str, Any]:
+        if not args.ble:
+            mode = "--no-ble"
+        elif ble is None:
+            mode = (
+                "suppressed"
+                if (ble_startup_suppressed or is_recovery_suppressed(state_dir))
+                else "degraded"
+            )
+        elif getattr(ble, "degraded", False):
+            mode = "degraded"
+        elif is_recovery_suppressed(state_dir):
+            mode = "suppressed"
+        else:
+            mode = "active"
+        app = getattr(ble, "app", None)
+        return {
+            "mode": mode,
+            "load_cuts": bool(ble_load_cuts),
+            "mtu": app.mtu if app is not None else DEFAULT_MTU,
+            "subscribed": sorted(app.subscribed) if app is not None else [],
+            "decimated": app.decimated if app is not None else 0,
+            "ble_dropped": app.dropped_records if app is not None else 0,
+        }
+
+    write_ble_status(_ble_snapshot(), state_dir)
 
     advertiser: MdnsAdvertiser | None = None
     discovery: DiscoveryResponder | None = None
@@ -1016,17 +1088,26 @@ async def _run(args: argparse.Namespace) -> int:
             while not stop.is_set():
                 await asyncio.sleep(5.0)
                 status = bridge.status()
+                ble_snap = _ble_snapshot()
+                write_ble_status(ble_snap, state_dir)
                 hands = " ".join(
                     f"{item['hand'].lower()}={'up' if item['connected'] else 'down'}"
                     f"/{item['reports']}({item['delivered']})"
                     for item in status["hands"]
                 )
                 LOG.info(
-                    "clients=%d subscribed=%d %s dropped=%d",
+                    "clients=%d subscribed=%d %s dropped=%d "
+                    "ble=%s load_cuts=%s mtu=%d ble_subscribed=%d decimated=%d ble_dropped=%d",
                     status["clients"],
                     status["subscribed"],
                     hands,
                     status["dropped"],
+                    ble_snap["mode"],
+                    "on" if ble_snap["load_cuts"] else "off",
+                    ble_snap["mtu"],
+                    len(ble_snap["subscribed"]),
+                    ble_snap["decimated"],
+                    ble_snap["ble_dropped"],
                 )
 
         status_task = asyncio.create_task(log_status(), name="status")
@@ -1060,6 +1141,7 @@ async def _run(args: argparse.Namespace) -> int:
             await discovery.close()
         if ble is not None:
             await ble.close()
+        clear_ble_status(state_dir)
         await server.close()
         LOG.info("stopped: %s", bridge.status())
     return 0
