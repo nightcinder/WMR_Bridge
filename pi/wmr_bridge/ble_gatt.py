@@ -1064,8 +1064,6 @@ class GattApplication:
         self._subscribed.discard(uuid)
         if uuid == FF14_BATCHED:
             self._discard_batch()
-        if not self._subscribed:
-            self.reset_mtu()
 
     def _queue_batch(self, packed: bytes) -> None:
         self._batch.append(packed)
@@ -1688,6 +1686,7 @@ class DbusGattBackend:
         self._exported: list[Any] = []
         self._characteristics: dict[str, Any] = {}
         self._app: GattApplication | None = None
+        self._disconnect_task: asyncio.Task[None] | None = None
         self._recover_trigger = Path(
             recover_trigger
             or os.environ.get("WMR_BRIDGE_BT_RECOVER_TRIGGER", DEFAULT_BT_RECOVER_TRIGGER)
@@ -1761,6 +1760,71 @@ class DbusGattBackend:
         except Exception:
             await self.stop()
             raise
+
+        await self._install_disconnect_watch(bus)
+
+    async def _install_disconnect_watch(self, bus: Any) -> None:
+        if hasattr(bus, "add_message_handler"):
+            bus.add_message_handler(self._on_dbus_message)
+        try:
+            from dbus_next import Message
+
+            for rule in (
+                "type='signal',sender='org.bluez',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',arg0='org.bluez.Device1'",
+                "type='signal',sender='org.bluez',interface='org.freedesktop.DBus.ObjectManager',member='InterfacesRemoved'",
+            ):
+                await bus.call(
+                    Message(
+                        destination="org.freedesktop.DBus",
+                        path="/org/freedesktop/DBus",
+                        interface="org.freedesktop.DBus",
+                        member="AddMatch",
+                        signature="s",
+                        body=[rule],
+                    )
+                )
+        except Exception as exc:
+            LOG.debug("could not install BlueZ Device1 disconnect match: %s", exc)
+
+    def _on_dbus_message(self, msg: Any) -> bool:
+        interface = getattr(msg, "interface", None)
+        member = getattr(msg, "member", None)
+        body = getattr(msg, "body", None) or []
+        should_check = False
+        if (
+            interface == "org.freedesktop.DBus.Properties"
+            and member == "PropertiesChanged"
+            and len(body) >= 2
+            and body[0] == "org.bluez.Device1"
+            and isinstance(body[1], dict)
+            and "Connected" in body[1]
+            and not _dbus_value(body[1]["Connected"])
+        ):
+            should_check = True
+        elif (
+            interface == "org.freedesktop.DBus.ObjectManager"
+            and member == "InterfacesRemoved"
+            and len(body) >= 2
+            and "org.bluez.Device1" in body[1]
+        ):
+            should_check = True
+
+        if should_check and self._app is not None:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                pass
+            else:
+                if self._disconnect_task is not None and not self._disconnect_task.done():
+                    self._disconnect_task.cancel()
+                self._disconnect_task = loop.create_task(self._handle_device_disconnect())
+        return False
+
+    async def _handle_device_disconnect(self) -> None:
+        if self._app is None:
+            return
+        if not await self.has_connected_le_central():
+            self._app.reset_mtu()
 
     async def adapter_powered(self) -> bool:
         """Read ``Adapter1.Powered``; an unreadable adapter counts as off."""
@@ -1913,6 +1977,49 @@ class DbusGattBackend:
                 await self._release_agent()
         LOG.info("BLE adapter pairable: %s", "yes" if pairable else "no")
 
+    @staticmethod
+    def _is_wmr_controller_device(properties: dict[str, Any]) -> bool:
+        name = str(
+            _dbus_value(properties.get("Name"))
+            or _dbus_value(properties.get("Alias"))
+            or ""
+        )
+        if name.strip().casefold() in WMR_NAMES:
+            return True
+        # A dual-mode phone's LE bond carries Class and AddressType=public
+        # too, so Class is not evidence of a Classic bond. Only the Classic
+        # HID profile proves this bond belongs to a controller; anything
+        # unproven closes the door.
+        uuids = _dbus_value(properties.get("UUIDs")) or []
+        return CLASSIC_HID_UUID in {
+            str(_dbus_value(uuid)).casefold() for uuid in uuids
+        }
+
+    async def has_connected_le_central(self) -> bool:
+        """True when any non-WMR BlueZ Device1 reports ``Connected=True``."""
+
+        bus = self._bus
+        if bus is None:
+            return False
+        try:
+            introspection = await bus.introspect("org.bluez", "/")
+            manager_object = bus.get_proxy_object("org.bluez", "/", introspection)
+            manager = manager_object.get_interface(
+                "org.freedesktop.DBus.ObjectManager"
+            )
+            objects = await manager.call_get_managed_objects()
+        except Exception as exc:
+            LOG.warning("could not read BlueZ connected devices: %s", exc)
+            return True
+        for interfaces in objects.values():
+            properties = interfaces.get("org.bluez.Device1")
+            if not properties or not _dbus_value(properties.get("Connected")):
+                continue
+            if self._is_wmr_controller_device(properties):
+                continue
+            return True
+        return False
+
     async def has_le_bond(self) -> bool:
         """True when BlueZ holds a bond for a device that is not a WMR controller.
 
@@ -1944,21 +2051,7 @@ class DbusGattBackend:
             properties = interfaces.get("org.bluez.Device1")
             if not properties or not _dbus_value(properties.get("Paired")):
                 continue
-            name = str(
-                _dbus_value(properties.get("Name"))
-                or _dbus_value(properties.get("Alias"))
-                or ""
-            )
-            if name.strip().casefold() in WMR_NAMES:
-                continue
-            # A dual-mode phone's LE bond carries Class and AddressType=public
-            # too, so Class is not evidence of a Classic bond. Only the Classic
-            # HID profile proves this bond belongs to a controller; anything
-            # unproven closes the door.
-            uuids = _dbus_value(properties.get("UUIDs")) or []
-            if CLASSIC_HID_UUID in {
-                str(_dbus_value(uuid)).casefold() for uuid in uuids
-            }:
+            if self._is_wmr_controller_device(properties):
                 continue
             return True
         return False
@@ -1995,12 +2088,20 @@ class DbusGattBackend:
         raise RuntimeError("could not re-register the advertisement") from error
 
     async def stop(self) -> None:
+        if self._disconnect_task is not None:
+            self._disconnect_task.cancel()
+            self._disconnect_task = None
         if self._app is not None:
             self._app.reset_mtu()
             self._app = None
         bus = self._bus
         if bus is None:
             return
+        if hasattr(bus, "remove_message_handler"):
+            try:
+                bus.remove_message_handler(self._on_dbus_message)
+            except Exception:
+                pass
         await self._release_agent()
         if self._advertising_manager is not None:
             try:

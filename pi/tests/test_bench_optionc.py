@@ -190,18 +190,20 @@ class OptionCPreflightTests(unittest.TestCase):
 
 class CaptureAndRedactionTests(unittest.TestCase):
     def test_redaction_strips_macs_keys_and_tokens(self) -> None:
+        ltk = "0011" * 8
+        link_key = "ff00" * 8
         raw = (
             "Device AA:BB:CC:DD:EE:FF /org/bluez/hci0/dev_11_22_33_44_55_66\n"
-            "Long Term Key: 00112233445566778899aabbccddeeff\n"
-            "Link Key: ff00ee11dd22cc33bb44aa5599668877\n"
+            f"Long Term Key: {ltk}\n"
+            f"Link Key: {link_key}\n"
             'FF13 payload: {"type":"wmr_ble_session","token":"super-secret-token-123"}\n'
             "wmr-bridge --token my-cli-secret\n"
         )
         redacted = bench_optionc.redact_text(raw)
         self.assertNotIn("AA:BB:CC:DD:EE:FF", redacted)
         self.assertNotIn("11_22_33_44_55_66", redacted)
-        self.assertNotIn("00112233445566778899aabbccddeeff", redacted)
-        self.assertNotIn("ff00ee11dd22cc33bb44aa5599668877", redacted)
+        self.assertNotIn(ltk, redacted)
+        self.assertNotIn(link_key, redacted)
         self.assertNotIn("super-secret-token-123", redacted)
         self.assertNotIn("my-cli-secret", redacted)
         self.assertIn("[REDACTED_MAC]", redacted)

@@ -2517,23 +2517,90 @@ class Hardening281AndMtuTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(app.dropped_records, 1)
         self.assertEqual(len(backend.values(FF14_BATCHED)), 1)
 
-    async def test_all_centrals_disconnect_and_backend_stop_reset_mtu_to_default(self) -> None:
+    async def test_resubscribe_keeps_negotiated_mtu_until_central_disconnect_or_stop(self) -> None:
+        from types import SimpleNamespace
         from wmr_bridge.ble_gatt import DEFAULT_MTU
 
         backend = DbusGattBackend()
-        app = GattApplication(self.bridge, hosts=["192.0.2.10"], clock=self.clock)
+        app = GattApplication(
+            self.bridge,
+            hosts=["192.0.2.10"],
+            clock=self.clock,
+            serial_load_cuts=True,
+        )
+        fake_sink = FakeBackend()
+        app.set_emitter(fake_sink.notify)
+        self.bridge.add_sink(app)
         backend._app = app
 
+        # Negotiate MTU via FF16 read, subscribe, then unsubscribe all characteristics.
         app.read_value(FF16_VERSION, {"mtu": 247})
         self.assertEqual(app.mtu, 247)
         app.start_notify(FF14_BATCHED)
         app.start_notify(HID_REPORT)
         app.stop_notify(FF14_BATCHED)
-        # Still one subscribed characteristic: MTU stays negotiated.
-        self.assertEqual(app.mtu, 247)
         app.stop_notify(HID_REPORT)
-        # All centrals disconnected: MTU resets to DEFAULT_MTU (23).
+        # Unsubscribing without disconnecting must keep the negotiated MTU.
+        self.assertEqual(app.mtu, 247)
+
+        # Resubscribing via zero-arg StartNotify still delivers FF14 records.
+        app.start_notify(FF14_BATCHED)
+        self.clock.advance(0.05)
+        self.bridge.ingest(0, SAMPLE_DATA)
+        self.assertEqual(app.dropped_records, 0)
+        self.assertEqual(len(fake_sink.values(FF14_BATCHED)), 1)
+
+        # Simulated central disconnect (only WMR controller remains connected) resets MTU.
+        class _FakeManager:
+            def __init__(self, objects: dict[str, Any]) -> None:
+                self._objects = objects
+
+            async def call_get_managed_objects(self) -> dict[str, Any]:
+                return self._objects
+
+        class _FakeProxy:
+            def __init__(self, objects: dict[str, Any]) -> None:
+                self._objects = objects
+
+            def get_interface(self, _name: str) -> _FakeManager:
+                return _FakeManager(self._objects)
+
+        class _FakeBus:
+            def __init__(self, objects: dict[str, Any]) -> None:
+                self._objects = objects
+
+            async def introspect(self, _service: str, _path: str) -> None:
+                return None
+
+            def get_proxy_object(self, _service: str, _path: str, _intro: Any) -> _FakeProxy:
+                return _FakeProxy(self._objects)
+
+        backend._bus = _FakeBus(
+            {
+                "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF": {
+                    "org.bluez.Device1": {
+                        "Connected": True,
+                        "Name": "Motion Controller - Left",
+                    }
+                },
+                "/org/bluez/hci0/dev_11_22_33_44_55_66": {
+                    "org.bluez.Device1": {
+                        "Connected": False,
+                        "Name": "Pixel 11 Pro",
+                    }
+                },
+            }
+        )
+        backend._on_dbus_message(
+            SimpleNamespace(
+                interface="org.freedesktop.DBus.Properties",
+                member="PropertiesChanged",
+                body=["org.bluez.Device1", {"Connected": False}, []],
+            )
+        )
+        await asyncio.sleep(0)
         self.assertEqual(app.mtu, DEFAULT_MTU)
+        backend._bus = None
 
         app.read_value(FF16_VERSION, {"mtu": 185})
         self.assertEqual(app.mtu, 185)
