@@ -7,6 +7,19 @@ This file records what each release contains; hardware evidence stays in
 
 ## Unreleased
 
+## 0.3.28-rc.4 — 2026-11-26
+
+The fourth pre-release candidate for the Pixel + Pi hardware check, cut from
+`main` on top of 0.3.28-rc.3. It carries the Pi work merged as #272 to #288:
+the adapter-recovery work (#273, #274, #276, #277, #281), the recovery and
+bench docs (#272, #275, #278, #280, #282, #283, #285, #287) and the Option C
+BLE load cuts (#284, #286, #288). It is a prerelease: GitHub does not offer it
+as "Latest", and `releases/latest` still returns `v0.3.27`. Firmware payloads
+are unchanged from 0.3.28-rc.3, and so from 0.3.27: FF10-FF17 keep their
+payloads, companions at 0.2.2 or later continue to work, and the tag only
+changes the version FF16 reports. The Pi changes below are host-tested only
+and have not run on Pi hardware.
+
 ### Raspberry Pi bridge
 
 - **Adapter recovery reports failure, and the daemon retries it.** A ladder
@@ -18,8 +31,7 @@ This file records what each release contains; hardware evidence stays in
   treats an adapter that is absent from the bus as `Powered: no`, and reports
   a degraded state after exhaustion. `wmr-bridge status` names the failed
   recovery. The recovery changes are host-tested only and have not run on Pi
-  hardware. The package still reports `0.3.28-rc.3` until the release bumps
-  `VERSION`.
+  hardware. The package reports `0.3.28-rc.4`.
 - **`wmr-bridge-bt-recover` skips `hci_uart` sysfs rebind, guarantees daemon
   restart, and backs off per boot.** `pi/systemd/wmr-bridge-bt-recover.sh`
   skips sysfs unbind and rebind on `hci_uart` or `serial` bus adapters while
