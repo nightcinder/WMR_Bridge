@@ -137,7 +137,7 @@ bootloader and partition-table images for all three variants, the three
 manifests, `build-info*.json`, `index.html`, the tarball and per-file `.sha256`
 checksums. The pinned list below is `v0.3.28-rc.4`.
 
-Pinned 2026-11-19 assets:
+Pinned 2026-11-26 assets:
 
 | Asset | SHA-256 |
 |---|---|
