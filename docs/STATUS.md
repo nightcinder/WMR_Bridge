@@ -1,8 +1,8 @@
 # WMR Bridge: Firmware & Bridge Status
 
-Last updated: 2026-11-26 (the release text covers 0.3.28-rc.4). Pre-release
-0.3.28-rc.4, on top of the 0.3.27 release: the Pi package in this tree is
-`0.3.28-rc.4`. It reports adapter-recovery failure and retries it, skips the
+Last updated: 2026-11-26 (the release text covers 0.3.28). Release
+0.3.28, on top of the 0.3.27 release: the Pi package in this tree is
+`0.3.28`. It reports adapter-recovery failure and retries it, skips the
 `hci_uart` sysfs rebind, guarantees a daemon restart with a per-boot backoff,
 and adds the Option C BLE load cuts for `hci_uart` and `serial` adapters; these
 changes are host-tested only and have not run on Pi hardware. It carries

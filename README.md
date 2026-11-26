@@ -131,14 +131,14 @@ reuse it. The output in `dist/` includes the bootloader, partition table,
 application and merged factory images, plus a browser flasher page. The browser
 manifest writes the three separate images at offsets `0x1000`, `0x8000` and
 `0x10000`. It does not write NVS (`0x9000`-`0xFFFF`), so a reflash with
-"Erase device" unchecked keeps the stored pairings. `0.3.27` is the latest full release; `0.3.28-rc.4` is a pre-release cut for the Pixel + Pi hardware check. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+"Erase device" unchecked keeps the stored pairings. `0.3.28` is the latest full release. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 To flash without ESP-IDF, use the hosted browser installer at
 <https://nightcinder.github.io/WMR_Bridge/>, which serves all three variants,
 or the Pi setup page at <https://nightcinder.github.io/WMR_Bridge/pi.html>. The
 installer is redeployed on every `v*` tag, so it serves the newest tagged
-build, currently the `0.3.28-rc.4` pre-release images. The
+build, currently the `0.3.28` images. The
 [GitHub release](https://github.com/nightcinder/WMR_Bridge/releases/latest)
-stays on the latest full release (`0.3.27`) and carries the three merged factory
+stays on the latest full release (`0.3.28`) and carries the three merged factory
 images and the three application images;
 the per-variant bootloader and partition images stay in the workflow artifacts.
 For a local build, serve
