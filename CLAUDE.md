@@ -132,3 +132,8 @@ Almost all findings were doc accuracy, not code:
 - Do not claim hardware results in docs without a run record.
 - Keep `docs/runs/` records as written; add new files instead of editing old evidence.
 - Do not push to `main` or tag releases; open a PR. Keep new C files' license header (`license_header.txt`).
+
+## Code intelligence
+- C navigation: clangd over the compile database ESP-IDF writes at `build/compile_commands.json` after a build. Start it with `--background-index=0` and only for the session that needs it; never leave it running and never run another language server beside it (a leftover code-intel run overloaded the liesa build host on 2026-11-27).
+- Structural search and rewrites in C (protocol and HID paths): `ast-grep run --lang c -p '<pattern>' src/` (checked working 2026-11-27). Review the diff before committing.
+- Unused code and footprint: `idf.py size-components` and `clang-tidy -p build --checks='-*,misc-unused-*'`. Build warnings stay the CI truth.
