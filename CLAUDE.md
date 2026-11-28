@@ -68,8 +68,8 @@ PR which commands you did not run.
 | `wmr_bridge.gatt` | GATT database (compiled by BTstack `compile_gatt.py`) |
 | `tests/`, `samples/` | Host C and Python tests, `host_stubs/`, sample frames |
 | `fuzz/` | libfuzzer targets (batch, decode, decoded) |
-| `tools/` | `capture_ble.py`, `analyze_capture.py`, `firmware/build.py`, `release/` |
-| `pi/` | Linux/Pi bridge (BlueZ, WebSocket, systemd, deb packaging) |
+| `tools/` | `capture_ble.py`, `analyze_capture.py`, `triage_bundle.py`, `firmware/build.py` (+ size budget), `release/` (sums, signing) |
+| `pi/` | Linux/Pi bridge (BlueZ, WebSocket, systemd, deb packaging); bench scripts in `pi/tools/` touch real hardware |
 | `integration/` | The one BTstack CMake file that must replace the stock one |
 | `docs/` | PROTOCOL, FLASHING, TESTING, DISCOVERY, COMPATIBILITY, STATUS, PI_BRIDGE, run records in `docs/runs/` |
 
@@ -103,8 +103,8 @@ PR which commands you did not run.
 - Host C tests compile with `-Werror -Wconversion`. Fix warnings, do not silence them.
 - Docs are tested: `test_docs_links.py` checks links, `test_doc_gatt.py` checks property claims
   against `wmr_bridge.gatt`. Renaming a doc or changing a GATT property breaks them.
-- `pi/` tests are slow (about 1 minute) and one run in four here failed once, then passed on
-  rerun; check for flakiness before blaming your change.
+- `pi/` tests are slow (about 1 minute) and have flaked before (failed once, passed on rerun);
+  rerun once before blaming your change.
 - Hardware status is mostly unverified (CI-built). Claim only what a run record in `docs/runs/`
   supports, and write "not run" otherwise.
 
