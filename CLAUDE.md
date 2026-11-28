@@ -132,3 +132,8 @@ Almost all findings were doc accuracy, not code:
 - Do not claim hardware results in docs without a run record.
 - Keep `docs/runs/` records as written; add new files instead of editing old evidence.
 - Do not push to `main` or tag releases; open a PR. Keep new C files' license header (`license_header.txt`).
+
+## Code intelligence
+- C navigation: clangd over the compile database of the firmware build: `.fw-build/build-wmr-bridge/compile_commands.json` after `python tools/firmware/build.py` (the repo-root `build/` is only the host `wmr_codec` test build, so its database lacks ESP-IDF and BTstack). Start it with `--background-index=0` and only for the session that needs it; never leave it running and never run another language server beside it (a leftover code-intel run overloaded the liesa build host on 2026-11-27).
+- Structural search and rewrites in C (protocol and HID paths): `ast-grep run --lang c -p '<pattern>' src/` (checked working 2026-11-27). Review the diff before committing.
+- Unused code and footprint: `clang-tidy -p .fw-build/build-wmr-bridge --checks='-*,misc-unused-*'` on `src/*.c`, and the size report `build.py` already writes (`wmr-size.json`). `idf.py size-components` does not work from the repo root; run `(cd .fw-build/btstack/port/esp32 && idf.py -B ../../../build-wmr-bridge size-components)`. Note the compile database lists the copies of `src/` that `build.py` makes under `.fw-build/btstack/wmr_bridge/`, so go-to-definition may open a copy: edit only the real `src/` files. Build warnings stay the CI truth.
