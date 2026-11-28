@@ -134,6 +134,6 @@ Almost all findings were doc accuracy, not code:
 - Do not push to `main` or tag releases; open a PR. Keep new C files' license header (`license_header.txt`).
 
 ## Code intelligence
-- C navigation: clangd over the compile database ESP-IDF writes at `build/compile_commands.json` after a build. Start it with `--background-index=0` and only for the session that needs it; never leave it running and never run another language server beside it (a leftover code-intel run overloaded the liesa build host on 2026-11-27).
+- C navigation: clangd over the compile database of the firmware build: `.fw-build/build-wmr-bridge/compile_commands.json` after `python tools/firmware/build.py` (the repo-root `build/` is only the host `wmr_codec` test build, so its database lacks ESP-IDF and BTstack). Start it with `--background-index=0` and only for the session that needs it; never leave it running and never run another language server beside it (a leftover code-intel run overloaded the liesa build host on 2026-11-27).
 - Structural search and rewrites in C (protocol and HID paths): `ast-grep run --lang c -p '<pattern>' src/` (checked working 2026-11-27). Review the diff before committing.
-- Unused code and footprint: `idf.py size-components` and `clang-tidy -p build --checks='-*,misc-unused-*'`. Build warnings stay the CI truth.
+- Unused code and footprint: `clang-tidy -p .fw-build/build-wmr-bridge --checks='-*,misc-unused-*'` on `src/*.c`, and the size report `build.py` already writes (`wmr-size.json`). `idf.py size-components` only works inside the port directory with `-B .fw-build/build-wmr-bridge`, not from the repo root. Build warnings stay the CI truth.
